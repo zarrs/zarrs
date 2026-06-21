@@ -45,7 +45,6 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use zarrs_plugin::PluginCreateError;
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -134,7 +133,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ReshapeCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ReshapeCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
@@ -150,7 +149,8 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_codec::{
-        ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions,
+        ArrayPartialDecoderTraits, CodecOptions, UnboundArrayToArrayCodecTraits,
+        UnboundArrayToBytesCodecTraits,
     };
 
     fn nz(value: u64) -> NonZeroU64 {
@@ -174,23 +174,12 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
-        let codec = ReshapeCodec::new_with_configuration(&configuration)?;
+        let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?)
+            .with_context(data_type.clone(), fill_value.clone())?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
-        let encoded = codec.encode(
-            bytes.clone(),
-            &shape,
-            &data_type,
-            &fill_value,
-            &CodecOptions::default(),
-        )?;
-        let decoded = codec.decode(
-            encoded,
-            &shape,
-            &data_type,
-            &fill_value,
-            &CodecOptions::default(),
-        )?;
+        let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
+        let decoded = codec.decode(encoded, &shape, &CodecOptions::default())?;
         assert_eq!(bytes, decoded);
         Ok(())
     }
@@ -364,10 +353,12 @@ mod tests {
 
     #[test]
     fn codec_reshape_partial_decode_granularity() {
-        let codec = ReshapeCodec::new(ReshapeShape(vec![
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
             ReshapeDim::InputDims(vec![0]),
             ReshapeDim::InputDims(vec![1]),
-        ]));
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
         assert_eq!(
             codec
                 .partial_decode_granularity(&[nz(4), nz(6)], &[nz(2), nz(3)])
@@ -375,7 +366,11 @@ mod tests {
             vec![nz(2), nz(3)]
         );
 
-        let codec = ReshapeCodec::new(ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]));
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
         assert_eq!(
             codec
                 .partial_decode_granularity(&[nz(2), nz(20)], &[nz(5)])
@@ -395,11 +390,13 @@ mod tests {
             vec![nz(2), nz(20)]
         );
 
-        let codec = ReshapeCodec::new(ReshapeShape(vec![
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
             ReshapeDim::Size(nz(2)),
             ReshapeDim::Size(nz(3)),
             ReshapeDim::Size(nz(2)),
-        ]));
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
         assert_eq!(
             codec
                 .partial_decode_granularity(&[nz(12)], &[nz(1), nz(1), nz(2)])
@@ -413,10 +410,12 @@ mod tests {
             vec![nz(6)]
         );
 
-        let codec = ReshapeCodec::new(ReshapeShape(vec![
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
-        ]));
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
         assert_eq!(
             codec
                 .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1), nz(6)])
@@ -445,37 +444,25 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
+        let codec = codec
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
         let encoded = codec
-            .encode(
-                bytes,
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let (encoded_shape, encoded_data_type, encoded_fill_value) = codec
-            .encoded_representation(shape, &data_type, &fill_value)
+        let encoded_shape = codec.encoded_shape(shape).unwrap();
+        let encoded_data_type = codec.encoded_data_type().clone();
+        let encoded_fill_value = codec.encoded_fill_value().clone();
+        let bytes_codec = bytes_codec
+            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
             .unwrap();
         let input_handle = bytes_codec
-            .partial_decoder(
-                input_handle,
-                &encoded_shape,
-                &encoded_data_type,
-                &encoded_fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
             .unwrap();
         codec
-            .partial_decoder(
-                input_handle,
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle, shape, &CodecOptions::default())
             .unwrap()
     }
 
@@ -501,50 +488,32 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
+        let codec = codec
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
         let encoded = codec
-            .encode(
-                bytes,
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
 
         let bytes_codec = Arc::new(BytesCodec::default());
-        let (encoded_shape, encoded_data_type, encoded_fill_value) = codec
-            .encoded_representation(shape, &data_type, &fill_value)
+        let encoded_shape = codec.encoded_shape(shape).unwrap();
+        let encoded_data_type = codec.encoded_data_type().clone();
+        let encoded_fill_value = codec.encoded_fill_value().clone();
+        let bytes_codec = bytes_codec
+            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
             .unwrap();
         let encoded_chunk = bytes_codec
-            .encode(
-                encoded,
-                &encoded_shape,
-                &encoded_data_type,
-                &encoded_fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(encoded, &encoded_shape, &CodecOptions::default())
             .unwrap()
             .into_owned();
         let output = Arc::new(Mutex::new(Some(encoded_chunk)));
         let input_output_handle = bytes_codec
             .clone()
-            .partial_encoder(
-                output.clone(),
-                &encoded_shape,
-                &encoded_data_type,
-                &encoded_fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_encoder(output.clone(), &encoded_shape, &CodecOptions::default())
             .unwrap();
         let partial_encoder = codec
             .clone()
-            .partial_encoder(
-                input_output_handle,
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_encoder(input_output_handle, shape, &CodecOptions::default())
             .unwrap();
         assert!(partial_encoder.supports_partial_encode());
 
@@ -555,22 +524,10 @@ mod tests {
 
         let output = output.lock().unwrap().clone().unwrap();
         let decoded_encoded = bytes_codec
-            .decode(
-                output.into(),
-                &encoded_shape,
-                &encoded_data_type,
-                &encoded_fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(output.into(), &encoded_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                decoded_encoded,
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(decoded_encoded, shape, &CodecOptions::default())
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap()).to_vec()
     }

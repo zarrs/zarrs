@@ -46,7 +46,6 @@ use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
@@ -58,7 +57,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for BitroundCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BitroundCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
@@ -92,7 +91,9 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    };
 
     #[test]
     fn codec_bitround_float() {
@@ -118,30 +119,35 @@ mod tests {
         let bytes = ArrayBytes::from(bytes);
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-        let codec = BitroundCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f32>(
             decoded.into_fixed().unwrap().into_owned(),
         );
         assert_eq!(decoded_elements, &[0.0f32, 1.25f32, -8.0f32, 98304.0f32]);
+    }
+
+    #[test]
+    fn codec_bitround_encoded_fill_value_is_rounded() {
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
+        let data_type = data_type::float32();
+        let fill_value = FillValue::from(1.234_567_9f32);
+
+        let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type, fill_value.clone())
+            .unwrap();
+
+        assert_eq!(codec.fill_value(), &fill_value);
+        assert_eq!(codec.encoded_fill_value(), &FillValue::from(1.25f32));
     }
 
     #[test]
@@ -155,25 +161,15 @@ mod tests {
         let bytes = ArrayBytes::from(bytes);
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-        let codec = BitroundCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -198,25 +194,15 @@ mod tests {
         let bytes = ArrayBytes::from(bytes);
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-        let codec = BitroundCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -232,43 +218,33 @@ mod tests {
     fn codec_bitround_partial_decode() {
         const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap()
             .into_owned();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
             .unwrap();
+        let input_handle = bytes_codec
+            .partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .unwrap();
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bitround partial decoder does not hold bytes
         let decoded_regions = [
@@ -295,7 +271,6 @@ mod tests {
 
         const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
@@ -303,36 +278,27 @@ mod tests {
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
+            .unwrap();
+        let input_handle = bytes_codec
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let decoded_regions = [

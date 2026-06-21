@@ -10,9 +10,21 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self
     }
 
-    pub fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self {
-        self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts));
-        self
+    /// Reconfigure and rebind the codec chain.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    pub fn set_codec_specific_options(
+        &mut self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<&mut Self, CodecCreateError> {
+        let codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts)?);
+        let codecs_bound = codecs
+            .clone()
+            .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        self.codecs = codecs;
+        self.codecs_bound = codecs_bound;
+        Ok(self)
     }
 
     pub fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self {
@@ -25,7 +37,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grid = crate::array::array_sharded_ext::create_subchunk_grid(
             &self.chunk_grid,
-            self.codecs.as_ref(),
+            self.codecs_bound.as_ref(),
         );
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {

@@ -12,7 +12,7 @@ use zarrs::storage::storage_adapter::sync_to_async::{
     SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
 };
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions};
+use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToArrayCodecTraits};
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
@@ -27,7 +27,7 @@ impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
 
 /// Test async partial encoding for array-to-array codecs in isolation
 async fn test_array_to_array_codec_async_partial_encoding<
-    T: ArrayToArrayCodecTraits + Send + Sync + 'static,
+    T: UnboundArrayToArrayCodecTraits + Send + Sync + 'static,
 >(
     codec: Arc<T>,
     codec_name: &str,

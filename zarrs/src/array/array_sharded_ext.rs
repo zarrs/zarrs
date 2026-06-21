@@ -1,10 +1,12 @@
 use std::num::NonZeroU64;
 
 use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};
-use super::{ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
+use super::{
+    ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChainBound,
+};
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
-use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
+use crate::array::codec::array_to_bytes::sharding::ShardingCodecBound;
 use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::ExtensionAliasesV3;
@@ -116,16 +118,17 @@ fn repeated_subchunk_grid_for_regular_shards(
 
 pub(crate) fn create_subchunk_grid(
     chunk_grid: &ChunkGrid,
-    codecs: &CodecChain,
+    codecs: &CodecChainBound,
 ) -> Option<ChunkGrid> {
-    if !codecs.array_to_bytes_codec().as_any().is::<ShardingCodec>() {
-        return None;
-    }
+    let sharding_codec = codecs
+        .array_to_bytes_codec()
+        .as_any()
+        .downcast_ref::<ShardingCodecBound>()?;
 
     let dimensionality = chunk_grid.dimensionality();
     let origin_chunk = vec![0; dimensionality];
     let decoded_chunk_shape = chunk_grid.chunk_shape(&origin_chunk).ok().flatten()?;
-    let subchunk_shape = codecs
+    let subchunk_shape = sharding_codec
         .partial_decode_granularity(&decoded_chunk_shape)
         .ok()?;
     if subchunk_shape == decoded_chunk_shape {

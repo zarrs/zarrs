@@ -107,14 +107,8 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             self.erase_chunk(chunk_indices)?;
         } else {
             let chunk_encoded = self
-                .codecs()
-                .encode(
-                    chunk_bytes,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
@@ -151,8 +145,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
                 // Calculate chunk/codec concurrency
                 let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-                let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+                let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,

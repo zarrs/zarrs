@@ -10,9 +10,9 @@ use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -26,6 +26,20 @@ pub struct FixedScaleOffsetCodec {
     astype_str: Option<String>,
     dtype: DataType,
     astype: Option<DataType>,
+}
+
+/// A `fixedscaleoffset` codec implementation bound to a data type and fill value.
+#[derive(Clone, Debug)]
+struct FixedScaleOffsetCodecBound {
+    offset: f32,
+    scale: f32,
+    astype: Option<DataType>,
+    element_type: FixedScaleOffsetElementType,
+    encoded_element_type: FixedScaleOffsetElementType,
+    data_type: DataType,
+    fill_value: FillValue,
+    encoded_data_type: DataType,
+    encoded_fill_value: FillValue,
 }
 
 fn add_byteoder_to_dtype(dtype: &str) -> String {
@@ -97,10 +111,6 @@ impl FixedScaleOffsetCodec {
 }
 
 impl CodecTraits for FixedScaleOffsetCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -132,16 +142,6 @@ impl CodecTraits for FixedScaleOffsetCodec {
     }
 }
 
-impl ArrayCodecTraits for FixedScaleOffsetCodec {
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
-}
-
 fn get_element_type(
     data_type: &DataType,
 ) -> Result<FixedScaleOffsetElementType, zarrs_data_type::DataTypeCodecError> {
@@ -157,11 +157,10 @@ fn get_element_type(
 )]
 fn scale_array(
     bytes: &mut [u8],
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
+) -> Result<(), CodecError> {
     let float_type = element_type.intermediate_float();
 
     macro_rules! scale_impl {
@@ -188,10 +187,9 @@ fn scale_array(
         (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => scale_impl!(f64, f64),
         _ => {
             // FIXME: make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
+            return Err(CodecError::Other(
+                "fixedscaleoffset element type has unsupported intermediate float type".to_string(),
+            ));
         }
     }
     Ok(())
@@ -205,11 +203,10 @@ fn scale_array(
 )]
 fn unscale_array(
     bytes: &mut [u8],
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
+) -> Result<(), CodecError> {
     let float_type = element_type.intermediate_float();
 
     macro_rules! unscale_impl {
@@ -251,10 +248,9 @@ fn unscale_array(
         }
         _ => {
             // FIXME: Make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
+            return Err(CodecError::Other(
+                "fixedscaleoffset element type has unsupported intermediate float type".to_string(),
+            ));
         }
     }
     Ok(())
@@ -269,12 +265,9 @@ fn unscale_array(
 )]
 fn cast_array(
     bytes: &[u8],
-    data_type: &DataType,
-    as_type: &DataType,
-) -> Result<Vec<u8>, zarrs_data_type::DataTypeCodecError> {
-    let from_type = get_element_type(data_type)?;
-    let to_type = get_element_type(as_type)?;
-
+    from_type: FixedScaleOffsetElementType,
+    to_type: FixedScaleOffsetElementType,
+) -> Vec<u8> {
     // First cast to f32
     let elements: Vec<f32> = match from_type {
         FixedScaleOffsetElementType::I8 => bytes
@@ -382,22 +375,119 @@ fn cast_array(
             .collect(),
     };
 
-    Ok(result)
+    result
 }
 
 fn do_encode<'a>(
     bytes: ArrayBytes<'a>,
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-    astype: Option<&DataType>,
+    encoded_element_type: FixedScaleOffsetElementType,
+    astype: bool,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let mut bytes = bytes.into_fixed()?.into_owned();
-    scale_array(&mut bytes, data_type, offset, scale)?;
-    if let Some(astype) = astype {
-        Ok(cast_array(&bytes, data_type, astype)?.into())
+    scale_array(&mut bytes, element_type, offset, scale)?;
+    if astype {
+        Ok(cast_array(&bytes, element_type, encoded_element_type).into())
     } else {
         Ok(bytes.into())
+    }
+}
+
+fn encode_fill_value(
+    fill_value: &FillValue,
+    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
+    offset: f32,
+    scale: f32,
+    encoded_element_type: FixedScaleOffsetElementType,
+    astype: bool,
+) -> Result<FillValue, CodecCreateError> {
+    let fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?;
+    let encoded_fill_value = do_encode(
+        fill_value_bytes,
+        element_type,
+        offset,
+        scale,
+        encoded_element_type,
+        astype,
+    )
+    .map_err(CodecCreateError::other)?;
+    Ok(FillValue::new(
+        encoded_fill_value
+            .into_fixed()
+            .map_err(CodecCreateError::other)?
+            .into_owned(),
+    ))
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self as Arc<dyn UnboundArrayToArrayCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        let element_type = get_element_type(&data_type)?;
+        if self.dtype != data_type {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
+            ));
+        }
+        let encoded_data_type = self.astype.clone().unwrap_or_else(|| self.dtype.clone());
+        let encoded_element_type = get_element_type(&encoded_data_type)?;
+        let astype = self.astype.is_some();
+        let encoded_fill_value = encode_fill_value(
+            &fill_value,
+            &data_type,
+            element_type,
+            self.offset,
+            self.scale,
+            encoded_element_type,
+            astype,
+        )?;
+        Ok(Arc::new(FixedScaleOffsetCodecBound {
+            offset: self.offset,
+            scale: self.scale,
+            astype: self.astype.clone(),
+            element_type,
+            encoded_element_type,
+            data_type,
+            fill_value,
+            encoded_data_type,
+            encoded_fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
 
@@ -406,32 +496,32 @@ fn do_encode<'a>(
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
+impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        &self.encoded_data_type
+    }
+
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.encoded_fill_value
     }
 
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if self.dtype != *data_type {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
-            ));
-        }
-
         do_encode(
             bytes,
-            data_type,
+            self.element_type,
             self.offset,
             self.scale,
-            self.astype.as_ref(),
+            self.encoded_element_type,
+            self.astype.is_some(),
         )
     }
 
@@ -439,35 +529,15 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if self.dtype != *data_type {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
-            ));
-        }
-
         let bytes = bytes.into_fixed()?.into_owned();
-        let mut bytes = if let Some(astype) = &self.astype {
-            cast_array(&bytes, astype, data_type)?
+        let mut bytes = if self.astype.is_some() {
+            cast_array(&bytes, self.encoded_element_type, self.element_type)
         } else {
             bytes
         };
-        unscale_array(&mut bytes, data_type, self.offset, self.scale)?;
+        unscale_array(&mut bytes, self.element_type, self.offset, self.scale)?;
         Ok(bytes.into())
-    }
-
-    fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        // Check if the data type is supported by checking the trait
-        get_element_type(decoded_data_type)?;
-
-        if let Some(astype) = &self.astype {
-            Ok(astype.clone())
-        } else {
-            Ok(decoded_data_type.clone())
-        }
     }
 }

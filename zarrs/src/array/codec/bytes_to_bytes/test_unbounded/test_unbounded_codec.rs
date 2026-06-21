@@ -37,10 +37,6 @@ impl Default for TestUnboundedCodec {
 }
 
 impl CodecTraits for TestUnboundedCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

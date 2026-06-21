@@ -50,7 +50,6 @@ pub use zarrs_metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(PcodecCodec,
     v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"],
@@ -67,7 +66,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for PcodecCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
@@ -75,7 +74,7 @@ impl CodecTraitsV3 for PcodecCodec {
 }
 
 impl CodecTraitsV2 for PcodecCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: PcodecCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
@@ -98,7 +97,7 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
         transmute_to_bytes_vec,
     };
-    use zarrs_codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
+    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
 
     const JSON_VALID: &str = r#"{
         "level": 8,
@@ -125,24 +124,16 @@ mod tests {
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
-        let max_encoded_size =
-            codec.encoded_representation(chunk_shape.as_slice(), &data_type, &fill_value)?;
+        let codec = Arc::new(codec.clone()).with_context(data_type.clone(), fill_value.clone())?;
+        let max_encoded_size = codec.encoded_representation(chunk_shape.as_slice())?;
         let encoded = codec.encode(
             bytes.clone(),
             chunk_shape.as_slice(),
-            &data_type,
-            &fill_value,
             &CodecOptions::default(),
         )?;
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
         let decoded = codec
-            .decode(
-                encoded,
-                chunk_shape.as_slice(),
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, chunk_shape.as_slice(), &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -330,27 +321,17 @@ mod tests {
         let codec = Arc::new(
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-        );
+        )
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
@@ -382,27 +363,17 @@ mod tests {
         let codec = Arc::new(
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-        );
+        )
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder

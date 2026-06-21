@@ -20,15 +20,15 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
-    ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
-    transmute_to_bytes_vec, unravel_index,
+    ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
+    chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -47,6 +47,16 @@ pub struct ShardingCodec {
     /// Specifies whether the shard index is located at the beginning or end of the file.
     pub(crate) index_location: ShardingIndexLocation,
     /// Runtime options applied at array creation/opening time.
+    pub(crate) options: ShardingCodecOptions,
+}
+
+/// A `sharding` codec implementation bound to a data type and fill value.
+#[derive(Clone, Debug)]
+pub(crate) struct ShardingCodecBound {
+    pub(crate) subchunk_shape: ChunkShape,
+    pub(crate) inner_codecs: Arc<CodecChainBound>,
+    pub(crate) index_codecs: Arc<CodecChainBound>,
+    pub(crate) index_location: ShardingIndexLocation,
     pub(crate) options: ShardingCodecOptions,
 }
 
@@ -78,9 +88,14 @@ impl ShardingCodec {
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             ShardingCodecConfiguration::V1(configuration) => {
-                let inner_codecs = Arc::new(CodecChain::from_metadata(&configuration.codecs)?);
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let inner_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
+                let index_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.index_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
                 Ok(Self::new(
                     configuration.chunk_shape.clone(),
                     inner_codecs,
@@ -110,10 +125,6 @@ impl ShardingCodec {
 }
 
 impl CodecTraits for ShardingCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -142,11 +153,68 @@ impl CodecTraits for ShardingCodec {
     }
 }
 
-impl ArrayCodecTraits for ShardingCodec {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for ShardingCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        let inner_codecs = self
+            .inner_codecs
+            .clone()
+            .with_context(data_type, fill_value)?;
+        let index_codecs = self
+            .index_codecs
+            .clone()
+            .with_context(crate::array::data_type::uint64(), FillValue::from(u64::MAX))?;
+        Ok(Arc::new(ShardingCodecBound {
+            subchunk_shape: self.subchunk_shape.clone(),
+            inner_codecs,
+            index_codecs,
+            index_location: self.index_location,
+            options: self.options.clone(),
+        }))
+    }
+
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
+        if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
+            let mut codec = self;
+            Arc::make_mut(&mut codec).options = sharding_opts.clone();
+            Ok(codec)
+        } else {
+            Ok(self.into_dyn())
+        }
+    }
+}
+
+impl ArrayCodecTraits for ShardingCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        self.inner_codecs.data_type()
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        self.inner_codecs.fill_value()
+    }
+
     fn recommended_concurrency(
         &self,
         shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
         let num_elements = chunks_per_shard.num_elements_nonzero_usize();
@@ -159,7 +227,7 @@ impl ArrayCodecTraits for ShardingCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for ShardingCodec {
+impl ArrayToBytesCodecTraits for ShardingCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
@@ -171,69 +239,41 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         Ok(self.subchunk_shape.clone())
     }
 
-    fn with_codec_specific_options(
-        self: Arc<Self>,
-        opts: &CodecSpecificOptions,
-    ) -> Arc<dyn ArrayToBytesCodecTraits> {
-        if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
-            let mut codec = self;
-            Arc::make_mut(&mut codec).options = sharding_opts.clone();
-            codec
-        } else {
-            self.into_dyn()
-        }
-    }
-
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        let data_type = self.data_type();
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, data_type)?;
 
         // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
-        let chunk_bytes_representation = self.inner_codecs.encoded_representation(
-            &self.subchunk_shape,
-            data_type,
-            fill_value,
-        )?;
+        let chunk_bytes_representation = self
+            .inner_codecs
+            .encoded_representation(&self.subchunk_shape)?;
 
+        bytes.validate(shape.num_elements_u64(), data_type)?;
         let bytes = match chunk_bytes_representation {
-            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => self
-                .encode_bounded(
-                    &bytes,
-                    data_type,
-                    fill_value,
-                    shape,
-                    &self.subchunk_shape,
-                    size,
-                    options,
-                ),
-            BytesRepresentation::UnboundedSize => self.encode_unbounded(
-                &bytes,
-                data_type,
-                fill_value,
-                shape,
-                &self.subchunk_shape,
-                options,
-            ),
+            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
+                self.encode_bounded(&bytes, shape, &self.subchunk_shape, size, options)
+            }
+            BytesRepresentation::UnboundedSize => {
+                self.encode_unbounded(&bytes, shape, &self.subchunk_shape, options)
+            }
         }?;
         Ok(ArrayBytesRaw::from(bytes))
     }
 
-    #[allow(clippy::too_many_lines)]
     fn decode<'a>(
         &self,
         encoded_shard: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        let data_type = self.data_type();
+        let fill_value = self.fill_value();
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let num_chunks = chunks_per_shard
             .as_slice()
@@ -247,17 +287,17 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shape, data_type)?,
+            &self.recommended_concurrency(shape)?,
             &self
                 .inner_codecs
-                .recommended_concurrency(&self.subchunk_shape, data_type)?,
+                .recommended_concurrency(&self.subchunk_shape)?,
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
+                ShardingCodec::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -289,13 +329,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         let size: usize = size.try_into().unwrap();
                         let encoded_chunk = &encoded_shard[offset..offset + size];
                         self.inner_codecs
-                            .decode(
-                                Cow::Borrowed(encoded_chunk),
-                                &self.subchunk_shape,
-                                data_type,
-                                fill_value,
-                                &options,
-                            )?
+                            .decode(Cow::Borrowed(encoded_chunk), &self.subchunk_shape, &options)?
                             .into_variable()?
                     };
                     Ok((chunk_bytes, chunk_subset))
@@ -359,8 +393,6 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                             self.inner_codecs.decode_into(
                                 Cow::Borrowed(encoded_chunk),
                                 &self.subchunk_shape,
-                                data_type,
-                                fill_value,
                                 ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                                 &options,
                             )?;
@@ -386,8 +418,6 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         // Calculate chunks per shard
@@ -464,13 +494,9 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
 
         // Encode and write index
         let index_bytes = transmute_to_bytes_vec(new_index);
-        let encoded_index = self.index_codecs.encode(
-            ArrayBytes::from(index_bytes),
-            &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
-            options,
-        )?;
+        let encoded_index =
+            self.index_codecs
+                .encode(ArrayBytes::from(index_bytes), &index_shape, options)?;
 
         match self.index_location {
             ShardingIndexLocation::Start => {
@@ -485,23 +511,23 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         Ok(Some(Cow::Owned(compact_shard)))
     }
 
-    #[allow(clippy::too_many_lines)]
     fn decode_into(
         &self,
         encoded_shard: ArrayBytesRaw<'_>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let data_type = self.data_type();
+        let fill_value = self.fill_value();
+
         // Sharding currently only supports non-optional data
         let output_view = match output_target {
             ArrayBytesDecodeIntoTarget::Fixed(data) => data,
             ArrayBytesDecodeIntoTarget::Optional(..) => {
                 return Err(CodecError::UnsupportedDataType(
                     data_type.clone(),
-                    Self::aliases_v3().default_name.to_string(),
+                    ShardingCodec::aliases_v3().default_name.to_string(),
                 ));
             }
         };
@@ -518,10 +544,10 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shape, data_type)?,
+            &self.recommended_concurrency(shape)?,
             &self
                 .inner_codecs
-                .recommended_concurrency(&self.subchunk_shape, data_type)?,
+                .recommended_concurrency(&self.subchunk_shape)?,
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
@@ -562,8 +588,6 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.inner_codecs.decode_into(
                     Cow::Borrowed(encoded_chunk),
                     &self.subchunk_shape,
-                    data_type,
-                    fill_value,
                     ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                     &options,
                 )?;
@@ -586,14 +610,10 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(ShardingPartialDecoder::new(
             input_handle,
-            data_type.clone(),
-            fill_value.clone(),
             ChunkShape::from(shape.to_vec()),
             self.subchunk_shape.clone(),
             self.inner_codecs.clone(),
@@ -609,15 +629,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             AsyncShardingPartialDecoder::new(
                 input_handle,
-                data_type.clone(),
-                fill_value.clone(),
                 ChunkShape::from(shape.to_vec()),
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
@@ -629,20 +645,15 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             .await?,
         ))
     }
-
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             sharding_partial_encoder::ShardingPartialEncoder::new(
                 input_output_handle,
-                data_type.clone(),
-                fill_value.clone(),
                 ChunkShape::from(shape.to_vec()),
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
@@ -657,13 +668,9 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Get the maximum size of encoded chunks
-        let chunk_bytes_representation = self
-            .inner_codecs
-            .encoded_representation(shape, data_type, fill_value)?;
+        let chunk_bytes_representation = self.inner_codecs.encoded_representation(shape)?;
 
         match chunk_bytes_representation {
             BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
@@ -685,7 +692,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
     }
 }
 
-impl ShardingCodec {
+impl ShardingCodecBound {
     /// Convert a linearised chunk index to an array subset.
     /// Returns [`None`] if `chunk_index` is out-of-bounds of `chunks_per_shard`.
     fn chunk_index_to_subset(
@@ -721,18 +728,17 @@ impl ShardingCodec {
     }
 
     /// Encode an inner chunk from the `decoded_value` or return None.
-    #[expect(clippy::too_many_arguments)]
     fn encode_inner_by_chunk_index(
         &self,
         chunk_index: usize,
         decoded_value: &ArrayBytes,
         shard_shape: &[NonZeroU64],
         chunks_per_shard: &[NonZeroU64],
-        fill_value: &FillValue,
-        data_type: &DataType,
         subchunk_shape: &[NonZeroU64],
         options_inner: &CodecOptions,
     ) -> Option<Result<(usize, Vec<u8>), CodecError>> {
+        let data_type = self.inner_codecs.data_type();
+        let fill_value = self.inner_codecs.fill_value();
         let chunk_subset = self
             .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
             .expect("inbounds chunk");
@@ -751,13 +757,9 @@ impl ShardingCodec {
         if is_fill_value {
             None
         } else {
-            let encoded_chunk = self.inner_codecs.encode(
-                bytes,
-                subchunk_shape,
-                data_type,
-                fill_value,
-                options_inner,
-            );
+            let encoded_chunk = self
+                .inner_codecs
+                .encode(bytes, subchunk_shape, options_inner);
             match encoded_chunk {
                 Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
                 Err(err) => Some(Err(err)),
@@ -767,19 +769,14 @@ impl ShardingCodec {
 
     /// Preallocate shard, encode and write chunks (in parallel), then truncate shard
     #[allow(clippy::too_many_lines)]
-    #[expect(clippy::too_many_arguments)]
     fn encode_bounded(
         &self,
         decoded_value: &ArrayBytes,
-        data_type: &DataType,
-        fill_value: &FillValue,
         shard_shape: &[NonZeroU64],
         subchunk_shape: &[NonZeroU64],
         chunk_size_bounded: u64,
         options: &CodecOptions,
     ) -> Result<Vec<u8>, CodecError> {
-        decoded_value.validate(shard_shape.num_elements_u64(), data_type)?;
-
         // Calculate maximum possible shard size
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
@@ -807,10 +804,8 @@ impl ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shard_shape, data_type)?,
-            &self
-                .inner_codecs
-                .recommended_concurrency(subchunk_shape, data_type)?,
+            &self.recommended_concurrency(shard_shape)?,
+            &self.inner_codecs.recommended_concurrency(subchunk_shape)?,
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
@@ -835,8 +830,6 @@ impl ShardingCodec {
                             decoded_value,
                             shard_shape,
                             chunks_per_shard.as_slice(),
-                            fill_value,
-                            data_type,
                             subchunk_shape,
                             &options,
                         );
@@ -886,8 +879,6 @@ impl ShardingCodec {
                                 decoded_value,
                                 shard_shape,
                                 chunks_per_shard.as_slice(),
-                                fill_value,
-                                data_type,
                                 subchunk_shape,
                                 &options,
                             )
@@ -936,13 +927,9 @@ impl ShardingCodec {
 
         // Encode and write array index
         let shard_index_bytes: ArrayBytesRaw = transmute_to_bytes_vec(shard_index).into();
-        let encoded_array_index = self.index_codecs.encode(
-            shard_index_bytes.into(),
-            &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
-            &options,
-        )?;
+        let encoded_array_index =
+            self.index_codecs
+                .encode(shard_index_bytes.into(), &index_shape, &options)?;
         {
             // SAFETY: `shard_slice` is not read from until it has been written
             let shard_slice = unsafe { crate::vec_spare_capacity_to_mut_slice(&mut shard) };
@@ -968,14 +955,10 @@ impl ShardingCodec {
     fn encode_unbounded(
         &self,
         decoded_value: &ArrayBytes,
-        data_type: &DataType,
-        fill_value: &FillValue,
         shard_shape: &[NonZeroU64],
         subchunk_shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Vec<u8>, CodecError> {
-        decoded_value.validate(shard_shape.num_elements_u64(), data_type)?;
-
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
         let index_encoded_size =
@@ -992,10 +975,8 @@ impl ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shard_shape, data_type)?,
-            &self
-                .inner_codecs
-                .recommended_concurrency(subchunk_shape, data_type)?,
+            &self.recommended_concurrency(shard_shape)?,
+            &self.inner_codecs.recommended_concurrency(subchunk_shape)?,
         );
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
@@ -1021,8 +1002,6 @@ impl ShardingCodec {
                 decoded_value,
                 shard_shape,
                 chunks_per_shard.as_slice(),
-                fill_value,
-                data_type,
                 subchunk_shape,
                 &options_inner
             )
@@ -1110,8 +1089,6 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
             &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
             options,
         )?;
         {
@@ -1139,7 +1116,7 @@ impl ShardingCodec {
     ///
     /// # Panics
     /// Panics if the encoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
-    pub fn decode_index(
+    pub(crate) fn decode_index(
         &self,
         encoded_shard: &[u8],
         chunks_per_shard: &[NonZeroU64],

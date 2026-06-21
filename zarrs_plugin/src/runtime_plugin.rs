@@ -69,7 +69,7 @@ where
 ///
 /// This is the runtime equivalent of [`Plugin2`](crate::Plugin2).
 #[allow(clippy::type_complexity)]
-pub struct RuntimePlugin2<TPlugin, TInput1, TInput2>
+pub struct RuntimePlugin2<TPlugin, TInput1, TInput2, TError = PluginCreateError>
 where
     TPlugin: MaybeSend + MaybeSync + 'static,
     TInput1: ?Sized + 'static,
@@ -78,12 +78,10 @@ where
     /// Tests if the name is a match for this plugin.
     match_name_fn: Box<dyn Fn(&str) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
-    create_fn: Box<
-        dyn Fn(&TInput1, &TInput2) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
-    >,
+    create_fn: Box<dyn Fn(&TInput1, &TInput2) -> Result<TPlugin, TError> + Send + Sync + 'static>,
 }
 
-impl<TPlugin, TInput1, TInput2> RuntimePlugin2<TPlugin, TInput1, TInput2>
+impl<TPlugin, TInput1, TInput2, TError> RuntimePlugin2<TPlugin, TInput1, TInput2, TError>
 where
     TPlugin: MaybeSend + MaybeSync + 'static,
     TInput1: ?Sized + 'static,
@@ -93,7 +91,7 @@ where
     pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
     where
         M: Fn(&str) -> bool + Send + Sync + 'static,
-        C: Fn(&TInput1, &TInput2) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
+        C: Fn(&TInput1, &TInput2) -> Result<TPlugin, TError> + Send + Sync + 'static,
     {
         Self {
             match_name_fn: Box::new(match_name_fn),
@@ -104,8 +102,8 @@ where
     /// Create a `TPlugin` plugin from `input1` and `input2`.
     ///
     /// # Errors
-    /// Returns a [`PluginCreateError`] if plugin creation fails.
-    pub fn create(&self, input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError> {
+    /// Returns a `TError` if plugin creation fails.
+    pub fn create(&self, input1: &TInput1, input2: &TInput2) -> Result<TPlugin, TError> {
         (self.create_fn)(input1, input2)
     }
 
@@ -123,15 +121,29 @@ where
 mod wasm_impls {
     use super::{RuntimePlugin, RuntimePlugin2};
 
-    unsafe impl<TPlugin: 'static, TInput: ?Sized + 'static> Send for RuntimePlugin<TPlugin, TInput> {}
-    unsafe impl<TPlugin: 'static, TInput: ?Sized + 'static> Sync for RuntimePlugin<TPlugin, TInput> {}
-
-    unsafe impl<TPlugin: 'static, TInput1: ?Sized + 'static, TInput2: ?Sized + 'static> Send
-        for RuntimePlugin2<TPlugin, TInput1, TInput2>
+    unsafe impl<TPlugin: 'static, TInput: ?Sized + 'static, TError: 'static> Send
+        for RuntimePlugin<TPlugin, TInput, TError>
     {
     }
-    unsafe impl<TPlugin: 'static, TInput1: ?Sized + 'static, TInput2: ?Sized + 'static> Sync
-        for RuntimePlugin2<TPlugin, TInput1, TInput2>
+    unsafe impl<TPlugin: 'static, TInput: ?Sized + 'static, TError: 'static> Sync
+        for RuntimePlugin<TPlugin, TInput, TError>
+    {
+    }
+
+    unsafe impl<
+        TPlugin: 'static,
+        TInput1: ?Sized + 'static,
+        TInput2: ?Sized + 'static,
+        TError: 'static,
+    > Send for RuntimePlugin2<TPlugin, TInput1, TInput2, TError>
+    {
+    }
+    unsafe impl<
+        TPlugin: 'static,
+        TInput1: ?Sized + 'static,
+        TInput2: ?Sized + 'static,
+        TError: 'static,
+    > Sync for RuntimePlugin2<TPlugin, TInput1, TInput2, TError>
     {
     }
 }

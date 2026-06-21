@@ -103,22 +103,20 @@ use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
-    data_type,
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChainBound, Endianness,
+    convert_from_bytes_slice, data_type,
 };
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
-    InvalidBytesLengthError,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    CodecTraitsV3, InvalidBytesLengthError,
 };
-use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 pub use zarrs_metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenCodec,
     v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
@@ -130,7 +128,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for VlenCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
         let configuration: VlenCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
@@ -141,20 +139,14 @@ impl CodecTraitsV3 for VlenCodec {
 fn get_vlen_bytes_and_offsets(
     bytes: &ArrayBytesRaw,
     shape: &[NonZeroU64],
-    index_data_type: VlenIndexDataType,
-    index_codecs: &CodecChain,
-    data_codecs: &CodecChain,
+    index_codecs: &CodecChainBound,
+    data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
-    let (data_type, fill_value) = match index_data_type {
-        VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
-        VlenIndexDataType::UInt64 => (data_type::uint64(), FillValue::from(0u64)),
-    };
-
     // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
@@ -181,26 +173,22 @@ fn get_vlen_bytes_and_offsets(
 
     // Decode the index
     let mut index = index_codecs
-        .decode(
-            index_enc.into(),
-            &index_shape,
-            &data_type,
-            &fill_value,
-            options,
-        )?
+        .decode(index_enc.into(), &index_shape, options)?
         .into_fixed()?;
+    let index_data_type = index_codecs.data_type();
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &data_type::uint64());
+        reverse_endianness(index.to_mut(), index_data_type);
     }
-    let index = match index_data_type {
-        VlenIndexDataType::UInt32 => {
-            let index = convert_from_bytes_slice::<u32>(&index);
-            offsets_u32_to_usize(index)
-        }
-        VlenIndexDataType::UInt64 => {
-            let index = convert_from_bytes_slice::<u64>(&index);
-            offsets_u64_to_usize(index)
-        }
+    let index = if *index_data_type == data_type::uint32() {
+        let index = convert_from_bytes_slice::<u32>(&index);
+        offsets_u32_to_usize(index)
+    } else if *index_data_type == data_type::uint64() {
+        let index = convert_from_bytes_slice::<u64>(&index);
+        offsets_u64_to_usize(index)
+    } else {
+        return Err(CodecError::Other(
+            "unsupported vlen index data type, expected uint32 or uint64".to_string(),
+        ));
     };
 
     // Get the data length
@@ -213,13 +201,7 @@ fn get_vlen_bytes_and_offsets(
     // Decode the data
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
         data_codecs
-            .decode(
-                data_enc.into(),
-                &[data_len_expected],
-                &data_type::uint8(),
-                &0u8.into(),
-                options,
-            )?
+            .decode(data_enc.into(), &[data_len_expected], options)?
             .into_fixed()?
             .into_owned()
     } else {

@@ -29,6 +29,9 @@ pub trait ArrayOps {
     /// Get the codecs.
     fn codecs(&self) -> Arc<CodecChain>;
 
+    /// Get the codecs bound to the array data type and fill value.
+    fn codecs_bound(&self) -> Arc<CodecChainBound>;
+
     /// Get the chunk grid.
     fn chunk_grid(&self) -> &ChunkGrid;
 

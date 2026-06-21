@@ -138,7 +138,7 @@ pub struct PartialEncoderCapability {
 
 /// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPluginV3(Plugin<Codec, MetadataV3>);
+pub struct CodecPluginV3(Plugin<Codec, MetadataV3, CodecCreateError>);
 inventory::collect!(CodecPluginV3);
 
 impl CodecPluginV3 {
@@ -150,7 +150,7 @@ impl CodecPluginV3 {
 
 /// A Zarr V2 codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPluginV2(Plugin<Codec, MetadataV2>);
+pub struct CodecPluginV2(Plugin<Codec, MetadataV2, CodecCreateError>);
 inventory::collect!(CodecPluginV2);
 
 impl CodecPluginV2 {
@@ -161,10 +161,10 @@ impl CodecPluginV2 {
 }
 
 /// A runtime V3 codec plugin for dynamic registration.
-pub type CodecRuntimePluginV3 = RuntimePlugin<Codec, MetadataV3>;
+pub type CodecRuntimePluginV3 = RuntimePlugin<Codec, MetadataV3, CodecCreateError>;
 
 /// A runtime V2 codec plugin for dynamic registration.
-pub type CodecRuntimePluginV2 = RuntimePlugin<Codec, MetadataV2>;
+pub type CodecRuntimePluginV2 = RuntimePlugin<Codec, MetadataV2, CodecCreateError>;
 
 /// Global runtime registry for V3 codec plugins.
 pub static CODEC_RUNTIME_REGISTRY_V3: LazyLock<RuntimeRegistry<CodecRuntimePluginV3>> =
@@ -233,9 +233,9 @@ pub fn unregister_codec_v2(handle: &CodecRuntimeRegistryHandleV2) -> bool {
 #[derive(Debug)]
 pub enum Codec {
     /// An array to array codec.
-    ArrayToArray(Arc<dyn ArrayToArrayCodecTraits>),
+    ArrayToArray(Arc<dyn UnboundArrayToArrayCodecTraits>),
     /// An array to bytes codec.
-    ArrayToBytes(Arc<dyn ArrayToBytesCodecTraits>),
+    ArrayToBytes(Arc<dyn UnboundArrayToBytesCodecTraits>),
     /// A bytes to bytes codec.
     BytesToBytes(Arc<dyn BytesToBytesCodecTraits>),
 }
@@ -256,7 +256,7 @@ impl Codec {
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
     pub fn from_metadata<'a>(
         metadata: impl Into<CodecMetadata<'a>>,
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, CodecCreateError> {
         match metadata.into() {
             CodecMetadata::V2(metadata) => Self::from_metadata_v2(metadata),
             CodecMetadata::V3(metadata) => Self::from_metadata_v3(metadata),
@@ -266,8 +266,8 @@ impl Codec {
     /// Create a codec from V3 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+    /// Returns [`CodecCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, CodecCreateError> {
         let name = metadata.name();
 
         // Check runtime registry first (higher priority)
@@ -291,14 +291,18 @@ impl Codec {
                 return plugin.create(metadata);
             }
         }
-        Err(PluginUnsupportedError::new(metadata.name().to_string(), "codec".to_string()).into())
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.name().to_string(),
+            "codec".to_string(),
+        ))
+        .into())
     }
 
     /// Create a codec from V2 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    fn from_metadata_v2(metadata: &MetadataV2) -> Result<Self, PluginCreateError> {
+    /// Returns [`CodecCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v2(metadata: &MetadataV2) -> Result<Self, CodecCreateError> {
         let name = metadata.id();
 
         // Check runtime registry first (higher priority)
@@ -322,7 +326,11 @@ impl Codec {
                 return plugin.create(metadata);
             }
         }
-        Err(PluginUnsupportedError::new(metadata.id().to_string(), "codec".to_string()).into())
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.id().to_string(),
+            "codec".to_string(),
+        ))
+        .into())
     }
 
     /// Create the codec configuration.
@@ -369,8 +377,8 @@ pub trait CodecTraitsV2 {
     /// Create a codec from Zarr V2 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>
+    /// Returns [`CodecCreateError`] if the codec cannot be created.
+    fn create(metadata: &MetadataV2) -> Result<Codec, CodecCreateError>
     where
         Self: Sized;
 }
@@ -382,17 +390,14 @@ pub trait CodecTraitsV3 {
     /// Create a codec from Zarr V3 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>
+    /// Returns [`CodecCreateError`] if the codec cannot be created.
+    fn create(metadata: &MetadataV3) -> Result<Codec, CodecCreateError>
     where
         Self: Sized;
 }
 
 /// Codec traits.
 pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
-    /// Returns this codec as [`Any`].
-    fn as_any(&self) -> &dyn Any;
-
     /// Create the codec configuration.
     ///
     /// A hidden codec (e.g. a cache) will return [`None`], since it will not have any associated metadata.
@@ -419,16 +424,24 @@ pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
     fn partial_encoder_capability(&self) -> PartialEncoderCapability;
 }
 
-/// Traits for both array to array and array to bytes codecs.
-pub trait ArrayCodecTraits: CodecTraits {
-    /// Return the recommended concurrency for the requested decoded representation.
+/// Traits shared by context-bound array codecs.
+pub trait ArrayCodecTraits: MaybeSend + MaybeSync {
+    /// Returns this codec as [`Any`].
+    fn as_any(&self) -> &dyn Any;
+
+    /// Return the decoded data type bound to this codec.
+    fn data_type(&self) -> &DataType;
+
+    /// Return the decoded fill value bound to this codec.
+    fn fill_value(&self) -> &FillValue;
+
+    /// Return the recommended concurrency for the requested decoded shape.
     ///
     /// # Errors
-    /// Returns [`CodecError`] if the decoded representation is not valid for the codec.
+    /// Returns [`CodecError`] if the decoded `shape` is not valid for the codec.
     fn recommended_concurrency(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError>;
 }
 
@@ -1145,102 +1158,77 @@ impl AsyncBytesPartialEncoderTraits for StoragePartialEncoder<AsyncReadableWrita
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits>;
 
     /// Return a version of this codec reconfigured with the provided codec-specific options.
     ///
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured.
     #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Arc<dyn ArrayToArrayCodecTraits> {
-        self.into_dyn()
+    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecCreateError> {
+        Ok(self.into_dyn())
     }
 
-    /// Returns the encoded data type for a given decoded data type.
+    /// Bind this codec to a decoded data type and fill value.
+    ///
+    /// Binding eagerly validates and derives the encoded context.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the data type is not supported by this codec.
-    fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError>;
-
-    /// Returns the encoded fill value for a given decoded fill value
-    ///
-    /// The encoded fill value is computed by applying [`ArrayToArrayCodecTraits::encode`] to the `decoded_fill_value`.
-    /// This may need to be implemented manually if a codec does not support encoding a single element or the encoding is otherwise dependent on the chunk shape.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the data type is not supported by this codec.
-    fn encoded_fill_value(
+    /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
+    fn with_context(
         &self,
-        decoded_data_type: &DataType,
-        decoded_fill_value: &FillValue,
-    ) -> Result<FillValue, CodecError> {
-        let element_shape = ChunkShape::from(vec![unsafe { NonZeroU64::new_unchecked(1) }]);
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError>;
+}
 
-        // Calculate the changed fill value
-        let fill_value = self
-            .encode(
-                ArrayBytes::new_fill_value(decoded_data_type, 1, decoded_fill_value)?,
-                &element_shape,
-                decoded_data_type,
-                decoded_fill_value,
-                &CodecOptions::default(),
-            )?
-            .into_fixed()?
-            .into_owned();
-        Ok(FillValue::new(fill_value))
-    }
+/// Runtime traits for an array-to-array codec bound to a data type and fill value.
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+    /// Return a dynamic version of the bound codec.
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
+
+    /// Return the encoded data type.
+    fn encoded_data_type(&self) -> &DataType;
+
+    /// Return the encoded fill value.
+    fn encoded_fill_value(&self) -> &FillValue;
 
     /// Returns the shape of the encoded chunk for a given decoded chunk shape.
     ///
-    /// The default implementation returns the shape unchanged.
-    ///
     /// # Errors
-    /// Returns a [`CodecError`] if the shape is not supported by this codec.
+    /// Returns a [`CodecError`] if the `decoded_shape` is not supported by this codec.
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         Ok(decoded_shape.to_vec())
     }
 
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///
-    /// The default implementation is for shape and order-preserving codecs, where the granularity is unchanged.
-    /// Codecs may return `decoded_shape` if they do not support granular access or otherwise calculate a different granularity for partial decoding.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if the decoded shape or encoded granularity is not supported by this codec.
-    #[expect(unused_variables)]
     fn partial_decode_granularity(
         &self,
         decoded_shape: &[NonZeroU64],
         encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
-        Ok(encoded_granularity.to_vec())
-    }
-
-    /// Returns the encoded chunk representation given the decoded chunk representation.
-    ///
-    /// The default implementation returns the chunk representation from the outputs of
-    /// - [`encoded_data_type`](ArrayToArrayCodecTraits::encoded_data_type),
-    /// - [`encoded_fill_value`](ArrayToArrayCodecTraits::encoded_fill_value), and
-    /// - [`encoded_shape`](ArrayToArrayCodecTraits::encoded_shape).
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the decoded chunk representation is not supported by this codec.
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-    ) -> Result<(ChunkShape, DataType, FillValue), CodecError> {
-        Ok((
-            self.encoded_shape(shape)?,
-            self.encoded_data_type(data_type)?,
-            self.encoded_fill_value(data_type, fill_value)?,
-        ))
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_shape == decoded_shape {
+            Ok(encoded_granularity.to_vec())
+        } else {
+            Ok(decoded_shape.to_vec())
+        }
     }
 
     /// Encode a chunk.
@@ -1251,8 +1239,6 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
@@ -1264,55 +1250,45 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Initialise a partial decoder.
     ///
-    /// The default implementation decodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
 
     /// Initialise a partial encoder.
     ///
-    /// The default implementation reencodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1320,24 +1296,20 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial decoder.
     ///
-    /// The default implementation decodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1345,24 +1317,20 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial encoder.
     ///
-    /// The default implementation reencodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1374,21 +1342,45 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits>;
 
     /// Return a version of this codec reconfigured with the provided codec-specific options.
     ///
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured.
     #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self.into_dyn()
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
+        Ok(self.into_dyn())
     }
+
+    /// Bind this codec to a decoded data type and fill value.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError>;
+}
+
+/// Runtime traits for an array-to-bytes codec bound to a data type and fill value.
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+    /// Return a dynamic version of the bound codec.
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
 
     /// Returns the size of the encoded representation given a size of the decoded representation.
     ///
@@ -1397,8 +1389,6 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError>;
 
     /// Return the partial decode granularity.
@@ -1424,8 +1414,6 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError>;
 
@@ -1437,27 +1425,22 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
-    /// Compact a chunk.
+    /// Compact a chunk to remove any extraneous data.
     ///
-    /// Takes an encoded representation and compacts it to remove any extraneous data.
     /// The default implementation returns the input `bytes` unchanged.
     ///
     /// Returns `Ok(None)` if no compaction was performed.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with the decoded representation.
-    #[expect(unused_variables)]
+    #[allow(unused_variables)]
     fn compact<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         Ok(None)
@@ -1480,65 +1463,48 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: ArrayBytesRaw<'_>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let num_elements = output_target.num_elements();
-        let shape_num_elements: u64 = shape.iter().map(|d| d.get()).product();
-        if shape_num_elements != num_elements {
-            return Err(InvalidNumberOfElementsError::new(num_elements, shape_num_elements).into());
-        }
-
-        let decoded_value = self.decode(bytes, shape, data_type, fill_value, options)?;
-        decode_into_array_bytes_target(&decoded_value, output_target)
+        let bytes = self.decode(bytes, shape, options)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     /// Initialise a partial decoder.
-    ///
-    /// The default implementation decodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
 
     /// Initialise a partial encoder.
     ///
-    /// The default implementation reencodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1546,24 +1512,20 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial decoder.
     ///
-    /// The default implementation decodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1571,24 +1533,20 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial encoder.
     ///
-    /// The default implementation reencodes the entire chunk.
-    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
             self.into_dyn(),
         )))
     }
@@ -1612,8 +1570,8 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Arc<dyn BytesToBytesCodecTraits> {
-        self.into_dyn()
+    ) -> Result<Arc<dyn BytesToBytesCodecTraits>, CodecCreateError> {
+        Ok(self.into_dyn())
     }
 
     /// Return the maximum internal concurrency supported for the requested decoded representation.
@@ -1919,7 +1877,63 @@ impl SubsetOutOfBoundsError {
     }
 }
 
-/// A codec error.
+/// A codec creation error.
+///
+/// This is used for failures while creating codecs from metadata, reconfiguring codecs, or binding
+/// unbound array codecs to a decoded data type and fill value.
+#[derive(Clone, Debug, Error)]
+pub enum CodecCreateError {
+    /// A plugin creation error.
+    #[error(transparent)]
+    PluginCreateError(#[from] PluginCreateError),
+    /// Unsupported data type.
+    #[error("{}", format_unsupported_data_type(.0, .1))]
+    UnsupportedDataType(DataType, String),
+    /// An incompatible fill value error.
+    #[error(transparent)]
+    DataTypeFillValueError(#[from] DataTypeFillValueError),
+    /// Other.
+    #[error("{_0}")]
+    Other(String),
+}
+
+impl From<zarrs_data_type::DataTypeCodecError> for CodecCreateError {
+    fn from(error: zarrs_data_type::DataTypeCodecError) -> Self {
+        let zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+            data_type,
+            codec_name,
+        } = error;
+        Self::UnsupportedDataType(data_type, codec_name.to_string())
+    }
+}
+
+impl CodecCreateError {
+    /// Create a new [`CodecCreateError::Other`] from a displayable error or message.
+    #[must_use]
+    pub fn other(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<&str> for CodecCreateError {
+    fn from(error: &str) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<String> for CodecCreateError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
+}
+
+impl From<Arc<serde_json::Error>> for CodecCreateError {
+    fn from(error: Arc<serde_json::Error>) -> Self {
+        Self::PluginCreateError(PluginCreateError::from(error))
+    }
+}
+
+/// A codec runtime error.
 #[non_exhaustive]
 #[derive(Clone, Debug, Error)]
 pub enum CodecError {
@@ -1944,12 +1958,9 @@ pub enum CodecError {
     /// A store error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
-    /// Unsupported data type
+    /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
-    /// Data type does not support a codec.
-    #[error(transparent)]
-    UnsupportedDataTypeCodec(#[from] zarrs_data_type::DataTypeCodecError),
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"
@@ -1991,6 +2002,19 @@ pub enum CodecError {
     /// An array region error.
     #[error(transparent)]
     ArraySubsetError(#[from] ArraySubsetError),
+    /// Codec create error.
+    #[error(transparent)]
+    CodecCreateError(#[from] CodecCreateError),
+}
+
+impl From<zarrs_data_type::DataTypeCodecError> for CodecError {
+    fn from(error: zarrs_data_type::DataTypeCodecError) -> Self {
+        let zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+            data_type,
+            codec_name,
+        } = error;
+        Self::UnsupportedDataType(data_type, codec_name.to_string())
+    }
 }
 
 fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> String {

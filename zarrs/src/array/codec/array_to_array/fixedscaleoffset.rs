@@ -44,7 +44,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
     v3: "numcodecs.fixedscaleoffset", [],
@@ -60,7 +59,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for FixedScaleOffsetCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: FixedScaleOffsetCodecConfiguration =
             metadata.to_typed_configuration()?;
         let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
@@ -71,7 +70,7 @@ impl CodecTraitsV3 for FixedScaleOffsetCodec {
 }
 
 impl CodecTraitsV2 for FixedScaleOffsetCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: FixedScaleOffsetCodecConfiguration =
             metadata.to_typed_configuration()?;
         let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
@@ -91,12 +90,13 @@ pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use zarrs_data_type::FillValue;
 
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
-    use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use zarrs_codec::{CodecOptions, UnboundArrayToArrayCodecTraits};
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
@@ -123,25 +123,16 @@ mod tests {
 
         let codec_configuration: FixedScaleOffsetCodecConfiguration =
             serde_json::from_str(JSON).unwrap();
-        let codec = FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(data_type.clone(), fill_value.clone())
+                .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -152,5 +143,21 @@ mod tests {
                 1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.
             ]
         );
+    }
+
+    #[test]
+    fn codec_fixedscaleoffset_encoded_fill_value() {
+        const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
+        let data_type = data_type::float64();
+        let fill_value = FillValue::from(1000.3f64);
+
+        let codec_configuration: FixedScaleOffsetCodecConfiguration =
+            serde_json::from_str(JSON).unwrap();
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(data_type, fill_value)
+                .unwrap();
+
+        assert_eq!(codec.encoded_fill_value(), &FillValue::from(3u8));
     }
 }

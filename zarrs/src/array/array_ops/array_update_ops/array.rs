@@ -144,8 +144,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-            let codec_concurrency =
-                self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+            let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -185,11 +184,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     ) -> Result<bool, ArrayError> {
         let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
         if let Some(chunk_bytes) = chunk_bytes {
-            if let Some(compacted_bytes) = self.codecs.compact(
+            if let Some(compacted_bytes) = self.codecs_bound.compact(
                 chunk_bytes.into(),
                 &self.chunk_shape(chunk_indices)?,
-                self.data_type(),
-                self.fill_value(),
                 options,
             )? {
                 // SAFETY: The compacted bytes are already encoded
@@ -232,11 +229,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             self.chunk_key(chunk_indices),
         ));
 
-        Ok(self.codecs.clone().partial_encoder(
+        Ok(self.codecs_bound().partial_encoder(
             input_output_handle,
             &self.chunk_shape(chunk_indices)?,
-            self.data_type(),
-            self.fill_value(),
             options,
         )?)
     }

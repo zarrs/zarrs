@@ -15,8 +15,9 @@ use crate::array::{
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::pcodec::{
@@ -27,6 +28,16 @@ use zarrs_metadata_ext::codec::pcodec::{
 #[derive(Debug, Clone)]
 pub struct PcodecCodec {
     chunk_config: ChunkConfig,
+}
+
+/// A `pcodec` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct PcodecCodecBound {
+    chunk_config: ChunkConfig,
+    element_type: PcodecElementType,
+    elements_per_element: usize,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 fn mode_spec_config_to_pco(mode_spec: PcodecModeSpecConfiguration) -> ModeSpec {
@@ -90,10 +101,6 @@ impl PcodecCodec {
 }
 
 impl CodecTraits for PcodecCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -145,11 +152,45 @@ impl CodecTraits for PcodecCodec {
     }
 }
 
-impl ArrayCodecTraits for PcodecCodec {
+impl UnboundArrayToBytesCodecTraits for PcodecCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        let pcodec = data_type.codec_pcodec()?;
+        let element_type = pcodec.pcodec_element_type();
+        let elements_per_element = pcodec.pcodec_elements_per_element();
+        Ok(Arc::new(PcodecCodecBound {
+            chunk_config: self.chunk_config.clone(),
+            element_type,
+            elements_per_element,
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for PcodecCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // pcodec does not support parallel decode
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -161,7 +202,7 @@ impl ArrayCodecTraits for PcodecCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for PcodecCodec {
+impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
@@ -170,14 +211,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
-
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
             ( $t:ty ) => {
@@ -190,7 +225,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             };
         }
 
-        match element_type {
+        match self.element_type {
             PcodecElementType::U16 => pcodec_encode!(u16),
             PcodecElementType::U32 => pcodec_encode!(u32),
             PcodecElementType::U64 => pcodec_encode!(u64),
@@ -207,14 +242,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
-
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
                 pco::standalone::simple_decompress(&bytes)
@@ -223,7 +252,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             };
         }
 
-        let bytes = match element_type {
+        let bytes = match self.element_type {
             PcodecElementType::U16 => pcodec_decode!(u16),
             PcodecElementType::U32 => pcodec_decode!(u32),
             PcodecElementType::U64 => pcodec_decode!(u64),
@@ -240,16 +269,10 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
+        let num_elements = shape.num_elements_usize() * self.elements_per_element;
 
-        let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();
-
-        let size = match element_type {
+        let size = match self.element_type {
             PcodecElementType::U16 | PcodecElementType::I16 | PcodecElementType::F16 => {
                 file_size::<u16>(num_elements, &self.chunk_config.paging_spec)
                     .map_err(|err| CodecError::from(err.to_string()))?

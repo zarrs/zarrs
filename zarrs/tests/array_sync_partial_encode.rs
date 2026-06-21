@@ -8,11 +8,11 @@ use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions};
+use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToArrayCodecTraits};
 
 /// Test sync partial encoding for array-to-array codecs in isolation
 fn test_array_to_array_codec_sync_partial_encoding<
-    T: ArrayToArrayCodecTraits + Send + Sync + 'static,
+    T: UnboundArrayToArrayCodecTraits + Send + Sync + 'static,
 >(
     codec: Arc<T>,
     codec_name: &str,

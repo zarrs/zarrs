@@ -22,10 +22,6 @@ struct TestPassthroughCodec;
 zarrs_plugin::impl_extension_aliases!(TestPassthroughCodec, v3: "test.passthrough", v2: "test.passthrough");
 
 impl CodecTraits for TestPassthroughCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

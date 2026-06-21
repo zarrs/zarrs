@@ -36,7 +36,6 @@ use zarrs_codec::Codec;
 pub use zarrs_metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationNumcodecs, Crc32cCodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c", v2: "crc32c");
 
@@ -46,7 +45,7 @@ inventory::submit! {
 }
 
 impl zarrs_codec::CodecTraitsV3 for Crc32cCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = if metadata.name() == "numcodecs.crc32c" {
             Crc32cCodecConfiguration::Numcodecs(
                 metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
@@ -62,7 +61,7 @@ impl zarrs_codec::CodecTraitsV3 for Crc32cCodec {
 }
 
 impl zarrs_codec::CodecTraitsV2 for Crc32cCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = Crc32cCodecConfiguration::Numcodecs(
             metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
         );

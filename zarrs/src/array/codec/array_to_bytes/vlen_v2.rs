@@ -39,7 +39,6 @@ use zarrs_metadata::v3::MetadataV3;
 use crate::array::ArrayBytesRaw;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
@@ -51,7 +50,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for VlenV2Codec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
 
         if metadata.configuration().is_none_or(|c| c.is_empty()) {

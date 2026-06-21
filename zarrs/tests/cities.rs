@@ -12,7 +12,7 @@ use zarrs::array::codec::{VlenCodecConfiguration, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::ArrayToBytesCodecTraits;
+use zarrs_codec::UnboundArrayToBytesCodecTraits;
 use zarrs_filesystem::FilesystemStore;
 
 fn read_cities() -> std::io::Result<Vec<String>> {
@@ -29,7 +29,7 @@ fn cities_impl(
     compression_level: Option<i32>,
     chunk_size: u64,
     shard_size: Option<u64>,
-    vlen_codec: Arc<dyn ArrayToBytesCodecTraits>,
+    vlen_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     write_to_file: bool,
 ) -> Result<u64, Box<dyn Error>> {
     let store: ReadableWritableListableStorage = if write_to_file {

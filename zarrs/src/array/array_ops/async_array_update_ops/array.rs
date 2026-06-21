@@ -154,8 +154,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
 
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-            let codec_concurrency =
-                self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+            let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -207,13 +206,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         if let Some(chunk_bytes) = chunk_bytes {
             let chunk_bytes: Vec<u8> = chunk_bytes.into();
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            if let Some(compacted_bytes) = self.codecs.compact(
-                chunk_bytes.into(),
-                &chunk_shape,
-                self.data_type(),
-                self.fill_value(),
-                options,
-            )? {
+            if let Some(compacted_bytes) =
+                self.codecs_bound
+                    .compact(chunk_bytes.into(), &chunk_shape, options)?
+            {
                 unsafe {
                     self.async_store_encoded_chunk(
                         chunk_indices,
@@ -257,15 +253,8 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         ));
 
         Ok(self
-            .codecs
-            .clone()
-            .async_partial_encoder(
-                input_output_handle,
-                &chunk_shape,
-                self.data_type(),
-                self.fill_value(),
-                options,
-            )
+            .codecs_bound()
+            .async_partial_encoder(input_output_handle, &chunk_shape, options)
             .await?)
     }
 }

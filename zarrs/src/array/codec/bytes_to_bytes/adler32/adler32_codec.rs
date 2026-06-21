@@ -54,10 +54,6 @@ impl Adler32Codec {
 }
 
 impl CodecTraits for Adler32Codec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

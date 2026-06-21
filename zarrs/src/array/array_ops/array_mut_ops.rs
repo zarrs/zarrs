@@ -11,6 +11,9 @@ pub trait ArrayMutOps: ArrayOps {
     ///
     /// Refer to [`with_codec_specific_options`](Array::with_codec_specific_options) for details.
     ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    ///
     /// # Example
     /// ```rust,no_run
     /// # use std::sync::Arc;
@@ -24,7 +27,10 @@ pub trait ArrayMutOps: ArrayOps {
     /// array.set_codec_specific_options(&opts);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self;
+    fn set_codec_specific_options(
+        &mut self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<&mut Self, CodecCreateError>;
 
     /// Set the metadata options.
     fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self;

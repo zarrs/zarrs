@@ -9,8 +9,9 @@ use super::{
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -22,6 +23,14 @@ use zarrs_plugin::PluginCreateError;
 #[derive(Clone, Debug)]
 pub struct TransposeCodec {
     pub(crate) order: TransposeOrder,
+}
+
+/// A Transpose codec implementation bound to a data type and fill value.
+#[derive(Clone, Debug)]
+struct TransposeCodecBound {
+    order: TransposeOrder,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl TransposeCodec {
@@ -48,13 +57,15 @@ impl TransposeCodec {
     pub const fn new(order: TransposeOrder) -> Self {
         Self { order }
     }
+}
 
+impl TransposeCodecBound {
     /// Validate the shape and data type for this codec.
-    fn validate(&self, shape: &[NonZeroU64], data_type: &DataType) -> Result<(), CodecError> {
-        if data_type.is_optional() {
+    fn validate(&self, shape: &[NonZeroU64]) -> Result<(), CodecError> {
+        if self.data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
+                self.data_type.clone(),
+                TransposeCodec::aliases_v3().default_name.to_string(),
             ));
         }
         if self.order.0.len() != shape.len() {
@@ -67,10 +78,6 @@ impl TransposeCodec {
 }
 
 impl CodecTraits for TransposeCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -101,27 +108,68 @@ impl CodecTraits for TransposeCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for TransposeCodec {
+impl UnboundArrayToArrayCodecTraits for TransposeCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self as Arc<dyn UnboundArrayToArrayCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        if data_type.is_optional() {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        }
+        Ok(Arc::new(TransposeCodecBound {
+            order: self.order.clone(),
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for TransposeCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        // TODO: This could be increased, need to implement `transpose_array` without ndarray
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
     }
 
-    fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        if decoded_data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                decoded_data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
-        Ok(decoded_data_type.clone())
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
     }
 
-    fn encoded_fill_value(
-        &self,
-        _decoded_data_type: &DataType,
-        decoded_fill_value: &FillValue,
-    ) -> Result<FillValue, CodecError> {
-        Ok(decoded_fill_value.clone())
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
@@ -155,26 +203,22 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(shape, data_type)?;
+        self.validate(shape)?;
 
         // Encode: apply the transpose order to the decoded shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
-        apply_permutation(&bytes, shape_u64, &self.order.0, data_type)
+        apply_permutation(&bytes, shape_u64, &self.order.0, &self.data_type)
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(shape, data_type)?;
+        self.validate(shape)?;
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
@@ -183,7 +227,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             &bytes,
             &transposed_shape,
             &inverse_permutation(&self.order.0),
-            data_type,
+            &self.data_type,
         )
     }
 
@@ -191,16 +235,14 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -210,16 +252,14 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_output_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -230,16 +270,14 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -250,29 +288,16 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_output_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 self.order.0.clone(),
             ),
         ))
-    }
-}
-
-impl ArrayCodecTraits for TransposeCodec {
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: This could be increased, need to implement `transpose_array` without ndarray
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 }

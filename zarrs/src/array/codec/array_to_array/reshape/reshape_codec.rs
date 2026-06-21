@@ -8,8 +8,9 @@ use zarrs_plugin::ZarrVersion;
 use crate::array::{ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -23,6 +24,14 @@ use zarrs_plugin::PluginCreateError;
 #[derive(Clone, Debug)]
 pub struct ReshapeCodec {
     shape: ReshapeShape,
+}
+
+/// A `reshape` codec implementation bound to a data type and fill value.
+#[derive(Clone, Debug)]
+struct ReshapeCodecBound {
+    shape: ReshapeShape,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 /// Return the row-major linear length of an encoded granule if every encoded
@@ -138,10 +147,6 @@ impl ReshapeCodec {
 }
 
 impl CodecTraits for ReshapeCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -172,21 +177,61 @@ impl CodecTraits for ReshapeCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for ReshapeCodec {
+impl UnboundArrayToArrayCodecTraits for ReshapeCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self as Arc<dyn UnboundArrayToArrayCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        Ok(Arc::new(ReshapeCodecBound {
+            shape: self.shape.clone(),
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for ReshapeCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToArrayCodecTraits for ReshapeCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
     }
 
-    fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        Ok(decoded_data_type.clone())
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
     }
 
-    fn encoded_fill_value(
-        &self,
-        _decoded_data_type: &DataType,
-        decoded_fill_value: &FillValue,
-    ) -> Result<FillValue, CodecError> {
-        Ok(decoded_fill_value.clone())
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
@@ -230,8 +275,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -241,8 +284,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -252,8 +293,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
@@ -261,8 +300,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
             super::reshape_codec_partial::ReshapeCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 encoded_shape,
             ),
         ))
@@ -272,8 +311,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
@@ -281,8 +318,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
             super::reshape_codec_partial::ReshapeCodecPartial::new(
                 input_output_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 encoded_shape,
             ),
         ))
@@ -293,8 +330,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
@@ -302,8 +337,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
             super::reshape_codec_partial::ReshapeCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 encoded_shape,
             ),
         ))
@@ -314,8 +349,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
@@ -323,20 +356,10 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
             super::reshape_codec_partial::ReshapeCodecPartial::new(
                 input_output_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 encoded_shape,
             ),
         ))
-    }
-}
-
-impl ArrayCodecTraits for ReshapeCodec {
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 }

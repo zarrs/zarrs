@@ -12,7 +12,7 @@ use super::super::*;
 use super::ArrayReadOps;
 use crate::array::ArrayBytes;
 use crate::array::array_sharded_ext::subchunk_shard_index_and_chunk_index;
-use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingPartialDecoder};
+use crate::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -57,12 +57,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            self.codecs()
+            self.codecs_bound()
                 .decode_into(
                     Cow::Owned(chunk_encoded.into()),
                     &self.chunk_shape(chunk_indices)?,
-                    self.data_type(),
-                    self.fill_value(),
                     output_target,
                     options,
                 )
@@ -124,15 +122,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 self.chunk_key(chunk_indices),
             ));
 
-            self.codecs
-                .clone()
-                .partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )?
+            self.codecs_bound()
+                .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode(chunk_subset, options)?
                 .into_owned()
         };
@@ -168,15 +159,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 storage_transformer,
                 self.chunk_key(chunk_indices),
             ));
-            self.codecs
-                .clone()
-                .partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )?
+            self.codecs_bound()
+                .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode_into(chunk_subset, output_target, options)?;
             Ok(())
         }
@@ -243,8 +227,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 let chunk_shape = self.chunk_shape(chunks.start())?;
 
                 // Calculate chunk/codec concurrency
-                let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+                let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,
@@ -322,11 +305,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
-        let codecs = self.codecs();
+        let codecs = self.codecs_bound();
         let Some(sharding_codec) = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
         else {
             return Err(ArrayError::UnsupportedMethod(
                 "the array is not exclusively sharded".to_string(),
@@ -352,8 +335,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
 
         let partial_decoder = ShardingPartialDecoder::new(
             input_handle,
-            self.data_type().clone(),
-            self.fill_value().clone(),
             self.chunk_shape(&shard_indices)?,
             sharding_codec.subchunk_shape.clone(),
             sharding_codec.inner_codecs.clone(),
@@ -420,14 +401,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
-                .codecs()
-                .decode(
-                    Cow::Owned(chunk_encoded.into()),
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
@@ -474,11 +449,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             storage_transformer,
             self.chunk_key(chunk_indices),
         ));
-        Ok(self.codecs.clone().partial_decoder(
+        Ok(self.codecs_bound().partial_decoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,
-            self.data_type(),
-            self.fill_value(),
             options,
         )?)
     }

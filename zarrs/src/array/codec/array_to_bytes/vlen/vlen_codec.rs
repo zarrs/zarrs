@@ -4,19 +4,20 @@ use std::sync::Arc;
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::BytesCodec;
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, DataType,
-    DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound,
+    DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]
@@ -25,6 +26,16 @@ pub struct VlenCodec {
     data_codecs: Arc<CodecChain>,
     index_data_type: VlenIndexDataType,
     index_location: VlenIndexLocation,
+}
+
+/// A `vlen` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct VlenCodecBound {
+    index_codecs: Arc<CodecChainBound>,
+    data_codecs: Arc<CodecChainBound>,
+    index_location: VlenIndexLocation,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl Default for VlenCodec {
@@ -75,10 +86,10 @@ impl VlenCodec {
     /// Create a new `vlen` codec from configuration.
     ///
     /// # Errors
-    /// Returns a [`PluginCreateError`] if the codecs cannot be constructed from the codec metadata.
+    /// Returns a [`CodecCreateError`] if the codecs cannot be constructed from the codec metadata.
     pub fn new_with_configuration(
         configuration: &VlenCodecConfiguration,
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, CodecCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
                 let index_codecs =
@@ -102,7 +113,7 @@ impl VlenCodec {
                     VlenIndexLocation::Start,
                 ))
             }
-            _ => Err(PluginCreateError::Other(
+            _ => Err(CodecCreateError::Other(
                 "this vlen codec configuration variant is unsupported".to_string(),
             )),
         }
@@ -110,10 +121,6 @@ impl VlenCodec {
 }
 
 impl CodecTraits for VlenCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -142,11 +149,73 @@ impl CodecTraits for VlenCodec {
     }
 }
 
-impl ArrayCodecTraits for VlenCodec {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for VlenCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        if data_type.is_optional() {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        }
+        if !matches!(data_type.size(), DataTypeSize::Variable) {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        }
+        let index_codecs = match self.index_data_type {
+            VlenIndexDataType::UInt32 => self
+                .index_codecs
+                .clone()
+                .with_context(crate::array::data_type::uint32(), FillValue::from(0u32))?,
+            VlenIndexDataType::UInt64 => self
+                .index_codecs
+                .clone()
+                .with_context(crate::array::data_type::uint64(), FillValue::from(0u64))?,
+        };
+        let data_codecs = self
+            .data_codecs
+            .clone()
+            .with_context(crate::array::data_type::uint8(), FillValue::from(0u8))?;
+        Ok(Arc::new(VlenCodecBound {
+            index_codecs,
+            data_codecs,
+            index_location: self.index_location,
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for VlenCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -157,7 +226,7 @@ impl ArrayCodecTraits for VlenCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for VlenCodec {
+impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
@@ -166,66 +235,49 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        bytes.validate(num_elements, data_type)?;
+        bytes.validate(num_elements, &self.data_type)?;
         let (data, offsets) = bytes.into_variable()?.into_parts();
         assert_eq!(offsets.len(), usize::try_from(num_elements).unwrap() + 1);
 
         // Encode offsets
         let num_offsets =
             NonZeroU64::try_from(usize::try_from(num_elements).unwrap() as u64 + 1).unwrap();
-        let offsets = match self.index_data_type {
-            VlenIndexDataType::UInt32 => {
-                let offsets = offsets
-                    .iter()
-                    .map(|offset| u32::try_from(*offset))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| {
-                        CodecError::Other(
-                            "index offsets are too large for a uint32 index_data_type".to_string(),
-                        )
-                    })?;
-                let offsets = transmute_to_bytes_vec(offsets);
-                let index_shape = vec![num_offsets];
-                self.index_codecs.encode(
-                    offsets.into(),
-                    &index_shape,
-                    &crate::array::data_type::uint32(),
-                    &FillValue::from(0u32),
-                    options,
-                )?
-            }
-            VlenIndexDataType::UInt64 => {
-                let offsets = offsets
-                    .iter()
-                    .map(|offset| u64::try_from(*offset).unwrap())
-                    .collect::<Vec<u64>>();
-                let offsets = transmute_to_bytes_vec(offsets);
-                let index_shape = vec![num_offsets];
-                self.index_codecs.encode(
-                    offsets.into(),
-                    &index_shape,
-                    &crate::array::data_type::uint64(),
-                    &FillValue::from(0u64),
-                    options,
-                )?
-            }
+        let offsets = if *self.index_codecs.data_type() == crate::array::data_type::uint32() {
+            let offsets = offsets
+                .iter()
+                .map(|offset| u32::try_from(*offset))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| {
+                    CodecError::Other(
+                        "index offsets are too large for a uint32 index_data_type".to_string(),
+                    )
+                })?;
+            let offsets = transmute_to_bytes_vec(offsets);
+            let index_shape = vec![num_offsets];
+            self.index_codecs
+                .encode(offsets.into(), &index_shape, options)?
+        } else if *self.index_codecs.data_type() == crate::array::data_type::uint64() {
+            let offsets = offsets
+                .iter()
+                .map(|offset| u64::try_from(*offset).unwrap())
+                .collect::<Vec<u64>>();
+            let offsets = transmute_to_bytes_vec(offsets);
+            let index_shape = vec![num_offsets];
+            self.index_codecs
+                .encode(offsets.into(), &index_shape, options)?
+        } else {
+            return Err(CodecError::Other(
+                "unsupported bound vlen index data type, expected uint32 or uint64".to_string(),
+            ));
         };
 
         // Encode data
         let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
             let data_shape = vec![data_len];
-            self.data_codecs.encode(
-                data.into(),
-                &data_shape,
-                &crate::array::data_type::uint8(),
-                &FillValue::from(0u8),
-                options,
-            )?
+            self.data_codecs.encode(data.into(), &data_shape, options)?
         } else {
             vec![].into()
         };
@@ -253,14 +305,11 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
             &bytes,
             shape,
-            self.index_data_type,
             &self.index_codecs,
             &self.data_codecs,
             self.index_location,
@@ -275,18 +324,15 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
             input_handle,
             shape.to_vec(),
-            data_type.clone(),
-            fill_value.clone(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
             self.index_codecs.clone(),
             self.data_codecs.clone(),
-            self.index_data_type,
             self.index_location,
         )))
     }
@@ -296,19 +342,16 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             vlen_partial_decoder::AsyncVlenPartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
-                data_type.clone(),
-                fill_value.clone(),
+                self.data_type.clone(),
+                self.fill_value.clone(),
                 self.index_codecs.clone(),
                 self.data_codecs.clone(),
-                self.index_data_type,
                 self.index_location,
             ),
         ))
@@ -317,21 +360,12 @@ impl ArrayToBytesCodecTraits for VlenCodec {
     fn encoded_representation(
         &self,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
-
-        match data_type.size() {
+        match self.data_type.size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
+                self.data_type.clone(),
+                VlenCodec::aliases_v3().default_name.to_string(),
             )),
         }
     }

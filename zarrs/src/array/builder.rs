@@ -17,8 +17,8 @@ use crate::config::global_config;
 use crate::node::NodePath;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
-    CodecSpecificOptions,
+    BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -107,9 +107,9 @@ pub struct ArrayBuilder {
     /// Fill value.
     fill_value: ArrayBuilderFillValue,
     /// The array-to-array codecs.
-    array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+    array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     /// The array-to-bytes codec.
-    array_to_bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
+    array_to_bytes_codec: Option<Arc<dyn UnboundArrayToBytesCodecTraits>>,
     /// The bytes-to-bytes codecs. If [`None`], chooses a default based on the data type.
     bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     /// Storage transformer chain.
@@ -313,7 +313,7 @@ impl ArrayBuilder {
     /// If left unmodified, the array will have no array-to-array codecs.
     pub fn array_to_array_codecs(
         &mut self,
-        array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+        array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     ) -> &mut Self {
         self.array_to_array_codecs = array_to_array_codecs;
         self
@@ -324,7 +324,7 @@ impl ArrayBuilder {
     /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
     pub fn array_to_bytes_codec(
         &mut self,
-        array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+        array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     ) -> &mut Self {
         self.array_to_bytes_codec = Some(array_to_bytes_codec);
         self
@@ -588,7 +588,7 @@ impl ArrayBuilder {
             Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?
                 .with_metadata_options(self.metadata_options)
                 .with_codec_options(self.codec_options)
-                .with_codec_specific_options(&self.codec_specific_options),
+                .with_codec_specific_options(&self.codec_specific_options)?,
         )
     }
 
@@ -616,6 +616,7 @@ mod tests {
     use super::*;
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
+    use crate::array::codec::ShardingCodecBound;
     use crate::array::data_type;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
@@ -912,7 +913,7 @@ mod tests {
     fn array_builder_codec_specific_options_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
-        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecOptions};
+        use crate::array::codec::array_to_bytes::sharding::ShardingCodecOptions;
         use zarrs_codec::CodecSpecificOptions;
 
         let storage = Arc::new(MemoryStore::new());
@@ -925,11 +926,11 @@ mod tests {
         );
         let array = builder.build(storage, "/").unwrap();
 
-        let codecs = array.codecs();
+        let codecs = array.codecs_bound();
         let sharding = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
             .expect("expected ShardingCodec");
         assert!(
             matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
@@ -956,7 +957,7 @@ mod tests {
     ) {
         use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
-        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecBuilder};
+        use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
         const SHAPE: [u64; 2] = [4, 4];
         const SHARD_SHAPE: [u64; 2] = [2, 2];
@@ -983,11 +984,11 @@ mod tests {
         .unwrap();
 
         // Verify the option was preserved through build()
-        let codecs = array.codecs();
+        let codecs = array.codecs_bound();
         let sharding = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
             .expect("expected ShardingCodec");
         assert!(
             matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
