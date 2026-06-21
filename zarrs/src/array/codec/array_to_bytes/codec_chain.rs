@@ -527,6 +527,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
+            // Fast path if no bytes to bytes or array to array codecs
             return self.array_to_bytes.decode_into(
                 bytes,
                 &array_representations.last().unwrap().0,
@@ -535,6 +536,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             );
         }
 
+        // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
@@ -542,6 +544,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             bytes = codec.decode(bytes, bytes_representation, options)?;
         }
 
+        // Fast path if no array to array codecs
         if self.array_to_array.is_empty() {
             return self.array_to_bytes.decode_into(
                 bytes,
@@ -551,10 +554,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             );
         }
 
+        // bytes->array
         let mut bytes =
             self.array_to_bytes
                 .decode(bytes, &array_representations.last().unwrap().0, options)?;
 
+        // array->array
         for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
@@ -576,6 +581,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
+        // Decode through bytes_to_bytes codecs (in reverse) to get to array_to_bytes level
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
@@ -583,12 +589,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             bytes = codec.decode(bytes, bytes_representation, options)?;
         }
 
+        // Compact at the array_to_bytes level (e.g., ShardingCodec compact)
         let compacted = self.array_to_bytes.compact(
             bytes,
             &array_representations.last().unwrap().0,
             options,
         )?;
 
+        // If compaction occurred, re-encode through bytes_to_bytes codecs
         if let Some(mut compacted_bytes) = compacted {
             let mut bytes_representation = *bytes_representations.first().unwrap();
             for codec in &self.bytes_to_bytes {
