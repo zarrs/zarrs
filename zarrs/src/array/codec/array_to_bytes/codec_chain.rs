@@ -263,71 +263,150 @@ impl CodecChain {
     }
 }
 
-impl ArrayCodecTraits for CodecChainBound {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn data_type(&self) -> &DataType {
-        self.array_to_array.first().map_or_else(
-            || self.array_to_bytes.data_type(),
-            |codec| codec.data_type(),
-        )
-    }
-
-    fn fill_value(&self) -> &FillValue {
-        self.array_to_array.first().map_or_else(
-            || self.array_to_bytes.fill_value(),
-            |codec| codec.fill_value(),
-        )
-    }
-
-    fn recommended_concurrency(
+impl CodecChainBound {
+    fn get_array_representations(
         &self,
         shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        let mut concurrency_min = usize::MAX;
-        let mut concurrency_max = 0;
+    ) -> Result<ArrayRepresentations, CodecError> {
+        let mut array_representations = Vec::with_capacity(self.array_to_array.len() + 1);
+        array_representations.push((
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+        ));
+        for codec in &self.array_to_array {
+            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
+            array_representations.push((
+                codec.encoded_shape(shape)?,
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
+            ));
+        }
+        Ok(array_representations)
+    }
 
+    fn get_bytes_representations(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentations, CodecError> {
+        let mut bytes_representations = Vec::with_capacity(self.bytes_to_bytes.len() + 1);
+        bytes_representations.push(self.array_to_bytes.encoded_representation(shape)?);
+        for codec in &self.bytes_to_bytes {
+            bytes_representations
+                .push(codec.encoded_representation(bytes_representations.last().unwrap()));
+        }
+        Ok(bytes_representations)
+    }
+
+    fn get_representations(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<(ArrayRepresentations, BytesRepresentations), CodecError> {
         let array_representations = self.get_array_representations(shape)?;
-        let bytes_representations = self.get_bytes_representations(
-            &array_representations
-                .last()
-                .expect("array representations is non-empty")
-                .0,
-        )?;
+        let bytes_representations =
+            self.get_bytes_representations(&array_representations.last().unwrap().0)?;
+        Ok((array_representations, bytes_representations))
+    }
 
-        // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            let recommended_concurrency = &codec.recommended_concurrency(bytes_representation)?;
-            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
-        }
+    /// Get the array to array codecs
+    #[must_use]
+    pub fn array_to_array_codecs(&self) -> &[Arc<dyn ArrayToArrayCodecTraits>] {
+        &self.array_to_array
+    }
 
-        let recommended_concurrency = self
-            .array_to_bytes
-            .recommended_concurrency(&array_representations.last().unwrap().0)?;
-        concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-        concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
+    /// Get the array to bytes codec
+    #[must_use]
+    pub fn array_to_bytes_codec(&self) -> &Arc<dyn ArrayToBytesCodecTraits> {
+        &self.array_to_bytes
+    }
 
-        // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            let recommended_concurrency = codec.recommended_concurrency(shape)?;
-            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
-        }
+    /// Get the bytes to bytes codecs
+    #[must_use]
+    pub fn bytes_to_bytes_codecs(&self) -> &[Arc<dyn BytesToBytesCodecTraits>] {
+        &self.bytes_to_bytes
+    }
+}
 
-        let recommended_concurrency = RecommendedConcurrency::new(
-            std::cmp::min(concurrency_min, concurrency_max)..concurrency_max,
-        );
+impl zarrs_plugin::ExtensionName for CodecChain {
+    fn name(&self, _version: zarrs_plugin::ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
+        // CodecChain is an internal type and does not have a serialization name
+        None
+    }
+}
 
-        Ok(recommended_concurrency)
+impl CodecTraits for CodecChain {
+    /// Returns [`None`] since a codec chain does not have standard codec metadata.
+    ///
+    /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        None
+    }
+
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        // All codecs in the chain must support partial decoding capabilities
+        itertools::chain!(
+            self.array_to_array
+                .iter()
+                .map(|codec| codec.partial_decoder_capability()),
+            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_decoder_capability()),
+            self.bytes_to_bytes
+                .iter()
+                .map(|codec| codec.partial_decoder_capability())
+        )
+        .fold(
+            PartialDecoderCapability {
+                partial_read: true,
+                partial_decode: true,
+            },
+            |acc, capability| PartialDecoderCapability {
+                partial_read: acc.partial_read && capability.partial_read,
+                partial_decode: acc.partial_decode && capability.partial_decode,
+            },
+        )
+    }
+
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        // All codecs in the chain must support partial encoding capabilities
+        itertools::chain!(
+            self.array_to_array
+                .iter()
+                .map(|codec| codec.partial_encoder_capability()),
+            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_encoder_capability()),
+            self.bytes_to_bytes
+                .iter()
+                .map(|codec| codec.partial_encoder_capability())
+        )
+        .fold(
+            PartialEncoderCapability {
+                partial_encode: true,
+            },
+            |acc, capability| PartialEncoderCapability {
+                partial_encode: acc.partial_encode && capability.partial_encode,
+            },
+        )
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for CodecChain {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        Ok(CodecChain::with_context(self, data_type, fill_value)?)
     }
 }
 
@@ -339,20 +418,6 @@ impl ArrayCodecTraits for CodecChainBound {
 impl ArrayToBytesCodecTraits for CodecChainBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
-    }
-
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
-        let array_representations = self.get_array_representations(shape)?;
-        let mut bytes_representation = self
-            .array_to_bytes
-            .encoded_representation(&array_representations.last().unwrap().0)?;
-        for codec in &self.bytes_to_bytes {
-            bytes_representation = codec.encoded_representation(&bytes_representation);
-        }
-        Ok(bytes_representation)
     }
 
     fn partial_decode_granularity(
@@ -440,39 +505,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         Ok(bytes)
     }
 
-    fn compact<'a>(
-        &self,
-        mut bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
-
-        let compacted = self.array_to_bytes.compact(
-            bytes,
-            &array_representations.last().unwrap().0,
-            options,
-        )?;
-
-        if let Some(mut compacted_bytes) = compacted {
-            let mut bytes_representation = *bytes_representations.first().unwrap();
-            for codec in &self.bytes_to_bytes {
-                compacted_bytes = codec.encode(compacted_bytes, options)?;
-                bytes_representation = codec.encoded_representation(&bytes_representation);
-            }
-            Ok(Some(compacted_bytes))
-        } else {
-            Ok(None)
-        }
-    }
-
     fn decode_into(
         &self,
         mut bytes: ArrayBytesRaw<'_>,
@@ -522,6 +554,39 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
 
         decode_into_array_bytes_target(&bytes, output_target)
+    }
+
+    fn compact<'a>(
+        &self,
+        mut bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        let (array_representations, bytes_representations) = self.get_representations(shape)?;
+
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            bytes = codec.decode(bytes, bytes_representation, options)?;
+        }
+
+        let compacted = self.array_to_bytes.compact(
+            bytes,
+            &array_representations.last().unwrap().0,
+            options,
+        )?;
+
+        if let Some(mut compacted_bytes) = compacted {
+            let mut bytes_representation = *bytes_representations.first().unwrap();
+            for codec in &self.bytes_to_bytes {
+                compacted_bytes = codec.encode(compacted_bytes, options)?;
+                bytes_representation = codec.encoded_representation(&bytes_representation);
+            }
+            Ok(Some(compacted_bytes))
+        } else {
+            Ok(None)
+        }
     }
 
     fn partial_decoder(
@@ -742,152 +807,86 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         Ok(input_output_handle)
     }
-}
-
-impl zarrs_plugin::ExtensionName for CodecChain {
-    fn name(&self, _version: zarrs_plugin::ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
-        // CodecChain is an internal type and does not have a serialization name
-        None
-    }
-}
-
-impl CodecTraits for CodecChain {
-    /// Returns [`None`] since a codec chain does not have standard codec metadata.
-    ///
-    /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
-    fn configuration(
-        &self,
-        _version: ZarrVersion,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
-        None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        // All codecs in the chain must support partial decoding capabilities
-        itertools::chain!(
-            self.array_to_array
-                .iter()
-                .map(|codec| codec.partial_decoder_capability()),
-            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_decoder_capability()),
-            self.bytes_to_bytes
-                .iter()
-                .map(|codec| codec.partial_decoder_capability())
-        )
-        .fold(
-            PartialDecoderCapability {
-                partial_read: true,
-                partial_decode: true,
-            },
-            |acc, capability| PartialDecoderCapability {
-                partial_read: acc.partial_read && capability.partial_read,
-                partial_decode: acc.partial_decode && capability.partial_decode,
-            },
-        )
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        // All codecs in the chain must support partial encoding capabilities
-        itertools::chain!(
-            self.array_to_array
-                .iter()
-                .map(|codec| codec.partial_encoder_capability()),
-            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_encoder_capability()),
-            self.bytes_to_bytes
-                .iter()
-                .map(|codec| codec.partial_encoder_capability())
-        )
-        .fold(
-            PartialEncoderCapability {
-                partial_encode: true,
-            },
-            |acc, capability| PartialEncoderCapability {
-                partial_encode: acc.partial_encode && capability.partial_encode,
-            },
-        )
-    }
-}
-
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl UnboundArrayToBytesCodecTraits for CodecChain {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self as Arc<dyn UnboundArrayToBytesCodecTraits>
-    }
-
-    fn with_context(
-        &self,
-        data_type: DataType,
-        fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        Ok(CodecChain::with_context(self, data_type, fill_value)?)
-    }
-}
-
-impl CodecChainBound {
-    fn get_array_representations(
+    fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-    ) -> Result<ArrayRepresentations, CodecError> {
-        let mut array_representations = Vec::with_capacity(self.array_to_array.len() + 1);
-        array_representations.push((
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-        ));
-        for codec in &self.array_to_array {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
-            array_representations.push((
-                codec.encoded_shape(shape)?,
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-            ));
-        }
-        Ok(array_representations)
-    }
-
-    fn get_bytes_representations(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentations, CodecError> {
-        let mut bytes_representations = Vec::with_capacity(self.bytes_to_bytes.len() + 1);
-        bytes_representations.push(self.array_to_bytes.encoded_representation(shape)?);
-        for codec in &self.bytes_to_bytes {
-            bytes_representations
-                .push(codec.encoded_representation(bytes_representations.last().unwrap()));
-        }
-        Ok(bytes_representations)
-    }
-
-    fn get_representations(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<(ArrayRepresentations, BytesRepresentations), CodecError> {
+    ) -> Result<BytesRepresentation, CodecError> {
         let array_representations = self.get_array_representations(shape)?;
-        let bytes_representations =
-            self.get_bytes_representations(&array_representations.last().unwrap().0)?;
-        Ok((array_representations, bytes_representations))
+        let mut bytes_representation = self
+            .array_to_bytes
+            .encoded_representation(&array_representations.last().unwrap().0)?;
+        for codec in &self.bytes_to_bytes {
+            bytes_representation = codec.encoded_representation(&bytes_representation);
+        }
+        Ok(bytes_representation)
+    }
+}
+
+impl ArrayCodecTraits for CodecChainBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    /// Get the array to array codecs
-    #[must_use]
-    pub fn array_to_array_codecs(&self) -> &[Arc<dyn ArrayToArrayCodecTraits>] {
-        &self.array_to_array
+    fn data_type(&self) -> &DataType {
+        self.array_to_array.first().map_or_else(
+            || self.array_to_bytes.data_type(),
+            |codec| codec.data_type(),
+        )
     }
 
-    /// Get the array to bytes codec
-    #[must_use]
-    pub fn array_to_bytes_codec(&self) -> &Arc<dyn ArrayToBytesCodecTraits> {
-        &self.array_to_bytes
+    fn fill_value(&self) -> &FillValue {
+        self.array_to_array.first().map_or_else(
+            || self.array_to_bytes.fill_value(),
+            |codec| codec.fill_value(),
+        )
     }
 
-    /// Get the bytes to bytes codecs
-    #[must_use]
-    pub fn bytes_to_bytes_codecs(&self) -> &[Arc<dyn BytesToBytesCodecTraits>] {
-        &self.bytes_to_bytes
+    fn recommended_concurrency(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        let mut concurrency_min = usize::MAX;
+        let mut concurrency_max = 0;
+
+        let array_representations = self.get_array_representations(shape)?;
+        let bytes_representations = self.get_bytes_representations(
+            &array_representations
+                .last()
+                .expect("array representations is non-empty")
+                .0,
+        )?;
+
+        // bytes->bytes
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            let recommended_concurrency = &codec.recommended_concurrency(bytes_representation)?;
+            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
+            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
+        }
+
+        let recommended_concurrency = self
+            .array_to_bytes
+            .recommended_concurrency(&array_representations.last().unwrap().0)?;
+        concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
+        concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
+
+        // array->array
+        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+            self.array_to_array.iter().rev(),
+            array_representations.iter().rev().skip(1),
+        ) {
+            let recommended_concurrency = codec.recommended_concurrency(shape)?;
+            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
+            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
+        }
+
+        let recommended_concurrency = RecommendedConcurrency::new(
+            std::cmp::min(concurrency_min, concurrency_max)..concurrency_max,
+        );
+
+        Ok(recommended_concurrency)
     }
 }
 
