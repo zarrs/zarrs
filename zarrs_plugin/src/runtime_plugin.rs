@@ -22,7 +22,7 @@ use crate::{MaybeSend, MaybeSync, PluginCreateError};
 /// );
 /// ```
 #[allow(clippy::type_complexity)]
-pub struct RuntimePlugin<TPlugin, TInput>
+pub struct RuntimePlugin<TPlugin, TInput, TError = PluginCreateError>
 where
     TPlugin: MaybeSend + MaybeSync + 'static,
     TInput: ?Sized + 'static,
@@ -30,10 +30,10 @@ where
     /// Tests if the name is a match for this plugin.
     match_name_fn: Box<dyn Fn(&str) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
-    create_fn: Box<dyn Fn(&TInput) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static>,
+    create_fn: Box<dyn Fn(&TInput) -> Result<TPlugin, TError> + Send + Sync + 'static>,
 }
 
-impl<TPlugin, TInput> RuntimePlugin<TPlugin, TInput>
+impl<TPlugin, TInput, TError> RuntimePlugin<TPlugin, TInput, TError>
 where
     TPlugin: MaybeSend + MaybeSync + 'static,
     TInput: ?Sized + 'static,
@@ -42,7 +42,7 @@ where
     pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
     where
         M: Fn(&str) -> bool + Send + Sync + 'static,
-        C: Fn(&TInput) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
+        C: Fn(&TInput) -> Result<TPlugin, TError> + Send + Sync + 'static,
     {
         Self {
             match_name_fn: Box::new(match_name_fn),
@@ -53,8 +53,8 @@ where
     /// Create a `TPlugin` plugin from `input`.
     ///
     /// # Errors
-    /// Returns a [`PluginCreateError`] if plugin creation fails.
-    pub fn create(&self, input: &TInput) -> Result<TPlugin, PluginCreateError> {
+    /// Returns a [`TError`] if plugin creation fails.
+    pub fn create(&self, input: &TInput) -> Result<TPlugin, TError> {
         (self.create_fn)(input)
     }
 
