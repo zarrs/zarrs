@@ -406,7 +406,10 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits.is_multiple_of(8) && first_bit == 0 && last_bit == component_size_bits - 1 {
+        if component_size_bits.is_multiple_of(8)
+            && first_bit == 0
+            && last_bit == component_size_bits - 1
+        {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
