@@ -605,8 +605,6 @@ async fn partial_decode_fixed_indexer(
             .get_or_insert_async(&chunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
@@ -715,8 +713,6 @@ async fn partial_decode_variable_indexer(
             .get_or_insert_async(&chunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,

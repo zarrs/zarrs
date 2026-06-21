@@ -549,8 +549,6 @@ fn partial_decode_fixed_indexer(
             subchunk_partial_decoders.get_or_insert_with(&chunk_index_1d, || {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
@@ -656,8 +654,6 @@ fn partial_decode_variable_indexer(
             subchunk_partial_decoders.get_or_insert_with(&chunk_index_1d, || {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
