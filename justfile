@@ -12,9 +12,9 @@ build:
     cargo +{{TOOLCHAIN}} check --no-default-features
 
 # Test with all features
-test:
-    cargo +{{TOOLCHAIN}} test --all-features
-    cargo +{{TOOLCHAIN}} test --all-features --examples
+test *args:
+    cargo +{{TOOLCHAIN}} test --all-features {{args}}
+    cargo +{{TOOLCHAIN}} test --all-features --examples {{args}}
 
 # Run ignored tests
 test_ignored:

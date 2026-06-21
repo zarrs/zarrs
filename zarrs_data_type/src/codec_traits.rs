@@ -10,6 +10,7 @@
 //!
 //! - [`impl_bitround_codec`] - Implement [`bitround::BitroundDataTypeTraits`]
 //! - [`impl_bytes_data_type_traits`] - Implement [`bytes::BytesDataTypeTraits`]
+//! - [`impl_cast_value_data_type_traits_float`] - Implement [`cast_value::CastValueDataTypeTraits`] for floats
 //! - [`impl_fixed_scale_offset_data_type_traits`] - Implement [`fixedscaleoffset::FixedScaleOffsetDataTypeTraits`]
 //! - [`impl_pack_bits_data_type_traits`] - Implement [`packbits::PackBitsDataTypeTraits`]
 //! - [`impl_pcodec_data_type_traits`] - Implement [`pcodec::PcodecDataTypeTraits`]
@@ -17,6 +18,7 @@
 
 pub mod bitround;
 pub mod bytes;
+pub mod cast_value;
 pub mod fixedscaleoffset;
 pub mod packbits;
 pub mod pcodec;
@@ -24,6 +26,10 @@ pub mod zfp;
 
 pub use bitround::impl_bitround_codec;
 pub use bytes::impl_bytes_data_type_traits;
+pub use cast_value::{
+    impl_cast_value_data_type_traits_float, impl_cast_value_data_type_traits_signed_integer,
+    impl_cast_value_data_type_traits_unsigned_integer,
+};
 pub use fixedscaleoffset::impl_fixed_scale_offset_data_type_traits;
 pub use packbits::impl_pack_bits_data_type_traits;
 pub use pcodec::impl_pcodec_data_type_traits;
