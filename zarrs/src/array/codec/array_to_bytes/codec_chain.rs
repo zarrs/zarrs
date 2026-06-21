@@ -80,34 +80,38 @@ impl CodecChain {
         let mut codec_index = 0;
         for codec in self.bytes_to_bytes.iter().rev() {
             let capability = codec.partial_decoder_capability();
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
             if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
+            if !capability.partial_decode {
+                cache_index_must = Some(codec_index + 1);
+            }
             codec_index += 1;
         }
+
         {
-            let capability = self.array_to_bytes.partial_decoder_capability();
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
+            let codec = &self.array_to_bytes;
+            let capability = codec.partial_decoder_capability();
             if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
+            if !capability.partial_decode {
+                cache_index_must = Some(codec_index + 1);
+            }
             codec_index += 1;
         }
+
         for codec in self.array_to_array.iter().rev() {
             let capability = codec.partial_decoder_capability();
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
             if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
+            if !capability.partial_decode {
+                cache_index_must = Some(codec_index + 1);
+            }
             codec_index += 1;
         }
+
         let cache_index = match (cache_index_must, cache_index_should) {
             (Some(m), Some(s)) => Some(m.max(s)),
             (Some(m), None) => Some(m),
