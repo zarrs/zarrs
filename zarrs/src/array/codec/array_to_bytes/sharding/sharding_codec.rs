@@ -26,7 +26,7 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
@@ -88,9 +88,14 @@ impl ShardingCodec {
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             ShardingCodecConfiguration::V1(configuration) => {
-                let inner_codecs = Arc::new(CodecChain::from_metadata(&configuration.codecs)?);
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let inner_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
+                let index_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.index_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
                 Ok(Self::new(
                     configuration.chunk_shape.clone(),
                     inner_codecs,
@@ -162,7 +167,7 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let inner_codecs = self
             .inner_codecs
             .clone()
@@ -183,7 +188,7 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
         if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
             let mut codec = self;
             Arc::make_mut(&mut codec).options = sharding_opts.clone();

@@ -12,7 +12,7 @@ pub trait ArrayMutOps: ArrayOps {
     /// Refer to [`with_codec_specific_options`](Array::with_codec_specific_options) for details.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if a codec cannot be reconfigured or rebound.
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
     ///
     /// # Example
     /// ```rust,no_run
@@ -30,7 +30,7 @@ pub trait ArrayMutOps: ArrayOps {
     fn set_codec_specific_options(
         &mut self,
         opts: &CodecSpecificOptions,
-    ) -> Result<&mut Self, CodecError>;
+    ) -> Result<&mut Self, CodecCreateError>;
 
     /// Set the metadata options.
     fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self;

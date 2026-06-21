@@ -54,7 +54,7 @@ macro_rules! vlen_v2_codec {
         use zarrs_codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-            CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+            CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
             UnboundArrayToBytesCodecTraits,
         };
@@ -130,7 +130,7 @@ macro_rules! vlen_v2_codec {
                 &self,
                 data_type: crate::array::DataType,
                 fill_value: crate::array::FillValue,
-            ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+            ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
                 paste::paste! {
                     Ok(Arc::new([<$struct Bound>] {
                         inner: self.inner.clone().with_context(data_type, fill_value)?,

@@ -9,8 +9,8 @@ use super::{
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -117,9 +117,9 @@ impl UnboundArrayToArrayCodecTraits for TransposeCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
+            return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
             ));

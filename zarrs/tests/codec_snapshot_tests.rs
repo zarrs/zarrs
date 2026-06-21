@@ -901,8 +901,8 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     let array = match builder.build(store.clone(), "/") {
         Ok(a) => a,
         Err(e) => {
-            let reason = if let zarrs::array::ArrayCreateError::CodecError(e) = e {
-                format!("Data storage failed: {e}")
+            let reason = if let zarrs::array::ArrayCreateError::CodecsCreateError(e) = e {
+                format!("Codec creation failed: {e}")
             } else {
                 format!("Array creation failed: {e}")
             };
@@ -1247,7 +1247,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                     }
                     None => {
                         assert!(
-                            reason.starts_with("Data storage failed:")
+                            reason.starts_with("Codec creation failed:")
                                 && snapshot_path.has_unsupported(&snapshots),
                             "Test {display_path} is unsupported ({reason}). Run with UPDATE_SNAPSHOTS=1 to record this."
                         );

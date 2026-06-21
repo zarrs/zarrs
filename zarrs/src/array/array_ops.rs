@@ -4,8 +4,8 @@ use super::chunk_cache::ChunkCache;
 use super::{
     Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
     ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ArrayToBytesCodecTraits,
-    ChunkGrid, ChunkKeyEncoding, ChunkShape, CodecChain, CodecChainBound, CodecError, CodecOptions,
-    CodecSpecificOptions, DataType, DimensionName, FillValue, FromArrayBytes,
+    ChunkGrid, ChunkKeyEncoding, ChunkShape, CodecChain, CodecChainBound, CodecCreateError,
+    CodecOptions, CodecSpecificOptions, DataType, DimensionName, FillValue, FromArrayBytes,
     IncompatibleDimensionalityError, IntoArrayBytes, NodePath, StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;

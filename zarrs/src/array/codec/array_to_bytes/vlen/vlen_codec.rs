@@ -9,8 +9,8 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -92,9 +92,14 @@ impl VlenCodec {
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let index_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.index_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
+                let data_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.data_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -103,9 +108,14 @@ impl VlenCodec {
                 ))
             }
             VlenCodecConfiguration::V0(configuration) => {
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let index_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.index_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
+                let data_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.data_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -163,15 +173,15 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
+            return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
         if !matches!(data_type.size(), DataTypeSize::Variable) {
-            return Err(CodecError::UnsupportedDataType(
+            return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
             ));

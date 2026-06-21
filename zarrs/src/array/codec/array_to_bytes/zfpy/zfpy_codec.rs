@@ -6,8 +6,8 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -135,7 +135,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let inner_bound = Arc::new(self.inner).with_context(data_type, fill_value)?;
         Ok(Arc::new(ZfpyCodecBound { inner: inner_bound }))
     }

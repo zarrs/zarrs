@@ -13,9 +13,9 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -24,7 +24,6 @@ use zarrs_codec::{
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::PluginCreateError;
 
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
@@ -56,12 +55,12 @@ impl CodecChain {
     /// Bind this codec chain to a decoded data type and fill value.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if any codec cannot be bound to the derived context.
+    /// Returns a [`CodecCreateError`] if any codec cannot be bound to the derived context.
     pub fn with_context(
         &self,
         mut data_type: DataType,
         mut fill_value: FillValue,
-    ) -> Result<Arc<CodecChainBound>, CodecError> {
+    ) -> Result<Arc<CodecChainBound>, CodecCreateError> {
         let mut array_to_array = Vec::with_capacity(self.array_to_array.len());
         for codec in &self.array_to_array {
             let bound = codec
@@ -141,11 +140,11 @@ impl CodecChain {
     /// Create a new codec chain from a list of metadata.
     ///
     /// # Errors
-    /// Returns a [`PluginCreateError`] if:
+    /// Returns a [`CodecCreateError`] if:
     ///  - a codec could not be created,
     ///  - no array to bytes codec is supplied, or
     ///  - more than one array to bytes codec is supplied.
-    pub fn from_metadata(metadatas: &[MetadataV3]) -> Result<Self, PluginCreateError> {
+    pub fn from_metadata(metadatas: &[MetadataV3]) -> Result<Self, CodecCreateError> {
         let mut array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>> = vec![];
         let mut array_to_bytes: Option<Arc<dyn UnboundArrayToBytesCodecTraits>> = None;
         let mut bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>> = vec![];
@@ -169,7 +168,7 @@ impl CodecChain {
                     if array_to_bytes.is_none() {
                         array_to_bytes = Some(codec);
                     } else {
-                        return Err(PluginCreateError::from("multiple array to bytes codecs"));
+                        return Err(CodecCreateError::from("multiple array to bytes codecs"));
                     }
                 }
                 Codec::BytesToBytes(codec) => {
@@ -179,7 +178,7 @@ impl CodecChain {
         }
 
         array_to_bytes.map_or_else(
-            || Err(PluginCreateError::from("missing array to bytes codec")),
+            || Err(CodecCreateError::from("missing array to bytes codec")),
             |array_to_bytes| Ok(Self::new(array_to_array, array_to_bytes, bytes_to_bytes)),
         )
     }
@@ -192,7 +191,7 @@ impl CodecChain {
     pub fn with_codec_specific_options(
         self,
         opts: &zarrs_codec::CodecSpecificOptions,
-    ) -> Result<Self, CodecError> {
+    ) -> Result<Self, CodecCreateError> {
         Ok(Self::new(
             self.array_to_array
                 .into_iter()
@@ -202,7 +201,7 @@ impl CodecChain {
             self.bytes_to_bytes
                 .into_iter()
                 .map(|c| c.with_codec_specific_options(opts))
-                .collect(),
+                .collect::<Result<_, _>>()?,
         ))
     }
 
@@ -823,7 +822,7 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(CodecChain::with_context(self, data_type, fill_value)?)
     }
 }

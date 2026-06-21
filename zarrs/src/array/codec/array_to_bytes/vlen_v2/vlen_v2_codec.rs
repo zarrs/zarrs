@@ -9,8 +9,8 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -74,9 +74,9 @@ impl UnboundArrayToBytesCodecTraits for VlenV2Codec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() || !matches!(data_type.size(), DataTypeSize::Variable) {
-            return Err(CodecError::UnsupportedDataType(
+            return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
             ));

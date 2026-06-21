@@ -10,9 +10,9 @@ use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -403,7 +403,7 @@ fn encode_fill_value(
     scale: f32,
     encoded_element_type: FixedScaleOffsetElementType,
     astype: bool,
-) -> Result<FillValue, CodecError> {
+) -> Result<FillValue, CodecCreateError> {
     let fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?;
     let encoded_fill_value = do_encode(
         fill_value_bytes,
@@ -412,9 +412,13 @@ fn encode_fill_value(
         scale,
         encoded_element_type,
         astype,
-    )?;
+    )
+    .map_err(CodecCreateError::other)?;
     Ok(FillValue::new(
-        encoded_fill_value.into_fixed()?.into_owned(),
+        encoded_fill_value
+            .into_fixed()
+            .map_err(CodecCreateError::other)?
+            .into_owned(),
     ))
 }
 
@@ -432,10 +436,10 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         let element_type = get_element_type(&data_type)?;
         if self.dtype != data_type {
-            return Err(CodecError::UnsupportedDataType(
+            return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
             ));

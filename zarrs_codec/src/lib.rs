@@ -1160,12 +1160,12 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the codec cannot be reconfigured.
+    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured.
     #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(self.into_dyn())
     }
 
@@ -1174,12 +1174,12 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Binding eagerly validates and derives the encoded context.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the `data_type` or `fill_value` is not supported by this codec.
+    /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
     fn with_context(
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError>;
 }
 
 /// Runtime traits for an array-to-array codec bound to a data type and fill value.
@@ -1344,24 +1344,24 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the codec cannot be reconfigured.
+    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured.
     #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(self.into_dyn())
     }
 
     /// Bind this codec to a decoded data type and fill value.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the `data_type` or `fill_value` is not supported by this codec.
+    /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
     fn with_context(
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError>;
 }
 
 /// Runtime traits for an array-to-bytes codec bound to a data type and fill value.
@@ -1562,8 +1562,8 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Arc<dyn BytesToBytesCodecTraits> {
-        self.into_dyn()
+    ) -> Result<Arc<dyn BytesToBytesCodecTraits>, CodecCreateError> {
+        Ok(self.into_dyn())
     }
 
     /// Return the maximum internal concurrency supported for the requested decoded representation.
@@ -1869,7 +1869,50 @@ impl SubsetOutOfBoundsError {
     }
 }
 
-/// A codec error.
+/// A codec creation error.
+///
+/// This is used for failures while creating codecs from metadata, reconfiguring codecs, or binding
+/// unbound array codecs to a decoded data type and fill value.
+#[derive(Clone, Debug, Error)]
+pub enum CodecCreateError {
+    /// A plugin creation error.
+    #[error(transparent)]
+    PluginCreateError(#[from] PluginCreateError),
+    /// Unsupported data type.
+    #[error("{}", format_unsupported_data_type(.0, .1))]
+    UnsupportedDataType(DataType, String),
+    /// Data type does not support a codec.
+    #[error(transparent)]
+    UnsupportedDataTypeCodec(#[from] zarrs_data_type::DataTypeCodecError),
+    /// An incompatible fill value error.
+    #[error(transparent)]
+    DataTypeFillValueError(#[from] DataTypeFillValueError),
+    /// Other.
+    #[error("{_0}")]
+    Other(String),
+}
+
+impl CodecCreateError {
+    /// Create a new [`CodecCreateError::Other`] from a displayable error or message.
+    #[must_use]
+    pub fn other(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<&str> for CodecCreateError {
+    fn from(error: &str) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<String> for CodecCreateError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
+}
+
+/// A codec runtime error.
 #[non_exhaustive]
 #[derive(Clone, Debug, Error)]
 pub enum CodecError {
@@ -1894,7 +1937,7 @@ pub enum CodecError {
     /// A store error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
-    /// Unsupported data type
+    /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
     /// Data type does not support a codec.

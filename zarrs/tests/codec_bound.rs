@@ -45,6 +45,6 @@ fn codec_binding_error_propagates_from_array_builder() {
 
     assert!(matches!(
         builder.build(Arc::new(MemoryStore::new()), "/array"),
-        Err(ArrayCreateError::CodecError(_))
+        Err(ArrayCreateError::CodecsCreateError(_))
     ));
 }

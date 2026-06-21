@@ -12,9 +12,9 @@ use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
 
@@ -53,8 +53,14 @@ impl OptionalCodec {
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             OptionalCodecConfiguration::V1(configuration) => {
-                let mask_codecs = Arc::new(CodecChain::from_metadata(&configuration.mask_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let mask_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.mask_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
+                let data_codecs = Arc::new(
+                    CodecChain::from_metadata(&configuration.data_codecs)
+                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
+                );
                 Ok(Self::new(mask_codecs, data_codecs))
             }
             _ => Err(PluginCreateError::Other(
@@ -323,14 +329,14 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if !data_type.is_optional() {
-            return Err(CodecError::Other(
+            return Err(CodecCreateError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
         }
         let inner_type = data_type.as_optional().ok_or_else(|| {
-            CodecError::Other("optional codec requires an optional data type".to_string())
+            CodecCreateError::Other("optional codec requires an optional data type".to_string())
         })?;
         let inner_fill_value =
             OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());

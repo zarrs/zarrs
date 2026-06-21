@@ -69,10 +69,10 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
-    StoragePartialDecoder, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    copy_fill_value_into, update_array_bytes,
+    BytesToBytesCodecTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
+    RecommendedConcurrency, StoragePartialDecoder, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -657,7 +657,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// This replaces the array's codec chain with the reconfigured version.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if a codec cannot be reconfigured or rebound.
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
     ///
     /// # Example
     /// ```rust,no_run
@@ -675,7 +675,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     pub fn with_codec_specific_options(
         mut self,
         opts: &CodecSpecificOptions,
-    ) -> Result<Self, CodecError> {
+    ) -> Result<Self, CodecCreateError> {
         self.codecs =
             Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts)?);
         self.codecs_bound = self

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add context-bound `ArrayToArrayCodecTraitsBound` and `ArrayToBytesCodecTraitsBound` runtime APIs
 - Repurpose `ArrayCodecTraits` as the shared bound API with data type, fill value, and context-free concurrency queries
+- Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 
 ### Changed
 - **Breaking**: Make array codec-specific reconfiguration fallible

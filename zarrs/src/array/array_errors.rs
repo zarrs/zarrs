@@ -1,6 +1,6 @@
 use serde_json::Value;
 use thiserror::Error;
-use zarrs_codec::CodecError;
+use zarrs_codec::{CodecCreateError, CodecError};
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
@@ -47,12 +47,9 @@ pub enum ArrayCreateError {
         /// The fill value metadata.
         fill_value_metadata: FillValueMetadata,
     },
-    /// Error creating codecs.
+    /// Error creating, reconfiguring, or binding codecs.
     #[error(transparent)]
-    CodecsCreateError(PluginCreateError),
-    /// Error binding codecs to the array data type and fill value.
-    #[error(transparent)]
-    CodecError(#[from] CodecError),
+    CodecsCreateError(#[from] CodecCreateError),
     /// Storage transformer creation error.
     #[error(transparent)]
     StorageTransformersCreateError(PluginCreateError),

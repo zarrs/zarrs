@@ -10,8 +10,8 @@ use crate::array::{ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -98,7 +98,7 @@ impl UnboundArrayToArrayCodecTraits for BitroundCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
-    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError> {
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         data_type.codec_bitround()?;
         Ok(Arc::new(BitroundCodecBound {
             keepbits: self.keepbits,
