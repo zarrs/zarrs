@@ -68,7 +68,9 @@ impl OptionalCodec {
             )),
         }
     }
+}
 
+impl OptionalCodecBound {
     /// Recursively extract sparse data from dense data based on a validity mask.
     /// This supports arbitrarily nested optional types.
     fn extract_sparse_data<'a>(
@@ -339,7 +341,7 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
             CodecCreateError::Other("optional codec requires an optional data type".to_string())
         })?;
         let inner_fill_value =
-            OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
+            OptionalCodecBound::create_fill_value_for_inner_type(inner_type.data_type());
         Ok(Arc::new(OptionalCodecBound {
             mask_codecs: self
                 .mask_codecs
@@ -420,7 +422,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = OptionalCodec::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
+        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
@@ -488,10 +490,10 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             };
 
             // Expand sparse data to dense format (supports nested optional types)
-            OptionalCodec::expand_to_dense(sparse_data, &mask, opt.data_type())?
+            Self::expand_to_dense(sparse_data, &mask, opt.data_type())?
         } else {
             // No valid elements - create empty dense data of the right type/size
-            OptionalCodec::create_empty_dense_data(&mask, opt.data_type())?
+            Self::create_empty_dense_data(&mask, opt.data_type())?
         };
 
         // Return ArrayBytes with mask and dense data
