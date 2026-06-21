@@ -1889,15 +1889,22 @@ pub enum CodecCreateError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
-    /// Data type does not support a codec.
-    #[error(transparent)]
-    UnsupportedDataTypeCodec(#[from] zarrs_data_type::DataTypeCodecError),
     /// An incompatible fill value error.
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),
     /// Other.
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<zarrs_data_type::DataTypeCodecError> for CodecCreateError {
+    fn from(error: zarrs_data_type::DataTypeCodecError) -> Self {
+        let zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+            data_type,
+            codec_name,
+        } = error;
+        Self::UnsupportedDataType(data_type, codec_name.to_string())
+    }
 }
 
 impl CodecCreateError {
@@ -1954,9 +1961,6 @@ pub enum CodecError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
-    /// Data type does not support a codec.
-    #[error(transparent)]
-    UnsupportedDataTypeCodec(#[from] zarrs_data_type::DataTypeCodecError),
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"
@@ -1998,6 +2002,19 @@ pub enum CodecError {
     /// An array region error.
     #[error(transparent)]
     ArraySubsetError(#[from] ArraySubsetError),
+    /// Codec create error.
+    #[error(transparent)]
+    CodecCreateError(#[from] CodecCreateError),
+}
+
+impl From<zarrs_data_type::DataTypeCodecError> for CodecError {
+    fn from(error: zarrs_data_type::DataTypeCodecError) -> Self {
+        let zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+            data_type,
+            codec_name,
+        } = error;
+        Self::UnsupportedDataType(data_type, codec_name.to_string())
+    }
 }
 
 fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> String {
