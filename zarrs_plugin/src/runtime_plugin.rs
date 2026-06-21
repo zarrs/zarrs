@@ -53,7 +53,7 @@ where
     /// Create a `TPlugin` plugin from `input`.
     ///
     /// # Errors
-    /// Returns a [`TError`] if plugin creation fails.
+    /// Returns a `TError` if plugin creation fails.
     pub fn create(&self, input: &TInput) -> Result<TPlugin, TError> {
         (self.create_fn)(input)
     }
