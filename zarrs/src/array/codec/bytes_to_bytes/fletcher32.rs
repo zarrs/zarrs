@@ -43,7 +43,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::fletcher32::{
     Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(Fletcher32Codec,
     v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"],
@@ -60,7 +59,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for Fletcher32Codec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Fletcher32Codec::new_with_configuration(&configuration));
         Ok(Codec::BytesToBytes(codec))
@@ -68,7 +67,7 @@ impl CodecTraitsV3 for Fletcher32Codec {
 }
 
 impl CodecTraitsV2 for Fletcher32Codec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: Fletcher32CodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Fletcher32Codec::new_with_configuration(&configuration));
         Ok(Codec::BytesToBytes(codec))

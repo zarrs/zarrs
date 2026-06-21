@@ -66,7 +66,6 @@ use std::sync::Arc;
 
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::PluginCreateError;
 
 use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfpy::{
@@ -89,7 +88,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ZfpyCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
@@ -97,7 +96,7 @@ impl CodecTraitsV3 for ZfpyCodec {
 }
 
 impl CodecTraitsV2 for ZfpyCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))

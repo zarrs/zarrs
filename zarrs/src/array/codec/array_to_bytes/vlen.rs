@@ -117,7 +117,6 @@ use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 pub use zarrs_metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenCodec,
     v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
@@ -129,7 +128,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for VlenCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
         let configuration: VlenCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);

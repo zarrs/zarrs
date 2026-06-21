@@ -50,7 +50,6 @@ pub use zarrs_metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(PcodecCodec,
     v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"],
@@ -67,7 +66,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for PcodecCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
@@ -75,7 +74,7 @@ impl CodecTraitsV3 for PcodecCodec {
 }
 
 impl CodecTraitsV2 for PcodecCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: PcodecCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))

@@ -21,10 +21,9 @@ pub use zarrs_metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscShuffleMode, BloscShuffleModeNumcodecs,
 };
-use zarrs_plugin::PluginCreateError;
 
 impl CodecTraitsV3 for BloscCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -32,7 +31,7 @@ impl CodecTraitsV3 for BloscCodec {
 }
 
 impl CodecTraitsV2 for BloscCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))

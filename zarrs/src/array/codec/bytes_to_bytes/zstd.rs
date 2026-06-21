@@ -43,7 +43,6 @@ pub use zarrs_metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
     ZstdCompressionLevel,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZstdCodec, v3: "zstd", v2: "zstd");
 
@@ -58,7 +57,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ZstdCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZstdCodecConfigurationV1 = metadata.to_typed_configuration()?;
         let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
         Ok(Codec::BytesToBytes(Arc::new(codec)))
@@ -66,7 +65,7 @@ impl CodecTraitsV3 for ZstdCodec {
 }
 
 impl CodecTraitsV2 for ZstdCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZstdCodecConfigurationNumcodecs = metadata.to_typed_configuration()?;
         let codec = ZstdCodec::new(configuration.level.into(), false);
         Ok(Codec::BytesToBytes(Arc::new(codec)))

@@ -43,7 +43,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(Bz2Codec,
     v3: "numcodecs.bz2", [],
@@ -61,7 +60,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for Bz2Codec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: Bz2CodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -69,7 +68,7 @@ impl CodecTraitsV3 for Bz2Codec {
 }
 
 impl CodecTraitsV2 for Bz2Codec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: Bz2CodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))

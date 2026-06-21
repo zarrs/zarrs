@@ -9,7 +9,6 @@ macro_rules! vlen_v2_module {
         use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
         use zarrs_metadata::v2::MetadataV2;
         use zarrs_metadata::v3::MetadataV3;
-        use zarrs_plugin::PluginCreateError;
 
         // Register the V3 codec.
         inventory::submit! {
@@ -21,7 +20,7 @@ macro_rules! vlen_v2_module {
         }
 
         impl CodecTraitsV3 for $struct {
-            fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+            fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
                 if metadata.configuration().is_none_or(|c| c.is_empty()) {
                     let codec = Arc::new($struct::new());
                     Ok(Codec::ArrayToBytes(codec))
@@ -32,7 +31,7 @@ macro_rules! vlen_v2_module {
         }
 
         impl CodecTraitsV2 for $struct {
-            fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+            fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
                 if metadata.configuration().is_empty() {
                     let codec = Arc::new($struct::new());
                     Ok(Codec::ArrayToBytes(codec))

@@ -17,7 +17,7 @@ use zarrs_codec::{
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]
@@ -86,20 +86,15 @@ impl VlenCodec {
     /// Create a new `vlen` codec from configuration.
     ///
     /// # Errors
-    /// Returns a [`PluginCreateError`] if the codecs cannot be constructed from the codec metadata.
+    /// Returns a [`CodecCreateError`] if the codecs cannot be constructed from the codec metadata.
     pub fn new_with_configuration(
         configuration: &VlenCodecConfiguration,
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, CodecCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
-                let index_codecs = Arc::new(
-                    CodecChain::from_metadata(&configuration.index_codecs)
-                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
-                );
-                let data_codecs = Arc::new(
-                    CodecChain::from_metadata(&configuration.data_codecs)
-                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
-                );
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -108,14 +103,9 @@ impl VlenCodec {
                 ))
             }
             VlenCodecConfiguration::V0(configuration) => {
-                let index_codecs = Arc::new(
-                    CodecChain::from_metadata(&configuration.index_codecs)
-                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
-                );
-                let data_codecs = Arc::new(
-                    CodecChain::from_metadata(&configuration.data_codecs)
-                        .map_err(|err| PluginCreateError::Other(err.to_string()))?,
-                );
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -123,7 +113,7 @@ impl VlenCodec {
                     VlenIndexLocation::Start,
                 ))
             }
-            _ => Err(PluginCreateError::Other(
+            _ => Err(CodecCreateError::Other(
                 "this vlen codec configuration variant is unsupported".to_string(),
             )),
         }

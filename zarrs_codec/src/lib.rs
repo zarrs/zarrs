@@ -138,7 +138,7 @@ pub struct PartialEncoderCapability {
 
 /// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPluginV3(Plugin<Codec, MetadataV3>);
+pub struct CodecPluginV3(Plugin<Codec, MetadataV3, CodecCreateError>);
 inventory::collect!(CodecPluginV3);
 
 impl CodecPluginV3 {
@@ -150,7 +150,7 @@ impl CodecPluginV3 {
 
 /// A Zarr V2 codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPluginV2(Plugin<Codec, MetadataV2>);
+pub struct CodecPluginV2(Plugin<Codec, MetadataV2, CodecCreateError>);
 inventory::collect!(CodecPluginV2);
 
 impl CodecPluginV2 {
@@ -161,10 +161,10 @@ impl CodecPluginV2 {
 }
 
 /// A runtime V3 codec plugin for dynamic registration.
-pub type CodecRuntimePluginV3 = RuntimePlugin<Codec, MetadataV3>;
+pub type CodecRuntimePluginV3 = RuntimePlugin<Codec, MetadataV3, CodecCreateError>;
 
 /// A runtime V2 codec plugin for dynamic registration.
-pub type CodecRuntimePluginV2 = RuntimePlugin<Codec, MetadataV2>;
+pub type CodecRuntimePluginV2 = RuntimePlugin<Codec, MetadataV2, CodecCreateError>;
 
 /// Global runtime registry for V3 codec plugins.
 pub static CODEC_RUNTIME_REGISTRY_V3: LazyLock<RuntimeRegistry<CodecRuntimePluginV3>> =
@@ -256,7 +256,7 @@ impl Codec {
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
     pub fn from_metadata<'a>(
         metadata: impl Into<CodecMetadata<'a>>,
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, CodecCreateError> {
         match metadata.into() {
             CodecMetadata::V2(metadata) => Self::from_metadata_v2(metadata),
             CodecMetadata::V3(metadata) => Self::from_metadata_v3(metadata),
@@ -266,8 +266,8 @@ impl Codec {
     /// Create a codec from V3 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+    /// Returns [`CodecCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, CodecCreateError> {
         let name = metadata.name();
 
         // Check runtime registry first (higher priority)
@@ -291,14 +291,18 @@ impl Codec {
                 return plugin.create(metadata);
             }
         }
-        Err(PluginUnsupportedError::new(metadata.name().to_string(), "codec".to_string()).into())
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.name().to_string(),
+            "codec".to_string(),
+        ))
+        .into())
     }
 
     /// Create a codec from V2 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    fn from_metadata_v2(metadata: &MetadataV2) -> Result<Self, PluginCreateError> {
+    /// Returns [`CodecCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v2(metadata: &MetadataV2) -> Result<Self, CodecCreateError> {
         let name = metadata.id();
 
         // Check runtime registry first (higher priority)
@@ -322,7 +326,11 @@ impl Codec {
                 return plugin.create(metadata);
             }
         }
-        Err(PluginUnsupportedError::new(metadata.id().to_string(), "codec".to_string()).into())
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.id().to_string(),
+            "codec".to_string(),
+        ))
+        .into())
     }
 
     /// Create the codec configuration.
@@ -369,8 +377,8 @@ pub trait CodecTraitsV2 {
     /// Create a codec from Zarr V2 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>
+    /// Returns [`CodecCreateError`] if the codec cannot be created.
+    fn create(metadata: &MetadataV2) -> Result<Codec, CodecCreateError>
     where
         Self: Sized;
 }
@@ -382,8 +390,8 @@ pub trait CodecTraitsV3 {
     /// Create a codec from Zarr V3 metadata.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>
+    /// Returns [`CodecCreateError`] if the codec cannot be created.
+    fn create(metadata: &MetadataV3) -> Result<Codec, CodecCreateError>
     where
         Self: Sized;
 }
@@ -1909,6 +1917,12 @@ impl From<&str> for CodecCreateError {
 impl From<String> for CodecCreateError {
     fn from(error: String) -> Self {
         Self::Other(error)
+    }
+}
+
+impl From<Arc<serde_json::Error>> for CodecCreateError {
+    fn from(error: Arc<serde_json::Error>) -> Self {
+        Self::PluginCreateError(PluginCreateError::from(error))
     }
 }
 

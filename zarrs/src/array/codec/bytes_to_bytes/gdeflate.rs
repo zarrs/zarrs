@@ -54,7 +54,6 @@ pub use zarrs_metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
 
@@ -64,7 +63,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for GDeflateCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
         let configuration: GDeflateCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);

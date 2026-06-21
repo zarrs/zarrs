@@ -46,7 +46,6 @@ use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
@@ -58,7 +57,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for BitroundCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BitroundCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
@@ -134,6 +133,21 @@ mod tests {
             decoded.into_fixed().unwrap().into_owned(),
         );
         assert_eq!(decoded_elements, &[0.0f32, 1.25f32, -8.0f32, 98304.0f32]);
+    }
+
+    #[test]
+    fn codec_bitround_encoded_fill_value_is_rounded() {
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
+        let data_type = data_type::float32();
+        let fill_value = FillValue::from(1.234_567_9f32);
+
+        let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type, fill_value.clone())
+            .unwrap();
+
+        assert_eq!(codec.fill_value(), &fill_value);
+        assert_eq!(codec.encoded_fill_value(), &FillValue::from(1.25f32));
     }
 
     #[test]

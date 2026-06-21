@@ -41,7 +41,6 @@ use zarrs_metadata::v3::MetadataV3;
 use crate::array::DataType;
 use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
-use zarrs_plugin::PluginCreateError;
 
 // Re-export extension trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bytes::{
@@ -61,7 +60,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for BytesCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         if metadata.name() == "binary" {
             crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
         }

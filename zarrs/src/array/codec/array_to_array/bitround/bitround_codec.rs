@@ -30,6 +30,7 @@ struct BitroundCodecBound {
     keepbits: u32,
     data_type: DataType,
     fill_value: FillValue,
+    encoded_fill_value: FillValue,
 }
 
 impl BitroundCodec {
@@ -89,6 +90,19 @@ impl CodecTraits for BitroundCodec {
     }
 }
 
+fn encode_fill_value(
+    fill_value: &FillValue,
+    data_type: &DataType,
+    keepbits: u32,
+) -> Result<FillValue, CodecCreateError> {
+    let mut fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?
+        .into_fixed()
+        .map_err(CodecCreateError::other)?
+        .into_owned();
+    round_bytes(&mut fill_value_bytes, data_type, keepbits).map_err(CodecCreateError::other)?;
+    Ok(FillValue::new(fill_value_bytes))
+}
+
 impl UnboundArrayToArrayCodecTraits for BitroundCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -100,10 +114,12 @@ impl UnboundArrayToArrayCodecTraits for BitroundCodec {
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         data_type.codec_bitround()?;
+        let encoded_fill_value = encode_fill_value(&fill_value, &data_type, self.keepbits)?;
         Ok(Arc::new(BitroundCodecBound {
             keepbits: self.keepbits,
             data_type,
             fill_value,
+            encoded_fill_value,
         }))
     }
 }
@@ -147,7 +163,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     }
 
     fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
+        &self.encoded_fill_value
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {

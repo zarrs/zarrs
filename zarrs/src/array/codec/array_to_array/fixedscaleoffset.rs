@@ -44,7 +44,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
     v3: "numcodecs.fixedscaleoffset", [],
@@ -60,7 +59,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for FixedScaleOffsetCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: FixedScaleOffsetCodecConfiguration =
             metadata.to_typed_configuration()?;
         let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
@@ -71,7 +70,7 @@ impl CodecTraitsV3 for FixedScaleOffsetCodec {
 }
 
 impl CodecTraitsV2 for FixedScaleOffsetCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: FixedScaleOffsetCodecConfiguration =
             metadata.to_typed_configuration()?;
         let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
