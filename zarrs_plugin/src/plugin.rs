@@ -44,11 +44,11 @@ impl<TPlugin, TInput, TError> Plugin<TPlugin, TInput, TError> {
     }
 }
 
-impl<TPlugin, TInput1, TInput2> Plugin2<TPlugin, TInput1, TInput2> {
+impl<TPlugin, TInput1, TInput2, TError> Plugin2<TPlugin, TInput1, TInput2, TError> {
     /// Create a new plugin for registration.
     pub const fn new(
         match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError>,
+        create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, TError>,
     ) -> Self {
         Self {
             match_name_fn,
@@ -60,11 +60,11 @@ impl<TPlugin, TInput1, TInput2> Plugin2<TPlugin, TInput1, TInput2> {
     ///
     /// # Errors
     ///
-    /// Returns a [`PluginCreateError`] if plugin creation fails due to either:
+    /// Returns a `TError` if plugin creation fails due to either:
     ///  - metadata name being unregistered,
     ///  - or the configuration is invalid, or
     ///  - some other reason specific to the plugin.
-    pub fn create(&self, input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError> {
+    pub fn create(&self, input1: &TInput1, input2: &TInput2) -> Result<TPlugin, TError> {
         (self.create_fn)(input1, input2)
     }
 

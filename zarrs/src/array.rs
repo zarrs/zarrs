@@ -1117,7 +1117,7 @@ fn create_codec_chain_from_v2(
         #[cfg(not(feature = "blosc"))]
         {
             let codec = Codec::from_metadata(compressor)
-                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+                .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
                 Codec::ArrayToArray(c) => {
