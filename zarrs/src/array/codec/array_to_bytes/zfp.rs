@@ -148,11 +148,8 @@ fn zfp_native_type_to_sys(native_type: ZfpNativeType) -> zfp_sys::zfp_type {
 }
 
 #[allow(clippy::cast_possible_wrap)]
-fn promote_before_zfp_encoding(
-    decoded_value: &[u8],
-    encoding: ZfpEncoding,
-) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
-    Ok(match encoding {
+fn promote_before_zfp_encoding(decoded_value: &[u8], encoding: ZfpEncoding) -> ZfpArray {
+    match encoding {
         ZfpEncoding::Int32 => ZfpArray::Int32(convert_from_bytes_slice::<i32>(decoded_value)),
         ZfpEncoding::Int64 => ZfpArray::Int64(convert_from_bytes_slice::<i64>(decoded_value)),
         ZfpEncoding::Float32 => ZfpArray::Float32(convert_from_bytes_slice::<f32>(decoded_value)),
@@ -201,7 +198,7 @@ fn promote_before_zfp_encoding(
                     .collect(),
             )
         }
-    })
+    }
 }
 
 fn init_zfp_decoding_output(shape: &[NonZeroU64], encoding: ZfpEncoding) -> ZfpArray {

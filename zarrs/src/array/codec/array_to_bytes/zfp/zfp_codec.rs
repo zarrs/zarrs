@@ -224,7 +224,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
-        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding)?;
+        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding);
         let zfp_type = bytes_promoted.zfp_type();
         let field = ZfpField::new(
             &mut bytes_promoted,
