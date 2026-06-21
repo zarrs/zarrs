@@ -158,6 +158,7 @@ pub(crate) struct PackBitsPartialDecoder {
 
 impl PackBitsPartialDecoder {
     /// Create a new partial decoder for the `packbits` codec.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: ChunkShape,
@@ -234,6 +235,7 @@ pub(crate) struct AsyncPackBitsPartialDecoder {
 #[cfg(feature = "async")]
 impl AsyncPackBitsPartialDecoder {
     /// Create a new partial decoder for the `packbits` codec.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: ChunkShape,

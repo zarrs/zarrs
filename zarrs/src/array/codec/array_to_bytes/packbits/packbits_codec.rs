@@ -226,7 +226,10 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
+        if component_size_bits.is_multiple_of(8)
+            && first_bit == 0
+            && last_bit == component_size_bits - 1
+        {
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
             return Arc::new(BytesCodec::new(Some(Endianness::Little)))
                 .with_context(self.data_type.clone(), self.fill_value.clone())?
@@ -398,16 +401,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let PackBitsCodecComponents {
-            component_size_bits,
-            num_components: _,
-            sign_extension: _,
-        } = self.components;
+        let component_size_bits = self.components.component_size_bits;
         let first_bit = self.first_bit;
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
+        if component_size_bits.is_multiple_of(8) && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
@@ -437,16 +436,15 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let PackBitsCodecComponents {
-            component_size_bits,
-            num_components: _,
-            sign_extension: _,
-        } = self.components;
+        let component_size_bits = self.components.component_size_bits;
         let first_bit = self.first_bit;
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
+        if component_size_bits.is_multiple_of(8)
+            && first_bit == 0
+            && last_bit == component_size_bits - 1
+        {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
@@ -473,11 +471,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let PackBitsCodecComponents {
-            component_size_bits: _,
-            num_components,
-            sign_extension: _,
-        } = self.components;
+        let num_components = self.components.num_components;
         let first_bit = self.first_bit;
         let last_bit = self.last_bit;
 

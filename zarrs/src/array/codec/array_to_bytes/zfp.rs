@@ -111,7 +111,7 @@ use self::zfp_array::ZfpArray;
 use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
-use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice};
+use crate::array::{ChunkShapeTraits, convert_from_bytes_slice};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
 use zarrs_plugin::PluginCreateError;
@@ -276,7 +276,8 @@ mod tests {
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
     use crate::array::element::ElementOwned;
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
+        data_type,
     };
     use zarrs_codec::{
         ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
