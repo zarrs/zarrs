@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_chunk_grid::ChunkGridCreateError;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -17,10 +18,12 @@ use super::{
     compute_index_encoded_size, decode_shard_index, sharding_index_shape, sharding_partial_encoder,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
+use crate::array::chunk_grid::repeat::RepeatChunkGrid;
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
-    ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
+    ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
     chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
@@ -33,7 +36,109 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+
+fn edge_lengths_to_chunk_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
+    if let Some(first) = edge_lengths.first().copied()
+        && edge_lengths.iter().all(|edge_length| *edge_length == first)
+    {
+        ChunkEdgeLengths::Scalar(first)
+    } else {
+        ChunkEdgeLengths::Varying(
+            edge_lengths
+                .iter()
+                .copied()
+                .map(RunLengthElement::Single)
+                .collect(),
+        )
+    }
+}
+
+fn regular_subchunk_grid(
+    chunk_grid: &ChunkGrid,
+    subchunk_shape: &ChunkShape,
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    if chunk_grid.dimensionality() != subchunk_shape.len() {
+        return Err(ChunkGridCreateError::new(format!(
+            "sharding subchunk shape dimensionality {} does not match chunk grid dimensionality {}",
+            subchunk_shape.len(),
+            chunk_grid.dimensionality()
+        )));
+    }
+
+    if chunk_grid
+        .name_v3()
+        .is_some_and(|name| RegularChunkGrid::matches_name_v3(name.as_ref()))
+    {
+        let chunk_shape = chunk_grid
+            .chunk_shape(&vec![0; chunk_grid.dimensionality()])?
+            .ok_or_else(|| {
+                ChunkGridCreateError::new("chunk grid does not contain an origin chunk")
+            })?;
+        if std::iter::zip(&chunk_shape, subchunk_shape)
+            .all(|(shape, subchunk)| shape.get().is_multiple_of(subchunk.get()))
+        {
+            return Ok(ChunkGrid::new(RepeatChunkGrid::new(
+                chunk_grid.grid_shape().to_vec(),
+                ChunkGrid::new(RegularChunkGrid::new(
+                    chunk_shape.iter().map(|dim| dim.get()).collect(),
+                    subchunk_shape.clone(),
+                )?),
+            )?));
+        }
+    }
+
+    let mut subchunk_grid_shape = Vec::with_capacity(chunk_grid.dimensionality());
+    let mut subchunk_edge_lengths = Vec::with_capacity(chunk_grid.dimensionality());
+    let mut needs_rectilinear = false;
+
+    for (dim, subchunk) in subchunk_shape.iter().enumerate() {
+        let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim)?;
+        let mut global_edge_lengths = Vec::new();
+        for edge_length in chunk_edge_lengths {
+            if !edge_length.get().is_multiple_of(subchunk.get()) {
+                return Err(ChunkGridCreateError::new(format!(
+                    "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {edge_length:?}"
+                )));
+            }
+            global_edge_lengths.extend(std::iter::repeat_n(
+                *subchunk,
+                (edge_length.get() / subchunk.get()) as usize,
+            ));
+        }
+        let dimension_shape = global_edge_lengths
+            .iter()
+            .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))
+            .ok_or_else(|| ChunkGridCreateError::new("subchunk grid shape overflow"))?;
+        let edge_lengths = edge_lengths_to_chunk_edge_lengths(&global_edge_lengths);
+        if !matches!(edge_lengths, ChunkEdgeLengths::Scalar(_)) {
+            needs_rectilinear = true;
+        }
+        subchunk_grid_shape.push(dimension_shape);
+        subchunk_edge_lengths.push(edge_lengths);
+    }
+
+    if needs_rectilinear {
+        Ok(ChunkGrid::new(RectilinearChunkGrid::new(
+            subchunk_grid_shape,
+            &subchunk_edge_lengths,
+        )?))
+    } else {
+        let subchunk_shape = subchunk_edge_lengths
+            .into_iter()
+            .map(|edge_lengths| match edge_lengths {
+                ChunkEdgeLengths::Scalar(edge_length) => Some(edge_length),
+                ChunkEdgeLengths::Varying(_) => None,
+            })
+            .collect::<Option<ChunkShape>>()
+            .expect("all edge lengths are scalar");
+        Ok(ChunkGrid::new(RegularChunkGrid::new(
+            subchunk_grid_shape,
+            subchunk_shape,
+        )?))
+    }
+}
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -237,6 +342,16 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         _decoded_shape: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
         Ok(self.subchunk_shape.clone())
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(regular_subchunk_grid(
+            decoded_chunk_grid,
+            &self.subchunk_shape,
+        )?))
     }
 
     fn encode<'a>(

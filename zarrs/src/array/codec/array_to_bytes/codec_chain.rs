@@ -3,11 +3,12 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShape, DataType, FillValue,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShape, DataType, FillValue,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
@@ -27,6 +28,50 @@ use zarrs_metadata::v3::MetadataV3;
 
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
+
+fn cumulative_boundaries(edge_lengths: &[NonZeroU64]) -> Vec<u64> {
+    let mut offset = 0;
+    let mut boundaries = Vec::with_capacity(edge_lengths.len() + 1);
+    boundaries.push(offset);
+    for edge_length in edge_lengths {
+        offset += edge_length.get();
+        boundaries.push(offset);
+    }
+    boundaries
+}
+
+fn validate_subchunk_grid_refines_chunk_grid(
+    chunk_grid: &ChunkGrid,
+    subchunk_grid: &ChunkGrid,
+) -> Result<(), ChunkGridCreateError> {
+    if chunk_grid.dimensionality() != subchunk_grid.dimensionality() {
+        return Err(ChunkGridCreateError::new(format!(
+            "subchunk grid dimensionality {} does not match chunk grid dimensionality {}",
+            subchunk_grid.dimensionality(),
+            chunk_grid.dimensionality()
+        )));
+    }
+
+    for dim in 0..chunk_grid.dimensionality() {
+        let chunk_boundaries = cumulative_boundaries(&chunk_grid.chunk_edge_lengths(dim)?);
+        let subchunk_boundaries = cumulative_boundaries(&subchunk_grid.chunk_edge_lengths(dim)?);
+        if chunk_boundaries.last() != subchunk_boundaries.last() {
+            return Err(ChunkGridCreateError::Other(format!(
+                "subchunk grid edge lengths in dimension {dim} do not sum to chunk grid edge lengths"
+            )));
+        }
+        if !chunk_boundaries
+            .iter()
+            .all(|boundary| subchunk_boundaries.binary_search(boundary).is_ok())
+        {
+            return Err(ChunkGridCreateError::Other(format!(
+                "subchunk grid boundaries in dimension {dim} do not align with chunk grid boundaries"
+            )));
+        }
+    }
+
+    Ok(())
+}
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
@@ -451,6 +496,50 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         Ok(granularity)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        if decoded_chunk_grid.array_shape().contains(&0) {
+            return Ok(None);
+        }
+
+        let mut chunk_grids = Vec::with_capacity(self.array_to_array.len() + 1);
+        chunk_grids.push(decoded_chunk_grid.clone());
+        for codec in &self.array_to_array {
+            let decoded_chunk_grid = chunk_grids.last().expect("chunk_grids is non-empty");
+            let Some(encoded_chunk_grid) = codec.encoded_chunk_grid(decoded_chunk_grid)? else {
+                return Ok(None);
+            };
+            chunk_grids.push(encoded_chunk_grid);
+        }
+
+        let encoded_chunk_grid = chunk_grids.last().expect("chunk_grids is non-empty");
+        let Some(mut subchunk_grid) = self
+            .array_to_bytes
+            .decoded_subchunk_grid(encoded_chunk_grid)?
+        else {
+            return Ok(None);
+        };
+
+        for (codec, decoded_chunk_grid) in self
+            .array_to_array
+            .iter()
+            .rev()
+            .zip(chunk_grids.iter().rev().skip(1))
+        {
+            let Some(decoded_subchunk_grid) =
+                codec.decoded_subchunk_grid(decoded_chunk_grid, &subchunk_grid)?
+            else {
+                return Ok(None);
+            };
+            subchunk_grid = decoded_subchunk_grid;
+        }
+
+        validate_subchunk_grid_refines_chunk_grid(decoded_chunk_grid, &subchunk_grid)?;
+        Ok(Some(subchunk_grid))
     }
 
     fn encode<'a>(

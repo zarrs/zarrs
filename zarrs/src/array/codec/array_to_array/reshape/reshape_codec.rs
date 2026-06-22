@@ -3,9 +3,10 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -269,6 +270,21 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             decoded_granularity_from_linear_interval(decoded_shape, interval_len)
                 .unwrap_or_else(|| decoded_shape.to_vec()),
         )
+    }
+
+    fn encoded_chunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+        _encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

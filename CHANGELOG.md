@@ -40,11 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
+- **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
+- **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 

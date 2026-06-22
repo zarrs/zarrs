@@ -62,7 +62,8 @@ use std::num::NonZeroU64;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use zarrs_chunk_grid::{
-    ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, Indexer, IndexerError,
+    ArraySubset, ArraySubsetError, ChunkGrid, ChunkGridCreateError,
+    IncompatibleDimensionalityError, Indexer, IndexerError,
 };
 use zarrs_data_type::{DataType, DataTypeFillValueError, FillValue};
 use zarrs_metadata::v2::MetadataV2;
@@ -1231,6 +1232,31 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         }
     }
 
+    /// Map a chunk grid from the decoded representation to the encoded representation.
+    ///
+    /// Returns [`None`] if this codec cannot preserve or transform the chunk grid.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid is not supported by this codec.
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(decoded_chunk_grid.clone()))
+    }
+
+    /// Map a subchunk grid from the encoded representation to the decoded representation.
+    ///
+    /// Returns [`None`] if this codec cannot preserve or transform the subchunk grid.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid or encoded subchunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
+
     /// Encode a chunk.
     ///
     /// # Errors
@@ -1405,6 +1431,17 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ) -> Result<ChunkShape, CodecError> {
         Ok(decoded_shape.to_vec())
     }
+
+    /// Return the decoded subchunk grid created by this codec.
+    ///
+    /// Returns [`None`] if this codec does not expose finer subchunk boundaries.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///

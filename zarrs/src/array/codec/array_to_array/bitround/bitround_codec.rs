@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
     bitround_codec_partial, round_bytes,
 };
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -168,6 +169,14 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         Ok(decoded_shape.to_vec())
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(encoded_subchunk_grid.clone()))
     }
 
     fn partial_decode_granularity(

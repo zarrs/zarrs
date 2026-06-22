@@ -7,10 +7,10 @@ use crate::array::{
     ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{ExtensionName, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 /// A chunk grid that repeats an inner chunk grid tile.
 #[derive(Debug, Clone)]
@@ -43,6 +43,24 @@ pub(crate) enum RepeatChunkGridCreateError {
     },
     #[error("dimension {0} is out of bounds, expected less than {1}")]
     IncompatibleDimension(usize, usize),
+}
+
+impl From<RepeatChunkGridCreateError> for ChunkGridCreateError {
+    fn from(error: RepeatChunkGridCreateError) -> Self {
+        match error {
+            RepeatChunkGridCreateError::IncompatibleDimensionality { got, expected } => {
+                IncompatibleDimensionalityError::new(got, expected).into()
+            }
+            RepeatChunkGridCreateError::IncompatibleDimension(got, expected) => {
+                IncompatibleDimensionError::new(got, expected).into()
+            }
+            err @ RepeatChunkGridCreateError::ZeroRepeat(_)
+            | err @ RepeatChunkGridCreateError::ShapeOverflow
+            | err @ RepeatChunkGridCreateError::InnerChunkEdgeLengthsMismatch { .. } => {
+                Self::Other(err.to_string())
+            }
+        }
+    }
 }
 
 impl RepeatChunkGrid {
@@ -190,8 +208,8 @@ unsafe impl ChunkGridTraits for RepeatChunkGrid {
     fn create(
         _metadata: &MetadataV3,
         _array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
-        Err(PluginCreateError::Other(
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
+        Err(ChunkGridCreateError::Other(
             "repeat chunk grid cannot be created from metadata".to_string(),
         ))
     }

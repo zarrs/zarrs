@@ -57,9 +57,9 @@ use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 use crate::node::NodePath;
 pub use zarrs_chunk_grid::{
     ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
-    ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape,
-    ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError, Indexer,
-    IndexerError, iterators,
+    ArraySubsetTraits, ChunkGrid, ChunkGridCreateError, ChunkGridTraits, ChunkGridTraitsIterators,
+    ChunkShape, ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError,
+    Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 pub use zarrs_codec::{
@@ -91,9 +91,7 @@ pub use zarrs_metadata::v3::{
 pub use zarrs_metadata::{
     ArrayMetadata, ChunkKeySeparator, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
 };
-use zarrs_plugin::{
-    ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, PluginCreateError, ZarrVersion,
-};
+use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
@@ -501,7 +499,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs_bound);
+        let subchunk_grid = codecs_bound.decoded_subchunk_grid(&chunk_grid)?;
 
         // Create storage transformers
         let storage_transformers =
@@ -566,9 +564,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
         // Create chunk grid from V2 chunks
         let chunk_grid = ChunkGrid::new(
-            RegularChunkGrid::new(v2.shape.clone(), v2.chunks.clone()).map_err(|err| {
-                ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(err.to_string()))
-            })?,
+            RegularChunkGrid::new(v2.shape.clone(), v2.chunks.clone())
+                .map_err(|e| ArrayCreateError::ChunkGridCreateError(e.into()))?,
         );
 
         // Create fill value from V2 metadata directly
@@ -606,7 +603,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs_bound = codecs
             .clone()
             .with_context(data_type.clone(), fill_value.clone())?;
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs_bound);
+        let subchunk_grid = codecs_bound.decoded_subchunk_grid(&chunk_grid)?;
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -721,8 +718,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid =
-            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, &self.codecs_bound);
+        self.subchunk_grid = self.codecs_bound.decoded_subchunk_grid(&self.chunk_grid)?;
 
         // Update metadata based on version
         match &mut self.metadata {
@@ -732,7 +728,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             }
             ArrayMetadata::V2(metadata) => {
                 let err = || {
-                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
+                    ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::Other(
                         "Only regular chunk grids are supported in Zarr V2".to_string(),
                     ))
                 };
@@ -747,11 +743,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     array_shape.clone(),
                     regular_chunk_grid_configuration.chunk_shape,
                 )
-                .map_err(|_| {
-                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
-                        "Chunk grid is not compatible with array shape".to_string(),
-                    ))
-                })?;
+                .map_err(|e| ArrayCreateError::ChunkGridCreateError(e.into()))?;
                 metadata.shape = array_shape;
                 metadata.chunks = regular_chunk_grid.chunk_shape().to_vec();
             }
