@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Implement `Clone` for `ArrayBuilder` (backport of #412, `f9f24524`)
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 
 ### Changed
