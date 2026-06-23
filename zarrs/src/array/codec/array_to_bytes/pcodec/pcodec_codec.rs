@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
@@ -10,7 +11,8 @@ use super::{
     PcodecDataTypeExt, PcodecDeltaEncodingOrder, PcodecElementType,
 };
 use crate::array::{
-    ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
+    ChunkGrid, ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice,
+    transmute_to_bytes_vec,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -205,6 +207,13 @@ impl ArrayCodecTraits for PcodecCodecBound {
 impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

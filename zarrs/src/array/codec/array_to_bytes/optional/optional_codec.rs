@@ -5,12 +5,15 @@ use std::mem::size_of;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::{CodecChain, CodecChainBound};
-use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
+use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkGrid, DataType,
+};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
@@ -387,6 +390,13 @@ impl ArrayCodecTraits for OptionalCodecBound {
 impl ArrayToBytesCodecTraits for OptionalCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

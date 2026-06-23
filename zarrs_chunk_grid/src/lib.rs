@@ -75,6 +75,55 @@ impl IncompatibleDimensionError {
     }
 }
 
+/// A chunk grid creation/configuration error.
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum ChunkGridCreateError {
+    /// Plugin creation error.
+    #[error(transparent)]
+    PluginCreateError(#[from] PluginCreateError),
+    /// Incompatible dimension error.
+    #[error(transparent)]
+    IncompatibleDimensionError(#[from] IncompatibleDimensionError),
+    /// Incompatible dimensionality error.
+    #[error(transparent)]
+    IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),
+    /// Any other error.
+    #[error("{0}")]
+    Other(String),
+}
+
+impl ChunkGridCreateError {
+    /// Create a new [`ChunkGridCreateError`].
+    #[must_use]
+    pub fn new(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+
+    /// Create a new [`ChunkGridCreateError::Other`].
+    #[must_use]
+    pub fn other(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<&str> for ChunkGridCreateError {
+    fn from(error: &str) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<String> for ChunkGridCreateError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
+}
+
+impl From<Arc<serde_json::Error>> for ChunkGridCreateError {
+    fn from(error: Arc<serde_json::Error>) -> Self {
+        Self::PluginCreateError(PluginCreateError::from(error))
+    }
+}
+
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
 pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
@@ -100,7 +149,7 @@ impl ExtensionName for ChunkGrid {
 
 /// A chunk grid plugin.
 #[derive(derive_more::Deref)]
-pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape>);
+pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape, ChunkGridCreateError>);
 inventory::collect!(ChunkGridPlugin);
 
 impl ChunkGridPlugin {
@@ -111,7 +160,8 @@ impl ChunkGridPlugin {
 }
 
 /// A runtime chunk grid plugin for dynamic registration.
-pub type ChunkGridRuntimePlugin = RuntimePlugin2<ChunkGrid, MetadataV3, ArrayShape>;
+pub type ChunkGridRuntimePlugin =
+    RuntimePlugin2<ChunkGrid, MetadataV3, ArrayShape, ChunkGridCreateError>;
 
 /// A handle to a registered chunk grid plugin.
 pub type ChunkGridRuntimeRegistryHandle = Arc<ChunkGridRuntimePlugin>;
@@ -168,11 +218,11 @@ impl ChunkGrid {
     ///
     /// # Errors
     ///
-    /// Returns a [`PluginCreateError`] if the metadata is invalid or not associated with a registered chunk grid plugin.
+    /// Returns a [`ChunkGridCreateError`] if the metadata is invalid or not associated with a registered chunk grid plugin.
     pub fn from_metadata(
         metadata: &MetadataV3,
         array_shape: &[u64],
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, ChunkGridCreateError> {
         let name = metadata.name();
 
         // Check runtime registry first (higher priority)
@@ -196,10 +246,11 @@ impl ChunkGrid {
                 return plugin.create(metadata, &array_shape.to_vec());
             }
         }
-        Err(
-            PluginUnsupportedError::new(metadata.name().to_string(), "chunk grid".to_string())
-                .into(),
-        )
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.name().to_string(),
+            "chunk grid".to_string(),
+        ))
+        .into())
     }
 }
 
@@ -214,11 +265,11 @@ pub unsafe trait ChunkGridTraits:
     /// Create a chunk grid from Zarr V3 metadata and an array shape.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    /// Returns [`ChunkGridCreateError`] if the plugin cannot be created.
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError>
+    ) -> Result<ChunkGrid, ChunkGridCreateError>
     where
         Self: Sized;
 

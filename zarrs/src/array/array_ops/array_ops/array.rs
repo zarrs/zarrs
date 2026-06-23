@@ -6,11 +6,9 @@ use super::super::super::{
 };
 use super::super::*;
 use super::ArrayOps;
-use crate::array::codec::ShardingCodecConfiguration;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
@@ -221,20 +219,6 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.chunk_grid().grid_shape()
     }
 
-    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        let configuration = self
-            .codecs
-            .array_to_bytes_codec()
-            .configuration_v3(self.metadata_options().codec_metadata_options())?;
-        if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
-            ShardingCodecConfiguration::try_from_configuration(configuration)
-        {
-            Some(sharding_configuration.chunk_shape)
-        } else {
-            None
-        }
-    }
-
     pub fn subchunk_grid(&self) -> &ChunkGrid {
         self.subchunk_grid
             .as_ref()
@@ -261,16 +245,6 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .chunk_shape(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
-    }
-
-    pub fn partial_decode_granularity(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<ChunkShape, ArrayError> {
-        let chunk_shape = self.chunk_shape(chunk_indices)?;
-        Ok(self
-            .codecs_bound()
-            .partial_decode_granularity(&chunk_shape)?)
     }
 
     pub fn subset_all(&self) -> ArraySubset {

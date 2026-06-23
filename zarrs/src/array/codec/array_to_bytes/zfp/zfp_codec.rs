@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zfp_sys::{
     zfp_compress,
@@ -18,7 +19,7 @@ use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
     promote_before_zfp_encoding, zfp_decode, zfp_native_type_to_sys,
 };
-use crate::array::{BytesRepresentation, DataType, FillValue};
+use crate::array::{BytesRepresentation, ChunkGrid, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
@@ -215,6 +216,13 @@ impl ArrayCodecTraits for ZfpCodecBound {
 impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

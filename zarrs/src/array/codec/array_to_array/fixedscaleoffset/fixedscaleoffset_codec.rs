@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
     FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
 };
-use crate::array::{DataType, FillValue};
+use crate::array::{ChunkGrid, DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -507,6 +508,14 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
 
     fn encoded_fill_value(&self) -> &FillValue {
         &self.encoded_fill_value
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(encoded_subchunk_grid.clone()))
     }
 
     fn encode<'a>(

@@ -62,7 +62,8 @@ use std::num::NonZeroU64;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use zarrs_chunk_grid::{
-    ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, Indexer, IndexerError,
+    ArraySubset, ArraySubsetError, ChunkGrid, ChunkGridCreateError,
+    IncompatibleDimensionalityError, Indexer, IndexerError,
 };
 use zarrs_data_type::{DataType, DataTypeFillValueError, FillValue};
 use zarrs_metadata::v2::MetadataV2;
@@ -1214,22 +1215,30 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         Ok(decoded_shape.to_vec())
     }
 
-    /// Map a partial decode granularity from the encoded representation to the decoded representation.
+    /// Map a chunk grid from the decoded representation to the encoded representation.
+    ///
+    /// Returns [`None`] if this codec cannot preserve or transform the chunk grid.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the decoded shape or encoded granularity is not supported by this codec.
-    fn partial_decode_granularity(
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid is not supported by this codec.
+    fn encoded_chunk_grid(
         &self,
-        decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        let encoded_shape = self.encoded_shape(decoded_shape)?;
-        if encoded_shape == decoded_shape {
-            Ok(encoded_granularity.to_vec())
-        } else {
-            Ok(decoded_shape.to_vec())
-        }
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(decoded_chunk_grid.clone()))
     }
+
+    /// Map a subchunk grid from the encoded representation to the decoded representation.
+    ///
+    /// Returns [`None`] if this codec cannot preserve or transform the subchunk grid.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid or encoded subchunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///
@@ -1391,20 +1400,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError>;
 
-    /// Return the partial decode granularity.
+    /// Return the decoded subchunk grid created by this codec.
     ///
-    /// This represents the shape of the smallest subset of a chunk that can be efficiently decoded if the chunk were subdivided into a regular grid.
-    /// For most codecs, this is just the shape of the chunk.
-    /// It is the shape of the sub chunks (inner chunks) for the sharding codec.
+    /// Returns [`None`] if this codec does not expose finer subchunk boundaries.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the decoded shape is not supported by this codec.
-    fn partial_decode_granularity(
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
         &self,
-        decoded_shape: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        Ok(decoded_shape.to_vec())
-    }
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///

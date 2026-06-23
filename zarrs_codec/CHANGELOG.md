@@ -16,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
     - **Breaking**: Add `data_type()` and `fill_value()` methods
     - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
-  - Add `partial_decode_granularity()` with a default implementation (moved from `ArrayCodecTraits`)
   - **Breaking**: Remove `ArrayToArrayCodecTraits::decoded_shape()`
 
 ### Removed

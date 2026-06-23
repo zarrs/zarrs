@@ -1,12 +1,14 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
-use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
+use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
+use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -181,22 +183,60 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
-    fn partial_decode_granularity(
+    fn encoded_chunk_grid(
         &self,
-        decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        if self.order.0.len() != decoded_shape.len()
-            || self.order.0.len() != encoded_granularity.len()
-        {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        if self.order.0.len() != decoded_chunk_grid.dimensionality() {
+            return Err(ChunkGridCreateError::new(
+                "Length of transpose codec `order` does not match chunk grid dimensionality",
             ));
         }
-        Ok(
-            permute(encoded_granularity, &inverse_permutation(&self.order.0))
-                .expect("matching dimensionality"),
-        )
+
+        let array_shape = permute(decoded_chunk_grid.array_shape(), &self.order.0)
+            .expect("matching dimensionality");
+        let chunk_shapes = self
+            .order
+            .0
+            .iter()
+            .map(|&decoded_dim| {
+                let edge_lengths = decoded_chunk_grid.chunk_edge_lengths(decoded_dim)?;
+                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+            })
+            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+
+        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+            array_shape,
+            &chunk_shapes,
+        )?)))
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        if self.order.0.len() != decoded_chunk_grid.dimensionality()
+            || self.order.0.len() != encoded_subchunk_grid.dimensionality()
+        {
+            return Err(ChunkGridCreateError::new(
+                "Length of transpose codec `order` does not match subchunk grid dimensionality",
+            ));
+        }
+
+        let inverse = inverse_permutation(&self.order.0);
+        let chunk_shapes = inverse
+            .iter()
+            .map(|&encoded_dim| {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+            })
+            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+
+        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+            decoded_chunk_grid.array_shape().to_vec(),
+            &chunk_shapes,
+        )?)))
     }
 
     fn encode<'a>(

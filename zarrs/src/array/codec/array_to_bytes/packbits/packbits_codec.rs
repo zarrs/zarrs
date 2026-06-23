@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use num::Integer;
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 #[cfg(feature = "async")]
@@ -20,7 +21,8 @@ use crate::array::codec::BytesCodec;
 use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
 use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShapeTraits, DataType,
+    FillValue,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -209,6 +211,13 @@ impl ArrayCodecTraits for PackBitsCodecBound {
 impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

@@ -3,9 +3,13 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::chunk_grid::{
+    ChunkEdgeLengths, RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths,
+};
+use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -119,6 +123,25 @@ fn decoded_granularity_from_linear_interval(
     }
 
     (remaining == 1).then_some(granularity)
+}
+
+fn chunk_edge_lengths_to_regular_granularity(
+    chunk_grid: &ChunkGrid,
+) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
+    let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
+    for dim in 0..chunk_grid.dimensionality() {
+        let edge_lengths = chunk_grid
+            .chunk_edge_lengths(dim)
+            .map_err(ChunkGridCreateError::from)?;
+        let Some(first) = edge_lengths.first().copied() else {
+            return Ok(None);
+        };
+        if edge_lengths.iter().any(|&edge_length| edge_length != first) {
+            return Ok(None);
+        }
+        chunk_shape.push(first);
+    }
+    Ok(Some(chunk_shape))
 }
 
 impl ReshapeCodec {
@@ -238,37 +261,83 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
-    fn partial_decode_granularity(
+    fn encoded_chunk_grid(
         &self,
-        decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape)?;
-        if encoded_granularity.len() != encoded_shape.len() {
-            return Err(CodecError::Other(format!(
-                "encoded granularity dimensionality {} is incompatible with encoded dimensionality {}",
-                encoded_granularity.len(),
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        let decoded_shape = decoded_chunk_grid
+            .array_shape()
+            .iter()
+            .copied()
+            .map(NonZeroU64::new)
+            .collect::<Option<ChunkShape>>();
+        let Some(decoded_shape) = decoded_shape else {
+            return Ok(None);
+        };
+
+        let encoded_shape = super::get_encoded_shape(&self.shape, &decoded_shape)
+            .map_err(|err| ChunkGridCreateError::new(err.to_string()))?;
+        if encoded_subchunk_grid.dimensionality() != encoded_shape.len() {
+            return Err(ChunkGridCreateError::new(format!(
+                "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {}",
+                encoded_subchunk_grid.dimensionality(),
                 encoded_shape.len()
             )));
         }
 
-        if encoded_shape == decoded_shape {
-            return Ok(encoded_granularity.to_vec());
-        }
-
-        // Reshape preserves row-major linear order, so a decoded rectangular
-        // granularity can be inferred only when each encoded granule is a
-        // contiguous linear interval that also tiles decoded row-major
-        // coordinates as a rectangle. Otherwise, use the full decoded chunk.
-        let Some(interval_len) =
-            encoded_granularity_linear_interval_len(&encoded_shape, encoded_granularity)
+        let Some(encoded_granularity) =
+            chunk_edge_lengths_to_regular_granularity(encoded_subchunk_grid)?
         else {
-            return Ok(decoded_shape.to_vec());
+            return Ok(None);
         };
-        Ok(
-            decoded_granularity_from_linear_interval(decoded_shape, interval_len)
-                .unwrap_or_else(|| decoded_shape.to_vec()),
-        )
+
+        let decoded_granularity = if encoded_shape == decoded_shape {
+            encoded_granularity
+        } else if let Some(interval_len) =
+            encoded_granularity_linear_interval_len(&encoded_shape, &encoded_granularity)
+        {
+            decoded_granularity_from_linear_interval(&decoded_shape, interval_len)
+                .unwrap_or_else(|| decoded_shape.clone())
+        } else {
+            decoded_shape.clone()
+        };
+
+        let chunk_shapes = decoded_shape
+            .iter()
+            .zip(&decoded_granularity)
+            .map(|(shape, granularity)| {
+                if !shape.get().is_multiple_of(granularity.get()) {
+                    return None;
+                }
+                let edge_lengths =
+                    vec![*granularity; (shape.get() / granularity.get()) as usize];
+                Some(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                ChunkGridCreateError::new(format!(
+                    "decoded granularity {decoded_granularity:?} is incompatible with decoded shape {decoded_shape:?}"
+                ))
+            })?;
+
+        let chunk_shapes = if chunk_shapes.is_empty() {
+            vec![ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())]
+        } else {
+            chunk_shapes
+        };
+
+        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+            decoded_chunk_grid.array_shape().to_vec(),
+            &chunk_shapes,
+        )?)))
     }
 
     fn encode<'a>(

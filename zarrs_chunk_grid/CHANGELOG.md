@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `IncompatibleDimensionError`
+- Add `ChunkGridCreateError` for chunk grid creation and configuration failures
 
 ### Changed
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
 - **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
+- **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 
 ## [0.5.1] - 2026-02-08
 

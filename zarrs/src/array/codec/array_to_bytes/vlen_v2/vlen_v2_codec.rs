@@ -119,6 +119,13 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &zarrs_chunk_grid::ChunkGrid,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, zarrs_chunk_grid::ChunkGridCreateError> {
+        Ok(None)
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,

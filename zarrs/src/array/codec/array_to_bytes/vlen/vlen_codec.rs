@@ -4,9 +4,10 @@ use std::sync::Arc;
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::BytesCodec;
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound,
-    DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkGrid, CodecChain,
+    CodecChainBound, DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
 };
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -229,6 +230,13 @@ impl ArrayCodecTraits for VlenCodecBound {
 impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(None)
     }
 
     fn encode<'a>(

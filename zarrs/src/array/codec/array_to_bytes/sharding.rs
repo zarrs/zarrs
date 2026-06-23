@@ -111,6 +111,7 @@ fn calculate_chunks_per_shard(
             if num::Integer::is_multiple_of(&s, &c) {
                 Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
             } else {
+                // TODO: Permit this path if/when https://github.com/zarr-developers/zarr-specs/pull/370 merges
                 Err(CodecError::Other(
                     format!("invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {shard_shape:?}")
                 ))

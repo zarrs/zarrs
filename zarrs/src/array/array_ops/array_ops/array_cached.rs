@@ -87,10 +87,6 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().chunk_grid_shape()
     }
 
-    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        self.array().subchunk_shape()
-    }
-
     pub fn subchunk_grid(&self) -> &ChunkGrid {
         self.array().subchunk_grid()
     }
@@ -109,13 +105,6 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
 
     pub fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError> {
         self.array().chunk_shape(chunk_indices)
-    }
-
-    pub fn partial_decode_granularity(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<ChunkShape, ArrayError> {
-        self.array().partial_decode_granularity(chunk_indices)
     }
 
     pub fn subset_all(&self) -> ArraySubset {
