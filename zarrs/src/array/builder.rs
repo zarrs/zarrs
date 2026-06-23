@@ -96,7 +96,7 @@ use array_builder_fill_value::ArrayBuilderFillValueImpl;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArrayBuilder {
     /// Data type.
     data_type: ArrayBuilderDataType,
@@ -130,7 +130,7 @@ pub struct ArrayBuilder {
     metadata_options: ArrayMetadataOptions,
 }
 
-#[derive(Debug, From)]
+#[derive(Clone, Debug, From)]
 enum ArrayBuilderChunkGridMaybe {
     ChunkGrid(ChunkGrid),
     Metadata(ArrayShape, ArrayBuilderChunkGridMetadata),
