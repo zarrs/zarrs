@@ -120,13 +120,15 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
         CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
 
-    fn nz(value: u64) -> NonZeroU64 {
+    const fn nz(value: u64) -> NonZeroU64 {
         NonZeroU64::new(value).unwrap()
     }
 
@@ -175,34 +177,50 @@ mod tests {
         codec_squeeze_round_trip_impl(JSON, data_type::uint8(), 0u8);
     }
 
-    #[test]
-    fn codec_squeeze_partial_decode_granularity() {
+    fn test_squeeze_partial_decode_granularity(
+        array_shape: Vec<u64>,
+        chunk_shape: Vec<NonZeroU64>,
+        inner_array_shape: Vec<u64>,
+        inner_subchunk_shape: Vec<NonZeroU64>,
+        expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
+    ) {
         let codec = Arc::new(SqueezeCodec::new())
             .with_context(data_type::uint8(), FillValue::from(0u8))
             .unwrap();
+        let chunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(array_shape.clone(), chunk_shape).unwrap());
+        let inner_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(inner_array_shape, inner_subchunk_shape).unwrap());
+        let subchunk_grid = codec
+            .decoded_subchunk_grid(&chunk_grid, &inner_subchunk_grid)
+            .unwrap()
+            .unwrap();
+        for (axis, expected_subchunk_grid_edge_lengths_axis) in
+            expected_subchunk_grid_edge_lengths.into_iter().enumerate()
+        {
+            assert_eq!(
+                subchunk_grid.chunk_edge_lengths(axis).unwrap(),
+                expected_subchunk_grid_edge_lengths_axis
+            );
+        }
+    }
 
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(1), nz(10)], &[nz(5)])
-                .unwrap(),
-            vec![nz(1), nz(5)]
+    #[test]
+    fn codec_squeeze_partial_decode_granularity() {
+        test_squeeze_partial_decode_granularity(
+            vec![1, 10],
+            vec![nz(1), nz(5)],
+            vec![10],
+            vec![nz(5)],
+            vec![vec![nz(1)], vec![nz(5), nz(5)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(1), nz(10)], &[nz(1), nz(5)])
-                .unwrap(),
-            vec![nz(1), nz(1), nz(5)]
-        );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(1), nz(1)], &[nz(1)])
-                .unwrap(),
-            vec![nz(1), nz(1)]
-        );
-        assert!(
-            codec
-                .partial_decode_granularity(&[nz(2)], &[nz(1), nz(1)])
-                .is_err()
+
+        test_squeeze_partial_decode_granularity(
+            vec![4, 2, 20],
+            vec![nz(2), nz(1), nz(10)],
+            vec![4, 20],
+            vec![nz(2), nz(10)],
+            vec![vec![nz(2), nz(2)], vec![nz(1), nz(1)], vec![nz(10), nz(10)]],
         );
     }
 
