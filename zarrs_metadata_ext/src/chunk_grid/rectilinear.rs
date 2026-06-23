@@ -43,6 +43,7 @@ pub enum RunLengthElement {
 #[serde(untagged)]
 pub enum ChunkEdgeLengths {
     /// A scalar value representing a regular grid with fixed-size chunks.
+    // FIXME: 0.5.0 -> Scalar -> Fixed?
     Scalar(NonZeroU64),
     /// An array of chunk edge lengths (potentially run-length encoded).
     Varying(Vec<RunLengthElement>),

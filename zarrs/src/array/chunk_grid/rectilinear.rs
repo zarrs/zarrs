@@ -640,15 +640,11 @@ mod tests {
         assert!(matches!(&elements[2], RunLengthElement::Single(val) if val.get() == 20));
         assert!(matches!(&elements[3], RunLengthElement::Single(val) if val.get() == 35));
 
-        // Second dimension should be compressed: [[10, 10]]
-        let elements = match &chunk_shapes[1] {
-            ChunkEdgeLengths::Varying(elements) => elements,
-            _ => panic!("Expected Varying"),
-        };
-        assert_eq!(elements.len(), 1);
-        assert!(
-            matches!(&elements[0], RunLengthElement::Repeated([val, count]) if val.get() == 10 && count.get() == 10)
-        );
+        // Second dimension should be fixed scalar: 10
+        assert!(matches!(
+            &chunk_shapes[1],
+            ChunkEdgeLengths::Scalar(s) if s.get() == 10
+        ));
     }
 
     #[test]
