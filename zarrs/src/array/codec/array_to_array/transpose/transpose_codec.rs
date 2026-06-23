@@ -183,24 +183,6 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
-    fn partial_decode_granularity(
-        &self,
-        decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        if self.order.0.len() != decoded_shape.len()
-            || self.order.0.len() != encoded_granularity.len()
-        {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match array dimensionality".to_string(),
-            ));
-        }
-        Ok(
-            permute(encoded_granularity, &inverse_permutation(&self.order.0))
-                .expect("matching dimensionality"),
-        )
-    }
-
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,

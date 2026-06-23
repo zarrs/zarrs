@@ -70,12 +70,6 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
-    ///
-    /// Returns [`None`] for an unsharded array.
-    #[must_use]
-    fn subchunk_shape(&self) -> Option<ChunkShape>;
-
     /// Retrieve the subchunk grid.
     ///
     /// Returns the normal chunk grid for an unsharded array.
@@ -104,16 +98,6 @@ pub trait ArrayOps {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     #[allow(clippy::missing_errors_doc)]
     fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
-
-    /// Return the partial decode granularity of the chunk at `chunk_indices`.
-    ///
-    /// # Errors
-    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
-    ///
-    /// # Panics
-    /// Panics if any component of the shape of the chunk at `chunk_indices` exceeds [`usize::MAX`].
-    #[allow(clippy::missing_errors_doc)]
-    fn partial_decode_granularity(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
 
     /// Return an array subset that spans the entire array.
     fn subset_all(&self) -> ArraySubset;

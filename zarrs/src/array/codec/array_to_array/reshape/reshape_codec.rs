@@ -261,39 +261,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
-    fn partial_decode_granularity(
-        &self,
-        decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape)?;
-        if encoded_granularity.len() != encoded_shape.len() {
-            return Err(CodecError::Other(format!(
-                "encoded granularity dimensionality {} is incompatible with encoded dimensionality {}",
-                encoded_granularity.len(),
-                encoded_shape.len()
-            )));
-        }
-
-        if encoded_shape == decoded_shape {
-            return Ok(encoded_granularity.to_vec());
-        }
-
-        // Reshape preserves row-major linear order, so a decoded rectangular
-        // granularity can be inferred only when each encoded granule is a
-        // contiguous linear interval that also tiles decoded row-major
-        // coordinates as a rectangle. Otherwise, use the full decoded chunk.
-        let Some(interval_len) =
-            encoded_granularity_linear_interval_len(&encoded_shape, encoded_granularity)
-        else {
-            return Ok(decoded_shape.to_vec());
-        };
-        Ok(
-            decoded_granularity_from_linear_interval(decoded_shape, interval_len)
-                .unwrap_or_else(|| decoded_shape.to_vec()),
-        )
-    }
-
     fn encoded_chunk_grid(
         &self,
         _decoded_chunk_grid: &ChunkGrid,

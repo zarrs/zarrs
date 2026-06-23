@@ -65,10 +65,6 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         &array.metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))
     );
     let _ = array.builder().build_metadata()?;
-    assert_eq!(
-        array.subchunk_shape().unwrap(),
-        vec![NonZeroU64::new(1).unwrap(); 2]
-    );
     assert_eq!(array.subchunk_grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
     assert_eq!(
@@ -76,8 +72,8 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         vec![NonZeroU64::new(3).unwrap(); 2]
     );
     assert_eq!(
-        array.partial_decode_granularity(&[0, 0])?,
-        vec![NonZeroU64::new(1).unwrap(); 2]
+        array.subchunk_grid().chunk_shape(&[0, 0]).unwrap(),
+        Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
     assert_eq!(array.chunk_shape_usize(&[0, 0])?, [3, 3]);
     assert_eq!(array.subset_all(), ArraySubset::new_with_shape(vec![5, 5]));

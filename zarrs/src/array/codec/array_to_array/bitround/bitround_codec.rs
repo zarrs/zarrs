@@ -179,14 +179,6 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(Some(encoded_subchunk_grid.clone()))
     }
 
-    fn partial_decode_granularity(
-        &self,
-        _decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        Ok(encoded_granularity.to_vec())
-    }
-
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,

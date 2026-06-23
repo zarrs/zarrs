@@ -322,13 +322,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
-    fn partial_decode_granularity(
-        &self,
-        _decoded_shape: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        Ok(self.subchunk_shape.clone())
-    }
-
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,
