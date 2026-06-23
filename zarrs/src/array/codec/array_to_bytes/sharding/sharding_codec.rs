@@ -19,7 +19,9 @@ use super::{
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
+use crate::array::chunk_grid::{
+    ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid, edge_lengths_to_chunk_edge_lengths,
+};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
@@ -36,24 +38,7 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
-
-fn edge_lengths_to_chunk_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
-    if let Some(first) = edge_lengths.first().copied()
-        && edge_lengths.iter().all(|edge_length| *edge_length == first)
-    {
-        ChunkEdgeLengths::Scalar(first)
-    } else {
-        ChunkEdgeLengths::Varying(
-            edge_lengths
-                .iter()
-                .copied()
-                .map(RunLengthElement::Single)
-                .collect(),
-        )
-    }
-}
 
 fn regular_subchunk_grid(
     chunk_grid: &ChunkGrid,

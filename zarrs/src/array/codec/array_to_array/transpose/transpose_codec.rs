@@ -7,7 +7,7 @@ use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
+use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -18,7 +18,6 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
 use zarrs_plugin::PluginCreateError;
 
@@ -358,21 +357,5 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
                 self.order.0.clone(),
             ),
         ))
-    }
-}
-
-fn edge_lengths_to_chunk_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
-    if let Some(first) = edge_lengths.first().copied()
-        && edge_lengths.iter().all(|edge_length| *edge_length == first)
-    {
-        ChunkEdgeLengths::Scalar(first)
-    } else {
-        ChunkEdgeLengths::Varying(
-            edge_lengths
-                .iter()
-                .copied()
-                .map(RunLengthElement::Single)
-                .collect(),
-        )
     }
 }
