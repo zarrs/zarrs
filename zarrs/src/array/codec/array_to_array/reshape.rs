@@ -146,8 +146,10 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
         ArrayPartialDecoderTraits, CodecOptions, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
@@ -351,63 +353,115 @@ mod tests {
         );
     }
 
+    fn test_reshape_partial_decode_granularity(
+        reshape_shape: ReshapeShape,
+        decoded_shape: Vec<u64>,
+        encoded_subchunk_shape: Vec<NonZeroU64>,
+        expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
+    ) {
+        let decoded_shape_nonzero = decoded_shape
+            .iter()
+            .copied()
+            .map(NonZeroU64::new)
+            .collect::<Option<Vec<_>>>()
+            .unwrap();
+        let codec = Arc::new(ReshapeCodec::new(reshape_shape))
+            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .unwrap();
+        let encoded_shape = codec
+            .encoded_shape(&decoded_shape_nonzero)
+            .unwrap()
+            .into_iter()
+            .map(NonZeroU64::get)
+            .collect();
+        let chunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(decoded_shape.clone(), decoded_shape_nonzero).unwrap(),
+        );
+        let encoded_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(encoded_shape, encoded_subchunk_shape).unwrap());
+        let subchunk_grid = codec
+            .decoded_subchunk_grid(&chunk_grid, &encoded_subchunk_grid)
+            .unwrap()
+            .unwrap();
+        for (axis, expected_subchunk_grid_edge_lengths_axis) in
+            expected_subchunk_grid_edge_lengths.into_iter().enumerate()
+        {
+            assert_eq!(
+                subchunk_grid.chunk_edge_lengths(axis).unwrap(),
+                expected_subchunk_grid_edge_lengths_axis
+            );
+        }
+    }
+
     #[test]
     fn codec_reshape_partial_decode_granularity() {
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0]),
-            ReshapeDim::InputDims(vec![1]),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(4), nz(6)], &[nz(2), nz(3)])
-                .unwrap(),
-            vec![nz(2), nz(3)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![0]),
+                ReshapeDim::InputDims(vec![1]),
+            ]),
+            vec![4, 6],
+            vec![nz(2), nz(3)],
+            vec![vec![nz(2), nz(2)], vec![nz(3), nz(3)]],
         );
 
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0, 1]),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(5)])
-                .unwrap(),
-            vec![nz(1), nz(5)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(5)],
+            vec![vec![nz(1), nz(1)], vec![nz(5), nz(5), nz(5), nz(5)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(20)])
-                .unwrap(),
-            vec![nz(1), nz(20)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(20)],
+            vec![vec![nz(1), nz(1)], vec![nz(20)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(40)])
-                .unwrap(),
-            vec![nz(2), nz(20)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(40)],
+            vec![vec![nz(2)], vec![nz(20)]],
         );
 
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::Size(nz(2)),
-            ReshapeDim::Size(nz(3)),
-            ReshapeDim::Size(nz(2)),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(12)], &[nz(1), nz(1), nz(2)])
-                .unwrap(),
-            vec![nz(2)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::Size(nz(2)),
+                ReshapeDim::Size(nz(3)),
+                ReshapeDim::Size(nz(2)),
+            ]),
+            vec![12],
+            vec![nz(1), nz(1), nz(2)],
+            vec![vec![nz(2), nz(2), nz(2), nz(2), nz(2), nz(2)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(12)], &[nz(1), nz(3), nz(2)])
-                .unwrap(),
-            vec![nz(6)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::Size(nz(2)),
+                ReshapeDim::Size(nz(3)),
+                ReshapeDim::Size(nz(2)),
+            ]),
+            vec![12],
+            vec![nz(1), nz(3), nz(2)],
+            vec![vec![nz(6), nz(6)]],
+        );
+
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![2]),
+                ReshapeDim::InputDims(vec![0, 1]),
+            ]),
+            vec![2, 3, 4],
+            vec![nz(1), nz(6)],
+            vec![vec![nz(2)], vec![nz(3)], vec![nz(4)]],
+        );
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![2]),
+                ReshapeDim::InputDims(vec![0, 1]),
+            ]),
+            vec![2, 3, 4],
+            vec![nz(2), nz(6)],
+            vec![vec![nz(1), nz(1)], vec![nz(3)], vec![nz(4)]],
         );
 
         let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
@@ -416,21 +470,14 @@ mod tests {
         ])))
         .with_context(data_type::uint8(), FillValue::from(0u8))
         .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1), nz(6)])
-                .unwrap(),
-            vec![nz(2), nz(3), nz(4)]
+        let chunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(vec![2, 3, 4], vec![nz(2), nz(3), nz(4)]).unwrap(),
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(2), nz(6)])
-                .unwrap(),
-            vec![nz(1), nz(3), nz(4)]
-        );
+        let encoded_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(vec![4], vec![nz(1)]).unwrap());
         assert!(
             codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1)])
+                .decoded_subchunk_grid(&chunk_grid, &encoded_subchunk_grid)
                 .is_err()
         );
     }
