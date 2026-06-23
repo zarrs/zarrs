@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
+- Bump `zarrs_metadata_ext` to 0.4.5
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
