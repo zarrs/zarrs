@@ -4,8 +4,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
-    FillValue,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize, FillValue,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -138,7 +137,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         })?;
         data.extend_from_slice(num_elements.to_le_bytes().as_slice());
         // Interleaved length (u32, little endian) and element bytes
-        for (&curr, &next) in offsets.iter().tuple_windows() {
+        for (curr, next) in offsets.iter().tuple_windows() {
             let element_bytes = &bytes[curr..next];
             let element_bytes_len = u32::try_from(element_bytes.len()).unwrap();
             data.extend_from_slice(&element_bytes_len.to_le_bytes());
@@ -158,7 +157,6 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         let num_elements_usize = usize::try_from(num_elements).unwrap();
         let (bytes, offsets) =
             super::get_interleaved_bytes_and_offsets(num_elements_usize, &bytes)?;
-        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }

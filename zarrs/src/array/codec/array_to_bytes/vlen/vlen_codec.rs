@@ -4,8 +4,8 @@ use std::sync::Arc;
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::BytesCodec;
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound,
-    DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound, DataType,
+    DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -248,7 +248,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         let offsets = if *self.index_codecs.data_type() == crate::array::data_type::uint32() {
             let offsets = offsets
                 .iter()
-                .map(|offset| u32::try_from(*offset))
+                .map(u32::try_from)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|_| {
                     CodecError::Other(
@@ -262,7 +262,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         } else if *self.index_codecs.data_type() == crate::array::data_type::uint64() {
             let offsets = offsets
                 .iter()
-                .map(|offset| u64::try_from(*offset).unwrap())
+                .map(|offset| u64::try_from(offset).unwrap())
                 .collect::<Vec<u64>>();
             let offsets = transmute_to_bytes_vec(offsets);
             let index_shape = vec![num_offsets];
@@ -315,7 +315,6 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
             self.index_location,
             options,
         )?;
-        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }

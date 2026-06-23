@@ -3,7 +3,7 @@ use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsErr
 /// Variable length array bytes composed of bytes and element bytes offsets.
 ///
 /// The bytes and offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
-/// - The offsets buffer contains length + 1 ~~signed integers (either 32-bit or 64-bit, depending on the data type)~~ usize integers.
+/// - The offsets buffer contains length + 1 unsigned integers, either 32-bit or 64-bit.
 /// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
 /// - The final offset must be less than or equal to the length of the bytes buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]

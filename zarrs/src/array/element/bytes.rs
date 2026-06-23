@@ -36,7 +36,7 @@ macro_rules! impl_element_bytes {
                 offsets.push(len);
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    ArrayBytesOffsets::new_unchecked(offsets)
+                    ArrayBytesOffsets::new_unchecked(offsets.as_slice())
                 };
 
                 // Concatenate bytes
@@ -71,7 +71,7 @@ impl ElementOwned for Vec<u8> {
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
-            elements.push(bytes[*curr..*next].to_vec());
+            elements.push(bytes[curr..next].to_vec());
         }
         Ok(elements)
     }

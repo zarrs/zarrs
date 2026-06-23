@@ -106,7 +106,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
     }));
     let offsets = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets)
+        ArrayBytesOffsets::new_unchecked(offsets.as_slice())
     };
 
     // Write bytes
@@ -115,12 +115,12 @@ pub(crate) fn merge_chunks_vlen<'a>(
     for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
         let (chunk_bytes, chunk_offsets) = chunk_bytes.into_parts();
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-        for (subset_idx, (&chunk_curr, &chunk_next)) in
+        for (subset_idx, (chunk_curr, chunk_next)) in
             indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
         {
             let subset_idx = usize::try_from(subset_idx).unwrap();
-            let subset_curr = offsets[subset_idx];
-            let subset_next = offsets[subset_idx + 1];
+            let subset_curr = offsets.get(subset_idx);
+            let subset_next = offsets.get(subset_idx + 1);
             bytes[subset_curr..subset_next].copy_from_slice(&chunk_bytes[chunk_curr..chunk_next]);
         }
     }
@@ -213,7 +213,7 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
 /// Panics if indices in the indexer exceed [`usize::MAX`].
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
-    offsets: &[usize],
+    offsets: &ArrayBytesOffsets,
     indexer: &dyn Indexer,
     array_shape: &[NonZeroU64],
 ) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
@@ -222,8 +222,8 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     let mut region_bytes_len = 0;
     for index in &indices {
         let index = usize::try_from(*index).unwrap();
-        let curr = offsets[index];
-        let next = offsets[index + 1];
+        let curr = offsets.get(index);
+        let next = offsets.get(index + 1);
         debug_assert!(next >= curr);
         region_bytes_len += next - curr;
     }
@@ -232,14 +232,14 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     for index in &indices {
         region_offsets.push(region_bytes.len());
         let index = usize::try_from(*index).unwrap();
-        let curr = offsets[index];
-        let next = offsets[index + 1];
+        let curr = offsets.get(index);
+        let next = offsets.get(index + 1);
         region_bytes.extend_from_slice(&bytes[curr..next]);
     }
     region_offsets.push(region_bytes.len());
     let region_offsets = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(region_offsets)
+        // SAFETY: The offsets are monotonically increasing and derived from the input offsets.
+        offsets.new_unchecked_like(&region_offsets)
     };
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes

@@ -615,7 +615,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
                 offsets.push(bytes.len());
             }
 
-            let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
+            let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets.as_slice()) };
             unsafe { ArrayBytes::new_vlen_unchecked(bytes, offsets) }
         }
 
@@ -633,7 +633,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
                 offsets.push(bytes.len());
             }
 
-            let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
+            let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets.as_slice()) };
             unsafe { ArrayBytes::new_vlen_unchecked(bytes, offsets) }
         }
 

@@ -52,7 +52,7 @@ impl Element for CustomDataTypeVariableSizeElement {
         offsets.push(bytes.len());
         let offsets = unsafe {
             // SAFETY: Constructed correctly above
-            ArrayBytesOffsets::new_unchecked(offsets)
+            ArrayBytesOffsets::new_unchecked(offsets.as_slice())
         };
         unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
     }
@@ -75,7 +75,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
 
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
-            let bytes = &bytes[*curr..*next];
+            let bytes = &bytes[curr..next];
             if let Ok(bytes) = <[u8; 4]>::try_from(bytes) {
                 let value = f32::from_le_bytes(bytes);
                 elements.push(CustomDataTypeVariableSizeElement(Some(value)));

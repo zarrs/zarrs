@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
   - Add `partial_decode_granularity()` with a default implementation (moved from `ArrayCodecTraits`)
   - **Breaking**: Remove `ArrayToArrayCodecTraits::decoded_shape()`
+- **Breaking**: Store `ArrayBytesOffsets` as `Cow<[u32]>` or `Cow<[u64]>` instead of `Cow<[usize]>`, using codec-configured offset widths where possible and platform-width casts for `usize` inputs
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`

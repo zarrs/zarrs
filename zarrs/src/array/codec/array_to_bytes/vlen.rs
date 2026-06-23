@@ -109,8 +109,8 @@ use crate::array::{
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
-    CodecTraitsV3, InvalidBytesLengthError,
+    ArrayBytesOffsets, ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions,
+    CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError,
 };
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
@@ -143,7 +143,7 @@ fn get_vlen_bytes_and_offsets(
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
-) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+) -> Result<(Vec<u8>, ArrayBytesOffsets<'static>), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
@@ -181,10 +181,10 @@ fn get_vlen_bytes_and_offsets(
     }
     let index = if *index_data_type == data_type::uint32() {
         let index = convert_from_bytes_slice::<u32>(&index);
-        offsets_u32_to_usize(index)
+        ArrayBytesOffsets::new(index)?
     } else if *index_data_type == data_type::uint64() {
         let index = convert_from_bytes_slice::<u64>(&index);
-        offsets_u64_to_usize(index)
+        ArrayBytesOffsets::new(index)?
     } else {
         return Err(CodecError::Other(
             "unsupported vlen index data type, expected uint32 or uint64".to_string(),
@@ -192,11 +192,12 @@ fn get_vlen_bytes_and_offsets(
     };
 
     // Get the data length
-    let Some(&data_len_expected) = index.last() else {
+    if index.is_empty() {
         return Err(CodecError::Other(
             "Index is empty? It should have at least one element".to_string(),
         ));
-    };
+    }
+    let data_len_expected = index.last();
 
     // Decode the data
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
@@ -218,7 +219,7 @@ fn get_vlen_bytes_and_offsets(
 
     // Validate the offsets
     for (curr, next) in index.iter().tuple_windows() {
-        if next < curr || *next > data_len {
+        if next < curr || next > data_len {
             return Err(CodecError::Other(
                 "Invalid bytes offsets in vlen Offset64 encoded chunk".to_string(),
             ));
@@ -226,60 +227,4 @@ fn get_vlen_bytes_and_offsets(
     }
 
     Ok((data, index))
-}
-
-// /// Convert u8 offsets to usize
-// ///
-// /// # Panics if the offsets exceed [`usize::MAX`].
-// fn offsets_u8_to_usize(offsets: Vec<u8>) -> Vec<usize> {
-//     if size_of::<u8>() == size_of::<usize>() {
-//         bytemuck::allocation::cast_vec(offsets)
-//     } else {
-//         offsets
-//             .into_iter()
-//             .map(|offset| usize::from(offset))
-//             .collect()
-//     }
-// }
-
-// /// Convert u16 offsets to usize
-// ///
-// /// # Panics if the offsets exceed [`usize::MAX`].
-// fn offsets_u16_to_usize(offsets: Vec<u16>) -> Vec<usize> {
-//     if size_of::<u16>() == size_of::<usize>() {
-//         bytemuck::allocation::cast_vec(offsets)
-//     } else {
-//         offsets
-//             .into_iter()
-//             .map(|offset| usize::from(offset))
-//             .collect()
-//     }
-// }
-
-/// Convert u32 offsets to usize
-///
-/// # Panics if the offsets exceed [`usize::MAX`].
-fn offsets_u32_to_usize(offsets: Vec<u32>) -> Vec<usize> {
-    if size_of::<u32>() == size_of::<usize>() {
-        bytemuck::allocation::cast_vec(offsets)
-    } else {
-        offsets
-            .into_iter()
-            .map(|offset| usize::try_from(offset).unwrap())
-            .collect()
-    }
-}
-
-/// Convert u64 offsets to usize
-///
-/// # Panics if the offsets exceed [`usize::MAX`].
-fn offsets_u64_to_usize(offsets: Vec<u64>) -> Vec<usize> {
-    if size_of::<u64>() == size_of::<usize>() {
-        bytemuck::allocation::cast_vec(offsets)
-    } else {
-        offsets
-            .into_iter()
-            .map(|offset| usize::try_from(offset).unwrap())
-            .collect()
-    }
 }

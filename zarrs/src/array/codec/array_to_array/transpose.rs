@@ -128,14 +128,14 @@ fn transpose_vlen<'a>(
     let mut offsets_new = Vec::with_capacity(offsets.len());
     for idx in &ndarray_indices_transposed {
         offsets_new.push(bytes_new.len());
-        let curr = offsets[*idx];
-        let next = offsets[idx + 1];
+        let curr = offsets.get(*idx);
+        let next = offsets.get(idx + 1);
         bytes_new.extend_from_slice(&bytes[curr..next]);
     }
     offsets_new.push(bytes_new.len());
     let offsets_new = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets_new)
+        ArrayBytesOffsets::new_unchecked(offsets_new.as_slice())
     };
     unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
