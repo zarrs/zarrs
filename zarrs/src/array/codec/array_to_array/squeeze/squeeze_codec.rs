@@ -54,6 +54,25 @@ impl SqueezeCodec {
     }
 }
 
+fn squeeze_chunk_edge_lengths(edge_lengths: &[NonZeroU64]) -> Option<bool> {
+    let mut has_unit_edge = false;
+    let mut has_non_unit_edge = false;
+    for edge_length in edge_lengths {
+        if edge_length.get() == 1 {
+            has_unit_edge = true;
+        } else {
+            has_non_unit_edge = true;
+        }
+    }
+
+    match (has_unit_edge, has_non_unit_edge) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        // The encoded dimensionality would vary across chunks.
+        (true, true) | (false, false) => None,
+    }
+}
+
 impl Default for SqueezeCodec {
     fn default() -> Self {
         Self::new()
@@ -198,34 +217,30 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         &self,
         decoded_chunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        let decoded_shape = decoded_chunk_grid
-            .array_shape()
-            .iter()
-            .copied()
-            .map(NonZeroU64::new)
-            .collect::<Option<ChunkShape>>();
-        let Some(decoded_shape) = decoded_shape else {
+        if decoded_chunk_grid.array_shape().contains(&0) {
             return Ok(None);
-        };
+        }
 
-        let array_shape = self
-            .encoded_shape(&decoded_shape)
-            .map_err(|err| ChunkGridCreateError::new(err.to_string()))?
-            .into_iter()
-            .map(NonZeroU64::get)
-            .collect::<Vec<_>>();
-        let chunk_shapes = decoded_shape
-            .iter()
-            .enumerate()
-            .filter(|(_, dim)| dim.get() > 1)
-            .map(|(decoded_dim, _)| {
+        let mut array_shape = Vec::new();
+        let mut chunk_shapes = Vec::new();
+        for decoded_dim in 0..decoded_chunk_grid.dimensionality() {
+            let edge_lengths = decoded_chunk_grid
+                .chunk_edge_lengths(decoded_dim)
+                .map_err(ChunkGridCreateError::from)?;
+            let Some(squeeze) = squeeze_chunk_edge_lengths(&edge_lengths) else {
+                return Ok(None);
+            };
+            if !squeeze {
                 let edge_lengths = decoded_chunk_grid
                     .chunk_edge_lengths(decoded_dim)
                     .map_err(ChunkGridCreateError::from)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+                array_shape.push(decoded_chunk_grid.array_shape()[decoded_dim]);
+                chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+            }
+        }
+
         let chunk_shapes = if chunk_shapes.is_empty() {
+            array_shape.push(1);
             vec![ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())]
         } else {
             chunk_shapes
@@ -243,17 +258,22 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
         // Empty chunk grids have no subchunk grid
-        let decoded_shape = decoded_chunk_grid
-            .array_shape()
-            .iter()
-            .copied()
-            .map(NonZeroU64::new)
-            .collect::<Option<ChunkShape>>();
-        let Some(decoded_shape) = decoded_shape else {
+        if decoded_chunk_grid.array_shape().contains(&0) {
             return Ok(None);
-        };
+        }
 
-        let num_unsqueezed_dims = decoded_shape.iter().filter(|dim| dim.get() > 1).count();
+        let mut squeeze = Vec::with_capacity(decoded_chunk_grid.dimensionality());
+        for decoded_dim in 0..decoded_chunk_grid.dimensionality() {
+            let edge_lengths = decoded_chunk_grid
+                .chunk_edge_lengths(decoded_dim)
+                .map_err(ChunkGridCreateError::from)?;
+            let Some(squeeze_dim) = squeeze_chunk_edge_lengths(&edge_lengths) else {
+                return Ok(None);
+            };
+            squeeze.push(squeeze_dim);
+        }
+
+        let num_unsqueezed_dims = squeeze.iter().filter(|&&squeeze| !squeeze).count();
         let expected_encoded_dimensionality = num_unsqueezed_dims.max(1);
         if encoded_subchunk_grid.dimensionality() != expected_encoded_dimensionality {
             return Err(ChunkGridCreateError::new(format!(
@@ -264,17 +284,17 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         }
 
         let mut encoded_dim = 0usize;
-        let chunk_shapes = decoded_shape
+        let chunk_shapes = squeeze
             .iter()
-            .map(|dim| {
-                if dim.get() > 1 {
+            .map(|&squeeze_dim| {
+                if squeeze_dim {
+                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
+                } else {
                     let edge_lengths = encoded_subchunk_grid
                         .chunk_edge_lengths(encoded_dim)
                         .map_err(ChunkGridCreateError::from)?;
                     encoded_dim += 1;
                     Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-                } else {
-                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
                 }
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
