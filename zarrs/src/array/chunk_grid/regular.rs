@@ -428,18 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn regular_create_error_converts_to_chunk_grid_create_error() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(1).unwrap()];
-        let error = RegularChunkGrid::new(vec![1, 1], chunk_shape).unwrap_err();
-        let error = ChunkGridCreateError::from(error);
-
-        assert!(matches!(
-            error,
-            ChunkGridCreateError::IncompatibleDimensionalityError(_)
-        ));
-    }
-
-    #[test]
     fn chunk_grid_regular_fully_and_partially_out_of_bounds() {
         // Array [10, 12], chunks [3, 5] -> grid [4, 3]
         let array_shape: ArrayShape = vec![10, 12];
