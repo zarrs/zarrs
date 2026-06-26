@@ -12,7 +12,7 @@ use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -220,10 +220,10 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         &self,
         decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
         // Empty chunk grids have no subchunk grid
         if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(None);
+            return Ok(SubchunkGrid::None);
         }
 
         let mut squeeze = Vec::with_capacity(decoded_chunk_grid.dimensionality());
@@ -232,7 +232,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
             let Some(squeeze_dim) = squeeze_chunk_edge_lengths(&edge_lengths) else {
-                return Ok(None);
+                return Ok(SubchunkGrid::None);
             };
             squeeze.push(squeeze_dim);
         }
@@ -263,10 +263,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
 
-        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
-            decoded_chunk_grid.array_shape().to_vec(),
-            &chunk_shapes,
-        )?)))
+        Ok(SubchunkGrid::Array(ChunkGrid::new(
+            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
+        )))
     }
 
     fn encode<'a>(

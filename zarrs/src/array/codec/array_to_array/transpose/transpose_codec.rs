@@ -13,7 +13,7 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -215,7 +215,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         &self,
         decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
         if self.order.0.len() != decoded_chunk_grid.dimensionality()
             || self.order.0.len() != encoded_subchunk_grid.dimensionality()
         {
@@ -233,10 +233,9 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
 
-        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
-            decoded_chunk_grid.array_shape().to_vec(),
-            &chunk_shapes,
-        )?)))
+        Ok(SubchunkGrid::Array(ChunkGrid::new(
+            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
+        )))
     }
 
     fn encode<'a>(

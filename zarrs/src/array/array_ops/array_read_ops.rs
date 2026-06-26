@@ -364,4 +364,20 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Return the chunk-local subchunk grid for a chunk, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid cannot be resolved.
+    fn local_subchunk_grid(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.partial_decoder_opt(chunk_indices, options)?
+            .local_subchunk_grid(options)
+            .map_err(ArrayError::CodecError)
+    }
 }

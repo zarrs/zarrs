@@ -18,7 +18,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -212,8 +212,8 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn decoded_subchunk_grid(
         &self,
         _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(None)
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::None)
     }
 
     fn encode<'a>(

@@ -15,7 +15,7 @@ use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid,
     UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
@@ -472,9 +472,9 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
         if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(None);
+            return Ok(SubchunkGrid::None);
         }
 
         let mut chunk_grids = Vec::with_capacity(self.array_to_array.len() + 1);
@@ -482,17 +482,21 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         for codec in &self.array_to_array {
             let decoded_chunk_grid = chunk_grids.last().expect("chunk_grids is non-empty");
             let Some(encoded_chunk_grid) = codec.encoded_chunk_grid(decoded_chunk_grid)? else {
-                return Ok(None);
+                return Ok(SubchunkGrid::None);
             };
             chunk_grids.push(encoded_chunk_grid);
         }
 
         let encoded_chunk_grid = chunk_grids.last().expect("chunk_grids is non-empty");
-        let Some(mut subchunk_grid) = self
+        let mut subchunk_grid = match self
             .array_to_bytes
             .decoded_subchunk_grid(encoded_chunk_grid)?
-        else {
-            return Ok(None);
+        {
+            SubchunkGrid::None => return Ok(SubchunkGrid::None),
+            SubchunkGrid::Array(subchunk_grid) => subchunk_grid,
+            local @ (SubchunkGrid::ChunkLocalKnown | SubchunkGrid::ChunkLocalDynamic) => {
+                return Ok(local);
+            }
         };
 
         for (codec, decoded_chunk_grid) in self
@@ -501,16 +505,17 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             .rev()
             .zip(chunk_grids.iter().rev().skip(1))
         {
-            let Some(decoded_subchunk_grid) =
-                codec.decoded_subchunk_grid(decoded_chunk_grid, &subchunk_grid)?
-            else {
-                return Ok(None);
+            subchunk_grid = match codec.decoded_subchunk_grid(decoded_chunk_grid, &subchunk_grid)? {
+                SubchunkGrid::None => return Ok(SubchunkGrid::None),
+                SubchunkGrid::Array(decoded_subchunk_grid) => decoded_subchunk_grid,
+                local @ (SubchunkGrid::ChunkLocalKnown | SubchunkGrid::ChunkLocalDynamic) => {
+                    return Ok(local);
+                }
             };
-            subchunk_grid = decoded_subchunk_grid;
         }
 
         validate_subchunk_grid_refines_chunk_grid(decoded_chunk_grid, &subchunk_grid)?;
-        Ok(Some(subchunk_grid))
+        Ok(SubchunkGrid::Array(subchunk_grid))
     }
 
     fn encode<'a>(

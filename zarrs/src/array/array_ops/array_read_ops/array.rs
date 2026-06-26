@@ -655,6 +655,13 @@ mod tests {
                 array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &CodecOptions::default())?;
             assert_eq!(compare, test);
 
+            let local_subchunk_grid =
+                array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
+            assert_eq!(
+                local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
+                vec![NonZeroU64::new(2).unwrap(); 2]
+            );
+
             #[cfg(feature = "ndarray")]
             {
                 let compare = array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[4..6, 6..8])?;
@@ -686,6 +693,11 @@ mod tests {
         } else {
             // assert_eq!(array.subchunk_grid(), None); // FIXME: Change subchunk_grid to None when unresolvable?
             assert_eq!(subchunk_grid.grid_shape(), &[2, 2]);
+            assert!(
+                array
+                    .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
+                    .is_none()
+            );
 
             let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?;
             let test =

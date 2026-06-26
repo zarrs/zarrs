@@ -33,7 +33,7 @@ use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    RecommendedConcurrency, SubchunkGrid, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -325,8 +325,8 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(Some(regular_subchunk_grid(
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::Array(regular_subchunk_grid(
             decoded_chunk_grid,
             &self.subchunk_shape,
         )?))

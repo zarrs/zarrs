@@ -125,7 +125,7 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
-        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecOptions, SubchunkGrid, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
 
     const fn nz(value: u64) -> NonZeroU64 {
@@ -193,8 +193,10 @@ mod tests {
             ChunkGrid::new(RegularChunkGrid::new(inner_array_shape, inner_subchunk_shape).unwrap());
         let subchunk_grid = codec
             .decoded_subchunk_grid(&chunk_grid, &inner_subchunk_grid)
-            .unwrap()
             .unwrap();
+        let SubchunkGrid::Array(subchunk_grid) = subchunk_grid else {
+            panic!("expected array subchunk grid");
+        };
         for (axis, expected_subchunk_grid_edge_lengths_axis) in
             expected_subchunk_grid_edge_lengths.into_iter().enumerate()
         {

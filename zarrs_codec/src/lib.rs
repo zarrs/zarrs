@@ -137,6 +137,19 @@ pub struct PartialEncoderCapability {
     pub partial_encode: bool,
 }
 
+/// Describes subchunk grid availability for a codec chain.
+#[derive(Debug, Clone)]
+pub enum SubchunkGrid {
+    /// The codec chain does not expose finer subchunk boundaries.
+    None,
+    /// A subchunk grid is resolvable and congruent across each dimension for the whole array.
+    Array(ChunkGrid),
+    /// A chunk-local subchunk grid can be resolved without reading encoded chunk bytes.
+    ChunkLocalKnown,
+    /// A chunk-local subchunk grid requires opening the encoded chunk.
+    ChunkLocalDynamic,
+}
+
 /// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
 pub struct CodecPluginV3(Plugin<Codec, MetadataV3, CodecCreateError>);
@@ -598,6 +611,20 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
+    /// Return the chunk-local subchunk grid for this decoder, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk handled by this partial decoder,
+    /// not to the full array.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid cannot be resolved.
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        Ok(None)
+    }
+
     /// Partially decode into a preallocated output.
     ///
     /// This method is intended for internal use by Array.
@@ -817,6 +844,14 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
+
+    /// Async variant of [`ArrayPartialDecoderTraits::local_subchunk_grid`].
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        Ok(None)
+    }
 
     /// Async variant of [`ArrayPartialDecoderTraits::partial_decode_into`].
     #[allow(clippy::missing_safety_doc)]
@@ -1238,7 +1273,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
+    ) -> Result<SubchunkGrid, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///
@@ -1409,7 +1444,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
+    ) -> Result<SubchunkGrid, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///

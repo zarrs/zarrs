@@ -9,6 +9,7 @@ use super::ArrayOps;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
+use zarrs_codec::SubchunkGrid;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
@@ -220,9 +221,16 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subchunk_grid(&self) -> &ChunkGrid {
-        self.subchunk_grid
-            .as_ref()
-            .unwrap_or_else(|| self.chunk_grid())
+        match &self.subchunk_grid {
+            SubchunkGrid::Array(subchunk_grid) => subchunk_grid,
+            SubchunkGrid::None
+            | SubchunkGrid::ChunkLocalKnown
+            | SubchunkGrid::ChunkLocalDynamic => self.chunk_grid(),
+        }
+    }
+
+    pub fn subchunk_grid_kind(&self) -> &SubchunkGrid {
+        &self.subchunk_grid
     }
 
     pub fn subchunk_grid_shape(&self) -> ArrayShape {

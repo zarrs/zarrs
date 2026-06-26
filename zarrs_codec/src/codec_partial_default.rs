@@ -168,6 +168,13 @@ where
         }
     }
 
+    fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<super::ChunkGrid>, CodecError> {
+        self.input_output_handle.local_subchunk_grid(options)
+    }
+
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
     }

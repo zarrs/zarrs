@@ -1,4 +1,5 @@
 use super::*;
+use zarrs_codec::SubchunkGrid;
 
 mod array;
 mod array_cached;
@@ -75,6 +76,10 @@ pub trait ArrayOps {
     /// Returns the normal chunk grid for an unsharded array.
     #[must_use]
     fn subchunk_grid(&self) -> &ChunkGrid;
+
+    /// Return subchunk grid information exposed by the codec chain.
+    #[must_use]
+    fn subchunk_grid_kind(&self) -> &SubchunkGrid;
 
     /// Return the shape of the subchunk grid (i.e., the number of subchunks).
     ///

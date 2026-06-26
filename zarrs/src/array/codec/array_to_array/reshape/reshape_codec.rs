@@ -14,7 +14,7 @@ use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -272,7 +272,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         &self,
         decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
         let decoded_shape = decoded_chunk_grid
             .array_shape()
             .iter()
@@ -280,7 +280,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             .map(NonZeroU64::new)
             .collect::<Option<ChunkShape>>();
         let Some(decoded_shape) = decoded_shape else {
-            return Ok(None);
+            return Ok(SubchunkGrid::None);
         };
 
         let encoded_shape = super::get_encoded_shape(&self.shape, &decoded_shape)
@@ -296,7 +296,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         let Some(encoded_granularity) =
             chunk_edge_lengths_to_regular_granularity(encoded_subchunk_grid)?
         else {
-            return Ok(None);
+            return Ok(SubchunkGrid::None);
         };
 
         let decoded_granularity = if encoded_shape == decoded_shape {
@@ -334,10 +334,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             chunk_shapes
         };
 
-        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
-            decoded_chunk_grid.array_shape().to_vec(),
-            &chunk_shapes,
-        )?)))
+        Ok(SubchunkGrid::Array(ChunkGrid::new(
+            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
+        )))
     }
 
     fn encode<'a>(

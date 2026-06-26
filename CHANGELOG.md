@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
+- Add `ArrayOps::subchunk_grid_kind` and `ArrayReadOps::local_subchunk_grid` for chunk-local subchunk grids
 
 ### Changed
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -41,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
 - Bump `zarrs_metadata_ext` to 0.4.5
+- **Breaking**: Support array-wide and chunk-local subchunk grid discovery via `zarrs_codec::SubchunkGrid`
 
 ### Removed
 - **Breaking**: Remove `Array::subchunk_shape()`, query `Array::subchunk_grid()` instead

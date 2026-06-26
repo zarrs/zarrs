@@ -12,7 +12,7 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
+    ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits,
     CodecChainBound, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer,
     IndexerError, ravel_indices,
 };
@@ -216,6 +216,17 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             options,
         )
         .await
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 
     fn supports_partial_decode(&self) -> bool {

@@ -71,7 +71,7 @@ pub use zarrs_codec::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
-    RecommendedConcurrency, StoragePartialDecoder, UnboundArrayToArrayCodecTraits,
+    RecommendedConcurrency, StoragePartialDecoder, SubchunkGrid, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
@@ -386,8 +386,8 @@ pub struct Array<TStorage: ?Sized> {
     data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
-    /// The subchunk grid for sharded arrays.
-    subchunk_grid: Option<ChunkGrid>,
+    /// The subchunk grid information exposed by the codec chain.
+    subchunk_grid: SubchunkGrid,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.

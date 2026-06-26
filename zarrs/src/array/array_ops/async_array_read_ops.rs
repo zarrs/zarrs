@@ -192,4 +192,18 @@ pub trait AsyncArrayReadOps: ArrayOps {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Async variant of [`ArrayReadOps::local_subchunk_grid`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_local_subchunk_grid(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.async_partial_decoder_opt(chunk_indices, options)
+            .await?
+            .local_subchunk_grid(options)
+            .await
+            .map_err(ArrayError::CodecError)
+    }
 }

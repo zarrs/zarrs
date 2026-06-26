@@ -11,7 +11,7 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    SubchunkGrid, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -122,8 +122,8 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn decoded_subchunk_grid(
         &self,
         _decoded_chunk_grid: &zarrs_chunk_grid::ChunkGrid,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, zarrs_chunk_grid::ChunkGridCreateError> {
-        Ok(None)
+    ) -> Result<SubchunkGrid, zarrs_chunk_grid::ChunkGridCreateError> {
+        Ok(SubchunkGrid::None)
     }
 
     fn encode<'a>(

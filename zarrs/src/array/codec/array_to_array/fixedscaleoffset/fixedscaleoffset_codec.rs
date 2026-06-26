@@ -13,7 +13,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -514,8 +514,8 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         &self,
         _decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(Some(encoded_subchunk_grid.clone()))
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::Array(encoded_subchunk_grid.clone()))
     }
 
     fn encode<'a>(

@@ -173,8 +173,8 @@ macro_rules! vlen_v2_codec {
             fn decoded_subchunk_grid(
                 &self,
                 _chunk_grid: &zarrs_chunk_grid::ChunkGrid,
-            ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, zarrs_chunk_grid::ChunkGridCreateError> {
-                Ok(None)
+            ) -> Result<zarrs_codec::SubchunkGrid, zarrs_chunk_grid::ChunkGridCreateError> {
+                Ok(zarrs_codec::SubchunkGrid::None)
             }
 
             fn encode<'a>(

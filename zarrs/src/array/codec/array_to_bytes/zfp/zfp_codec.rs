@@ -24,7 +24,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
     CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -221,8 +221,8 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn decoded_subchunk_grid(
         &self,
         _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(None)
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::None)
     }
 
     fn encode<'a>(

@@ -13,10 +13,10 @@ use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, SubchunkGrid};
 use zarrs_metadata::Configuration;
 
 /// A `bitround` codec implementation.
@@ -175,8 +175,8 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         &self,
         _decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(Some(encoded_subchunk_grid.clone()))
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::Array(encoded_subchunk_grid.clone()))
     }
 
     fn encode<'a>(

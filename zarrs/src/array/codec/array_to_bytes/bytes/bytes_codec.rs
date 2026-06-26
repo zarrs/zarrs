@@ -18,7 +18,7 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -188,8 +188,8 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn decoded_subchunk_grid(
         &self,
         _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(None)
+    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        Ok(SubchunkGrid::None)
     }
 
     fn encode<'a>(
