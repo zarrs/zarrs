@@ -346,6 +346,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
         let codecs = self.codecs_bound();
         let Some(sharding_codec) = codecs
             .array_to_bytes_codec()
@@ -364,7 +367,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
 
         let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
+            subchunk_shard_index_and_chunk_index(self, subchunk_grid, subchunk_indices)?;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -397,8 +400,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
         let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
+            subchunk_shard_index_and_subset(self, subchunk_grid, subchunk_indices)?;
         self.async_retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
             .await
     }
@@ -408,15 +414,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let array_subset = self
+        let subchunk_grid = self
             .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
         self.async_retrieve_array_subset_opt(&array_subset, options)
             .await
     }

@@ -69,14 +69,15 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         array.subchunk_shape(),
         Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
-    assert_eq!(array.subchunk_grid_shape(), &[6, 6]);
+    let subchunk_grid = array.subchunk_grid().unwrap();
+    assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
     assert_eq!(
         array.chunk_shape(&[0, 0])?,
         vec![NonZeroU64::new(3).unwrap(); 2]
     );
     assert_eq!(
-        array.subchunk_grid().chunk_shape(&[0, 0]).unwrap(),
+        subchunk_grid.chunk_shape(&[0, 0]).unwrap(),
         Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
     assert_eq!(array.chunk_shape_usize(&[0, 0])?, [3, 3]);

@@ -80,19 +80,13 @@ pub trait ArrayOps {
 
     /// Retrieve the subchunk grid.
     ///
-    /// Returns the normal chunk grid for an unsharded array.
+    /// Returns [`None`] if the array does not have a subchunk grid.
     #[must_use]
-    fn subchunk_grid(&self) -> &ChunkGrid;
+    fn subchunk_grid(&self) -> Option<&ChunkGrid>;
 
     /// Return subchunk grid information exposed by the codec chain.
     #[must_use]
     fn subchunk_grid_kind(&self) -> &SubchunkGrid;
-
-    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
-    ///
-    /// Returns the normal chunk grid shape for an unsharded array.
-    #[must_use]
-    fn subchunk_grid_shape(&self) -> ArrayShape;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;

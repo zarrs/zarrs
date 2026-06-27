@@ -116,13 +116,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, array_path)
     .unwrap();
 
-    assert_eq!(
-        array
-            .subchunk_grid()
-            .chunk_shape(&vec![0; array.dimensionality()])
-            .unwrap(),
-        Some(vec![NonZeroU64::new(2).unwrap(); 2])
-    );
+    assert!(array.subchunk_grid().is_none());
 
     array_sync_read(&array)?;
 
@@ -156,6 +150,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         array
             .subchunk_grid()
+            .unwrap()
             .chunk_shape(&vec![0; array.dimensionality()])
             .unwrap(),
         Some(vec![NonZeroU64::new(1).unwrap(); 2])

@@ -305,6 +305,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
         let codecs = self.codecs_bound();
         let Some(sharding_codec) = codecs
             .array_to_bytes_codec()
@@ -323,7 +326,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         }
 
         let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
+            subchunk_shard_index_and_chunk_index(self, subchunk_grid, subchunk_indices)?;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -639,13 +642,10 @@ mod tests {
             .collect();
         array.store_array_subset(&array.subset_all(), &data)?;
 
-        let subchunk_grid = array.subchunk_grid();
         if sharded {
+            let subchunk_grid = array.subchunk_grid().unwrap();
             assert_eq!(
-                array
-                    .subchunk_grid()
-                    .chunk_shape(&vec![0; array.dimensionality()])
-                    .unwrap(),
+                subchunk_grid.chunk_shape(&vec![0; array.dimensionality()])?,
                 Some(vec![NonZeroU64::new(2).unwrap(); 2])
             );
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
@@ -691,28 +691,25 @@ mod tests {
 
             assert!(array.retrieve_encoded_subchunk(&[0, 0])?.is_some());
         } else {
-            // assert_eq!(array.subchunk_grid(), None); // FIXME: Change subchunk_grid to None when unresolvable?
-            assert_eq!(subchunk_grid.grid_shape(), &[2, 2]);
+            assert!(array.subchunk_grid().is_none());
             assert!(
                 array
                     .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
                     .is_none()
             );
 
-            let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?;
-            let test =
-                array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())?;
-            assert_eq!(compare, test);
-
             let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
-            let compare = array.retrieve_chunks::<Vec<u16>>(&chunks)?;
-            let test =
-                array.retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default())?;
-            assert_eq!(compare, test);
-
             assert!(matches!(
                 array.retrieve_encoded_subchunk(&[0, 0]),
-                Err(ArrayError::UnsupportedMethod(_))
+                Err(ArrayError::MissingSubchunkGrid)
+            ));
+            assert!(matches!(
+                array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default()),
+                Err(ArrayError::MissingSubchunkGrid)
+            ));
+            assert!(matches!(
+                array.retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default()),
+                Err(ArrayError::MissingSubchunkGrid)
             ));
         }
 

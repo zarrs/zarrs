@@ -229,21 +229,17 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         }
     }
 
-    pub fn subchunk_grid(&self) -> &ChunkGrid {
+    pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
         match &self.subchunk_grid {
-            SubchunkGrid::Array(subchunk_grid) => subchunk_grid,
-            SubchunkGrid::None => self.chunk_grid(),
+            SubchunkGrid::Array(subchunk_grid) => Some(subchunk_grid),
+            SubchunkGrid::None => None,
             // | SubchunkGrid::ChunkLocalKnown
-            // | SubchunkGrid::ChunkLocalDynamic => self.chunk_grid(),
+            // | SubchunkGrid::ChunkLocalDynamic => None,
         }
     }
 
     pub fn subchunk_grid_kind(&self) -> &SubchunkGrid {
         &self.subchunk_grid
-    }
-
-    pub fn subchunk_grid_shape(&self) -> ArrayShape {
-        self.subchunk_grid().grid_shape().to_vec()
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

@@ -99,7 +99,7 @@ mod tests {
         expected_grid_shape: &[u64],
         expected_edge_lengths: &[NonZeroU64],
     ) -> Result<ChunkGrid, Box<dyn std::error::Error>> {
-        let subchunk_grid = array.subchunk_grid().clone();
+        let subchunk_grid = array.subchunk_grid().unwrap().clone();
         assert_eq!(subchunk_grid.array_shape(), expected_array_shape);
         assert_eq!(subchunk_grid.grid_shape(), expected_grid_shape);
         assert_eq!(subchunk_grid.chunk_edge_lengths(0)?, expected_edge_lengths);
@@ -114,7 +114,7 @@ mod tests {
         builder.subchunk_shape(vec![2, 2]);
         let array = builder.build(store, "/array")?;
 
-        let subchunk_grid = array.subchunk_grid();
+        let subchunk_grid = array.subchunk_grid().unwrap();
         assert_eq!(
             array.subchunk_shape(),
             Some(vec![NonZeroU64::new(2).unwrap(); 2])
@@ -142,7 +142,7 @@ mod tests {
         builder.subchunk_shape(vec![2, 2]);
         let array = builder.build(store, "/array")?;
 
-        let subchunk_grid = array.subchunk_grid();
+        let subchunk_grid = array.subchunk_grid().unwrap();
         assert_eq!(
             array.subchunk_shape(),
             Some(vec![NonZeroU64::new(2).unwrap(); 2])
@@ -246,7 +246,7 @@ mod tests {
             .array_to_bytes_codec(Arc::new(sharding_codec));
         let array = builder.build(store, "/array")?;
 
-        let subchunk_grid = array.subchunk_grid();
+        let subchunk_grid = array.subchunk_grid().unwrap();
         assert_eq!(array.subchunk_shape(), Some(vec![nz(2), nz(3)]));
         assert_eq!(subchunk_grid.array_shape(), &[8, 6]);
         assert_eq!(subchunk_grid.grid_shape(), &[4, 2]);

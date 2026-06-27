@@ -45,10 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
 - Bump `zarrs_metadata_ext` to 0.4.5
 - **Breaking**: Support array-wide and chunk-local subchunk grid discovery via `zarrs_codec::SubchunkGrid`
+- **Breaking**: Change `ArrayOps::subchunk_grid()` to return `Option<&ChunkGrid>` and return `None` when an array does not have a subchunk grid
+  - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
+- **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
 - **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`

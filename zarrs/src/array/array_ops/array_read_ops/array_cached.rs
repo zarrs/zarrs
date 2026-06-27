@@ -503,7 +503,7 @@ mod tests {
         ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
         ChunkCacheTypeDecoded,
     };
-    use crate::array::{ArrayBuilder, data_type};
+    use crate::array::{ArrayBuilder, ArrayError, data_type};
     use zarrs_storage::store::MemoryStore;
 
     #[expect(clippy::single_range_in_vec_init)]
@@ -544,18 +544,18 @@ mod tests {
             cached.retrieve_array_subset::<Vec<u8>>(&[1..3]).unwrap(),
             vec![2, 0]
         );
-        assert_eq!(
+        assert!(matches!(
             cached
                 .retrieve_subchunk_opt::<Vec<u8>>(&[0], &CodecOptions::default())
-                .unwrap(),
-            vec![1, 2]
-        );
-        assert_eq!(
+                .unwrap_err(),
+            ArrayError::MissingSubchunkGrid
+        ));
+        assert!(matches!(
             cached
                 .retrieve_subchunks_opt::<Vec<u8>>(&[0..2], &CodecOptions::default())
-                .unwrap(),
-            vec![1, 2, 0, 0]
-        );
+                .unwrap_err(),
+            ArrayError::MissingSubchunkGrid
+        ));
         assert!(
             cached
                 .retrieve_subchunk_opt::<Vec<u8>>(&[0, 0], &CodecOptions::default())

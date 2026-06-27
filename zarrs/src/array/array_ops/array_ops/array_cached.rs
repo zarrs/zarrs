@@ -92,16 +92,12 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().subchunk_shape()
     }
 
-    pub fn subchunk_grid(&self) -> &ChunkGrid {
+    pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
         self.array().subchunk_grid()
     }
 
     pub fn subchunk_grid_kind(&self) -> &SubchunkGrid {
         self.array().subchunk_grid_kind()
-    }
-
-    pub fn subchunk_grid_shape(&self) -> ArrayShape {
-        self.array().subchunk_grid_shape()
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {
