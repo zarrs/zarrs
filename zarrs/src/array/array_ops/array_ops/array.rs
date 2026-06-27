@@ -223,9 +223,9 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     pub fn subchunk_grid(&self) -> &ChunkGrid {
         match &self.subchunk_grid {
             SubchunkGrid::Array(subchunk_grid) => subchunk_grid,
-            SubchunkGrid::None
-            | SubchunkGrid::ChunkLocalKnown
-            | SubchunkGrid::ChunkLocalDynamic => self.chunk_grid(),
+            SubchunkGrid::None => self.chunk_grid(),
+            // | SubchunkGrid::ChunkLocalKnown
+            // | SubchunkGrid::ChunkLocalDynamic => self.chunk_grid(),
         }
     }
 

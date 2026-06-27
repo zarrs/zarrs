@@ -1,3 +1,6 @@
+//! These tests are fully disabled for now pending investigation of "sparse chunk grids", which might be a better API
+#![cfg(any())]
+
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;

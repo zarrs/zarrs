@@ -16,7 +16,7 @@ use zarrs_codec::{
     SubchunkGrid, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, SubchunkGrid};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 
 /// A `bitround` codec implementation.

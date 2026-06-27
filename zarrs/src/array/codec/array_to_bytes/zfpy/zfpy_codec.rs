@@ -17,9 +17,9 @@ use zarrs_metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
 };
 
-use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, SubchunkGrid};
+use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits, SubchunkGrid};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 
 /// A `zfpy` codec implementation.
 ///
