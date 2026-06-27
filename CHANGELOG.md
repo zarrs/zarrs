@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
+- **Behavioural change**: `ArrayOps::subchunk_shape()` now returns the subchunk shape of the subchunk grid (if regular) and supersedes the functionality of `effective_subchunk_shape`()
+  - Previously this returned the `sharding_indexed` codec `chunk_shape`
 - **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
 - **Breaking**: `Hierarchy::open_opt` now takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
 - **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
@@ -45,9 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Support array-wide and chunk-local subchunk grid discovery via `zarrs_codec::SubchunkGrid`
 
 ### Removed
-- **Breaking**: Remove `Array::subchunk_shape()`, query `Array::subchunk_grid()` instead
 - **Breaking**: Remove `ArrayShardedReadableExt`
-- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
 - **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`

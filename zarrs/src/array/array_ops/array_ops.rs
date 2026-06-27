@@ -71,6 +71,13 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
+    /// Return the subchunk shape if the array has a regular subchunk grid.
+    ///
+    /// Returns [`None`] if the array does not expose subchunks, or if the
+    /// resolved subchunk grid has varying edge lengths.
+    #[must_use]
+    fn subchunk_shape(&self) -> Option<ChunkShape>;
+
     /// Retrieve the subchunk grid.
     ///
     /// Returns the normal chunk grid for an unsharded array.
@@ -159,4 +166,20 @@ pub trait ArrayOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError>;
+}
+
+pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<ChunkShape> {
+    let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
+    for dimension in 0..chunk_grid.dimensionality() {
+        let edge_lengths = chunk_grid.chunk_edge_lengths(dimension).ok()?;
+        let (&edge_length, remaining_edge_lengths) = edge_lengths.split_first()?;
+        if remaining_edge_lengths
+            .iter()
+            .any(|remaining_edge_length| *remaining_edge_length != edge_length)
+        {
+            return None;
+        }
+        chunk_shape.push(edge_length);
+    }
+    Some(chunk_shape)
 }

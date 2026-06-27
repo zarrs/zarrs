@@ -65,6 +65,10 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         &array.metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))
     );
     let _ = array.builder().build_metadata()?;
+    assert_eq!(
+        array.subchunk_shape(),
+        Some(vec![NonZeroU64::new(1).unwrap(); 2])
+    );
     assert_eq!(array.subchunk_grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
     assert_eq!(

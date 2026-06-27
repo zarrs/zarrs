@@ -5,7 +5,7 @@ use super::super::super::{
     storage_transformer_default_name,
 };
 use super::super::*;
-use super::ArrayOps;
+use super::{ArrayOps, maybe_regular_chunk_grid_shape};
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
@@ -218,6 +218,15 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
 
     pub fn chunk_grid_shape(&self) -> &[u64] {
         self.chunk_grid().grid_shape()
+    }
+
+    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
+        match &self.subchunk_grid {
+            SubchunkGrid::Array(subchunk_grid) => maybe_regular_chunk_grid_shape(subchunk_grid),
+            SubchunkGrid::None => None,
+            // | SubchunkGrid::ChunkLocalKnown
+            // | SubchunkGrid::ChunkLocalDynamic => None,
+        }
     }
 
     pub fn subchunk_grid(&self) -> &ChunkGrid {
