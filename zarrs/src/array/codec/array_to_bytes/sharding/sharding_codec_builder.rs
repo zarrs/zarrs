@@ -8,6 +8,7 @@ use crate::array::{ChunkShape, DataType};
 use zarrs_codec::{
     BytesToBytesCodecTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
 };
+use zarrs_metadata::ChunkShapeNonEmpty;
 
 /// A [`ShardingCodec`] builder.
 ///
@@ -17,7 +18,7 @@ use zarrs_codec::{
 /// Use the methods in the `sharding` codec builder to change the configuration away from these defaults, and then build the `sharding` codec with [`build`](ShardingCodecBuilder::build).
 #[derive(Debug)]
 pub struct ShardingCodecBuilder {
-    subchunk_shape: ChunkShape,
+    subchunk_shape: ChunkShapeNonEmpty,
     index_array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     index_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
@@ -32,7 +33,7 @@ impl ShardingCodecBuilder {
     /// The default subchunk array-to-bytes codec is chosen based on the data type
     /// (see [`default_array_to_bytes_codec`]).
     #[must_use]
-    pub fn new(subchunk_shape: ChunkShape, data_type: &DataType) -> Self {
+    pub fn new(subchunk_shape: ChunkShapeNonEmpty, data_type: &DataType) -> Self {
         Self {
             subchunk_shape,
             index_array_to_bytes_codec: Arc::<BytesCodec>::default(),

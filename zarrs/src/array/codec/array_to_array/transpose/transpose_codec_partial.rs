@@ -28,7 +28,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         data_type: &DataType,
         _fill_value: &FillValue,
         order: Vec<usize>,

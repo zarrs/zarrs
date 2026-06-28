@@ -13,6 +13,7 @@ use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
+use zarrs_metadata::ChunkShape;
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -20,7 +21,7 @@ use zarrs_storage::byte_range::ByteRange;
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
     endian: Option<Endianness>,
@@ -30,7 +31,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         data_type: &DataType,
         fill_value: &FillValue,
         endian: Option<Endianness>,
@@ -246,7 +247,7 @@ where
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
             // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
+            let num_elements = self.shape.iter().product::<u64>();
             let chunk_bytes =
                 ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);
@@ -334,7 +335,7 @@ where
                 .await
         } else {
             // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
+            let num_elements = self.shape.iter().product::<u64>();
             let chunk_bytes =
                 ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);

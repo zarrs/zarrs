@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_metadata::ChunkShapeNonEmpty;
 
 use super::super::*;
 use super::ArrayOps;
@@ -88,7 +89,7 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().chunk_grid_shape()
     }
 
-    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
+    pub fn subchunk_shape(&self) -> Option<ChunkShapeNonEmpty> {
         self.array().subchunk_shape()
     }
 

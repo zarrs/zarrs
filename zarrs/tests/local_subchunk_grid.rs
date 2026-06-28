@@ -165,7 +165,7 @@ impl zarrs_codec::ArrayCodecTraits for DynamicLocalSubchunkCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -176,10 +176,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         self
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         Ok(BytesRepresentation::FixedSize(header_len(shape.len())))
     }
 
@@ -193,27 +190,27 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        bytes.validate(shape.num_elements_u64(), &self.data_type)?;
+        bytes.validate(shape.num_elements(), &self.data_type)?;
         Ok(Cow::Owned(encode_shape_header(&next_subchunk_shape(shape))))
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         decode_shape_header(&bytes, shape.len())?;
-        zero_bytes(&self.data_type, shape.num_elements_u64()).map(ArrayBytes::into_owned)
+        zero_bytes(&self.data_type, shape.num_elements()).map(ArrayBytes::into_owned)
     }
 
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(DynamicLocalSubchunkPartialDecoder {

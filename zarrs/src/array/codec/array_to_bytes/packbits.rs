@@ -133,7 +133,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
+            let chunk_shape = vec![8, 5];
             let data_type = data_type::bool();
             let fill_value = FillValue::from(false);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -194,7 +194,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
+            let chunk_shape = vec![8, 5];
             let data_type = data_type::float32();
             let fill_value = FillValue::from(0.0f32);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -232,8 +232,7 @@ mod tests {
                     PackBitsPaddingEncoding::FirstByte,
                     PackBitsPaddingEncoding::LastByte,
                 ] {
-                    let chunk_shape =
-                        vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
+                    let chunk_shape = vec![8, 5];
                     let data_type = data_type::int16();
                     let fill_value = FillValue::from(0i16);
                     let codec = Arc::new(
@@ -269,7 +268,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![4, 1];
             let data_type = data_type::uint2();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -298,7 +297,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![16, 1];
             let data_type = data_type::uint4();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -327,7 +326,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![4, 1];
             let data_type = data_type::int2();
             let fill_value = FillValue::from(0i8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -356,7 +355,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![16, 1];
             let data_type = data_type::int4();
             let fill_value = FillValue::from(0i8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -385,7 +384,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![16, 1];
             let data_type = data_type::float4_e2m1fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -413,7 +412,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![64, 1];
             let data_type = data_type::float6_e2m3fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
@@ -441,7 +440,7 @@ mod tests {
             PackBitsPaddingEncoding::FirstByte,
             PackBitsPaddingEncoding::LastByte,
         ] {
-            let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
+            let chunk_shape = vec![64, 1];
             let data_type = data_type::float6_e3m2fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())

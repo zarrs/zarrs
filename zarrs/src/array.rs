@@ -106,12 +106,6 @@ pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
 
-/// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
-#[must_use]
-pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> ArrayShape {
-    chunk_shape.iter().map(|i| i.get()).collect()
-}
-
 /// A Zarr array.
 ///
 /// ## Initilisation
@@ -760,7 +754,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Calculate the recommended codec concurrency.
     fn recommended_codec_concurrency(
         &self,
-        chunk_shape: &[NonZeroU64],
+        chunk_shape: &[u64],
     ) -> Result<RecommendedConcurrency, ArrayError> {
         Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
     }
@@ -1254,20 +1248,8 @@ mod tests {
         assert_eq!(array.shape(), &[14, 18]);
 
         // Verify chunk shapes for different chunks
-        assert_eq!(
-            array.chunk_shape(&[0, 0]).unwrap().as_slice(),
-            &[
-                std::num::NonZeroU64::new(4).unwrap(),
-                std::num::NonZeroU64::new(4).unwrap()
-            ]
-        );
-        assert_eq!(
-            array.chunk_shape(&[2, 3]).unwrap().as_slice(),
-            &[
-                std::num::NonZeroU64::new(6).unwrap(),
-                std::num::NonZeroU64::new(3).unwrap()
-            ]
-        );
+        assert_eq!(array.chunk_shape(&[0, 0]).unwrap().as_slice(), &[4, 4]);
+        assert_eq!(array.chunk_shape(&[2, 3]).unwrap().as_slice(), &[6, 3]);
     }
 
     #[test]

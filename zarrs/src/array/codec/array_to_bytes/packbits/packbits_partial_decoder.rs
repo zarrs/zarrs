@@ -24,7 +24,7 @@ use zarrs_storage::byte_range::ByteRange;
 #[cfg_attr(feature = "async", async_generic(
     async_signature(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
@@ -36,7 +36,7 @@ use zarrs_storage::byte_range::ByteRange;
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,

@@ -646,7 +646,7 @@ mod tests {
             let subchunk_grid = array.subchunk_grid().unwrap();
             assert_eq!(
                 subchunk_grid.chunk_shape(&vec![0; array.dimensionality()])?,
-                Some(vec![NonZeroU64::new(2).unwrap(); 2])
+                Some(vec![2; 2])
             );
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
 
@@ -659,7 +659,7 @@ mod tests {
                 array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
             assert_eq!(
                 local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
-                vec![NonZeroU64::new(2).unwrap(); 2]
+                vec![2; 2]
             );
 
             #[cfg(feature = "ndarray")]

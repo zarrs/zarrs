@@ -140,7 +140,7 @@ impl ArrayCodecTraits for SqueezeCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -164,14 +164,14 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         &self.fill_value
     }
 
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+    fn encoded_shape(&self, decoded_shape: &[u64]) -> Result<ChunkShape, CodecError> {
         let encoded_shape: Vec<_> = decoded_shape
             .iter()
-            .filter(|dim| dim.get() > 1)
+            .filter(|&&dim| dim > 1)
             .copied()
             .collect();
         if encoded_shape.is_empty() {
-            Ok(vec![NonZeroU64::new(1).unwrap()])
+            Ok(vec![])
         } else {
             Ok(encoded_shape)
         }
@@ -271,7 +271,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -280,7 +280,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -289,7 +289,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -305,7 +305,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -322,7 +322,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -339,7 +339,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(

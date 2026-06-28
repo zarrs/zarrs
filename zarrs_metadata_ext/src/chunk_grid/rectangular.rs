@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::{ChunkShape, ConfigurationSerialize};
+use zarrs_metadata::{ChunkShape, ChunkShapeNonEmpty, ConfigurationSerialize};
 
 /// Configuration parameters for a `rectangular` chunk grid.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]
@@ -24,5 +24,5 @@ pub enum RectangularChunkGridDimensionConfiguration {
     /// A fixed chunk size.
     Fixed(NonZeroU64),
     /// A varying chunk size.
-    Varying(ChunkShape),
+    Varying(ChunkShapeNonEmpty),
 }

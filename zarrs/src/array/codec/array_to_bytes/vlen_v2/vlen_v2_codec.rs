@@ -2,6 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use zarrs_chunk_grid::ChunkShapeTraits;
 
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
@@ -103,7 +104,7 @@ impl ArrayCodecTraits for VlenV2CodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -129,10 +130,10 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.num_elements();
         bytes.validate(num_elements, &self.data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
@@ -158,10 +159,10 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.num_elements();
         let num_elements_usize = usize::try_from(num_elements).unwrap();
         let (bytes, offsets) =
             super::get_interleaved_bytes_and_offsets(num_elements_usize, &bytes)?;
@@ -173,7 +174,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -190,7 +191,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -203,10 +204,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         ))
     }
 
-    fn encoded_representation(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, _shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         match self.data_type.size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(

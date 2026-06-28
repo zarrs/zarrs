@@ -99,7 +99,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
         // Validation
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        chunk_bytes.validate(chunk_shape.num_elements(), self.data_type())?;
 
         let is_fill_value =
             !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());

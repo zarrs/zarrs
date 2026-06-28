@@ -101,15 +101,14 @@ impl CodecTraitsV3 for ShardingCodec {
 }
 
 fn calculate_chunks_per_shard(
-    shard_shape: &[NonZeroU64],
+    shard_shape: &[u64],
     subchunk_shape: &[NonZeroU64],
 ) -> Result<ChunkShape, CodecError> {
     std::iter::zip(shard_shape, subchunk_shape)
-        .map(|(s, c)| {
-            let s = s.get();
+        .map(|(&s, c)| {
             let c = c.get();
             if num::Integer::is_multiple_of(&s, &c) {
-                Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
+                Ok(s / c)
             } else {
                 // TODO: Permit this path if/when https://github.com/zarr-developers/zarr-specs/pull/370 merges
                 Err(CodecError::Other(
@@ -120,16 +119,16 @@ fn calculate_chunks_per_shard(
         .collect()
 }
 
-fn sharding_index_shape(chunks_per_shard: &[NonZeroU64]) -> ChunkShape {
+fn sharding_index_shape(chunks_per_shard: &[u64]) -> ChunkShape {
     let mut index_shape = Vec::with_capacity(chunks_per_shard.len() + 1);
     index_shape.extend(chunks_per_shard);
-    index_shape.push(unsafe { NonZeroU64::new_unchecked(2) });
-    ChunkShape::from(index_shape)
+    index_shape.push(2);
+    index_shape
 }
 
 fn compute_index_encoded_size(
     index_codecs: &CodecChainBound,
-    sharding_index_shape: &[NonZeroU64],
+    sharding_index_shape: &[u64],
 ) -> Result<u64, CodecError> {
     let bytes_representation = index_codecs.encoded_representation(sharding_index_shape)?;
     match bytes_representation {
@@ -144,7 +143,7 @@ fn compute_index_encoded_size(
 
 fn decode_shard_index(
     encoded_shard_index: &[u8],
-    index_shape: &[NonZeroU64],
+    index_shape: &[u64],
     index_codecs: &CodecChainBound,
     options: &CodecOptions,
 ) -> Result<Vec<u64>, CodecError> {
@@ -161,7 +160,7 @@ fn decode_shard_index(
 }
 
 fn get_index_byte_range(
-    index_shape: &[NonZeroU64],
+    index_shape: &[u64],
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
 ) -> Result<ByteRange, CodecError> {
@@ -175,13 +174,12 @@ fn get_index_byte_range(
 
 fn subchunk_byte_range(
     shard_index: Option<&[u64]>,
-    shard_shape: &[NonZeroU64],
+    shard_shape: &[u64],
     chunk_shape: &[NonZeroU64],
     chunk_indices: &[u64],
 ) -> Result<Option<ByteRange>, CodecError> {
     if let Some(shard_index) = shard_index {
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
-        let chunks_per_shard = chunks_per_shard.to_array_shape();
 
         let shard_index_idx =
             ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
@@ -228,7 +226,7 @@ fn decode_shard_index_partial_decoder(
     input_handle: &dyn BytesPartialDecoderTraits,
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
-    shard_shape: &[NonZeroU64],
+    shard_shape: &[u64],
     subchunk_shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<Option<Vec<u64>>, CodecError> {
@@ -253,7 +251,7 @@ async fn decode_shard_index_async_partial_decoder(
     input_handle: &dyn zarrs_codec::AsyncBytesPartialDecoderTraits,
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
-    shard_shape: &[NonZeroU64],
+    shard_shape: &[u64],
     subchunk_shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<Option<Vec<u64>>, CodecError> {
@@ -359,7 +357,7 @@ mod tests {
         const NUM_AXES: usize = 3;
         let chunk_size = 16;
         let subchunk_size = 2;
-        let chunk_shape = vec![NonZeroU64::new(chunk_size).unwrap(); NUM_AXES];
+        let chunk_shape = vec![chunk_size; NUM_AXES];
         let subchunk_shape = vec![NonZeroU64::new(subchunk_size).unwrap(); NUM_AXES];
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
@@ -542,7 +540,7 @@ mod tests {
         all_fill_value: bool,
         mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) {
-        let shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let shape = vec![4; 2];
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = if all_fill_value {
@@ -604,7 +602,7 @@ mod tests {
         index_at_end: bool,
         all_fill_value: bool,
     ) {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
@@ -687,7 +685,7 @@ mod tests {
         index_at_end: bool,
         all_fill_value: bool,
     ) {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
@@ -770,11 +768,7 @@ mod tests {
     #[cfg(feature = "crc32c")]
     #[test]
     fn codec_sharding_partial_decode2() {
-        let chunk_shape: ChunkShape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let chunk_shape: ChunkShape = vec![2, 4, 4];
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
@@ -818,7 +812,7 @@ mod tests {
 
     #[test]
     fn codec_sharding_partial_decode3() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = (0..chunk_shape.num_elements_usize() as u8).collect();
@@ -865,7 +859,7 @@ mod tests {
         // 2. Update a subchunk and verify the shard size increased
         // 3. Compact and check that the size matches the original fully encoded shard
 
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
   - **Breaking**: Remove `ArrayToArrayCodecTraits::decoded_shape()`
 - **Breaking**: Change `ArrayTo{Array,Bytes}CodecTraits::decoded_subchunk_grid` to return `SubchunkGrid`
+- **Breaking**: Codec trait methods now take accept chunk shapes of `&[u64]` rather than `&[NonZeroU64]`
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`

@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::{ChunkShape, ConfigurationSerialize};
+use zarrs_metadata::{ChunkShapeNonEmpty, ConfigurationSerialize};
 
 /// Configuration parameters for a `regular` chunk grid.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]
@@ -15,7 +15,7 @@ use zarrs_metadata::{ChunkShape, ConfigurationSerialize};
 )]
 pub struct RegularChunkGridConfiguration {
     /// The chunk shape.
-    pub chunk_shape: ChunkShape,
+    pub chunk_shape: ChunkShapeNonEmpty,
 }
 
 impl ConfigurationSerialize for RegularChunkGridConfiguration {}

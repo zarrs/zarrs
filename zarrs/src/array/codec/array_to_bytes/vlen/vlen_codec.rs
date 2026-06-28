@@ -216,7 +216,7 @@ impl ArrayCodecTraits for VlenCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -242,7 +242,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
@@ -312,7 +312,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
@@ -331,7 +331,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(

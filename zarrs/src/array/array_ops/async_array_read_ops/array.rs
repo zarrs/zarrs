@@ -53,7 +53,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = ArrayBytes::new_fill_value(
                 self.data_type(),
-                chunk_shape.num_elements_u64(),
+                chunk_shape.num_elements(),
                 self.fill_value(),
             )
             .map_err(CodecError::from)
@@ -298,7 +298,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 .codecs_bound()
                 .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
-            bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+            bytes.validate(chunk_shape.num_elements(), self.data_type())?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
                 bytemuck::must_cast_slice(&chunk_shape),

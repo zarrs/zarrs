@@ -156,7 +156,7 @@ impl ArrayCodecTraits for BytesCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: Recomment > 1 if endianness needs changing and input is sufficiently large
         // if let Some(endian) = &self.endian {
@@ -195,10 +195,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.num_elements();
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
@@ -209,7 +209,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let bytes_decoded: ArrayBytes = self
@@ -218,7 +218,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             .decode(bytes, self.endian)?
             .into();
 
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.num_elements();
         bytes_decoded.validate(num_elements, &self.data_type)?;
 
         Ok(bytes_decoded)
@@ -227,7 +227,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
@@ -242,7 +242,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
@@ -258,7 +258,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
@@ -274,7 +274,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
@@ -286,17 +286,14 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         )))
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         match self.data_type.size() {
             DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
                 BytesCodec::aliases_v3().default_name.to_string(),
             )),
             DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
-                shape.num_elements_u64() * data_type_size as u64,
+                shape.num_elements() * data_type_size as u64,
             )),
         }
     }

@@ -37,6 +37,7 @@ use std::sync::Arc;
 
 use num::Integer;
 pub use reshape_codec::ReshapeCodec;
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
@@ -48,15 +49,15 @@ pub use zarrs_metadata_ext::codec::reshape::{
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
-    decoded_shape: &[NonZeroU64],
+    decoded_shape: &[u64],
 ) -> Result<ChunkShape, CodecError> {
     let mut encoded_shape = Vec::with_capacity(reshape_shape.0.len());
     let mut fill_index = None;
     for output_dim in &reshape_shape.0 {
         match output_dim {
-            ReshapeDim::Size(size) => encoded_shape.push(*size),
+            ReshapeDim::Size(size) => encoded_shape.push(size.get()),
             ReshapeDim::InputDims(input_dims) => {
-                let mut product = NonZeroU64::new(1).unwrap();
+                let mut product: u64 = 1;
                 for input_dim in input_dims {
                     let input_shape = *decoded_shape
                         .get(usize::try_from(*input_dim).unwrap())
@@ -71,17 +72,17 @@ fn get_encoded_shape(
             }
             ReshapeDim::Auto(_) => {
                 fill_index = Some(encoded_shape.len());
-                encoded_shape.push(NonZeroU64::new(1).unwrap());
+                encoded_shape.push(1);
             }
         }
     }
 
-    let num_elements_input = decoded_shape.iter().map(|u| u.get()).product::<u64>();
-    let num_elements_output = encoded_shape.iter().map(|u| u.get()).product::<u64>();
+    let num_elements_input = decoded_shape.num_elements();
+    let num_elements_output = encoded_shape.num_elements();
     if let Some(fill_index) = fill_index {
         let (quot, rem) = num_elements_input.div_rem(&num_elements_output);
         if rem == 0 {
-            encoded_shape[fill_index] = NonZeroU64::new(quot).unwrap();
+            encoded_shape[fill_index] = quot;
         } else {
             return Err(CodecError::Other(format!(
                 "reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."
@@ -154,6 +155,7 @@ mod tests {
         ArrayPartialDecoderTraits, CodecOptions, SubchunkGrid, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
     };
+    use zarrs_metadata::ChunkShapeNonEmpty;
 
     fn nz(value: u64) -> NonZeroU64 {
         NonZeroU64::new(value).unwrap()
@@ -163,15 +165,10 @@ mod tests {
         json: &str,
         data_type: DataType,
         fill_value: FillValue,
-        output_shape: Vec<NonZeroU64>,
+        output_shape: ChunkShape,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let shape = vec![
-            NonZeroU64::new(5).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
-        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
+        let shape = vec![5, 4, 4, 3];
+        let size = shape.iter().product::<u64>() as usize * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
@@ -191,11 +188,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [[0, 1], [2], 3]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(20).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![20, 4, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -212,11 +205,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [[0, 1], [2], -1]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(20).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![20, 4, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -233,7 +222,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [[0, 1, 2], 3]
         }"#;
-        let output_shape = vec![NonZeroU64::new(80).unwrap(), NonZeroU64::new(3).unwrap()];
+        let output_shape = vec![80, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -250,11 +239,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [[0], -1, [2, 3]]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(5).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(12).unwrap(),
-        ];
+        let output_shape = vec![5, 4, 12];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -271,11 +256,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [[0], -1, [3]]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(5).unwrap(),
-            NonZeroU64::new(16).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![5, 16, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -292,12 +273,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [-1, 2, 2, [3]]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(20).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![20, 2, 2, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -314,12 +290,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [-1, 2, 2, [4]]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(20).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![20, 2, 2, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -336,12 +307,7 @@ mod tests {
         const JSON: &str = r#"{
             "shape": [2, 2, 2]
         }"#;
-        let output_shape = vec![
-            NonZeroU64::new(20).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let output_shape = vec![20, 2, 2, 3];
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
@@ -355,8 +321,8 @@ mod tests {
 
     fn test_reshape_partial_decode_granularity(
         reshape_shape: ReshapeShape,
-        decoded_shape: Vec<u64>,
-        encoded_subchunk_shape: Vec<NonZeroU64>,
+        decoded_shape: ChunkShape,
+        encoded_subchunk_shape: ChunkShapeNonEmpty,
         expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
     ) {
         let decoded_shape_nonzero = decoded_shape
@@ -368,12 +334,7 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(reshape_shape))
             .with_context(data_type::uint8(), FillValue::from(0u8))
             .unwrap();
-        let encoded_shape = codec
-            .encoded_shape(&decoded_shape_nonzero)
-            .unwrap()
-            .into_iter()
-            .map(NonZeroU64::get)
-            .collect();
+        let encoded_shape = codec.encoded_shape(&decoded_shape).unwrap();
         let chunk_grid = ChunkGrid::new(
             RegularChunkGrid::new(decoded_shape.clone(), decoded_shape_nonzero).unwrap(),
         );
@@ -486,7 +447,7 @@ mod tests {
 
     fn partial_decoder_u16(
         codec: Arc<ReshapeCodec>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         elements: Vec<u16>,
     ) -> Arc<dyn ArrayPartialDecoderTraits> {
         let data_type = data_type::uint16();
@@ -528,7 +489,7 @@ mod tests {
 
     fn partial_encode_u16(
         codec: Arc<ReshapeCodec>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         elements: Vec<u16>,
         indexer: &dyn Indexer,
         elements_partial_encode: Vec<u16>,
@@ -600,11 +561,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
@@ -638,11 +595,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
@@ -666,11 +619,7 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
             ReshapeDim::InputDims(vec![0, 1, 2]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..3, 2..4]);
@@ -704,11 +653,7 @@ mod tests {
             ReshapeDim::Size(NonZeroU64::new(4).unwrap()),
             ReshapeDim::auto(),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![0, 2, 3], vec![1, 0, 0], vec![1, 2, 2]];
@@ -735,7 +680,7 @@ mod tests {
             ReshapeDim::Size(NonZeroU64::new(3).unwrap()),
             ReshapeDim::Size(NonZeroU64::new(2).unwrap()),
         ])));
-        let shape = vec![NonZeroU64::new(12).unwrap()];
+        let shape = vec![12];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..12).collect());
 
         #[expect(clippy::single_range_in_vec_init)]
@@ -762,11 +707,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let decoded_regions = [
@@ -785,11 +726,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let wrong_dimensionality = ArraySubset::new_with_ranges(&[0..1, 0..1]);
@@ -826,11 +763,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
 
         assert_eq!(
@@ -872,11 +805,7 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])));
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-        ];
+        let shape = vec![2, 3, 4];
         let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
 
         assert_eq!(

@@ -29,8 +29,8 @@ use crate::array::{
     IncompatibleDimensionalityError,
 };
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
-use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkShapeNonEmpty, Configuration};
 pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
@@ -46,13 +46,13 @@ inventory::submit! {
 pub struct RegularChunkGrid {
     array_shape: ArrayShape,
     grid_shape: ArrayShape,
-    chunk_shape: ChunkShape,
+    chunk_shape: ChunkShapeNonEmpty,
 }
 
 /// A [`RegularChunkGrid`] creation error.
 #[derive(Clone, Debug, Error)]
 #[error("regular chunk shape: {_1:?} not compatible with array shape {_0:?}")]
-pub struct RegularChunkGridCreateError(ArrayShape, ChunkShape);
+pub struct RegularChunkGridCreateError(ArrayShape, ChunkShapeNonEmpty);
 
 impl From<RegularChunkGridCreateError> for IncompatibleDimensionalityError {
     fn from(value: RegularChunkGridCreateError) -> Self {
@@ -73,7 +73,7 @@ impl RegularChunkGrid {
     /// Returns a [`RegularChunkGridCreateError`] if `chunk_shape` is not compatible with the `array_shape`.
     pub fn new(
         array_shape: ArrayShape,
-        chunk_shape: ChunkShape,
+        chunk_shape: ChunkShapeNonEmpty,
     ) -> Result<Self, RegularChunkGridCreateError> {
         if array_shape.len() != chunk_shape.len() {
             return Err(RegularChunkGridCreateError(array_shape, chunk_shape));
@@ -185,7 +185,8 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             if self.array_shape.contains(&0) {
                 return Ok(None);
             }
-            Ok(Some(self.chunk_shape.clone()))
+            let chunk_shape: ChunkShape = self.chunk_shape.iter().copied().collect();
+            Ok(Some(chunk_shape))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -286,7 +287,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_edge_lengths() {
         let array_shape: ArrayShape = vec![10, 20];
-        let chunk_shape: ChunkShape =
+        let chunk_shape: ChunkShapeNonEmpty =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(7).unwrap()];
         let grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
 
@@ -357,7 +358,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
@@ -406,7 +407,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_out_of_bounds() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
@@ -431,7 +432,7 @@ mod tests {
     fn chunk_grid_regular_fully_and_partially_out_of_bounds() {
         // Array [10, 12], chunks [3, 5] -> grid [4, 3]
         let array_shape: ArrayShape = vec![10, 12];
-        let chunk_shape: ChunkShape =
+        let chunk_shape: ChunkShapeNonEmpty =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
         let chunk_grid = RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
         let chunk_grid: ChunkGrid = chunk_grid.into();

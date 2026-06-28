@@ -66,7 +66,7 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
                     .codecs_bound()
                     .decode(Cow::Borrowed(encoded), &chunk_shape, options)
                     .map_err(ArrayError::CodecError)?;
-                bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
+                bytes.validate(chunk_shape.num_elements(), array.data_type())?;
                 Ok(Arc::new(bytes.into_owned()))
             })
             .transpose()

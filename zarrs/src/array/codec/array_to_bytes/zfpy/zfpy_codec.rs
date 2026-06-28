@@ -155,10 +155,7 @@ impl ArrayCodecTraits for ZfpyCodecBound {
         self.inner.fill_value()
     }
 
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
+    fn recommended_concurrency(&self, shape: &[u64]) -> Result<RecommendedConcurrency, CodecError> {
         self.inner.recommended_concurrency(shape)
     }
 }
@@ -183,7 +180,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         self.inner.encode(bytes, shape, options)
@@ -192,7 +189,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.inner.decode(bytes, shape, options)
@@ -201,7 +198,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         self.inner
@@ -213,7 +210,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         self.inner
@@ -222,10 +219,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
             .await
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         self.inner.encoded_representation(shape)
     }
 }

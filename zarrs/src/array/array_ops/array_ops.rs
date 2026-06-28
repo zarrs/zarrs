@@ -1,5 +1,6 @@
 use super::*;
 use zarrs_codec::SubchunkGrid;
+use zarrs_metadata::ChunkShapeNonEmpty;
 
 mod array;
 mod array_cached;
@@ -76,7 +77,7 @@ pub trait ArrayOps {
     /// Returns [`None`] if the array does not expose subchunks, or if the
     /// resolved subchunk grid has varying edge lengths.
     #[must_use]
-    fn subchunk_shape(&self) -> Option<ChunkShape>;
+    fn subchunk_shape(&self) -> Option<ChunkShapeNonEmpty>;
 
     /// Retrieve the subchunk grid.
     ///
@@ -162,7 +163,7 @@ pub trait ArrayOps {
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError>;
 }
 
-pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<ChunkShape> {
+pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<ChunkShapeNonEmpty> {
     let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
     for dimension in 0..chunk_grid.dimensionality() {
         let edge_lengths = chunk_grid.chunk_edge_lengths(dimension).ok()?;

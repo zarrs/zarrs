@@ -22,8 +22,11 @@ mod array;
 /// An array shape. Dimensions may be zero.
 pub type ArrayShape = Vec<u64>;
 
-/// A chunk shape. Dimensions must be non-zero.
-pub type ChunkShape = Vec<std::num::NonZeroU64>;
+/// A chunk shape. Dimensions may be zero for exotic chunk grids.
+pub type ChunkShape = Vec<u64>;
+
+/// A non-empty chunk chunk shape. Dimensions must be non-zero.
+pub type ChunkShapeNonEmpty = Vec<std::num::NonZeroU64>;
 
 /// Zarr V3 metadata.
 pub mod v3;

@@ -38,8 +38,8 @@ use crate::array::{
     IncompatibleDimensionalityError,
 };
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
-use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkShapeNonEmpty, Configuration};
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
   v3: "zarrs.regular_bounded", []
@@ -56,7 +56,7 @@ inventory::submit! {
 pub struct RegularBoundedChunkGrid {
     array_shape: ArrayShape,
     grid_shape: ArrayShape,
-    chunk_shape: ChunkShape,
+    chunk_shape: ChunkShapeNonEmpty,
 }
 
 impl RegularBoundedChunkGrid {
@@ -66,7 +66,7 @@ impl RegularBoundedChunkGrid {
     /// Returns a [`IncompatibleDimensionalityError`] if `chunk_shape` is not compatible with the `array_shape`.
     pub fn new(
         array_shape: ArrayShape,
-        chunk_shape: ChunkShape,
+        chunk_shape: ChunkShapeNonEmpty,
     ) -> Result<Self, IncompatibleDimensionalityError> {
         if array_shape.len() != chunk_shape.len() {
             return Err(IncompatibleDimensionalityError::new(

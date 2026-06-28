@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use super::{cache_error, validate_chunk_indices};
 use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder};
-use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions,
-    chunk_shape_to_array_shape,
-};
+use crate::array::{Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions};
 use zarrs_codec::ArrayPartialDecoderTraits;
 use zarrs_storage::ReadableStorageTraits;
 
@@ -42,7 +39,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
+        let shape = validate_chunk_indices(array, chunk_indices)?;
         let decoder = Self::partial_decoder(cache, array, chunk_indices, options)?;
         if decoder.exists()? {
             Ok(Some(

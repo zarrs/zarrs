@@ -3,7 +3,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ChunkGridCreateError, ChunkShapeTraits};
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
@@ -313,10 +313,7 @@ impl CodecChain {
 }
 
 impl CodecChainBound {
-    fn get_array_representations(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<ArrayRepresentations, CodecError> {
+    fn get_array_representations(&self, shape: &[u64]) -> Result<ArrayRepresentations, CodecError> {
         let mut array_representations = Vec::with_capacity(self.array_to_array.len() + 1);
         array_representations.push((
             shape.to_vec(),
@@ -334,10 +331,7 @@ impl CodecChainBound {
         Ok(array_representations)
     }
 
-    fn get_bytes_representations(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentations, CodecError> {
+    fn get_bytes_representations(&self, shape: &[u64]) -> Result<BytesRepresentations, CodecError> {
         let mut bytes_representations = Vec::with_capacity(self.bytes_to_bytes.len() + 1);
         bytes_representations.push(self.array_to_bytes.encoded_representation(shape)?);
         for codec in &self.bytes_to_bytes {
@@ -349,7 +343,7 @@ impl CodecChainBound {
 
     fn get_representations(
         &self,
-        shape: &[NonZeroU64],
+        shape: &[u64],
     ) -> Result<(ArrayRepresentations, BytesRepresentations), CodecError> {
         let array_representations = self.get_array_representations(shape)?;
         let bytes_representations =
@@ -521,12 +515,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn encode<'a>(
         &self,
         mut bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
+        bytes.validate(shape.iter().num_elements(), self.data_type())?;
 
-        let mut shape = ChunkShape::from(shape.to_vec());
+        let mut shape = shape.to_vec();
 
         // array->array
         for codec in &self.array_to_array {
@@ -550,7 +544,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn decode<'a>(
         &self,
         mut bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -577,7 +571,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         let (shape, data_type, _) = array_representations.first().unwrap();
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
+        bytes.validate(shape.num_elements(), data_type)?;
 
         Ok(bytes)
     }
@@ -585,7 +579,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn decode_into(
         &self,
         mut bytes: ArrayBytesRaw<'_>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -633,7 +627,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         let (shape, data_type, _) = array_representations.first().unwrap();
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
+        bytes.validate(shape.num_elements(), data_type)?;
 
         decode_into_array_bytes_target(&bytes, output_target)
     }
@@ -641,7 +635,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn compact<'a>(
         &self,
         mut bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -677,7 +671,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn partial_decoder(
         self: Arc<Self>,
         mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -740,7 +734,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     fn partial_encoder(
         self: Arc<Self>,
         mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -779,7 +773,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         mut input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -855,7 +849,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         mut input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
@@ -892,10 +886,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         Ok(input_output_handle)
     }
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         let array_representations = self.get_array_representations(shape)?;
         let mut bytes_representation = self
             .array_to_bytes
@@ -926,10 +917,7 @@ impl ArrayCodecTraits for CodecChainBound {
         )
     }
 
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
+    fn recommended_concurrency(&self, shape: &[u64]) -> Result<RecommendedConcurrency, CodecError> {
         let mut concurrency_min = usize::MAX;
         let mut concurrency_max = 0;
 
@@ -1162,7 +1150,7 @@ mod tests {
 }"#;
 
     fn codec_chain_round_trip_impl(
-        shape: &[NonZeroU64],
+        shape: &[u64],
         data_type: &DataType,
         fill_value: &FillValue,
         elements: Vec<f32>,
@@ -1247,11 +1235,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_chain_round_trip_bytes() {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-        ]);
+        let chunk_shape = vec![2, 2, 2];
         let elements: Vec<f32> = (0..chunk_shape.num_elements_usize())
             .map(|i| i as f32)
             .collect();
@@ -1270,7 +1254,7 @@ mod tests {
 
     #[test]
     fn codec_chain_partial_decoder_uses_decoded_byte_representation_at_cache_boundary() {
-        let shape = ChunkShape::from(vec![NonZeroU64::new(4).unwrap()]);
+        let shape = vec![4];
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let expected_decoded_representation = BytesRepresentation::FixedSize(8);
@@ -1294,11 +1278,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_chain_round_trip_pcodec() {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-        ]);
+        let chunk_shape = vec![2, 2, 2];
         let elements: Vec<f32> = (0..chunk_shape.num_elements_usize())
             .map(|i| i as f32)
             .collect();

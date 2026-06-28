@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ChunkGridCreateError, ChunkShapeTraits};
 use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
@@ -375,7 +375,7 @@ impl ArrayCodecTraits for OptionalCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // Sequential processing for now
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -402,7 +402,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let ArrayBytes::Optional(optional_bytes) = bytes else {
@@ -411,7 +411,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             ));
         };
         let (dense_data, mask) = optional_bytes.into_parts();
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.num_elements();
         if mask.len() != usize::try_from(num_elements).unwrap() {
             return Err(CodecError::Other(format!(
                 "mask length {} does not match number of elements {}",
@@ -437,7 +437,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
-            let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
+            let data_shape = vec![num_valid as u64];
             self.data_codecs
                 .clone()
                 .encode(sparse_data, &data_shape, options)?
@@ -458,7 +458,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
@@ -492,7 +492,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
             let sparse_data = {
-                let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
+                let data_shape = vec![valid_count as u64];
                 self.data_codecs
                     .clone()
                     .decode(encoded_data.into(), &data_shape, options)?
@@ -510,10 +510,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         Ok(dense_data.with_optional_mask(mask))
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         // Header: mask_len (u64) + data_len (u64) = 16 bytes
         const HEADER_SIZE: u64 = 16;
 
@@ -636,7 +633,7 @@ mod tests {
     ) -> Result<(), Box<dyn std::error::Error>> {
         use std::num::NonZeroU64;
 
-        let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let chunk_shape = vec![4, 4];
         let fill_value = fill_value.into();
 
         let num_elements = chunk_shape.num_elements_usize();
@@ -811,7 +808,7 @@ mod tests {
         // Test Option<Option<u8>> with explicit mask construction
         let data_type: DataType = data_type::uint8().to_optional().to_optional();
         let fill_value = FillValue::from(None::<Option<u8>>);
-        let chunk_shape = vec![NonZeroU64::new(8).unwrap()];
+        let chunk_shape = vec![8];
 
         // Create test data:
         // Element 0: Some(Some(10))  - outer valid=1, inner valid=1, data=10
@@ -886,7 +883,7 @@ mod tests {
         // Test Option<u8> where the u8 has a non-zero fill value
         // This represents the outer optional wrapping a non-optional type
         let data_type: DataType = data_type::uint8().to_optional();
-        let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
+        let chunk_shape = vec![6];
         // Use a non-null fill value of 255 for missing elements
         let fill_value = FillValue::new(vec![255u8]);
 
@@ -954,7 +951,7 @@ mod tests {
             .to_optional()
             .to_optional()
             .to_optional();
-        let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
+        let chunk_shape = vec![6];
         let fill_value = FillValue::from(None::<Option<Option<u16>>>);
 
         // Create test data with 3 levels:
@@ -1049,7 +1046,7 @@ mod tests {
 
         // Test Option<f32> with a specific fill value (e.g., NaN)
         let data_type: DataType = data_type::float32().to_optional();
-        let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
+        let chunk_shape = vec![5];
         let fill_value = FillValue::from(Some(f32::NAN));
 
         // Create test data with some valid and some invalid f32 values

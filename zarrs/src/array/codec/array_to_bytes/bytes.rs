@@ -165,12 +165,9 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(10).unwrap(),
-            NonZeroU64::new(10).unwrap(),
-        ]);
+        let chunk_shape = vec![10, 10];
         let fill_value = fill_value.into();
-        let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
+        let size = chunk_shape.num_elements() as usize * data_type.fixed_size().unwrap();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
         let codec = Arc::new(BytesCodec::new(endianness))
@@ -255,11 +252,11 @@ mod tests {
 
     #[test]
     fn codec_bytes_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
 
-        let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
+        let elements: Vec<u8> = (0..chunk_shape.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))
@@ -294,10 +291,10 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_bytes_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
-        let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
+        let elements: Vec<u8> = (0..chunk_shape.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))

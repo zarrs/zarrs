@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_metadata::ChunkShapeNonEmpty;
 
 use super::super::super::{
     chunk_grid_default_name, chunk_key_encoding_default_name, codec_default_name, data_type,
@@ -220,7 +221,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.chunk_grid().grid_shape()
     }
 
-    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
+    pub fn subchunk_shape(&self) -> Option<ChunkShapeNonEmpty> {
         match &self.subchunk_grid {
             SubchunkGrid::Array(subchunk_grid) => maybe_regular_chunk_grid_shape(subchunk_grid),
             SubchunkGrid::None => None,
@@ -268,7 +269,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         Ok(self
             .chunk_shape(chunk_indices)?
             .iter()
-            .map(|d| usize::try_from(d.get()).unwrap())
+            .map(|d| usize::try_from(*d).unwrap())
             .collect())
     }
 

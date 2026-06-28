@@ -192,7 +192,7 @@ impl ArrayCodecTraits for PcodecCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // pcodec does not support parallel decode
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -219,7 +219,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
@@ -250,7 +250,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         macro_rules! pcodec_decode {
@@ -275,10 +275,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         Ok(ArrayBytes::from(bytes))
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         let num_elements = shape.num_elements_usize() * self.elements_per_element;
 
         let size = match self.element_type {

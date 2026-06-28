@@ -37,12 +37,12 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use zarrs_metadata::Configuration;
+use zarrs_metadata::{ChunkShapeNonEmpty, Configuration};
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 fn regular_subchunk_grid(
     chunk_grid: &ChunkGrid,
-    subchunk_shape: &ChunkShape,
+    subchunk_shape: &ChunkShapeNonEmpty,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
     if chunk_grid.dimensionality() != subchunk_shape.len() {
         return Err(ChunkGridCreateError::new(format!(
@@ -116,7 +116,7 @@ fn regular_subchunk_grid(
                 ChunkEdgeLengths::Scalar(edge_length) => Some(edge_length),
                 ChunkEdgeLengths::Varying(_) => None,
             })
-            .collect::<Option<ChunkShape>>()
+            .collect::<Option<ChunkShapeNonEmpty>>()
             .expect("all edge lengths are scalar");
         Ok(ChunkGrid::new(RegularChunkGrid::new(
             subchunk_grid_shape,
@@ -129,7 +129,7 @@ fn regular_subchunk_grid(
 #[derive(Clone, Debug)]
 pub struct ShardingCodec {
     /// An array of integers specifying the shape of the subchunks in a shard along each dimension of the outer array.
-    pub(crate) subchunk_shape: ChunkShape,
+    pub(crate) subchunk_shape: ChunkShapeNonEmpty,
     /// The codecs used to encode and decode subchunks.
     pub(crate) inner_codecs: Arc<CodecChain>,
     /// The codecs used to encode and decode the shard index.
@@ -143,7 +143,7 @@ pub struct ShardingCodec {
 /// A `sharding` codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
 pub(crate) struct ShardingCodecBound {
-    pub(crate) subchunk_shape: ChunkShape,
+    pub(crate) subchunk_shape: ChunkShapeNonEmpty,
     pub(crate) inner_codecs: Arc<CodecChainBound>,
     pub(crate) index_codecs: Arc<CodecChainBound>,
     pub(crate) index_location: ShardingIndexLocation,
@@ -154,7 +154,7 @@ impl ShardingCodec {
     /// Create a new `sharding` codec.
     #[must_use]
     pub fn new(
-        subchunk_shape: ChunkShape,
+        subchunk_shape: ChunkShapeNonEmpty,
         inner_codecs: Arc<CodecChain>,
         index_codecs: Arc<CodecChain>,
         index_location: ShardingIndexLocation,
@@ -302,10 +302,7 @@ impl ArrayCodecTraits for ShardingCodecBound {
         self.inner_codecs.fill_value()
     }
 
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
+    fn recommended_concurrency(&self, shape: &[u64]) -> Result<RecommendedConcurrency, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
         let num_elements = chunks_per_shard.num_elements_nonzero_usize();
         Ok(RecommendedConcurrency::new_maximum(num_elements.into()))
@@ -335,7 +332,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let data_type = self.data_type();
@@ -347,7 +344,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             .inner_codecs
             .encoded_representation(&self.subchunk_shape)?;
 
-        bytes.validate(shape.num_elements_u64(), data_type)?;
+        bytes.validate(shape.num_elements(), data_type)?;
         let bytes = match chunk_bytes_representation {
             BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
                 self.encode_bounded(&bytes, shape, &self.subchunk_shape, size, options)
@@ -408,7 +405,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                     let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
                         ArrayBytes::new_fill_value(
                             data_type,
-                            self.subchunk_shape.num_elements_u64(),
+                            self.subchunk_shape.num_elements(),
                             fill_value,
                         )?
                         .into_variable()?
@@ -702,7 +699,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(ShardingPartialDecoder::new(
@@ -721,7 +718,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -738,16 +735,17 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             .await?,
         ))
     }
+
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             sharding_partial_encoder::ShardingPartialEncoder::new(
                 input_output_handle,
-                ChunkShape::from(shape.to_vec()),
+                shape.to_vec(),
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
                 self.index_codecs.clone(),
@@ -758,10 +756,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         ))
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         // Get the maximum size of encoded chunks
         let chunk_bytes_representation = self.inner_codecs.encoded_representation(shape)?;
 

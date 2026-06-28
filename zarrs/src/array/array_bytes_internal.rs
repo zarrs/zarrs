@@ -215,7 +215,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
     indexer: &dyn Indexer,
-    array_shape: &[NonZeroU64],
+    array_shape: &[u64],
 ) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
     let indices = indexer.iter_linearised_indices(bytemuck::must_cast_slice(array_shape))?;
     let indices: Vec<_> = indices.into_iter().collect();

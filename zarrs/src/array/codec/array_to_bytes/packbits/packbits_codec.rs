@@ -197,7 +197,7 @@ impl ArrayCodecTraits for PackBitsCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -223,7 +223,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let PackBitsCodecComponents {
@@ -247,7 +247,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.iter().product::<u64>();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =
@@ -305,7 +305,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
@@ -326,7 +326,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.iter().product::<u64>();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =
@@ -409,7 +409,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let component_size_bits = self.components.component_size_bits;
@@ -447,7 +447,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let component_size_bits = self.components.component_size_bits;
@@ -481,15 +481,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         let num_components = self.components.num_components;
         let first_bit = self.first_bit;
         let last_bit = self.last_bit;
 
-        let num_elements = shape.num_elements_u64();
+        let num_elements = shape.num_elements();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes = (num_elements * element_size_bits).div_ceil(8);

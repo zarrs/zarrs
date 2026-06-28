@@ -22,7 +22,7 @@ use zarrs_codec::{
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
-use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
+use zarrs_metadata::{ChunkKeySeparator, ChunkShapeNonEmpty, IntoDimensionName};
 
 mod array_builder_chunk_grid_metadata;
 pub use array_builder_chunk_grid_metadata::ArrayBuilderChunkGridMetadata;
@@ -546,7 +546,7 @@ impl ArrayBuilder {
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
-            let subchunk_shape: ChunkShape = subchunk_shape
+            let subchunk_shape: ChunkShapeNonEmpty = subchunk_shape
                 .iter()
                 .copied()
                 .map(NonZeroU64::try_from)
@@ -985,7 +985,7 @@ mod tests {
         const SHARD_SHAPE: [u64; 2] = [2, 2];
         const CHUNK_SHAPE: [u64; 2] = [1, 1];
 
-        let chunk_shape: ChunkShape = CHUNK_SHAPE
+        let chunk_shape: ChunkShapeNonEmpty = CHUNK_SHAPE
             .iter()
             .map(|&x| NonZeroU64::new(x).unwrap())
             .collect();

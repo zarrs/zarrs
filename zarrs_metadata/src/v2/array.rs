@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::v2::MetadataV2;
-use crate::{ArrayShape, ChunkKeySeparator, ChunkShape, Endianness};
+use crate::{ArrayShape, ChunkKeySeparator, ChunkShape, ChunkShapeNonEmpty, Endianness};
 
 /// Zarr V2 array metadata.
 ///
@@ -43,7 +43,7 @@ pub struct ArrayMetadataV2 {
     /// An array of integers providing the length of each dimension of the Zarr array.
     pub shape: ArrayShape,
     /// A list of integers defining the length of each dimension of a chunk of the array.
-    pub chunks: ChunkShape,
+    pub chunks: ChunkShapeNonEmpty,
     /// The data type of the Zarr array.
     pub dtype: DataTypeMetadataV2,
     /// A JSON object identifying the primary compression codec and providing configuration parameters, or null if no compressor is to be used.
@@ -88,7 +88,7 @@ impl ArrayMetadataV2 {
     #[must_use]
     pub fn new(
         shape: ArrayShape,
-        chunks: ChunkShape,
+        chunks: ChunkShapeNonEmpty,
         dtype: DataTypeMetadataV2,
         fill_value: FillValueMetadataV2,
         compressor: Option<MetadataV2>,

@@ -8,12 +8,13 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_metadata::ChunkShape;
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
 }
 
@@ -22,7 +23,7 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Self {

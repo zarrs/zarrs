@@ -348,7 +348,7 @@ pub unsafe trait ChunkGridTraits:
             let ranges = chunk_origin
                 .into_iter()
                 .zip(chunk_shape)
-                .map(|(o, s)| o..(o + s.get()));
+                .map(|(o, s)| o..(o + s));
             Ok(Some(ArraySubset::from(ranges)))
         } else {
             Ok(None)
