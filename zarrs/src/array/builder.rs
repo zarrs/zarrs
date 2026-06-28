@@ -979,7 +979,7 @@ mod tests {
     ) {
         use zarrs_chunk_grid::ChunkShapeTraits;
 
-use crate::array::ArraySubset;
+        use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
         use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 

@@ -245,7 +245,7 @@ fn indexer_array_subsets_vec() {
 #[async_generic::async_generic]
 fn indexer_partial_decode_impl<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     indexer: &dyn Indexer,
     data_type: DataType,
     bytes: &[T],
@@ -295,7 +295,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
 // #[async_generic::async_generic]
 fn indexer_partial_encode_impl<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     indexer: &dyn Indexer,
     elements_partial_encode: &[T],
     data_type: DataType,
@@ -351,11 +351,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
 
 #[tokio::test]
 async fn async_indexer_array_subsets_fixed() {
-    let shape: ChunkShape = vec![
-        NonZeroU64::new(1).unwrap(),
-        NonZeroU64::new(4).unwrap(),
-        NonZeroU64::new(4).unwrap(),
-    ];
+    let shape: ChunkShape = vec![1, 4, 4];
     let indexer = [
         ArraySubset::new_with_ranges(&[0..1, 1..4, 2..4]),
         ArraySubset::new_with_ranges(&[0..1, 0..1, 0..4]),
@@ -449,11 +445,7 @@ async fn async_indexer_array_subsets_fixed() {
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_indexer_array_subsets_variable() {
-    let shape: ChunkShape = vec![
-        NonZeroU64::new(1).unwrap(),
-        NonZeroU64::new(4).unwrap(),
-        NonZeroU64::new(4).unwrap(),
-    ];
+    let shape: ChunkShape = vec![1, 4, 4];
     let indexer = [
         ArraySubset::new_with_ranges(&[0..1, 1..4, 2..4]),
         ArraySubset::new_with_ranges(&[0..1, 0..1, 0..4]),

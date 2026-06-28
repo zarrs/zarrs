@@ -72,13 +72,10 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     let subchunk_grid = array.subchunk_grid().unwrap();
     assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
-    assert_eq!(
-        array.chunk_shape(&[0, 0])?,
-        vec![NonZeroU64::new(3).unwrap(); 2]
-    );
+    assert_eq!(array.chunk_shape(&[0, 0])?, vec![3u64; 2]);
     assert_eq!(
         subchunk_grid.chunk_shape(&[0, 0]).unwrap(),
-        Some(vec![NonZeroU64::new(1).unwrap(); 2])
+        Some(vec![1u64; 2])
     );
     assert_eq!(array.chunk_shape_usize(&[0, 0])?, [3, 3]);
     assert_eq!(array.subset_all(), ArraySubset::new_with_shape(vec![5, 5]));
@@ -153,8 +150,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
     chunk_indices: &[u64],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let shape = array.chunk_shape(chunk_indices)?;
-    let shape = shape.iter().map(|size| size.get()).collect::<Vec<_>>();
-    let mut output = vec![0; shape.num_elements() as usize];
+    let mut output = vec![0; shape.iter().product::<u64>() as usize];
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());

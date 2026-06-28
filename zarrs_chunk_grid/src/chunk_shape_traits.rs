@@ -1,7 +1,5 @@
 use std::num::NonZeroU64;
 
-use zarrs_metadata::ChunkShape;
-
 mod private {
     pub trait Sealed {}
 }
@@ -67,12 +65,6 @@ impl<const N: usize> ChunkShapeView for [NonZeroU64; N] {
 
 /// A trait for chunk shapes.
 pub trait ChunkShapeTraits: ChunkShapeView {
-    /// Convert a chunk shape to an array shape.
-    #[must_use]
-    fn to_chunk_shape(&self) -> ChunkShape {
-        self.as_shape().iter().copied().collect()
-    }
-
     /// Return the number of elements.
     ///
     /// Equal to the product of the components of its shape.

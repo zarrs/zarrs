@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_edge_lengths() {
         let array_shape: ArrayShape = vec![10, 20];
-        let chunk_shape: ChunkShape =
+        let chunk_shape: ChunkShapeNonEmpty =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(7).unwrap()];
         let grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
 
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
@@ -390,7 +390,7 @@ mod tests {
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(),
-                Some(chunk_shape.clone())
+                Some(chunk_shape.iter().map(|n| n.get()).collect())
             );
             assert_eq!(
                 chunk_grid.chunk_shape_u64(&[0, 0, 0]).unwrap(),
@@ -398,7 +398,7 @@ mod tests {
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
-                Some(vec![NonZeroU64::new(1).unwrap(); 3])
+                Some(vec![1u64; 3])
             );
             assert_eq!(chunk_grid.chunk_shape(&[5, 0, 0]).unwrap(), None);
             let chunk_grid_shape = chunk_grid.grid_shape();
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_out_of_bounds() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
@@ -454,7 +454,7 @@ mod tests {
     fn chunk_grid_regular_bounded_fully_and_partially_out_of_bounds() {
         // Array [10, 12], chunks [3, 5] -> grid [4, 3]
         let array_shape: ArrayShape = vec![10, 12];
-        let chunk_shape: ChunkShape =
+        let chunk_shape: ChunkShapeNonEmpty =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
         let chunk_grid =
             RegularBoundedChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
@@ -482,10 +482,7 @@ mod tests {
         assert_eq!(chunk_grid.chunk_origin(&[3, 2]).unwrap(), Some(vec![9, 10]));
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 2]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(2).unwrap()
-            ])
+            Some(vec![1u64, 2u64])
         );
         assert_eq!(
             chunk_grid.chunk_shape_u64(&[3, 2]).unwrap(),
@@ -501,10 +498,7 @@ mod tests {
         // -> reduced shape [1, 5]
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 0]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(5).unwrap()
-            ])
+            Some(vec![1u64, 5u64])
         );
 
         // Partially out-of-bounds edge in second dim only
@@ -512,10 +506,7 @@ mod tests {
         // -> reduced shape [3, 2]
         assert_eq!(
             chunk_grid.chunk_shape(&[0, 2]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(3).unwrap(),
-                NonZeroU64::new(2).unwrap()
-            ])
+            Some(vec![3u64, 2u64])
         );
 
         // In-bounds array index at array boundary -> last chunk
@@ -535,7 +526,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_zero_dim() {
         let array_shape: ArrayShape = vec![5, 7, 0];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
@@ -559,7 +550,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_iterators() {
         let array_shape: ArrayShape = vec![2, 2, 6];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),

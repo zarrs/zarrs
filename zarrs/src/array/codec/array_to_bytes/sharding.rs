@@ -420,11 +420,7 @@ mod tests {
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
         let index = codec
-            .decode_index(
-                &encoded,
-                &[NonZeroU64::new(chunk_size / subchunk_size).unwrap(); NUM_AXES],
-                options,
-            )
+            .decode_index(&encoded, &[chunk_size / subchunk_size; NUM_AXES], options)
             .unwrap();
         match fill_value_amount {
             FillValueAmount::None => match codec.options.subchunk_write_order() {
@@ -624,14 +620,20 @@ mod tests {
             vec![]
         };
         let codec = Arc::new(
-            ShardingCodecBuilder::new(chunk_shape.clone(), &data_type)
-                .index_location(if index_at_end {
-                    ShardingIndexLocation::End
-                } else {
-                    ShardingIndexLocation::Start
-                })
-                .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build(),
+            ShardingCodecBuilder::new(
+                chunk_shape
+                    .iter()
+                    .filter_map(|&n| NonZeroU64::new(n))
+                    .collect(),
+                &data_type,
+            )
+            .index_location(if index_at_end {
+                ShardingIndexLocation::End
+            } else {
+                ShardingIndexLocation::Start
+            })
+            .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
+            .build(),
         )
         .with_context(data_type.clone(), fill_value.clone())
         .unwrap();

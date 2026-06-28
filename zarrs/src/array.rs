@@ -1143,7 +1143,7 @@ fn create_codec_chain_from_v2(
 mod tests {
     use std::num::NonZeroU64;
 
-use zarrs_filesystem::FilesystemStore;
+    use zarrs_filesystem::FilesystemStore;
 
     use super::*;
     use crate::config::MetadataConvertVersion;

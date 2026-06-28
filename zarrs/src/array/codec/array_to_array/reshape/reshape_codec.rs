@@ -278,7 +278,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             return Ok(SubchunkGrid::None);
         };
 
-        let encoded_shape = super::get_encoded_shape(&self.shape, &decoded_shape)
+        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape)
             .map_err(|err| ChunkGridCreateError::new(err.to_string()))?;
         if encoded_subchunk_grid.dimensionality() != encoded_shape.len() {
             return Err(ChunkGridCreateError::new(format!(
@@ -299,7 +299,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         } else if let Some(interval_len) =
             encoded_granularity_linear_interval_len(&encoded_shape, &encoded_granularity)
         {
-            decoded_granularity_from_linear_interval(&decoded_shape, interval_len)
+            decoded_granularity_from_linear_interval(decoded_shape, interval_len)
                 .unwrap_or_else(|| decoded_shape.to_vec())
         } else {
             decoded_shape.to_vec()
@@ -309,9 +309,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             .iter()
             .zip(&decoded_granularity)
             .map(|(shape, granularity)| {
-                let Some(granularity) = NonZeroU64::new(*granularity) else {
-                    return None;
-                };
+                let granularity = NonZeroU64::new(*granularity)?;
                 if !shape.is_multiple_of(granularity.get()) {
                     return None;
                 }

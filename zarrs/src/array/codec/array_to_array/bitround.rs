@@ -219,7 +219,7 @@ mod tests {
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let shape = vec![elements.len() as u64];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
@@ -272,7 +272,7 @@ mod tests {
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let shape = vec![elements.len() as u64];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);

@@ -342,13 +342,14 @@ mod tests {
     use super::*;
     use crate::array::chunk_grid::{RegularBoundedChunkGrid, RegularChunkGrid};
     use crate::array::{ArraySubset, ChunkGridTraits};
+    use zarrs_metadata::ChunkShapeNonEmpty;
     use zarrs_plugin::ExtensionName;
 
-    fn regular_grid(shape: ArrayShape, chunk_shape: ChunkShape) -> ChunkGrid {
+    fn regular_grid(shape: ArrayShape, chunk_shape: ChunkShapeNonEmpty) -> ChunkGrid {
         RegularChunkGrid::new(shape, chunk_shape).unwrap().into()
     }
 
-    fn regular_bounded_grid(shape: ArrayShape, chunk_shape: ChunkShape) -> ChunkGrid {
+    fn regular_bounded_grid(shape: ArrayShape, chunk_shape: ChunkShapeNonEmpty) -> ChunkGrid {
         RegularBoundedChunkGrid::new(shape, chunk_shape)
             .unwrap()
             .into()
@@ -385,7 +386,7 @@ mod tests {
             Some(ArraySubset::new_with_ranges(&[3..9, 4..8]))
         );
         assert_eq!(grid.chunk_origin(&[2, 3]).unwrap(), Some(vec![6, 6]));
-        assert_eq!(grid.chunk_shape(&[2, 3]).unwrap(), Some(vec![nz(3), nz(2)]));
+        assert_eq!(grid.chunk_shape(&[2, 3]).unwrap(), Some(vec![3u64, 2u64]));
         assert_eq!(grid.chunk_indices(&[7, 7]).unwrap(), Some(vec![2, 3]));
         assert_eq!(
             grid.chunk_element_indices(&[7, 7]).unwrap(),
@@ -426,7 +427,7 @@ mod tests {
         assert_eq!(grid.subset(&[1]).unwrap(), Some(ArraySubset::from([3..5])));
         assert_eq!(grid.subset(&[2]).unwrap(), Some(ArraySubset::from([5..8])));
         assert_eq!(grid.chunk_origin(&[3]).unwrap(), Some(vec![8]));
-        assert_eq!(grid.chunk_shape(&[3]).unwrap(), Some(vec![nz(2)]));
+        assert_eq!(grid.chunk_shape(&[3]).unwrap(), Some(vec![2u64]));
         assert_eq!(grid.chunk_indices(&[8]).unwrap(), Some(vec![3]));
         assert_eq!(grid.chunk_element_indices(&[8]).unwrap(), Some(vec![0]));
     }
