@@ -58,7 +58,6 @@ use zarrs_storage::{
 
 use std::any::Any;
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use zarrs_chunk_grid::{

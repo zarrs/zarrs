@@ -2,7 +2,7 @@ use derive_more::derive::Display;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
-use zarrs_chunk_grid::{ArraySubset, IndexerError};
+use zarrs_chunk_grid::{ArraySubset, ChunkShapeTraits, IndexerError};
 
 use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 
@@ -63,8 +63,7 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             let bounding_subset = ArraySubset::new_with_shape(shape.to_vec());
             return Err(SubsetOutOfBoundsError::new(subset, bounding_subset).into());
         }
-        let bytes_in_array_len =
-            usize::try_from(shape.iter().product::<u64>()).unwrap() * data_type_size;
+        let bytes_in_array_len = usize::try_from(shape.num_elements()).unwrap() * data_type_size;
         if bytes.len() != bytes_in_array_len {
             return Err(InvalidBytesLengthError::new(bytes.len(), bytes_in_array_len).into());
         }

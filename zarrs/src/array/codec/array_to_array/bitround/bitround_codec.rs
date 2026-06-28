@@ -8,7 +8,6 @@ use super::{
     bitround_codec_partial, round_bytes,
 };
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,

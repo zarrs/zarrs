@@ -154,7 +154,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let shape = array.chunk_shape(chunk_indices)?;
     let shape = shape.iter().map(|size| size.get()).collect::<Vec<_>>();
-    let mut output = vec![0; shape.iter().product::<u64>() as usize];
+    let mut output = vec![0; shape.num_elements() as usize];
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());

@@ -1,9 +1,9 @@
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions,
@@ -247,7 +247,7 @@ where
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
             // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().product::<u64>();
+            let num_elements = self.shape.num_elements();
             let chunk_bytes =
                 ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);
@@ -335,7 +335,7 @@ where
                 .await
         } else {
             // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().product::<u64>();
+            let num_elements = self.shape.num_elements();
             let chunk_bytes =
                 ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);

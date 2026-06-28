@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::v2::MetadataV2;
-use crate::{ArrayShape, ChunkKeySeparator, ChunkShape, ChunkShapeNonEmpty, Endianness};
+use crate::{ArrayShape, ChunkKeySeparator, ChunkShapeNonEmpty, Endianness};
 
 /// Zarr V2 array metadata.
 ///

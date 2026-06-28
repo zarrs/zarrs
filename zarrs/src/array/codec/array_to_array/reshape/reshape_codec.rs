@@ -18,7 +18,7 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use zarrs_metadata::{ChunkShapeNonEmpty, Configuration};
+use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
@@ -45,17 +45,17 @@ struct ReshapeCodecBound {
 /// encoded granule spans a non-contiguous rectangle in row-major order.
 fn encoded_granularity_linear_interval_len(
     encoded_shape: &[u64],
-    encoded_granularity: &[NonZeroU64],
+    encoded_granularity: &[u64],
 ) -> Option<u64> {
     for (shape, granularity) in encoded_shape.iter().zip(encoded_granularity) {
-        if granularity.get() > shape.get() || !shape.get().is_multiple_of(granularity.get()) {
+        if *granularity == 0 || *granularity > *shape || !shape.is_multiple_of(*granularity) {
             return None;
         }
     }
 
     let Some(first_non_unit_axis) = encoded_granularity
         .iter()
-        .position(|granularity| granularity.get() > 1)
+        .position(|granularity| *granularity > 1)
     else {
         return Some(1);
     };
@@ -67,10 +67,10 @@ fn encoded_granularity_linear_interval_len(
         .enumerate()
         .skip(first_non_unit_axis)
     {
-        if axis > first_non_unit_axis && granularity != shape {
+        if axis > first_non_unit_axis && *granularity != *shape {
             return None;
         }
-        interval_len = interval_len.checked_mul(granularity.get())?;
+        interval_len = interval_len.checked_mul(*granularity)?;
     }
 
     Some(interval_len)
@@ -127,7 +127,7 @@ fn decoded_granularity_from_linear_interval(
 
 fn chunk_edge_lengths_to_regular_granularity(
     chunk_grid: &ChunkGrid,
-) -> Result<Option<ChunkShapeNonEmpty>, ChunkGridCreateError> {
+) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
     let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
     for dim in 0..chunk_grid.dimensionality() {
         let edge_lengths = chunk_grid
@@ -139,7 +139,7 @@ fn chunk_edge_lengths_to_regular_granularity(
         if edge_lengths.iter().any(|&edge_length| edge_length != first) {
             return Ok(None);
         }
-        chunk_shape.push(first);
+        chunk_shape.push(first.get());
     }
     Ok(Some(chunk_shape))
 }
@@ -300,20 +300,22 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
             encoded_granularity_linear_interval_len(&encoded_shape, &encoded_granularity)
         {
             decoded_granularity_from_linear_interval(&decoded_shape, interval_len)
-                .unwrap_or_else(|| decoded_shape.clone())
+                .unwrap_or_else(|| decoded_shape.to_vec())
         } else {
-            decoded_shape.clone()
+            decoded_shape.to_vec()
         };
 
         let chunk_shapes = decoded_shape
             .iter()
             .zip(&decoded_granularity)
             .map(|(shape, granularity)| {
-                if !shape.get().is_multiple_of(granularity.get()) {
+                let Some(granularity) = NonZeroU64::new(*granularity) else {
+                    return None;
+                };
+                if !shape.is_multiple_of(granularity.get()) {
                     return None;
                 }
-                let edge_lengths =
-                    vec![*granularity; (shape.get() / granularity.get()) as usize];
+                let edge_lengths = vec![granularity; (shape / granularity.get()) as usize];
                 Some(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
             })
             .collect::<Option<Vec<_>>>()

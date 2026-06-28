@@ -1,6 +1,5 @@
 // TODO: Support actual partial decoding, coalescing required
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
@@ -8,13 +7,14 @@ use crate::array::{ArrayBytes, ArrayBytesRaw, CodecChainBound, DataType, FillVal
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata::ChunkShape;
 use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 use zarrs_storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
     index_codecs: Arc<CodecChainBound>,
@@ -27,7 +27,7 @@ impl VlenPartialDecoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
+        shape: ChunkShape,
         data_type: DataType,
         fill_value: FillValue,
         index_codecs: Arc<CodecChainBound>,
@@ -55,7 +55,7 @@ fn decode_vlen_bytes<'a>(
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
@@ -118,7 +118,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
 /// Asynchronous partial decoder for the `bytes` codec.
 pub(crate) struct AsyncVlenPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
     index_codecs: Arc<CodecChainBound>,
@@ -132,7 +132,7 @@ impl AsyncVlenPartialDecoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
+        shape: ChunkShape,
         data_type: DataType,
         fill_value: FillValue,
         index_codecs: Arc<CodecChainBound>,

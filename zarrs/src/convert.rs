@@ -464,7 +464,6 @@ mod tests {
     use zarrs_metadata::{ChunkKeySeparator, Endianness};
 
     use super::*;
-    use crate::array::ChunkShape;
 
     #[cfg(all(feature = "blosc", feature = "transpose"))]
     use zarrs_metadata_ext::codec::{

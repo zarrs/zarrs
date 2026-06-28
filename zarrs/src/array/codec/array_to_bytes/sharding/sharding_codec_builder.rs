@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use super::{ShardingCodec, ShardingIndexLocation};
+use crate::array::DataType;
 #[cfg(feature = "crc32c")]
 use crate::array::codec::Crc32cCodec;
 use crate::array::codec::{BytesCodec, CodecChain, default_array_to_bytes_codec};
-use crate::array::{ChunkShape, DataType};
 use zarrs_codec::{
     BytesToBytesCodecTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
 };

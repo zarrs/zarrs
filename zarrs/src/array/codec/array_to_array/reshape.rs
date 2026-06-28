@@ -32,7 +32,6 @@
 mod reshape_codec;
 mod reshape_codec_partial;
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use num::Integer;
@@ -99,8 +98,8 @@ fn get_encoded_shape(
 
 fn get_reshaped_indexer(
     indexer: &dyn Indexer,
-    decoded_shape: &[NonZeroU64],
-    encoded_shape: &[NonZeroU64],
+    decoded_shape: &[u64],
+    encoded_shape: &[u64],
 ) -> Result<impl Indexer, CodecError> {
     if indexer.dimensionality() != decoded_shape.len() {
         return Err(IndexerError::new_incompatible_dimensionality(
@@ -168,7 +167,7 @@ mod tests {
         output_shape: ChunkShape,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let shape = vec![5, 4, 4, 3];
-        let size = shape.iter().product::<u64>() as usize * data_type.fixed_size().unwrap();
+        let size = shape.num_elements() as usize * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 

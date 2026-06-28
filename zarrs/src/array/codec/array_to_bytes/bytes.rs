@@ -110,7 +110,6 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;

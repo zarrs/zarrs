@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::{ChunkShape, ChunkShapeNonEmpty, ConfigurationSerialize};
+use zarrs_metadata::{ChunkShapeNonEmpty, ConfigurationSerialize};
 
 /// Configuration parameters for a `rectangular` chunk grid.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]

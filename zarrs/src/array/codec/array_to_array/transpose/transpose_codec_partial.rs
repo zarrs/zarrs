@@ -6,7 +6,6 @@ use super::{
 };
 use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
-use std::num::NonZeroU64;
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};

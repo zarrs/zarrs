@@ -159,7 +159,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             .map(|(chunk_shape, &array_shape, chunk_indices)| {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
-                NonZeroU64::new(end.saturating_sub(start))
+                if end > start { Some(end - start) } else { None }
             })
             .collect::<Option<Vec<_>>>())
         } else {

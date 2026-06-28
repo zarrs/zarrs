@@ -6,7 +6,6 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use async_generic::async_generic;
 use num::Integer;
-use std::num::NonZeroU64;
 
 use super::PackBitsCodecComponents;
 use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;

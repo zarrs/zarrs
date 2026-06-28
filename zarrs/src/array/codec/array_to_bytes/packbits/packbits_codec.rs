@@ -24,7 +24,6 @@ use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShapeTraits, DataType,
     FillValue,
 };
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -247,7 +246,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().product::<u64>();
+        let num_elements = shape.num_elements();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =
@@ -326,7 +325,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().product::<u64>();
+        let num_elements = shape.num_elements();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =

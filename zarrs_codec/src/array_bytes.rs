@@ -4,7 +4,7 @@ use derive_more::derive::Display;
 use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
+use zarrs_chunk_grid::{ArraySubsetTraits, ChunkShapeTraits, ravel_indices};
 use zarrs_data_type::DataTypeFillValueError;
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::extract_byte_ranges_concat;
@@ -554,7 +554,7 @@ fn update_bytes_vlen_indexer<'a>(
     );
 
     // Get the indices of elements to update and the size of the old bytes being replaced
-    let num_elements = usize::try_from(input_shape.iter().product::<u64>()).unwrap();
+    let num_elements = usize::try_from(input_shape.num_elements()).unwrap();
     let update_indices = update_indexer.iter_linearised_indices(input_shape)?;
     let mut element_indices_update: Vec<Option<usize>> = vec![None; num_elements];
     let mut updated_size_old = 0;

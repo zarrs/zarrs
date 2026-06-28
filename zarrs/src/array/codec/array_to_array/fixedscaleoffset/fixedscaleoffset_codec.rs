@@ -9,7 +9,6 @@ use super::{
 };
 use crate::array::{ChunkGrid, DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,

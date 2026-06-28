@@ -185,7 +185,7 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             if self.array_shape.contains(&0) {
                 return Ok(None);
             }
-            let chunk_shape: ChunkShape = self.chunk_shape.iter().copied().collect();
+            let chunk_shape: ChunkShape = self.chunk_shape.iter().map(|s| s.get()).collect();
             Ok(Some(chunk_shape))
         } else {
             Err(IncompatibleDimensionalityError::new(
@@ -436,6 +436,7 @@ mod tests {
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
         let chunk_grid = RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
         let chunk_grid: ChunkGrid = chunk_grid.into();
+        let chunk_shape: ChunkShape = chunk_shape.iter().map(|s| s.get()).collect();
 
         assert_eq!(chunk_grid.grid_shape(), &[4, 3]);
 
@@ -491,12 +492,12 @@ mod tests {
     #[test]
     fn chunk_grid_regular_zero_dim() {
         let array_shape: ArrayShape = vec![5, 7, 0];
-        let chunk_shape_cfg: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape_cfg).unwrap();
+        let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
         let grid: ChunkGrid = chunk_grid.into();
 
         // Grid shape has 0 for zero-dim
@@ -518,7 +519,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_iterators() {
         let array_shape: ArrayShape = vec![2, 2, 6];
-        let chunk_shape: ChunkShape = vec![
+        let chunk_shape: ChunkShapeNonEmpty = vec![
             NonZeroU64::new(1).unwrap(),
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),

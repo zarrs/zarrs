@@ -518,7 +518,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        bytes.validate(shape.iter().num_elements(), self.data_type())?;
+        bytes.validate(shape.num_elements(), self.data_type())?;
 
         let mut shape = shape.to_vec();
 
@@ -966,7 +966,6 @@ impl ArrayCodecTraits for CodecChainBound {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::num::NonZeroU64;
 
     use super::*;
     use crate::array::codec::BytesCodec;

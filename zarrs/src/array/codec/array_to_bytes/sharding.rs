@@ -206,7 +206,7 @@ fn get_concurrent_target_and_codec_options(
     chunks_per_shard: &[u64],
     options: &CodecOptions,
 ) -> Result<(usize, CodecOptions), CodecError> {
-    let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
+    let num_chunks = chunks_per_shard.num_elements_usize();
 
     // Calculate subchunk/codec concurrency
     let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
@@ -215,7 +215,7 @@ fn get_concurrent_target_and_codec_options(
             options.concurrent_target(),
             num_chunks,
         )),
-        &inner_codecs.recommended_concurrency(subchunk_shape)?,
+        &inner_codecs.recommended_concurrency(bytemuck::must_cast_slice(subchunk_shape))?,
     );
     let options = options.with_concurrent_target(concurrency_limit_codec);
     Ok((subchunk_concurrent_limit, options))

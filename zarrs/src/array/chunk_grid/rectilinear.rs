@@ -267,11 +267,11 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
 
         Ok(std::iter::zip(chunk_indices, &self.chunks)
             .map(|(chunk_index, chunk_dim)| match chunk_dim {
-                RectilinearChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
+                RectilinearChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let chunk_index = usize::try_from(*chunk_index).unwrap();
                     if chunk_index < offsets_sizes.len() {
-                        Some(offsets_sizes[chunk_index].size)
+                        Some(offsets_sizes[chunk_index].size.get())
                     } else {
                         None
                     }
@@ -681,13 +681,7 @@ mod tests {
             chunk_grid.chunk_origin(&[4, 3]).unwrap(),
             Some(vec![40, 45])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[4, 3]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(15).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[4, 3]).unwrap(), Some(vec![10, 15]));
         assert_eq!(
             chunk_grid.chunk_shape_u64(&[4, 3]).unwrap(),
             Some(vec![10, 15])
@@ -712,13 +706,7 @@ mod tests {
             chunk_grid.chunk_origin(&[2, 1]).unwrap(),
             Some(vec![20, 10])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[2, 1]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(15).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[2, 1]).unwrap(), Some(vec![10, 15]));
     }
 
     #[test]
@@ -774,20 +762,8 @@ mod tests {
         );
 
         // Test chunk shape for scalar chunks (all chunks same size)
-        assert_eq!(
-            chunk_grid.chunk_shape(&[0, 0]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(20).unwrap()
-            ])
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[9, 4]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(20).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[0, 0]).unwrap(), Some(vec![10, 20]));
+        assert_eq!(chunk_grid.chunk_shape(&[9, 4]).unwrap(), Some(vec![10, 20]));
 
         // Test chunk element indices
         assert_eq!(

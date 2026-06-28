@@ -6,9 +6,9 @@ mod private {
     pub trait Sealed {}
 }
 
-impl private::Sealed for [u64] {}
+impl private::Sealed for &[u64] {}
 impl private::Sealed for Vec<u64> {}
-impl private::Sealed for [NonZeroU64] {}
+impl private::Sealed for &[NonZeroU64] {}
 impl private::Sealed for Vec<NonZeroU64> {}
 impl<const N: usize> private::Sealed for [u64; N] {}
 impl<const N: usize> private::Sealed for [NonZeroU64; N] {}
@@ -23,7 +23,7 @@ pub trait ChunkShapeView: private::Sealed {
     fn as_shape(&self) -> &[u64];
 }
 
-impl ChunkShapeView for [u64] {
+impl ChunkShapeView for &[u64] {
     #[inline]
     fn as_shape(&self) -> &[u64] {
         self
@@ -37,7 +37,7 @@ impl ChunkShapeView for Vec<u64> {
     }
 }
 
-impl ChunkShapeView for [NonZeroU64] {
+impl ChunkShapeView for &[NonZeroU64] {
     #[inline]
     fn as_shape(&self) -> &[u64] {
         bytemuck::must_cast_slice(self)

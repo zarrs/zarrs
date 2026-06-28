@@ -1,4 +1,3 @@
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::get_reshaped_indexer;
@@ -8,13 +7,14 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_metadata::ChunkShape;
 use zarrs_storage::StorageError;
 
 /// Partial codec for the Reshape codec.
 pub(crate) struct ReshapeCodecPartial<T: ?Sized> {
     input_handle: Arc<T>,
-    decoded_shape: Vec<NonZeroU64>,
-    encoded_shape: Vec<NonZeroU64>,
+    decoded_shape: ChunkShape,
+    encoded_shape: ChunkShape,
     data_type: DataType,
 }
 
@@ -51,10 +51,10 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
     /// Create a new [`ReshapeCodecPartial`].
     pub(crate) fn new(
         input_handle: Arc<T>,
-        decoded_shape: &[NonZeroU64],
+        decoded_shape: &[u64],
         data_type: &DataType,
         _fill_value: &FillValue,
-        encoded_shape: Vec<NonZeroU64>,
+        encoded_shape: ChunkShape,
     ) -> Self {
         Self {
             input_handle,

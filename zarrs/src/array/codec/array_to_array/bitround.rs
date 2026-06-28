@@ -83,7 +83,6 @@ fn round_bytes(
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use zarrs_data_type::FillValue;

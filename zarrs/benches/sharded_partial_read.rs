@@ -70,7 +70,7 @@ fn populate_array(store: ReadableWritableListableStorage) {
     .unwrap();
     array.store_metadata().unwrap();
 
-    let total_elements = SHAPE.iter().product::<u64>() as usize;
+    let total_elements = shape.num_elements() as usize;
     let data = random_data(total_elements);
     array
         .store_array_subset(

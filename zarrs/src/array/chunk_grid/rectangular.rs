@@ -233,11 +233,11 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             }
             Ok(std::iter::zip(chunk_indices, &self.chunks)
                 .map(|(chunk_index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
+                    RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
                     RectangularChunkGridDimension::Varying(offsets_sizes) => {
                         let chunk_index = usize::try_from(*chunk_index).unwrap();
                         if chunk_index < offsets_sizes.len() {
-                            Some(offsets_sizes[chunk_index].size)
+                            Some(offsets_sizes[chunk_index].size.get())
                         } else {
                             None
                         }
@@ -576,13 +576,7 @@ mod tests {
             chunk_grid.chunk_origin(&[6, 9]).unwrap(),
             Some(vec![65, 90])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[6, 9]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(35).unwrap(),
-                NonZeroU64::new(10).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[6, 9]).unwrap(), Some(vec![35, 10]));
         assert_eq!(
             chunk_grid.chunk_shape_u64(&[6, 9]).unwrap(),
             Some(vec![35, 10])
@@ -607,13 +601,7 @@ mod tests {
             chunk_grid.chunk_origin(&[3, 1]).unwrap(),
             Some(vec![15, 10])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[3, 1]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(15).unwrap(),
-                NonZeroU64::new(10).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[3, 1]).unwrap(), Some(vec![15, 10]));
     }
 
     #[test]

@@ -14,7 +14,6 @@ use crate::array::{
     ChunkGrid, ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice,
     transmute_to_bytes_vec,
 };
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,

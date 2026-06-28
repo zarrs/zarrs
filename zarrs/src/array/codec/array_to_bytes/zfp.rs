@@ -98,6 +98,7 @@ mod zfp_stream;
 
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
 use zfp_sys::{
@@ -201,7 +202,7 @@ fn promote_before_zfp_encoding(decoded_value: &[u8], encoding: ZfpEncoding) -> Z
 }
 
 fn init_zfp_decoding_output(shape: &[u64], encoding: ZfpEncoding) -> ZfpArray {
-    let num_elements = shape.iter().product::<u64>() as usize;
+    let num_elements = shape.num_elements_usize();
     ZfpArray::new_zeroed(encoding, num_elements)
 }
 
@@ -262,7 +263,6 @@ fn zfp_decode(
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use num::traits::AsPrimitive;

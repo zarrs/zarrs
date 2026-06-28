@@ -70,11 +70,8 @@ impl ShardingPartialEncoder {
             vec![u64::MAX; num_chunks * 2]
         });
 
-        let chunk_grid = RegularChunkGrid::new(
-            shard_shape.to_vec(),
-            subchunk_shape.clone(),
-        )
-        .map_err(|err| CodecError::from(err.to_string()))?;
+        let chunk_grid = RegularChunkGrid::new(shard_shape.to_vec(), subchunk_shape.clone())
+            .map_err(|err| CodecError::from(err.to_string()))?;
         Ok(Self {
             input_output_handle,
             shard_shape,

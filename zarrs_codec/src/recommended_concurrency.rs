@@ -38,13 +38,13 @@ impl RecommendedConcurrency {
     /// Create a new recommended concurrency struct with a specified minimum concurrency and unbounded maximum concurrency.
     #[must_use]
     pub fn new_minimum(minimum: usize) -> Self {
-        Self::new(minimum..)
+        Self::new(minimum.max(1)..)
     }
 
     /// Create a new recommended concurrency struct with a specified maximum concurrency.
     #[must_use]
     pub fn new_maximum(maximum: usize) -> Self {
-        Self::new(..maximum)
+        Self::new(..maximum.max(1))
     }
 
     /// Return the minimum concurrency.

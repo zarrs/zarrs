@@ -117,7 +117,7 @@ mod tests {
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, DataType, FillValue, data_type};
-    use zarrs_chunk_grid::ChunkGrid;
+    use zarrs_chunk_grid::{ChunkGrid, ChunkShapeTraits};
     use zarrs_codec::{
         CodecOptions, SubchunkGrid, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
@@ -134,7 +134,7 @@ mod tests {
     ) {
         let shape = vec![1, 2, 1, 2, 3];
         let fill_value = fill_value.into();
-        let size = shape.iter().product::<u64>() as usize * data_type.fixed_size().unwrap();
+        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 

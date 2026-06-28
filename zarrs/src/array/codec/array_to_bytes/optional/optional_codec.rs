@@ -2,7 +2,6 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use std::mem::size_of;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::{ChunkGridCreateError, ChunkShapeTraits};
@@ -631,8 +630,6 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use std::num::NonZeroU64;
-
         let chunk_shape = vec![4, 4];
         let fill_value = fill_value.into();
 
@@ -803,8 +800,6 @@ mod tests {
 
     #[test]
     fn codec_optional_nested_2_level_detailed() {
-        use std::num::NonZeroU64;
-
         // Test Option<Option<u8>> with explicit mask construction
         let data_type: DataType = data_type::uint8().to_optional().to_optional();
         let fill_value = FillValue::from(None::<Option<u8>>);
@@ -878,8 +873,6 @@ mod tests {
 
     #[test]
     fn codec_optional_nested_2_level_with_inner_fill_value() {
-        use std::num::NonZeroU64;
-
         // Test Option<u8> where the u8 has a non-zero fill value
         // This represents the outer optional wrapping a non-optional type
         let data_type: DataType = data_type::uint8().to_optional();
@@ -944,8 +937,6 @@ mod tests {
 
     #[test]
     fn codec_optional_nested_3_level_detailed() {
-        use std::num::NonZeroU64;
-
         // Test Option<Option<Option<u16>>> with explicit mask construction
         let data_type: DataType = data_type::uint16()
             .to_optional()
@@ -1042,8 +1033,6 @@ mod tests {
 
     #[test]
     fn codec_optional_some_nan_fill_value() {
-        use std::num::NonZeroU64;
-
         // Test Option<f32> with a specific fill value (e.g., NaN)
         let data_type: DataType = data_type::float32().to_optional();
         let chunk_shape = vec![5];

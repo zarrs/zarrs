@@ -45,7 +45,6 @@ mod array_dlpack_ext;
 mod array_sharded_ext;
 
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use self::array_cached::ArrayCached;
@@ -986,7 +985,7 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
     shape: &[u64],
     bytes: Vec<u8>,
 ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-    let expected_len = shape.iter().product::<u64>() * size_of::<T>() as u64;
+    let expected_len = shape.num_elements() * size_of::<T>() as u64;
     if bytes.len() as u64 != expected_len {
         return Err(ArrayError::InvalidBytesInputSize(bytes.len(), expected_len));
     }
@@ -1142,7 +1141,9 @@ fn create_codec_chain_from_v2(
 
 #[cfg(test)]
 mod tests {
-    use zarrs_filesystem::FilesystemStore;
+    use std::num::NonZeroU64;
+
+use zarrs_filesystem::FilesystemStore;
 
     use super::*;
     use crate::config::MetadataConvertVersion;

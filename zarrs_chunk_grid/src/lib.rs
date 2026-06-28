@@ -462,7 +462,7 @@ pub unsafe trait ChunkGridTraits:
     /// Return a serial iterator over the chunk indices of the chunk grid.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
-        let n_chunks = shape.iter().product::<u64>();
+        let n_chunks = shape.num_elements();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         IndicesIntoIterator {
             subset: ArraySubset::new_with_shape(shape),
@@ -473,7 +473,7 @@ pub unsafe trait ChunkGridTraits:
     /// Return a parallel iterator over the chunk indices of the chunk grid.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
-        let n_chunks = shape.iter().product::<u64>();
+        let n_chunks = shape.num_elements();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         ParIndicesIntoIterator {
             subset: ArraySubset::new_with_shape(shape),

@@ -13,7 +13,6 @@ use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShapeTraits, DataType,
     DataTypeSize, FillValue,
 };
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
@@ -163,7 +162,7 @@ impl ArrayCodecTraits for BytesCodecBound {
         //     if !endian.is_native() {
         //         FIXME: Support parallel
         //         let min_elements_per_thread = 32768; // 32^3
-        //         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        //         let num_elements = shape.num_elements();
         //         unsafe {
         //             NonZeroU64::new_unchecked(
         //                 num_elements.div_ceil(min_elements_per_thread),

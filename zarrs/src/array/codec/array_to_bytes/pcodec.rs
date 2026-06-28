@@ -89,7 +89,6 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;

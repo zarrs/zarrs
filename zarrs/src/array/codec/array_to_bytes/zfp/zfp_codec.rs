@@ -20,7 +20,6 @@ use super::{
     promote_before_zfp_encoding, zfp_decode, zfp_native_type_to_sys,
 };
 use crate::array::{BytesRepresentation, ChunkGrid, DataType, FillValue};
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
     CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,

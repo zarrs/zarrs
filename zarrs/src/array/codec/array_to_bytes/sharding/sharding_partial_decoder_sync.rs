@@ -12,9 +12,8 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits,
-    CodecChainBound, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer,
-    IndexerError, ravel_indices,
+    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkGrid, ChunkShape, CodecChainBound, DataType,
+    DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
@@ -506,9 +505,8 @@ fn partial_decode_fixed_indexer(
     #[cfg(not(target_arch = "wasm32"))]
     let subchunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
-    let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
-    );
+    let subchunk_partial_decoders =
+        quick_cache::sync::Cache::new(chunks_per_shard.num_elements_usize());
 
     for indices in indexer.iter_indices() {
         // Get intersected index
@@ -610,9 +608,8 @@ fn partial_decode_variable_indexer(
     #[cfg(not(target_arch = "wasm32"))]
     let subchunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
-    let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
-    );
+    let subchunk_partial_decoders =
+        quick_cache::sync::Cache::new(chunks_per_shard.num_elements_usize());
 
     for indices in indexer.iter_indices() {
         // Get intersected index

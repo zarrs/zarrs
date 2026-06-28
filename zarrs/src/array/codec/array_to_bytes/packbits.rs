@@ -89,7 +89,6 @@ fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use num::Integer;

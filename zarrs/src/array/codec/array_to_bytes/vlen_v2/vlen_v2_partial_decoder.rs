@@ -1,6 +1,5 @@
 // TODO: Support actual partial decoding, coalescing required
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
