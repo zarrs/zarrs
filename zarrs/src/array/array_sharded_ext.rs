@@ -102,7 +102,10 @@ mod tests {
         let subchunk_grid = array.subchunk_grid().unwrap().clone();
         assert_eq!(subchunk_grid.array_shape(), expected_array_shape);
         assert_eq!(subchunk_grid.grid_shape(), expected_grid_shape);
-        assert_eq!(subchunk_grid.chunk_edge_lengths(0)?, expected_edge_lengths);
+        assert_eq!(
+            subchunk_grid.chunk_edge_lengths(0)?,
+            Some(expected_edge_lengths.to_vec())
+        );
         Ok(subchunk_grid)
     }
 
@@ -252,9 +255,12 @@ mod tests {
         assert_eq!(subchunk_grid.grid_shape(), &[4, 2]);
         assert_eq!(
             subchunk_grid.chunk_edge_lengths(0)?,
-            vec![nz(2), nz(2), nz(2), nz(2)]
+            Some(vec![nz(2), nz(2), nz(2), nz(2)])
         );
-        assert_eq!(subchunk_grid.chunk_edge_lengths(1)?, vec![nz(3), nz(3)]);
+        assert_eq!(
+            subchunk_grid.chunk_edge_lengths(1)?,
+            Some(vec![nz(3), nz(3)])
+        );
 
         Ok(())
     }

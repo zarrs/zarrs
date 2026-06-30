@@ -6,8 +6,10 @@ use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
-use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
-use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::chunk_grid::{
+    RectilinearChunkGrid, UnstructuredCartesianChunkGrid, edge_lengths_to_chunk_edge_lengths,
+};
+use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -76,6 +78,27 @@ impl TransposeCodecBound {
         }
         Ok(())
     }
+}
+
+pub(super) fn permuted_unstructured_chunk_grid(
+    chunk_grid: &ChunkGrid,
+    array_shape: Vec<u64>,
+    order: &[usize],
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    let chunks = chunk_grid
+        .iter_chunk_indices_and_subsets()
+        .map(|(_, chunk_subset)| {
+            let origin =
+                permute(chunk_subset.start(), order).expect("order dimensionality is validated");
+            let shape =
+                permute(chunk_subset.shape(), order).expect("order dimensionality is validated");
+            ArraySubset::new_with_start_shape(origin, shape)
+                .map_err(|err| ChunkGridCreateError::new(err.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ChunkGrid::new(
+        UnstructuredCartesianChunkGrid::new_from_subsets(array_shape, chunks)?,
+    ))
 }
 
 impl CodecTraits for TransposeCodec {
@@ -194,15 +217,17 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 
         let array_shape = permute(decoded_chunk_grid.array_shape(), &self.order.0)
             .expect("matching dimensionality");
-        let chunk_shapes = self
-            .order
-            .0
-            .iter()
-            .map(|&decoded_dim| {
-                let edge_lengths = decoded_chunk_grid.chunk_edge_lengths(decoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+        let mut chunk_shapes = Vec::with_capacity(self.order.0.len());
+        for &decoded_dim in &self.order.0 {
+            let Some(edge_lengths) = decoded_chunk_grid.chunk_edge_lengths(decoded_dim)? else {
+                return Ok(Some(permuted_unstructured_chunk_grid(
+                    decoded_chunk_grid,
+                    array_shape,
+                    &self.order.0,
+                )?));
+            };
+            chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+        }
 
         Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
             array_shape,
@@ -224,13 +249,17 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         }
 
         let inverse = inverse_permutation(&self.order.0);
-        let chunk_shapes = inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+        let mut chunk_shapes = Vec::with_capacity(inverse.len());
+        for &encoded_dim in &inverse {
+            let Some(edge_lengths) = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)? else {
+                return Ok(SubchunkGrid::Array(permuted_unstructured_chunk_grid(
+                    encoded_subchunk_grid,
+                    decoded_chunk_grid.array_shape().to_vec(),
+                    &inverse,
+                )?));
+            };
+            chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+        }
 
         Ok(SubchunkGrid::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,

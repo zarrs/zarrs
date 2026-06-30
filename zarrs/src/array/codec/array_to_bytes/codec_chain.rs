@@ -51,10 +51,23 @@ fn validate_subchunk_grid_refines_chunk_grid(
             chunk_grid.dimensionality()
         )));
     }
+    if chunk_grid.array_shape() != subchunk_grid.array_shape() {
+        return Err(ChunkGridCreateError::new(format!(
+            "subchunk grid shape {:?} does not match chunk grid shape {:?}",
+            subchunk_grid.array_shape(),
+            chunk_grid.array_shape()
+        )));
+    }
 
     for dim in 0..chunk_grid.dimensionality() {
-        let chunk_boundaries = cumulative_boundaries(&chunk_grid.chunk_edge_lengths(dim)?);
-        let subchunk_boundaries = cumulative_boundaries(&subchunk_grid.chunk_edge_lengths(dim)?);
+        let Some(chunk_edge_lengths) = chunk_grid.chunk_edge_lengths(dim)? else {
+            return validate_subchunk_grid_refines_chunk_grid_exact(chunk_grid, subchunk_grid);
+        };
+        let Some(subchunk_edge_lengths) = subchunk_grid.chunk_edge_lengths(dim)? else {
+            return validate_subchunk_grid_refines_chunk_grid_exact(chunk_grid, subchunk_grid);
+        };
+        let chunk_boundaries = cumulative_boundaries(&chunk_edge_lengths);
+        let subchunk_boundaries = cumulative_boundaries(&subchunk_edge_lengths);
         if chunk_boundaries.last() != subchunk_boundaries.last() {
             return Err(ChunkGridCreateError::Other(format!(
                 "subchunk grid edge lengths in dimension {dim} do not sum to chunk grid edge lengths"
@@ -66,6 +79,50 @@ fn validate_subchunk_grid_refines_chunk_grid(
         {
             return Err(ChunkGridCreateError::Other(format!(
                 "subchunk grid boundaries in dimension {dim} do not align with chunk grid boundaries"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_subchunk_grid_refines_chunk_grid_exact(
+    chunk_grid: &ChunkGrid,
+    subchunk_grid: &ChunkGrid,
+) -> Result<(), ChunkGridCreateError> {
+    let chunks = chunk_grid
+        .iter_chunk_indices_and_subsets()
+        .collect::<Vec<_>>();
+    let mut covered_elements = vec![0u64; chunks.len()];
+
+    for (subchunk_indices, subchunk_subset) in subchunk_grid.iter_chunk_indices_and_subsets() {
+        let mut containing_chunk = None;
+        for (chunk_index, (_, chunk_subset)) in chunks.iter().enumerate() {
+            if subchunk_subset.inbounds(chunk_subset)
+                && containing_chunk.replace(chunk_index).is_some()
+            {
+                return Err(ChunkGridCreateError::new(format!(
+                    "subchunk {subchunk_indices:?} is contained by multiple chunks"
+                )));
+            }
+        }
+        let Some(chunk_index) = containing_chunk else {
+            return Err(ChunkGridCreateError::new(format!(
+                "subchunk {subchunk_indices:?} is not contained by any chunk"
+            )));
+        };
+        covered_elements[chunk_index] = covered_elements[chunk_index]
+            .checked_add(subchunk_subset.num_elements())
+            .ok_or_else(|| ChunkGridCreateError::new("subchunk coverage overflow"))?;
+    }
+
+    for ((chunk_indices, chunk_subset), covered_elements) in
+        std::iter::zip(chunks, covered_elements)
+    {
+        if covered_elements != chunk_subset.num_elements() {
+            return Err(ChunkGridCreateError::new(format!(
+                "subchunks cover {covered_elements} elements of chunk {chunk_indices:?}, expected {}",
+                chunk_subset.num_elements()
             )));
         }
     }

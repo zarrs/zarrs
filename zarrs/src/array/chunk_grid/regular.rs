@@ -131,7 +131,7 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     fn chunk_edge_lengths(
         &self,
         dimension: usize,
-    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+    ) -> Result<Option<Vec<NonZeroU64>>, IncompatibleDimensionError> {
         if dimension >= self.dimensionality() {
             return Err(IncompatibleDimensionError::new(
                 dimension,
@@ -139,10 +139,10 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             ));
         }
         if self.array_shape[dimension] == 0 {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
         let edge_length = self.chunk_shape.as_slice()[dimension];
-        Ok(vec![edge_length; self.grid_shape[dimension] as usize])
+        Ok(Some(vec![edge_length; self.grid_shape[dimension] as usize]))
     }
 
     fn subset(
@@ -266,21 +266,21 @@ mod tests {
 
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            vec![chunk_shape[0]; 4usize]
+            Some(vec![chunk_shape[0]; 4usize])
         );
         assert_eq!(
             grid.chunk_edge_lengths(1).unwrap(),
-            vec![chunk_shape[1]; 3usize]
+            Some(vec![chunk_shape[1]; 3usize])
         );
 
         let unlimited = RegularChunkGrid::new(vec![0, 20], chunk_shape.clone()).unwrap();
         assert_eq!(
             unlimited.chunk_edge_lengths(0).unwrap(),
-            Vec::<NonZeroU64>::new()
+            Some(Vec::<NonZeroU64>::new())
         );
         assert_eq!(
             unlimited.chunk_edge_lengths(1).unwrap(),
-            vec![chunk_shape[1]; 3usize]
+            Some(vec![chunk_shape[1]; 3usize])
         );
 
         let result = grid.chunk_edge_lengths(2);

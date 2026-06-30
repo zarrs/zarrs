@@ -184,7 +184,7 @@ mod tests {
         {
             assert_eq!(
                 subchunk_grid.chunk_edge_lengths(axis).unwrap(),
-                expected_subchunk_grid_edge_lengths_axis
+                Some(expected_subchunk_grid_edge_lengths_axis)
             );
         }
     }

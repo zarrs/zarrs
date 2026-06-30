@@ -191,6 +191,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             let edge_lengths = decoded_chunk_grid
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
+            let Some(edge_lengths) = edge_lengths else {
+                return Ok(None);
+            };
             let Some(squeeze) = squeeze_chunk_edge_lengths(&edge_lengths) else {
                 return Ok(None);
             };
@@ -198,6 +201,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 let edge_lengths = decoded_chunk_grid
                     .chunk_edge_lengths(decoded_dim)
                     .map_err(ChunkGridCreateError::from)?;
+                let Some(edge_lengths) = edge_lengths else {
+                    return Ok(None);
+                };
                 array_shape.push(decoded_chunk_grid.array_shape()[decoded_dim]);
                 chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
             }
@@ -231,6 +237,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             let edge_lengths = decoded_chunk_grid
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
+            let Some(edge_lengths) = edge_lengths else {
+                return Ok(SubchunkGrid::None);
+            };
             let Some(squeeze_dim) = squeeze_chunk_edge_lengths(&edge_lengths) else {
                 return Ok(SubchunkGrid::None);
             };
@@ -257,6 +266,11 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                     let edge_lengths = encoded_subchunk_grid
                         .chunk_edge_lengths(encoded_dim)
                         .map_err(ChunkGridCreateError::from)?;
+                    let Some(edge_lengths) = edge_lengths else {
+                        return Err(ChunkGridCreateError::new(format!(
+                            "encoded subchunk grid edge lengths in dimension {encoded_dim} cannot be represented"
+                        )));
+                    };
                     encoded_dim += 1;
                     Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
                 }

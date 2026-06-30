@@ -133,6 +133,9 @@ fn chunk_edge_lengths_to_regular_granularity(
         let edge_lengths = chunk_grid
             .chunk_edge_lengths(dim)
             .map_err(ChunkGridCreateError::from)?;
+        let Some(edge_lengths) = edge_lengths else {
+            return Ok(None);
+        };
         let Some(first) = edge_lengths.first().copied() else {
             return Ok(None);
         };

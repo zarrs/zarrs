@@ -166,7 +166,7 @@ pub trait ArrayOps {
 pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<ChunkShapeNonEmpty> {
     let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
     for dimension in 0..chunk_grid.dimensionality() {
-        let edge_lengths = chunk_grid.chunk_edge_lengths(dimension).ok()?;
+        let edge_lengths = chunk_grid.chunk_edge_lengths(dimension).ok()??;
         let (&edge_length, remaining_edge_lengths) = edge_lengths.split_first()?;
         if remaining_edge_lengths
             .iter()

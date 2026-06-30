@@ -287,15 +287,17 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return the edge length of each chunk along a given dimension.
     ///
-    /// The returned vector has length equal to the grid shape for that dimension.
+    /// If returned, the vector has length equal to the grid shape for that dimension.
     /// Each element represents the size of the corresponding chunk along that axis.
+    /// Returns [`None`] if chunk edge lengths cannot be represented as a single
+    /// axis-aligned sequence for `dimension`.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionError`] if `dimension` is out of bounds given the chunk grid's dimensionality.
     fn chunk_edge_lengths(
         &self,
         dimension: usize,
-    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError>;
+    ) -> Result<Option<Vec<NonZeroU64>>, IncompatibleDimensionError>;
 
     /// The shape of the chunk at `chunk_indices`.
     ///
@@ -449,6 +451,8 @@ pub unsafe trait ChunkGridTraits:
     }
 
     /// Return a serial iterator over the chunk indices of the chunk grid.
+    ///
+    /// A chunk grid holding empty chunks may override this to skip empty chunks, but the default implementation yields all chunk indices.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
         let n_chunks = shape.num_elements();
@@ -460,6 +464,8 @@ pub unsafe trait ChunkGridTraits:
     }
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.
+    ///
+    /// A chunk grid holding empty chunks may override this to skip empty chunks, but the default implementation yields all chunk indices.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
         let n_chunks = shape.num_elements();
@@ -469,30 +475,29 @@ pub unsafe trait ChunkGridTraits:
             range: 0..n_chunks,
         }
     }
+
+    /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
+    ///
+    /// The default implementation treats every index yielded by [`Self::iter_chunk_indices`] as a
+    /// real chunk if [`Self::subset`] returns a non-empty subset. Chunk grids with sparse or
+    /// non-dense index spaces should override this to skip pseudo chunk indices.
+    fn iter_chunk_indices_and_subsets(
+        &self,
+    ) -> Box<dyn Iterator<Item = (ArrayIndicesTinyVec, ArraySubset)> + '_> {
+        Box::new(self.iter_chunk_indices().filter_map(|chunk_indices| {
+            self.subset(&chunk_indices)
+                .expect("matching dimensionality")
+                .filter(|subset| !subset.is_empty())
+                .map(|subset| (chunk_indices, subset))
+        }))
+    }
 }
 
 /// Chunk grid iterators.
 pub trait ChunkGridTraitsIterators: ChunkGridTraits {
     /// Return a serial iterator over the chunk subsets of the chunk grid.
     fn iter_chunk_subsets(&self) -> Box<dyn Iterator<Item = ArraySubset> + '_> {
-        Box::new(self.iter_chunk_indices().map(|chunk_indices| {
-            self.subset(&chunk_indices)
-                .expect("matching dimensionality")
-                .expect("inbounds chunk")
-        }))
-    }
-
-    /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
-    fn iter_chunk_indices_and_subsets(
-        &self,
-    ) -> Box<dyn Iterator<Item = (ArrayIndicesTinyVec, ArraySubset)> + '_> {
-        Box::new(self.iter_chunk_indices().map(|chunk_indices| {
-            let chunk_subset = self
-                .subset(&chunk_indices)
-                .expect("matching dimensionality")
-                .expect("inbounds chunk");
-            (chunk_indices, chunk_subset)
-        }))
+        Box::new(ChunkGridTraits::iter_chunk_indices_and_subsets(self).map(|(_, subset)| subset))
     }
 }
 

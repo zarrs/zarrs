@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::transpose_codec::permuted_unstructured_chunk_grid;
 use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
@@ -114,16 +115,24 @@ where
             ));
         }
 
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
         let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        let mut chunk_shapes = Vec::with_capacity(self.order_inverse.len());
+        for &encoded_dim in &self.order_inverse {
+            let Some(edge_lengths) = encoded_subchunk_grid
+                .chunk_edge_lengths(encoded_dim)
+                .map_err(|err| CodecError::Other(err.to_string()))?
+            else {
+                return Ok(Some(
+                    permuted_unstructured_chunk_grid(
+                        &encoded_subchunk_grid,
+                        array_shape,
+                        &self.order_inverse,
+                    )
+                    .map_err(|err| CodecError::Other(err.to_string()))?,
+                ));
+            };
+            chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+        }
         Ok(Some(ChunkGrid::new(
             RectilinearChunkGrid::new(array_shape, &chunk_shapes)
                 .map_err(|err| CodecError::Other(err.to_string()))?,
@@ -230,16 +239,24 @@ where
             ));
         }
 
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
         let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        let mut chunk_shapes = Vec::with_capacity(self.order_inverse.len());
+        for &encoded_dim in &self.order_inverse {
+            let Some(edge_lengths) = encoded_subchunk_grid
+                .chunk_edge_lengths(encoded_dim)
+                .map_err(|err| CodecError::Other(err.to_string()))?
+            else {
+                return Ok(Some(
+                    permuted_unstructured_chunk_grid(
+                        &encoded_subchunk_grid,
+                        array_shape,
+                        &self.order_inverse,
+                    )
+                    .map_err(|err| CodecError::Other(err.to_string()))?,
+                ));
+            };
+            chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+        }
         Ok(Some(ChunkGrid::new(
             RectilinearChunkGrid::new(array_shape, &chunk_shapes)
                 .map_err(|err| CodecError::Other(err.to_string()))?,

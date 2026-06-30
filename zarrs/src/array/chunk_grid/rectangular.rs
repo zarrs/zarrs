@@ -203,7 +203,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
     fn chunk_edge_lengths(
         &self,
         dimension: usize,
-    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+    ) -> Result<Option<Vec<NonZeroU64>>, IncompatibleDimensionError> {
         if dimension >= self.dimensionality() {
             return Err(IncompatibleDimensionError::new(
                 dimension,
@@ -211,14 +211,14 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             ));
         }
         if self.array_shape[dimension] == 0 {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
         match &self.chunks[dimension] {
             RectangularChunkGridDimension::Fixed(size) => {
-                Ok(vec![*size; self.grid_shape[dimension] as usize])
+                Ok(Some(vec![*size; self.grid_shape[dimension] as usize]))
             }
             RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                Ok(offsets_sizes.iter().map(|os| os.size).collect())
+                Ok(Some(offsets_sizes.iter().map(|os| os.size).collect()))
             }
         }
     }
@@ -383,7 +383,7 @@ mod tests {
 
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            vec![
+            Some(vec![
                 NonZeroU64::new(5).unwrap(),
                 NonZeroU64::new(5).unwrap(),
                 NonZeroU64::new(5).unwrap(),
@@ -391,17 +391,17 @@ mod tests {
                 NonZeroU64::new(15).unwrap(),
                 NonZeroU64::new(20).unwrap(),
                 NonZeroU64::new(35).unwrap(),
-            ]
+            ])
         );
         assert_eq!(
             grid.chunk_edge_lengths(1).unwrap(),
-            vec![NonZeroU64::new(10).unwrap(); 10usize]
+            Some(vec![NonZeroU64::new(10).unwrap(); 10usize])
         );
 
         let unlimited = RectangularChunkGrid::new(vec![100, 0], &chunk_shapes).unwrap();
         assert_eq!(
             unlimited.chunk_edge_lengths(1).unwrap(),
-            Vec::<NonZeroU64>::new()
+            Some(Vec::<NonZeroU64>::new())
         );
 
         let result = grid.chunk_edge_lengths(2);
