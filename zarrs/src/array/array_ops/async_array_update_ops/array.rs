@@ -167,6 +167,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                 let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
+                if chunk_subset.is_empty() || overlap.is_empty() {
+                    return futures::future::Either::Left(std::future::ready(Ok(())));
+                }
                 let chunk_subset_in_array_subset =
                     overlap.relative_to(&array_subset_start).unwrap();
                 let array_subset_in_chunk_subset =
@@ -178,7 +181,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                         self.data_type(),
                     )
                     .unwrap(); // FIXME: unwrap
-                async move {
+                futures::future::Either::Right(async move {
                     self.async_store_chunk_subset_opt(
                         &chunk_indices,
                         &array_subset_in_chunk_subset,
@@ -186,7 +189,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                         &options,
                     )
                     .await
-                }
+                })
             };
 
             futures::stream::iter(&chunks.indices())

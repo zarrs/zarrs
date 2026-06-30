@@ -155,6 +155,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                    if chunk_subset.is_empty() {
+                        return Ok(());
+                    }
                     let chunk_bytes = chunks_bytes.extract_array_subset(
                         &chunk_subset.relative_to(array_subset.start())?,
                         array_subset.shape(),
