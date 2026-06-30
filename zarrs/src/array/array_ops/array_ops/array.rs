@@ -287,16 +287,10 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
 
     #[allow(clippy::similar_names)]
     pub fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
-        match chunks.end_inc() {
-            Some(end) => {
-                let chunk0 = self.chunk_subset(&chunks.start())?;
-                let chunk1 = self.chunk_subset(&end)?;
-                let start = chunk0.start().to_vec();
-                let end = chunk1.end_exc();
-                ArraySubset::new_with_start_end_exc(start, end).map_err(std::convert::Into::into)
-            }
-            None => Ok(ArraySubset::new_empty(chunks.dimensionality())),
-        }
+        self.chunk_grid()
+            .chunks_subset(chunks)
+            .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunks.start().to_vec()))?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunks.start().to_vec()))
     }
 
     pub fn chunks_subset_bounded(
