@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(array.shape(), &[7, 7]);
         assert_eq!(array.chunk_grid_shape(), &[2, 2]);
         assert_eq!(subchunk_grid.name_v3(), None);
-        assert_eq!(subchunk_grid.array_shape(), &[8, 8]);
+        assert_eq!(subchunk_grid.array_shape(), &[7, 7]);
         assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
         assert_eq!(
             subchunk_grid.subset(&[3, 3])?,

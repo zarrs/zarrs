@@ -65,6 +65,7 @@ fn regular_subchunk_grid(
             .all(|(shape, subchunk)| shape.is_multiple_of(subchunk.get()))
         {
             return Ok(ChunkGrid::new(RepeatChunkGrid::new(
+                chunk_grid.array_shape().to_vec(),
                 chunk_grid.grid_shape().to_vec(),
                 ChunkGrid::new(RegularChunkGrid::new(chunk_shape, subchunk_shape.clone())?),
             )?));
