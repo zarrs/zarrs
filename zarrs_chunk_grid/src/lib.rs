@@ -308,17 +308,6 @@ pub unsafe trait ChunkGridTraits:
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError>;
 
-    /// The shape of the chunk at `chunk_indices`.
-    ///
-    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError>;
-
     /// The origin of the chunk at `chunk_indices`.
     ///
     /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds (its origin would fall entirely past the array extent in at least one dimension).

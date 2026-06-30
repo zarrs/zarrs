@@ -97,16 +97,6 @@ impl RegularChunkGrid {
     pub fn chunk_shape(&self) -> &[NonZeroU64] {
         self.chunk_shape.as_slice()
     }
-
-    /// Return the chunk shape as an [`ArrayShape`] ([`Vec<u64>`]).
-    #[must_use]
-    pub fn chunk_shape_u64(&self) -> ArrayShape {
-        self.chunk_shape
-            .iter()
-            .copied()
-            .map(NonZeroU64::get)
-            .collect::<ArrayShape>()
-    }
 }
 
 unsafe impl ChunkGridTraits for RegularChunkGrid {
@@ -187,23 +177,6 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             }
             let chunk_shape: ChunkShape = self.chunk_shape.iter().map(|s| s.get()).collect();
             Ok(Some(chunk_shape))
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
-
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            if self.array_shape.contains(&0) {
-                return Ok(None);
-            }
-            Ok(Some(self.chunk_shape_u64()))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),

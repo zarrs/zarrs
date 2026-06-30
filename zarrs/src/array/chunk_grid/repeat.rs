@@ -265,35 +265,6 @@ unsafe impl ChunkGridTraits for RepeatChunkGrid {
         self.inner_chunk_grid.chunk_shape(&inner_chunk_indices)
     }
 
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        self.check_dimensionality(chunk_indices.len())?;
-
-        let Some((_repeat_indices, inner_chunk_indices)) =
-            self.repeat_inner_chunk_indices(chunk_indices)
-        else {
-            return Ok(None);
-        };
-        self.inner_chunk_grid.chunk_shape_u64(&inner_chunk_indices)
-    }
-
-    fn chunk_origin(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.check_dimensionality(chunk_indices.len())?;
-
-        let Some((repeat_indices, inner_chunk_indices)) =
-            self.repeat_inner_chunk_indices(chunk_indices)
-        else {
-            return Ok(None);
-        };
-        let inner_origin = self.inner_chunk_grid.chunk_origin(&inner_chunk_indices)?;
-        Ok(inner_origin.map(|inner_origin| self.offset_origin(&repeat_indices, &inner_origin)))
-    }
-
     fn chunk_indices(
         &self,
         array_indices: &[u64],
@@ -320,6 +291,21 @@ unsafe impl ChunkGridTraits for RepeatChunkGrid {
             })
             .collect(),
         ))
+    }
+
+    fn chunk_origin(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        self.check_dimensionality(chunk_indices.len())?;
+
+        let Some((repeat_indices, inner_chunk_indices)) =
+            self.repeat_inner_chunk_indices(chunk_indices)
+        else {
+            return Ok(None);
+        };
+        let inner_origin = self.inner_chunk_grid.chunk_origin(&inner_chunk_indices)?;
+        Ok(inner_origin.map(|inner_origin| self.offset_origin(&repeat_indices, &inner_origin)))
     }
 
     fn chunk_element_indices(

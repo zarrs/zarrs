@@ -252,35 +252,6 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         }
     }
 
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            if self.array_shape.contains(&0) {
-                return Ok(None);
-            }
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
-                    RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                        let chunk_index = usize::try_from(*chunk_index).unwrap();
-                        if chunk_index < offsets_sizes.len() {
-                            Some(offsets_sizes[chunk_index].size.get())
-                        } else {
-                            None
-                        }
-                    }
-                })
-                .collect::<Option<Vec<_>>>())
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
-
     fn chunk_origin(
         &self,
         chunk_indices: &[u64],
@@ -577,10 +548,6 @@ mod tests {
             Some(vec![65, 90])
         );
         assert_eq!(chunk_grid.chunk_shape(&[6, 9]).unwrap(), Some(vec![35, 10]));
-        assert_eq!(
-            chunk_grid.chunk_shape_u64(&[6, 9]).unwrap(),
-            Some(vec![35, 10])
-        );
         assert_eq!(
             chunk_grid.subset(&[6, 9]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[65..100, 90..100]))

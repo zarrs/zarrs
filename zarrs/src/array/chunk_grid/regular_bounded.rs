@@ -170,30 +170,6 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         }
     }
 
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            Ok(izip!(
-                self.chunk_shape.as_slice(),
-                &self.array_shape,
-                chunk_indices
-            )
-            .map(|(chunk_shape, &array_shape, chunk_indices)| {
-                let start = (chunk_indices * chunk_shape.get()).min(array_shape);
-                let end = (start + chunk_shape.get()).min(array_shape);
-                if end > start { Some(end - start) } else { None }
-            })
-            .collect::<Option<Vec<_>>>())
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
-
     fn chunk_origin(
         &self,
         chunk_indices: &[u64],
@@ -393,10 +369,6 @@ mod tests {
                 Some(chunk_shape.iter().map(|n| n.get()).collect())
             );
             assert_eq!(
-                chunk_grid.chunk_shape_u64(&[0, 0, 0]).unwrap(),
-                Some(chunk_shape.iter().map(|u| u.get()).collect())
-            );
-            assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
                 Some(vec![1u64; 3])
             );
@@ -464,7 +436,6 @@ mod tests {
         // Fully out-of-bounds: all dims past grid extent
         assert_eq!(chunk_grid.chunk_origin(&[99, 99]).unwrap(), None);
         assert_eq!(chunk_grid.chunk_shape(&[99, 99]).unwrap(), None);
-        assert_eq!(chunk_grid.chunk_shape_u64(&[99, 99]).unwrap(), None);
         assert_eq!(chunk_grid.subset(&[99, 99]).unwrap(), None);
 
         // Fully out-of-bounds: one dim past grid extent
@@ -483,10 +454,6 @@ mod tests {
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 2]).unwrap(),
             Some(vec![1u64, 2u64])
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape_u64(&[3, 2]).unwrap(),
-            Some(vec![1, 2])
         );
         assert_eq!(
             chunk_grid.subset(&[3, 2]).unwrap(),

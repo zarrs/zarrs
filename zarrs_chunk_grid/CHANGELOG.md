@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Breaking**: Remove `ArraySubset::chunk_shape()`
+- **Brekaing**: Remove `ChunkGridTraits::chunk_shape_u64()`
 
 ## [0.5.1] - 2026-02-08
 
