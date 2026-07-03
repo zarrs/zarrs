@@ -42,26 +42,6 @@ pub(super) fn subchunk_shard_index_and_subset<A: ArrayOps + ?Sized>(
     Ok((location.shard_indices, shard_subset))
 }
 
-pub(super) fn subchunk_shard_index_and_chunk_index<A: ArrayOps + ?Sized>(
-    array: &A,
-    subchunk_grid: &ChunkGrid,
-    subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
-    let location = subchunk_shard_location(array, subchunk_grid, subchunk_indices)?;
-    let first_subchunk_indices = subchunk_grid
-        .chunk_indices(&location.shard_origin)
-        .map_err(|_| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    let chunk_indices: Vec<u64> = subchunk_indices
-        .iter()
-        .zip(first_subchunk_indices)
-        .map(|(subchunk_index, first_subchunk_index)| {
-            subchunk_index.checked_sub(first_subchunk_index)
-        })
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    Ok((location.shard_indices, chunk_indices))
-}
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
@@ -125,10 +105,6 @@ mod tests {
         assert_eq!(
             subchunk_grid.subset(&[2, 3])?,
             Some(ArraySubset::new_with_ranges(&[4..6, 6..8]))
-        );
-        assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[2, 3])?,
-            (vec![1, 1], vec![0, 1])
         );
 
         Ok(())
@@ -216,14 +192,6 @@ mod tests {
             assert_eq!(
                 subchunk_grid.subset(&[2])?,
                 Some(ArraySubset::new_with_ranges(&[6..9]))
-            );
-            assert_eq!(
-                subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2])?,
-                (vec![1], vec![0])
-            );
-            assert_eq!(
-                subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[4])?,
-                (vec![1], vec![2])
             );
         }
 

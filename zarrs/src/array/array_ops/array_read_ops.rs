@@ -260,20 +260,6 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         .collect()
     }
 
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// Only supported for arrays where the array-to-bytes codec is `sharding_indexed` and there
-    /// are no array-to-array or bytes-to-bytes codecs.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, is not exclusively
-    /// sharded, the subchunk indices are invalid, decoding the shard index fails, or there is an
-    /// underlying store error.
-    fn retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
-
     /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
     ///
     /// # Errors

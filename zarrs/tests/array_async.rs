@@ -437,13 +437,6 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
             .async_retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())
             .await?;
         assert_eq!(compare, test);
-
-        assert!(
-            array
-                .async_retrieve_encoded_subchunk(&[0, 0])
-                .await?
-                .is_some()
-        );
     } else {
         assert!(array.subchunk_grid().is_none());
         let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
@@ -457,11 +450,6 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
             array
                 .async_retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default())
                 .await,
-            Err(ArrayError::MissingSubchunkGrid)
-        ));
-
-        assert!(matches!(
-            array.async_retrieve_encoded_subchunk(&[0, 0]).await,
             Err(ArrayError::MissingSubchunkGrid)
         ));
     }
@@ -492,43 +480,4 @@ async fn array_async_read_subchunks_sharded() -> Result<(), Box<dyn std::error::
 #[cfg_attr(miri, ignore)]
 async fn array_async_read_subchunks_unsharded() -> Result<(), Box<dyn std::error::Error>> {
     array_async_read_subchunks(false).await
-}
-
-#[tokio::test]
-#[cfg_attr(miri, ignore)]
-async fn array_async_read_encoded_subchunk_missing() -> Result<(), Box<dyn std::error::Error>> {
-    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
-    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
-    builder.subchunk_shape(vec![2, 2]);
-    let array = builder.build(store, "/array")?;
-
-    assert_eq!(array.async_retrieve_encoded_subchunk(&[0, 0]).await?, None);
-    Ok(())
-}
-
-#[tokio::test]
-#[cfg_attr(miri, ignore)]
-async fn array_async_read_encoded_subchunk_outer_codec_unsupported()
--> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::array::codec::ShardingCodecBuilder;
-
-    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
-    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
-    builder
-        .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
-            &[1, 0],
-        )?))])
-        .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
-                .build(),
-        ));
-    let array = builder.build(store, "/array")?;
-
-    assert!(
-        array
-            .async_retrieve_encoded_subchunk(&[0, 0])
-            .await
-            .is_err()
-    );
-    Ok(())
 }

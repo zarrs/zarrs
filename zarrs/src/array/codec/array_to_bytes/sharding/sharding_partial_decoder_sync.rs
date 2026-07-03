@@ -25,7 +25,7 @@ use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Partial decoder for the sharding codec.
-pub(crate) struct ShardingPartialDecoder {
+pub struct ShardingPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: ChunkShape,
     subchunk_shape: ChunkShape,
@@ -38,7 +38,7 @@ pub(crate) struct ShardingPartialDecoder {
 impl ShardingPartialDecoder {
     /// Create a new partial decoder for the sharding codec.
     #[expect(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
@@ -70,7 +70,7 @@ impl ShardingPartialDecoder {
     /// Retrieve the byte range of an encoded subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) fn subchunk_byte_range(
+    pub fn subchunk_byte_range(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
@@ -85,7 +85,7 @@ impl ShardingPartialDecoder {
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) fn retrieve_subchunk_encoded(
+    pub fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {

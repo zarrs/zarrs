@@ -138,13 +138,6 @@ pub trait AsyncArrayReadOps: ArrayOps {
         options: &CodecOptions,
     ) -> Result<Vec<Option<Bytes>>, StorageError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_encoded_subchunk`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
-
     /// Async variant of [`ArrayReadOps::retrieve_subchunk_opt`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_subchunk_opt<T: FromArrayBytes>(

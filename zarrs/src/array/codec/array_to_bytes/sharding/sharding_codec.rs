@@ -142,7 +142,7 @@ pub struct ShardingCodec {
 
 /// A `sharding` codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
-pub(crate) struct ShardingCodecBound {
+pub struct ShardingCodecBound {
     pub(crate) subchunk_shape: ChunkShape,
     pub(crate) inner_codecs: Arc<CodecChainBound>,
     pub(crate) index_codecs: Arc<CodecChainBound>,
@@ -786,6 +786,36 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 }
 
 impl ShardingCodecBound {
+    /// Return the subchunk shape.
+    #[must_use]
+    pub fn subchunk_shape(&self) -> &ChunkShape {
+        &self.subchunk_shape
+    }
+
+    /// Return the codecs used to encode and decode subchunks.
+    #[must_use]
+    pub fn inner_codecs(&self) -> &Arc<CodecChainBound> {
+        &self.inner_codecs
+    }
+
+    /// Return the codecs used to encode and decode the shard index.
+    #[must_use]
+    pub fn index_codecs(&self) -> &Arc<CodecChainBound> {
+        &self.index_codecs
+    }
+
+    /// Return the shard index location.
+    #[must_use]
+    pub fn index_location(&self) -> ShardingIndexLocation {
+        self.index_location
+    }
+
+    /// Return the runtime sharding options.
+    #[must_use]
+    pub fn options(&self) -> &ShardingCodecOptions {
+        &self.options
+    }
+
     /// Convert a linearised chunk index to an array subset.
     /// Returns [`None`] if `chunk_index` is out-of-bounds of `chunks_per_shard`.
     fn chunk_index_to_subset(

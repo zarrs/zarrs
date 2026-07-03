@@ -8,6 +8,7 @@ use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
     ChunkCachePartialDecoderLruChunkLimit,
 };
+use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
     ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
@@ -16,6 +17,8 @@ use zarrs::array::{
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
+use zarrs::storage::{ReadableStorageTraits, StorageHandle};
+use zarrs_codec::StoragePartialDecoder;
 
 type TestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 type TestResult = Result<(), Box<dyn Error>>;
@@ -251,7 +254,6 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         array.retrieve_encoded_chunks_opt(&chunks, &options)?.len(),
         chunks.num_elements_usize()
     );
-    assert!(array.retrieve_encoded_subchunk(&[1, 1])?.is_some());
     let decoder = array.partial_decoder(&[0, 0])?;
     assert!(decoder.exists()?);
     assert_eq!(
@@ -262,6 +264,64 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         &[7, 8, 12, 13]
     );
     assert!(array.partial_decoder_opt(&[0, 0], &options)?.exists()?);
+    Ok(())
+}
+
+fn sharding_partial_decoder<A: ArrayReadOps>(
+    array: &A,
+) -> Result<ShardingPartialDecoder, Box<dyn Error>>
+where
+    A::Storage: ReadableStorageTraits + 'static,
+{
+    let codecs_bound = array.codecs_bound();
+    let sharding_codec = codecs_bound
+        .array_to_bytes_codec()
+        .as_any()
+        .downcast_ref::<ShardingCodecBound>()
+        .ok_or("array-to-bytes codec is not sharding")?;
+    let storage_handle = Arc::new(StorageHandle::new(array.storage()));
+    let storage_transformer = array
+        .storage_transformers()
+        .create_readable_transformer(storage_handle)?;
+    let input_handle = Arc::new(StoragePartialDecoder::new(
+        storage_transformer,
+        array.chunk_key(&[0, 0]),
+    ));
+
+    Ok(ShardingPartialDecoder::new(
+        input_handle,
+        array.chunk_shape(&[0, 0])?,
+        sharding_codec.subchunk_shape().clone(),
+        sharding_codec.inner_codecs().clone(),
+        sharding_codec.index_codecs(),
+        sharding_codec.index_location(),
+        array.codec_options(),
+        sharding_codec.options().clone(),
+    )?)
+}
+
+#[test]
+fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
+    let (array, _) = fixture();
+    populate(array.as_ref())?;
+
+    let decoder = sharding_partial_decoder(array.as_ref())?;
+
+    assert!(decoder.retrieve_subchunk_encoded(&[1, 1])?.is_some());
+    assert!(decoder.retrieve_subchunk_encoded(&[3, 3]).is_err());
+    Ok(())
+}
+
+#[test]
+fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
+    let (array, _) = fixture();
+
+    let decoder = sharding_partial_decoder(array.as_ref())?;
+    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0])?, None);
+
+    array.store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])?;
+    let decoder = sharding_partial_decoder(array.as_ref())?;
+    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1])?, None);
     Ok(())
 }
 

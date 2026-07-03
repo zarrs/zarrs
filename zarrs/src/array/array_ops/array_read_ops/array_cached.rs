@@ -423,14 +423,6 @@ where
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError> {
-        self.array().retrieve_encoded_subchunk(subchunk_indices)
-    }
-
-    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
@@ -697,20 +689,5 @@ mod tests {
     fn custom_policy_gets_reads_from_its_value_type() {
         test_cache(CustomDecodedCache::default());
         test_cache_sharded(CustomDecodedCache::default());
-    }
-
-    #[test]
-    fn encoded_subchunk_bypasses_cache() {
-        let store = Arc::new(MemoryStore::default());
-        let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
-        builder.subchunk_shape(vec![2, 2]);
-        let array = builder.build_arc(store, "/").unwrap();
-        array
-            .store_array_subset(&[0..2, 0..2], &[1u16, 2, 3, 4])
-            .unwrap();
-
-        let cached = ArrayCached::new(array, CustomDecodedCache::default());
-        assert!(cached.retrieve_encoded_subchunk(&[0, 0]).unwrap().is_some());
-        assert!(cached.cache().is_empty());
     }
 }

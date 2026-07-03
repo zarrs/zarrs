@@ -19,8 +19,8 @@ use super::Array;
 /// #### Encoded Chunk Retrieval
 ///
 /// Methods that retrieve encoded chunk bytes (`retrieve_encoded_chunk`,
-/// `retrieve_encoded_chunks`, `retrieve_encoded_subchunk`) bypass the cache
-/// and delegate directly to the inner [`Array`].
+/// `retrieve_encoded_chunks`) bypass the cache and delegate directly to the
+/// inner [`Array`].
 ///
 /// ### Write Operations
 ///
