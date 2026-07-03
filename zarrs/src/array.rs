@@ -70,7 +70,7 @@ pub use zarrs_codec::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
-    RecommendedConcurrency, StoragePartialDecoder, SubchunkGrid, UnboundArrayToArrayCodecTraits,
+    RecommendedConcurrency, SubchunkGrid, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]

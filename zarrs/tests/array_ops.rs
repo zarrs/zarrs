@@ -18,7 +18,6 @@ use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{ReadableStorageTraits, StorageHandle};
-use zarrs_codec::StoragePartialDecoder;
 
 type TestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 type TestResult = Result<(), Box<dyn Error>>;
@@ -283,10 +282,7 @@ where
     let storage_transformer = array
         .storage_transformers()
         .create_readable_transformer(storage_handle)?;
-    let input_handle = Arc::new(StoragePartialDecoder::new(
-        storage_transformer,
-        array.chunk_key(&[0, 0]),
-    ));
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0])));
 
     Ok(ShardingPartialDecoder::new(
         input_handle,
