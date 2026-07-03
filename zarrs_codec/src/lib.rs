@@ -62,7 +62,7 @@ use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, ChunkShape, Configuration};
-use zarrs_storage::byte_range::{ByteRangeIterator, InvalidByteRangeError, extract_byte_ranges};
+use zarrs_storage::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 #[cfg(feature = "async")]
 use zarrs_storage::{AsyncReadableStorage, AsyncReadableWritableStorage};
 use zarrs_storage::{
@@ -70,7 +70,7 @@ use zarrs_storage::{
 };
 
 use std::borrow::Cow;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock};
 
 use zarrs_chunk_grid::{
     ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, Indexer, IndexerError,
