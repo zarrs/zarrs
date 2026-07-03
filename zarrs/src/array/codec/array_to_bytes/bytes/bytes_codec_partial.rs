@@ -194,10 +194,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: BytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
     }
@@ -281,10 +277,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: AsyncBytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase().await
     }

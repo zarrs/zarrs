@@ -22,10 +22,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for ReshapeCodecPartial<T>
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_handle.erase()
     }
@@ -72,10 +68,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for ReshapeCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_handle.erase().await
     }

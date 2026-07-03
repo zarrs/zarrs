@@ -7,9 +7,7 @@ use super::super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::*;
 use super::AsyncArrayUpdateOps;
 use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
-use zarrs_codec::{
-    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits, StoragePartialEncoder,
-};
+use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
 #[cfg(feature = "async")]
@@ -247,11 +245,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             .storage_transformers()
             .create_async_readable_writable_transformer(storage_handle)
             .await?;
-        let input_output_handle = Arc::new(StoragePartialEncoder::new(
-            storage_transformer,
-            self.chunk_key(chunk_indices),
-        ));
-
+        let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
         Ok(self
             .codecs_bound()
             .async_partial_encoder(input_output_handle, &chunk_shape, options)

@@ -9,9 +9,7 @@ use super::super::*;
 use super::ArrayUpdateOps;
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec, ArraySubsetTraits, update_array_bytes};
 use crate::iter_concurrent_limit;
-use zarrs_codec::{
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits, StoragePartialEncoder,
-};
+use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
 #[inherent]
@@ -224,13 +222,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         let storage_transformer = self
             .storage_transformers()
             .create_readable_writable_transformer(storage_handle)?;
-        let input_output_handle = Arc::new(StoragePartialEncoder::new(
-            storage_transformer,
-            self.chunk_key(chunk_indices),
-        ));
-
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
         Ok(self.codecs_bound().partial_encoder(
-            input_output_handle,
+            input_handle,
             &self.chunk_shape(chunk_indices)?,
             options,
         )?)

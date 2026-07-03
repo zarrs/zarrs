@@ -1,10 +1,12 @@
 use std::any::Any;
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
-use zarrs_storage::{OffsetBytesIterator, StorageError};
+use zarrs_storage::{
+    AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, OffsetBytesIterator,
+    StorageError, StoreKey,
+};
 
 use crate::{ArrayBytesRaw, CodecError, CodecOptions};
 
@@ -79,9 +81,6 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 pub trait AsyncBytesPartialEncoderTraits:
     AsyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
-    /// Return the encoder as an [`Arc<AsyncBytesPartialDecoderTraits>`].
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits>;
-
     /// Erase the chunk.
     ///
     /// # Errors
@@ -174,5 +173,70 @@ impl AsyncBytesPartialDecoderTraits for Vec<u8> {
 
     fn supports_partial_decode(&self) -> bool {
         true
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TStorage: AsyncReadableStorageTraits + 'static> AsyncBytesPartialDecoderTraits
+    for (TStorage, StoreKey)
+{
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.0.size_key(&self.1).await?.is_some())
+    }
+
+    fn size_held(&self) -> usize {
+        0
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
+        _options: &CodecOptions,
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+        let bytes = self.0.get_partial_many(&self.1, decoded_regions).await?;
+        Ok(if let Some(bytes) = bytes {
+            use futures::{StreamExt, TryStreamExt};
+            Some(
+                bytes
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
+                    .try_collect()
+                    .await?,
+            )
+        } else {
+            None
+        })
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.0.supports_get_partial()
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEncoderTraits
+    for (TStorage, StoreKey)
+{
+    async fn erase(&self) -> Result<(), CodecError> {
+        Ok(self.0.erase(&self.1).await?)
+    }
+
+    async fn partial_encode_many<'a>(
+        &'a self,
+        offset_values: OffsetBytesIterator<'a, ArrayBytesRaw<'_>>,
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let offset_values = offset_values
+            .into_iter()
+            .map(|(offset, bytes)| (offset, bytes.into_owned().into()));
+        Ok(self
+            .0
+            .set_partial_many(&self.1, Box::new(offset_values))
+            .await?)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.0.supports_set_partial()
     }
 }
