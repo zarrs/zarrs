@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
+- Implement `Clone` for `ArrayBuilder`
 - Add `ArrayOps::subchunk_grid_kind` and `ArrayReadOps::local_subchunk_grid` for chunk-local subchunk grids
 
 ### Changed
