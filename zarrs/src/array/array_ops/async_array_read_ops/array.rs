@@ -22,7 +22,7 @@ use crate::array::codec::array_to_bytes::sharding::{
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    AsyncStoragePartialDecoder, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
+    CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::{Bytes, StorageHandle};
 
@@ -115,10 +115,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 .storage_transformers()
                 .create_async_readable_transformer(storage_handle)
                 .await?;
-            let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
-                storage_transformer,
-                self.chunk_key(chunk_indices),
-            ));
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
             let bytes = self
                 .codecs_bound()
                 .async_partial_decoder(input_handle, &chunk_shape, options)
@@ -370,10 +367,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .storage_transformers()
             .create_async_readable_transformer(storage_handle)
             .await?;
-        let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
-            storage_transformer,
-            self.chunk_key(&shard_indices),
-        ));
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(&shard_indices)));
         let partial_decoder = AsyncShardingPartialDecoder::new(
             input_handle,
             self.chunk_shape(&shard_indices)?,
@@ -513,10 +507,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .storage_transformers()
             .create_async_readable_transformer(storage_handle)
             .await?;
-        let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
-            storage_transformer,
-            self.chunk_key(chunk_indices),
-        ));
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
         Ok(self
             .codecs_bound()
             .async_partial_decoder(input_handle, &self.chunk_shape(chunk_indices)?, options)
@@ -826,11 +817,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .storage_transformers()
                 .create_async_readable_transformer(storage_handle)
                 .await?;
-            let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
-                storage_transformer,
-                self.chunk_key(chunk_indices),
-            ));
-
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
             self.codecs_bound()
                 .async_partial_decoder(input_handle, &chunk_shape, options)
                 .await?

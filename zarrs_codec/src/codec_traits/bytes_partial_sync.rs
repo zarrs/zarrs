@@ -1,12 +1,15 @@
 use std::any::Any;
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::{
     ByteRange, ByteRangeIterator, InvalidByteRangeError, extract_byte_ranges,
 };
-use zarrs_storage::{OffsetBytesIterator, StorageError};
+use zarrs_storage::{
+    OffsetBytesIterator, ReadableStorageTraits, ReadableWritableStorageTraits, StorageError,
+    StoreKey,
+};
 
 use crate::{ArrayBytesRaw, CodecError, CodecOptions};
 
@@ -72,9 +75,6 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 pub trait BytesPartialEncoderTraits:
     BytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
-    /// Return the encoder as an [`Arc<BytesPartialDecoderTraits>`].
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits>;
-
     /// Erase the chunk.
     ///
     /// # Errors
@@ -201,10 +201,6 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
 }
 
 impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         *self.lock().unwrap() = None;
         Ok(())
@@ -231,5 +227,60 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
 
     fn supports_partial_encode(&self) -> bool {
         true
+    }
+}
+
+impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (TStorage, StoreKey) {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.0.size_key(&self.1)?.is_some())
+    }
+
+    fn size_held(&self) -> usize {
+        0
+    }
+
+    fn partial_decode_many(
+        &self,
+        decoded_regions: ByteRangeIterator,
+        _options: &CodecOptions,
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+        let results = self.0.get_partial_many(&self.1, decoded_regions)?;
+        if let Some(results) = results {
+            Ok(Some(
+                results
+                    .into_iter()
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.0.supports_get_partial()
+    }
+}
+
+impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTraits
+    for (Tstorage, StoreKey)
+{
+    fn erase(&self) -> Result<(), CodecError> {
+        Ok(self.0.erase(&self.1)?)
+    }
+
+    fn partial_encode_many(
+        &self,
+        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let offset_values = offset_values
+            .into_iter()
+            .map(|(offset, bytes)| (offset, bytes.into_owned().into()));
+        Ok(self.0.set_partial_many(&self.1, Box::new(offset_values))?)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.0.supports_set_partial()
     }
 }

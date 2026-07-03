@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::sync::Arc;
 
 use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::DataType;
@@ -82,9 +81,6 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 pub trait AsyncArrayPartialEncoderTraits:
     AsyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
-    /// Return the encoder as an [`Arc<AsyncArrayPartialDecoderTraits>`].
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits>;
-
     /// Erase the chunk.
     ///
     /// # Errors
