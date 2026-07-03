@@ -1259,9 +1259,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(Some(decoded_chunk_grid.clone()))
-    }
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
 
     /// Map a subchunk grid from the encoded representation to the decoded representation.
     ///

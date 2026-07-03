@@ -510,6 +510,13 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         &self.encoded_fill_value
     }
 
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        Ok(Some(decoded_chunk_grid.clone()))
+    }
+
     fn decoded_subchunk_grid(
         &self,
         _decoded_chunk_grid: &ChunkGrid,

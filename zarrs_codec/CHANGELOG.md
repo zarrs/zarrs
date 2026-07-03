@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
-  - **Breaking**: Add `data_type()`, `fill_value()`, and `decoded_subchunk_grid()` methods
+  - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid()` methods
   - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
   - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
 
