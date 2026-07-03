@@ -1,6 +1,5 @@
 use super::*;
 use crate::array::ArrayBytes;
-use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -273,9 +272,10 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         let subchunk_grid = self
             .subchunk_grid()
             .ok_or(ArrayError::MissingSubchunkGrid)?;
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, subchunk_grid, subchunk_indices)?;
-        self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
+        let array_subset = subchunk_grid
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+        self.retrieve_array_subset_opt(&array_subset, options)
     }
 
     /// Read and decode the subchunks at `subchunks` with explicit codec options.

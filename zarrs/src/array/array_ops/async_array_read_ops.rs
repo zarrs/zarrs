@@ -144,7 +144,16 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+        self.async_retrieve_array_subset_opt(&array_subset, options)
+            .await
+    }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunks_opt`].
     #[allow(clippy::missing_errors_doc)]
@@ -152,7 +161,19 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
+        self.async_retrieve_array_subset_opt(&array_subset, options)
+            .await
+    }
 
     /// Async variant of [`ArrayReadOps::retrieve_array_subset_into`].
     #[allow(clippy::missing_errors_doc)]

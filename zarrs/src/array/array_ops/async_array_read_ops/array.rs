@@ -13,7 +13,6 @@ use super::super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::super::*;
 use super::AsyncArrayReadOps;
-use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
@@ -341,33 +340,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let subchunk_grid = self
-            .subchunk_grid()
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, subchunk_grid, subchunk_indices)?;
-        self.async_retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
-            .await
-    }
+    ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let subchunk_grid = self
-            .subchunk_grid()
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
-        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
-            ArrayError::InvalidArraySubset(
-                subchunks.to_array_subset(),
-                subchunk_grid.grid_shape().to_vec(),
-            )
-        })?;
-        self.async_retrieve_array_subset_opt(&array_subset, options)
-            .await
-    }
+    ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_array_subset_into_opt(
         &self,

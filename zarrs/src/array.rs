@@ -42,7 +42,6 @@ pub mod storage_transformer;
 
 #[cfg(feature = "dlpack")]
 mod array_dlpack_ext;
-mod array_sharded_ext;
 
 use std::borrow::Cow;
 use std::num::NonZeroU64;
