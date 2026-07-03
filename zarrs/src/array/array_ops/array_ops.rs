@@ -71,7 +71,7 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Return the subchunk shape if the array has a regular subchunk grid.
+    /// Return the subchunk shape if the subchunk grid has a regular chunk shape.
     ///
     /// Returns [`None`] if the array does not expose subchunks, or if the
     /// resolved subchunk grid has varying edge lengths.
