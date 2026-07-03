@@ -185,10 +185,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
     }
@@ -307,10 +303,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits
 where
     T: BytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
     }
@@ -424,10 +416,6 @@ impl<T: ?Sized> BytesPartialEncoderTraits
 where
     T: BytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
     }
@@ -542,10 +530,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase().await
     }
@@ -672,10 +656,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits
 where
     T: AsyncBytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase().await
     }
@@ -796,10 +776,6 @@ impl<T: ?Sized> AsyncBytesPartialEncoderTraits
 where
     T: AsyncBytesPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase().await
     }

@@ -19,8 +19,8 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError, CodecOptions,
-    update_array_bytes,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+    CodecOptions, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -57,7 +57,7 @@ impl ShardingPartialEncoder {
 
         // Decode the index
         let shard_index = super::decode_shard_index_partial_decoder(
-            input_output_handle.clone().into_dyn_decoder().as_ref(),
+            input_output_handle.as_ref(),
             &index_codecs,
             index_location,
             &shard_shape,
@@ -108,8 +108,9 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
+        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
         super::sharding_partial_decoder_sync::partial_decode(
-            &self.input_output_handle.clone().into_dyn_decoder(),
+            &handle,
             &self.shard_shape,
             &self.subchunk_shape,
             &self.inner_codecs,
@@ -125,10 +126,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 }
 
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
     }

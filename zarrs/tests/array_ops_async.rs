@@ -15,7 +15,6 @@ use zarrs::array::{
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
-use zarrs_codec::AsyncStoragePartialDecoder;
 use zarrs_object_store::AsyncObjectStore;
 
 type AsyncStore = AsyncObjectStore<InMemory>;
@@ -210,10 +209,7 @@ where
         .storage_transformers()
         .create_async_readable_transformer(storage_handle)
         .await?;
-    let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
-        storage_transformer,
-        array.chunk_key(&[0, 0]),
-    ));
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0])));
 
     Ok(AsyncShardingPartialDecoder::new(
         input_handle,
