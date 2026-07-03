@@ -62,10 +62,9 @@ use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, ChunkShape, Configuration};
-use zarrs_storage::byte_range::{ByteRangeIterator, InvalidByteRangeError};
-use zarrs_storage::{ReadableStorage, ReadableStorageTraits, StorageError, StoreKey};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::InvalidByteRangeError;
 
-use std::borrow::Cow;
 use std::sync::{Arc, LazyLock};
 
 use zarrs_chunk_grid::{
@@ -373,49 +372,6 @@ impl ExtensionName for Codec {
             Self::ArrayToBytes(codec) => codec.name(version),
             Self::BytesToBytes(codec) => codec.name(version),
         }
-    }
-}
-
-/// A [`ReadableStorage`] store value partial decoder.
-pub struct StoragePartialDecoder {
-    storage: ReadableStorage,
-    key: StoreKey,
-}
-
-impl StoragePartialDecoder {
-    /// Create a new storage partial decoder.
-    pub fn new(storage: ReadableStorage, key: StoreKey) -> Self {
-        Self { storage, key }
-    }
-}
-
-impl BytesPartialDecoderTraits for StoragePartialDecoder {
-    fn exists(&self) -> Result<bool, StorageError> {
-        Ok(self.storage.size_key(&self.key)?.is_some())
-    }
-
-    fn size_held(&self) -> usize {
-        0
-    }
-
-    fn partial_decode_many(
-        &self,
-        decoded_regions: ByteRangeIterator,
-        _options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
-        let bytes = self.storage.get_partial_many(&self.key, decoded_regions)?;
-        if let Some(bytes) = bytes {
-            let bytes = bytes
-                .map(|b| Ok::<_, StorageError>(Cow::Owned(b?.into())))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Some(bytes))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.storage.supports_get_partial()
     }
 }
 

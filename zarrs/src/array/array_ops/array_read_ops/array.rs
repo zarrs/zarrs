@@ -19,8 +19,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, StoragePartialDecoder,
-    copy_fill_value_into,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, copy_fill_value_into,
 };
 use zarrs_storage::StorageHandle;
 
@@ -117,11 +116,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             let storage_transformer = self
                 .storage_transformers()
                 .create_readable_transformer(storage_handle)?;
-            let input_handle = Arc::new(StoragePartialDecoder::new(
-                storage_transformer,
-                self.chunk_key(chunk_indices),
-            ));
-
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode(chunk_subset, options)?
@@ -155,10 +150,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             let storage_transformer = self
                 .storage_transformers()
                 .create_readable_transformer(storage_handle)?;
-            let input_handle = Arc::new(StoragePartialDecoder::new(
-                storage_transformer,
-                self.chunk_key(chunk_indices),
-            ));
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode_into(chunk_subset, output_target, options)?;
@@ -328,11 +320,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         let storage_transformer = self
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
-        let input_handle = Arc::new(StoragePartialDecoder::new(
-            storage_transformer,
-            self.chunk_key(&shard_indices),
-        ));
-
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(&shard_indices)));
         let partial_decoder = ShardingPartialDecoder::new(
             input_handle,
             self.chunk_shape(&shard_indices)?,
@@ -445,10 +433,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         let storage_transformer = self
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
-        let input_handle = Arc::new(StoragePartialDecoder::new(
-            storage_transformer,
-            self.chunk_key(chunk_indices),
-        ));
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
         Ok(self.codecs_bound().partial_decoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,
