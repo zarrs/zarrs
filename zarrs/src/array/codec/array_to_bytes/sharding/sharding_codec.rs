@@ -19,9 +19,7 @@ use super::{
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
-use crate::array::chunk_grid::{
-    ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid, edge_lengths_to_chunk_edge_lengths,
-};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
@@ -96,7 +94,7 @@ fn regular_subchunk_grid(
             .iter()
             .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))
             .ok_or_else(|| ChunkGridCreateError::new("subchunk grid shape overflow"))?;
-        let edge_lengths = edge_lengths_to_chunk_edge_lengths(&global_edge_lengths);
+        let edge_lengths = ChunkEdgeLengths::encode(&global_edge_lengths);
         if !matches!(edge_lengths, ChunkEdgeLengths::Scalar(_)) {
             needs_rectilinear = true;
         }

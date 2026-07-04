@@ -6,9 +6,7 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::chunk_grid::{
-    ChunkEdgeLengths, RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths,
-};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -319,7 +317,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
                 }
                 let edge_lengths =
                     vec![*granularity; (shape.get() / granularity.get()) as usize];
-                Some(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                Some(ChunkEdgeLengths::encode(&edge_lengths))
             })
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| {

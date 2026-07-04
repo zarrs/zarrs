@@ -7,7 +7,7 @@ use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
-use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -201,7 +201,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             .iter()
             .map(|&decoded_dim| {
                 let edge_lengths = decoded_chunk_grid.chunk_edge_lengths(decoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
 
@@ -229,7 +229,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             .iter()
             .map(|&encoded_dim| {
                 let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
 

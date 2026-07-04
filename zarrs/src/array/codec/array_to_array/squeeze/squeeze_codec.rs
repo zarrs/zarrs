@@ -4,9 +4,7 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::chunk_grid::{
-    ChunkEdgeLengths, RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths,
-};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -199,7 +197,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                     .chunk_edge_lengths(decoded_dim)
                     .map_err(ChunkGridCreateError::from)?;
                 array_shape.push(decoded_chunk_grid.array_shape()[decoded_dim]);
-                chunk_shapes.push(edge_lengths_to_chunk_edge_lengths(&edge_lengths));
+                chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
             }
         }
 
@@ -258,7 +256,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                         .chunk_edge_lengths(encoded_dim)
                         .map_err(ChunkGridCreateError::from)?;
                     encoded_dim += 1;
-                    Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                    Ok(ChunkEdgeLengths::encode(&edge_lengths))
                 }
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;

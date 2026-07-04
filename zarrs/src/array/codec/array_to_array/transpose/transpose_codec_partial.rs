@@ -4,7 +4,7 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::chunk_grid::{RectilinearChunkGrid, edge_lengths_to_chunk_edge_lengths};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
@@ -120,7 +120,7 @@ where
             .iter()
             .map(|&encoded_dim| {
                 let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
             })
             .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
             .map_err(|err| CodecError::Other(err.to_string()))?;
@@ -232,7 +232,7 @@ where
             .iter()
             .map(|&encoded_dim| {
                 let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(edge_lengths_to_chunk_edge_lengths(&edge_lengths))
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
             })
             .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
             .map_err(|err| CodecError::Other(err.to_string()))?;
