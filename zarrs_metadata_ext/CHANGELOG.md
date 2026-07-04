@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.4...HEAD)
 
 ### Added
-- Add helpers for expanding and compressing rectilinear chunk edge lengths
+- Add `ChunkEdgeLengths::decpde()` and `emcpde()` for expanding and compressing rectilinear chunk edge lengths
 
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.4) - 2026-05-16
 
