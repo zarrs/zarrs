@@ -48,37 +48,39 @@ pub enum ChunkEdgeLengths {
     Varying(Vec<RunLengthElement>),
 }
 
-/// Expand run-length encoded chunk edge lengths.
-///
-/// # Panics
-/// Panics if a run-length count does not fit into `usize`.
-#[must_use]
-pub fn decode_rle_edge_lengths(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
-    let mut result = Vec::new();
-    for element in elements {
-        match element {
-            RunLengthElement::Single(value) => result.push(*value),
-            RunLengthElement::Repeated([value, count]) => {
-                let count = usize::try_from(count.get()).unwrap();
-                result.reserve(count);
-                for _ in 0..count {
-                    result.push(*value);
+impl ChunkEdgeLengths {
+    /// Expand run-length encoded chunk edge lengths.
+    ///
+    /// # Panics
+    /// Panics if a run-length count does not fit into `usize`.
+    #[must_use]
+    pub fn decode(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
+        let mut result = Vec::new();
+        for element in elements {
+            match element {
+                RunLengthElement::Single(value) => result.push(*value),
+                RunLengthElement::Repeated([value, count]) => {
+                    let count = usize::try_from(count.get()).unwrap();
+                    result.reserve(count);
+                    for _ in 0..count {
+                        result.push(*value);
+                    }
                 }
             }
         }
+        result
     }
-    result
-}
 
-/// Encode explicit chunk edge lengths as scalar or run-length encoded metadata.
-#[must_use]
-pub fn encode_rle_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
-    if let Some(first) = edge_lengths.first().copied() {
-        if edge_lengths.iter().all(|edge_length| *edge_length == first) {
-            return ChunkEdgeLengths::Scalar(first);
+    /// Encode explicit chunk edge lengths as scalar or run-length encoded metadata.
+    #[must_use]
+    pub fn encode(edge_lengths: &[NonZeroU64]) -> Self {
+        if let Some(first) = edge_lengths.first().copied() {
+            if edge_lengths.iter().all(|edge_length| *edge_length == first) {
+                return Self::Scalar(first);
+            }
         }
+        Self::Varying(compress_run_length(edge_lengths))
     }
-    ChunkEdgeLengths::Varying(compress_run_length(edge_lengths))
 }
 
 /// Compress a sequence of chunk edge lengths into run-length encoded form.
@@ -174,21 +176,21 @@ mod tests {
     }
 
     #[test]
-    fn encode_rle_edge_lengths_scalar() {
+    fn encode_scalar() {
         let edge_lengths = [NonZeroU64::new(4).unwrap(); 3];
         assert!(matches!(
-            encode_rle_edge_lengths(&edge_lengths),
+            ChunkEdgeLengths::encode(&edge_lengths),
             ChunkEdgeLengths::Scalar(value) if value.get() == 4
         ));
     }
 
     #[test]
-    fn encode_rle_edge_lengths_varying() {
+    fn encode_varying() {
         let edge_lengths = [5, 5, 15, 15, 20]
             .into_iter()
             .map(|value| NonZeroU64::new(value).unwrap())
             .collect::<Vec<_>>();
-        let chunk_edge_lengths = encode_rle_edge_lengths(&edge_lengths);
+        let chunk_edge_lengths = ChunkEdgeLengths::encode(&edge_lengths);
         let ChunkEdgeLengths::Varying(elements) = chunk_edge_lengths else {
             panic!("expected varying chunk edge lengths");
         };
@@ -206,6 +208,6 @@ mod tests {
                 RunLengthElement::Single(NonZeroU64::new(20).unwrap()),
             ]
         );
-        assert_eq!(decode_rle_edge_lengths(&elements), edge_lengths);
+        assert_eq!(ChunkEdgeLengths::decode(&elements), edge_lengths);
     }
 }
