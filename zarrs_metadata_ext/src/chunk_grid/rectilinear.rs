@@ -53,7 +53,7 @@ pub enum ChunkEdgeLengths {
 /// # Panics
 /// Panics if a run-length count does not fit into `usize`.
 #[must_use]
-pub fn expand_varying_chunks(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
+pub fn decode_rle_edge_lengths(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
     let mut result = Vec::new();
     for element in elements {
         match element {
@@ -70,9 +70,9 @@ pub fn expand_varying_chunks(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
     result
 }
 
-/// Convert explicit chunk edge lengths to scalar or run-length encoded metadata.
+/// Encode explicit chunk edge lengths as scalar or run-length encoded metadata.
 #[must_use]
-pub fn edge_lengths_to_chunk_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
+pub fn encode_rle_edge_lengths(edge_lengths: &[NonZeroU64]) -> ChunkEdgeLengths {
     if let Some(first) = edge_lengths.first().copied() {
         if edge_lengths.iter().all(|edge_length| *edge_length == first) {
             return ChunkEdgeLengths::Scalar(first);
@@ -174,21 +174,21 @@ mod tests {
     }
 
     #[test]
-    fn edge_lengths_to_chunk_edge_lengths_scalar() {
+    fn encode_rle_edge_lengths_scalar() {
         let edge_lengths = [NonZeroU64::new(4).unwrap(); 3];
         assert!(matches!(
-            edge_lengths_to_chunk_edge_lengths(&edge_lengths),
+            encode_rle_edge_lengths(&edge_lengths),
             ChunkEdgeLengths::Scalar(value) if value.get() == 4
         ));
     }
 
     #[test]
-    fn edge_lengths_to_chunk_edge_lengths_varying() {
+    fn encode_rle_edge_lengths_varying() {
         let edge_lengths = [5, 5, 15, 15, 20]
             .into_iter()
             .map(|value| NonZeroU64::new(value).unwrap())
             .collect::<Vec<_>>();
-        let chunk_edge_lengths = edge_lengths_to_chunk_edge_lengths(&edge_lengths);
+        let chunk_edge_lengths = encode_rle_edge_lengths(&edge_lengths);
         let ChunkEdgeLengths::Varying(elements) = chunk_edge_lengths else {
             panic!("expected varying chunk edge lengths");
         };
@@ -206,6 +206,6 @@ mod tests {
                 RunLengthElement::Single(NonZeroU64::new(20).unwrap()),
             ]
         );
-        assert_eq!(expand_varying_chunks(&elements), edge_lengths);
+        assert_eq!(decode_rle_edge_lengths(&elements), edge_lengths);
     }
 }

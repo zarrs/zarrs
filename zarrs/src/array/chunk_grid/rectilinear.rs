@@ -70,8 +70,8 @@ use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectilinear::{
-    ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement,
-    edge_lengths_to_chunk_edge_lengths, expand_varying_chunks,
+    ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement, decode_rle_edge_lengths,
+    encode_rle_edge_lengths,
 };
 
 use crate::array::{
@@ -135,7 +135,7 @@ impl RectilinearChunkGrid {
                     RectilinearChunkGridDimension::Fixed(*chunk_size)
                 }
                 ChunkEdgeLengths::Varying(elements) => {
-                    let chunk_sizes = expand_varying_chunks(elements);
+                    let chunk_sizes = decode_rle_edge_lengths(elements);
                     RectilinearChunkGridDimension::Varying(
                         chunk_sizes
                             .iter()
@@ -205,7 +205,7 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                 RectilinearChunkGridDimension::Fixed(size) => ChunkEdgeLengths::Scalar(*size),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let sizes: Vec<NonZeroU64> = offsets_sizes.iter().map(|os| os.size).collect();
-                    edge_lengths_to_chunk_edge_lengths(&sizes)
+                    encode_rle_edge_lengths(&sizes)
                 }
             })
             .collect();
@@ -584,7 +584,7 @@ mod tests {
         // Second dimension should be scalar
         assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
 
-        // Verify that expand_varying_chunks correctly expands RunLengthElement::Repeated
+        // Verify that decode_rle_edge_lengths correctly expands RunLengthElement::Repeated
         // The RLE [[5, 3], [15, 2], 20, 35] should expand to [5, 5, 5, 15, 15, 20, 35]
         // Total = 5+5+5+15+15+20+35 = 100
         let array_shape: ArrayShape = vec![100, 100];
