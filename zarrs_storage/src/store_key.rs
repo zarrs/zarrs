@@ -22,7 +22,7 @@ impl StoreKey {
     #[must_use]
     pub fn root() -> Self {
         // SAFETY: The empty string is a valid store key.
-        unsafe { Self::new_unchecked("".to_string()) }
+        unsafe { Self::new_unchecked(String::default()) }
     }
 
     /// Create a new Zarr abstract store key from `key`.
