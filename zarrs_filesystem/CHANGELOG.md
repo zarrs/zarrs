@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump `zarrs_storage` to 0.4.4
+
+### Fixed
+- Remove docs stating that a `FilesystemStore` cannot be created at a file `base_path`
+
 ## [0.3.9] - 2026-01-13
 
 ### Changed
