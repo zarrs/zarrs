@@ -30,26 +30,8 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_os = "linux")]
 use direct_io::{MetadataExt, OpenOptionsExt, O_DIRECT};
 
-// // Register the store.
-// inventory::submit! {
-//     ReadableStorePlugin::new("file", |uri| Ok(Arc::new(create_store_filesystem(uri)?)))
-// }
-// inventory::submit! {
-//     WritableStorePlugin::new("file", |uri| Ok(Arc::new(create_store_filesystem(uri)?)))
-// }
-// inventory::submit! {
-//     ListableStorePlugin::new("file", |uri| Ok(Arc::new(create_store_filesystem(uri)?)))
-// }
-// inventory::submit! {
-//     ReadableWritableStorePlugin::new("file", |uri| Ok(Arc::new(create_store_filesystem(uri)?)))
-// }
-
-// #[allow(clippy::similar_names)]
-// fn create_store_filesystem(uri: &str) -> Result<FilesystemStore, StorePluginCreateError> {
-//     let url = url::Url::parse(uri)?;
-//     let path = std::path::PathBuf::from(url.path());
-//     FilesystemStore::new(path).map_err(|e| StorePluginCreateError::Other(e.to_string()))
-// }
+#[cfg(feature = "url-pipeline")]
+mod url_pipeline_support;
 
 /// For `O_DIRECT`, we need a buffer that is aligned to the page size and is a
 /// multiple of the page size.

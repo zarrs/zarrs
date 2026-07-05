@@ -1,0 +1,36 @@
+[package]
+name = "zarrs_url_pipeline"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2024"
+rust-version = "1.88"
+description = "URL pipeline support for the zarrs crate"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_url_pipeline"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_url_pipeline"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs", "storage", "store", "url"]
+categories = ["encoding"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+async = ["dep:async-trait", "dep:futures", "zarrs_storage/async"]
+
+[dependencies]
+async-trait = { version = "0.1.74", optional = true }
+futures = { version = "0.3.29", optional = true }
+inventory.workspace = true
+log = "0.4.28"
+thiserror.workspace = true
+url.workspace = true
+zarrs_plugin.workspace = true
+zarrs_storage.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+zarrs_storage = { workspace = true, features = ["tests"] }

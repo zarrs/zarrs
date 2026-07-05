@@ -46,6 +46,9 @@ use zarrs_storage::{
     StoreKeys, StoreKeysPrefixes, StorePrefix, async_store_set_partial_many,
 };
 
+#[cfg(feature = "url-pipeline")]
+mod url_pipeline_support;
+
 /// Maps a [`StoreKey`] to an [`object_store`] path.
 fn key_to_path(key: &StoreKey) -> Path {
     Path::from(key.as_str())
@@ -72,6 +75,7 @@ fn handle_result<T>(result: Result<T, object_store::Error>) -> Result<T, Storage
 }
 
 /// An asynchronous store backed by an [`object_store::ObjectStore`].
+#[derive(Debug)]
 pub struct AsyncObjectStore<T> {
     object_store: T,
     // locks: AsyncStoreLocks,
