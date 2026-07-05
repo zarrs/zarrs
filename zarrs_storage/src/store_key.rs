@@ -18,6 +18,13 @@ pub struct StoreKeyError(String);
 pub type StoreKeys = Vec<StoreKey>;
 
 impl StoreKey {
+    /// Returns the root store key.
+    #[must_use]
+    pub fn root() -> Self {
+        // SAFETY: The empty string is a valid store key.
+        unsafe { Self::new_unchecked("".to_string()) }
+    }
+
     /// Create a new Zarr abstract store key from `key`.
     ///
     /// # Errors
@@ -142,6 +149,7 @@ mod tests {
         // The empty key addresses a store's root resource as a single blob (e.g. a
         // `FilesystemStore` rooted directly at a file rather than a directory).
         let key = StoreKey::new("").unwrap();
+        assert_eq!(key, StoreKey::root());
         assert_eq!(key.to_string(), "");
         assert_eq!(key.to_prefix(), StorePrefix::root());
         assert_eq!(key.parent(), StorePrefix::root());
