@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.4...HEAD)
+
+## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.4) - 2026-07-05
 
 ### Added
 - Add `StoreKey::root()`
@@ -159,7 +161,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.3...HEAD
 [0.4.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.3
 [0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.2
 [0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.1
