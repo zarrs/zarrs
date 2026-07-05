@@ -187,14 +187,11 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         &self,
         decoded_chunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        if self.order.0.len() != decoded_chunk_grid.dimensionality() {
+        let Some(array_shape) = permute(decoded_chunk_grid.array_shape(), &self.order.0) else {
             return Err(ChunkGridCreateError::new(
                 "Length of transpose codec `order` does not match chunk grid dimensionality",
             ));
-        }
-
-        let array_shape = permute(decoded_chunk_grid.array_shape(), &self.order.0)
-            .expect("matching dimensionality");
+        };
         let chunk_shapes = self
             .order
             .0
@@ -216,11 +213,13 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         decoded_chunk_grid: &ChunkGrid,
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        if self.order.0.len() != decoded_chunk_grid.dimensionality()
-            || self.order.0.len() != encoded_subchunk_grid.dimensionality()
-        {
+        if self.order.0.len() != decoded_chunk_grid.dimensionality() {
             return Err(ChunkGridCreateError::new(
-                "Length of transpose codec `order` does not match subchunk grid dimensionality",
+                "Length of transpose codec `order` does not match `decoded_chunk_grid` dimensionality",
+            ));
+        } else if self.order.0.len() != encoded_subchunk_grid.dimensionality() {
+            return Err(ChunkGridCreateError::new(
+                "Length of transpose codec `order` does not match `encoded_subchunk_grid` dimensionality",
             ));
         }
 
