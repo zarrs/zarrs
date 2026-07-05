@@ -29,7 +29,7 @@ where
     TMatch: ?Sized,
 {
     /// Tests if the name is a match for this plugin.
-    match_name_fn: Box<dyn Fn(&TMatch) -> bool + Send + Sync + 'static>,
+    match_fn: Box<dyn Fn(&TMatch) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
     create_fn: Box<dyn Fn(&TInput) -> Result<TPlugin, TError> + Send + Sync + 'static>,
 }
@@ -41,13 +41,13 @@ where
     TMatch: ?Sized,
 {
     /// Create a new runtime plugin for registration.
-    pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
+    pub fn new<M, C>(match_fn: M, create_fn: C) -> Self
     where
         M: Fn(&TMatch) -> bool + Send + Sync + 'static,
         C: Fn(&TInput) -> Result<TPlugin, TError> + Send + Sync + 'static,
     {
         Self {
-            match_name_fn: Box::new(match_name_fn),
+            match_fn: Box::new(match_fn),
             create_fn: Box::new(create_fn),
         }
     }
@@ -60,10 +60,11 @@ where
         (self.create_fn)(input)
     }
 
-    /// Returns true if this plugin is associated with `name`.
+    /// Returns true if this plugin is associated with `match`.
+    // TODO: Rename to `match` on breaking release
     #[must_use]
-    pub fn match_name(&self, name: &TMatch) -> bool {
-        (self.match_name_fn)(name)
+    pub fn match_name(&self, r#match: &TMatch) -> bool {
+        (self.match_fn)(r#match)
     }
 }
 
@@ -79,7 +80,7 @@ where
     TMatch: ?Sized,
 {
     /// Tests if the name is a match for this plugin.
-    match_name_fn: Box<dyn Fn(&TMatch) -> bool + Send + Sync + 'static>,
+    match_fn: Box<dyn Fn(&TMatch) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
     create_fn: Box<dyn Fn(&TInput1, &TInput2) -> Result<TPlugin, TError> + Send + Sync + 'static>,
 }
@@ -93,13 +94,13 @@ where
     TMatch: ?Sized,
 {
     /// Create a new runtime plugin for registration.
-    pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
+    pub fn new<M, C>(match_fn: M, create_fn: C) -> Self
     where
         M: Fn(&TMatch) -> bool + Send + Sync + 'static,
         C: Fn(&TInput1, &TInput2) -> Result<TPlugin, TError> + Send + Sync + 'static,
     {
         Self {
-            match_name_fn: Box::new(match_name_fn),
+            match_fn: Box::new(match_fn),
             create_fn: Box::new(create_fn),
         }
     }
@@ -112,10 +113,11 @@ where
         (self.create_fn)(input1, input2)
     }
 
-    /// Returns true if this plugin is associated with `name`.
+    /// Returns true if this plugin is associated with `match`.with `match`.
+    // TODO: Rename to `match` on breaking release
     #[must_use]
-    pub fn match_name(&self, name: &TMatch) -> bool {
-        (self.match_name_fn)(name)
+    pub fn match_name(&self, r#match: &TMatch) -> bool {
+        (self.match_fn)(r#match)
     }
 }
 
