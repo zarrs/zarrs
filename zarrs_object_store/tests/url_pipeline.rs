@@ -10,7 +10,7 @@ fn _ensure_linked(_store: zarrs_object_store::AsyncObjectStore<object_store::mem
 
 #[tokio::test]
 async fn unregistered_scheme_still_errors() {
-    let result = zarrs_url_pipeline::try_resolve_async_readable("does-not-exist://foo");
+    let result = zarrs_url_pipeline::try_resolve_async_readable("does-not-exist://foo").await;
     assert!(result.is_err());
 }
 
@@ -22,7 +22,7 @@ async fn s3_scheme_is_registered_but_errors_without_a_bucket() {
     // scheme is claimed by `zarrs_object_store`'s plugin (match-time success) when the `aws`
     // feature is enabled, with the failure coming from a later stage (create-time), not scheme
     // lookup.
-    let Err(err) = zarrs_url_pipeline::try_resolve_async_readable("s3://") else {
+    let Err(err) = zarrs_url_pipeline::try_resolve_async_readable("s3://").await else {
         panic!("expected an error resolving s3://");
     };
     let err = err.to_string();
@@ -38,7 +38,7 @@ async fn s3_scheme_is_unregistered_without_the_aws_feature() {
     // With the `aws` feature disabled, `is_object_store_scheme` must not claim `s3:` at all, so
     // resolution fails at scheme lookup (`PluginUnsupportedError`, "... is not supported") rather
     // than reaching `object_store::parse_url_opts`.
-    let Err(err) = zarrs_url_pipeline::try_resolve_async_readable("s3://") else {
+    let Err(err) = zarrs_url_pipeline::try_resolve_async_readable("s3://").await else {
         panic!("expected an error resolving s3://");
     };
     assert!(
@@ -62,6 +62,7 @@ async fn http_scheme_resolves_and_fails_to_connect_on_first_request() {
     let storage = zarrs_url_pipeline::try_resolve_async_readable(&format!(
         "http://127.0.0.1:{port}/nonexistent-path"
     ))
+    .await
     .expect("resolving the stage performs no I/O and should succeed");
     let key = zarrs_storage::StoreKey::new("a/b").unwrap();
     assert!(storage.get(&key).await.is_err());

@@ -5,6 +5,8 @@
 
 use std::sync::LazyLock;
 
+#[cfg(feature = "async")]
+use futures::future::BoxFuture;
 use zarrs_plugin::{Plugin, RuntimePlugin, RuntimeRegistry, RuntimeRegistryHandle};
 
 use crate::error::PipelineCreateError;
@@ -152,7 +154,9 @@ pub struct AsyncRootStorePlugin {
     /// The name of the crate that registered this plugin, used only for diagnostics when
     /// multiple compile-time plugins claim the same scheme.
     source_crate: &'static str,
-    plugin: Plugin<AsyncPipelineStage, RootStoreInput, PipelineCreateError, RootStoreInput>,
+    match_fn: fn(&RootStoreInput) -> bool,
+    create_fn:
+        fn(&RootStoreInput) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>,
 }
 #[cfg(feature = "async")]
 inventory::collect!(AsyncRootStorePlugin);
@@ -167,19 +171,77 @@ impl AsyncRootStorePlugin {
     pub const fn new(
         source_crate: &'static str,
         match_fn: fn(&RootStoreInput) -> bool,
-        create_fn: fn(&RootStoreInput) -> Result<AsyncPipelineStage, PipelineCreateError>,
+        create_fn: fn(
+            &RootStoreInput,
+        )
+            -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>,
     ) -> Self {
         Self {
             source_crate,
-            plugin: Plugin::new(match_fn, create_fn),
+            match_fn,
+            create_fn,
         }
+    }
+
+    fn match_name(&self, input: &RootStoreInput) -> bool {
+        (self.match_fn)(input)
+    }
+
+    fn create(
+        &self,
+        input: &RootStoreInput,
+    ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+        (self.create_fn)(input)
     }
 }
 
 /// A runtime asynchronous root store plugin for dynamic registration.
+/// A runtime asynchronous root store plugin for dynamic registration.
 #[cfg(feature = "async")]
-pub type AsyncRootStoreRuntimePlugin =
-    RuntimePlugin<AsyncPipelineStage, RootStoreInput, PipelineCreateError, RootStoreInput>;
+#[allow(clippy::type_complexity)]
+pub struct AsyncRootStoreRuntimePlugin {
+    match_fn: Box<dyn Fn(&RootStoreInput) -> bool + Send + Sync + 'static>,
+    create_fn: Box<
+        dyn Fn(
+                &RootStoreInput,
+            ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>
+            + Send
+            + Sync
+            + 'static,
+    >,
+}
+
+#[cfg(feature = "async")]
+impl AsyncRootStoreRuntimePlugin {
+    /// Create a new runtime asynchronous root plugin.
+    #[must_use]
+    pub fn new<M, C>(match_fn: M, create_fn: C) -> Self
+    where
+        M: Fn(&RootStoreInput) -> bool + Send + Sync + 'static,
+        C: Fn(
+                &RootStoreInput,
+            ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Self {
+            match_fn: Box::new(match_fn),
+            create_fn: Box::new(create_fn),
+        }
+    }
+
+    fn match_name(&self, input: &RootStoreInput) -> bool {
+        (self.match_fn)(input)
+    }
+
+    fn create(
+        &self,
+        input: &RootStoreInput,
+    ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+        (self.create_fn)(input)
+    }
+}
 
 /// Global runtime registry for asynchronous root store plugins.
 ///
@@ -228,7 +290,7 @@ pub fn unregister_async_root_store_scheme(handle: &AsyncRootStoreRuntimeRegistry
 #[cfg(feature = "async")]
 pub fn try_create_async_root_stage(
     input: &RootStoreInput,
-) -> Result<AsyncPipelineStage, PipelineCreateError> {
+) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
     let result = ASYNC_ROOT_STORE_RUNTIME_REGISTRY.with_plugins(|plugins| {
         for plugin in plugins {
             if plugin.match_name(input) {
@@ -241,14 +303,13 @@ pub fn try_create_async_root_stage(
         return result;
     }
 
-    let mut matches =
-        inventory::iter::<AsyncRootStorePlugin>().filter(|p| p.plugin.match_name(input));
+    let mut matches = inventory::iter::<AsyncRootStorePlugin>().filter(|p| p.match_name(input));
     let Some(first) = matches.next() else {
-        return Err(zarrs_plugin::PluginUnsupportedError::new(
+        let error = PipelineCreateError::from(zarrs_plugin::PluginUnsupportedError::new(
             input.scheme.clone(),
             "async root store scheme".to_string(),
-        )
-        .into());
+        ));
+        return Box::pin(async move { Err(error) });
     };
     let others: Vec<&'static str> = matches.map(|p| p.source_crate).collect();
     if !others.is_empty() {
@@ -259,7 +320,7 @@ pub fn try_create_async_root_stage(
             others
         );
     }
-    first.plugin.create(input)
+    first.create(input)
 }
 
 #[cfg(test)]

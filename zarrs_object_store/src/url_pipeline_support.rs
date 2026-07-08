@@ -76,17 +76,22 @@ fn is_object_store(input: &RootStoreInput) -> bool {
     }
 }
 
-fn create_object_store(input: &RootStoreInput) -> Result<AsyncPipelineStage, PipelineCreateError> {
-    let full = format!("{}:{}", input.scheme, input.rest);
-    let url = url::Url::parse(&full).map_err(|e| PipelineCreateError::InvalidSegment {
-        scheme: input.scheme.clone(),
-        rest: input.rest.clone(),
-        reason: format!("invalid {}: url: {e}", input.scheme),
-    })?;
-    let (store, path) = object_store::parse_url_opts(&url, std::iter::empty::<(&str, &str)>())
-        .map_err(PipelineCreateError::other)?;
-    let store = PrefixStore::new(store, path);
-    Ok(Arc::new(AsyncObjectStore::new(store)))
+fn create_object_store(
+    input: &RootStoreInput,
+) -> futures::future::BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+    let input = input.clone();
+    Box::pin(async move {
+        let full = format!("{}:{}", input.scheme, input.rest);
+        let url = url::Url::parse(&full).map_err(|e| PipelineCreateError::InvalidSegment {
+            scheme: input.scheme.clone(),
+            rest: input.rest.clone(),
+            reason: format!("invalid {}: url: {e}", input.scheme),
+        })?;
+        let (store, path) = object_store::parse_url_opts(&url, std::iter::empty::<(&str, &str)>())
+            .map_err(PipelineCreateError::other)?;
+        let store = PrefixStore::new(store, path);
+        Ok(Arc::new(AsyncObjectStore::new(store)) as AsyncPipelineStage)
+    })
 }
 
 inventory::submit! {

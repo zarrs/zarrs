@@ -4,9 +4,13 @@
 
 use std::sync::LazyLock;
 
+#[cfg(feature = "async")]
+use futures::future::BoxFuture;
 use zarrs_plugin::{Plugin2, RuntimePlugin2, RuntimeRegistry, RuntimeRegistryHandle};
 
 use crate::error::PipelineCreateError;
+#[cfg(feature = "async")]
+use crate::parse::PipelineSegment;
 #[cfg(feature = "async")]
 use crate::stage::AsyncPipelineStage;
 use crate::stage::PipelineStage;
@@ -147,6 +151,10 @@ pub struct AsyncAdapterStoreInput {
     pub scheme: String,
     /// The raw scheme-specific part, unparsed.
     pub rest: String,
+    /// Previously parsed pipeline segments, excluding this adapter.
+    pub previous_segments: Vec<PipelineSegment>,
+    /// The previously resolved async stage, if one exists.
+    pub previous_stage: Option<AsyncPipelineStage>,
 }
 
 /// A compile-time registered asynchronous adapter store plugin.
@@ -162,12 +170,10 @@ pub struct AsyncAdapterStorePlugin {
     /// The name of the crate that registered this plugin, used only for diagnostics when
     /// multiple compile-time plugins claim the same scheme.
     source_crate: &'static str,
-    plugin: Plugin2<
-        AsyncPipelineStage,
-        AsyncAdapterStoreInput,
-        AsyncPipelineStage,
-        PipelineCreateError,
-    >,
+    match_fn: fn(&str) -> bool,
+    create_fn: fn(
+        &AsyncAdapterStoreInput,
+    ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>,
 }
 #[cfg(feature = "async")]
 inventory::collect!(AsyncAdapterStorePlugin);
@@ -184,24 +190,74 @@ impl AsyncAdapterStorePlugin {
         match_fn: fn(&str) -> bool,
         create_fn: fn(
             &AsyncAdapterStoreInput,
-            &AsyncPipelineStage,
-        ) -> Result<AsyncPipelineStage, PipelineCreateError>,
+        )
+            -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>,
     ) -> Self {
         Self {
             source_crate,
-            plugin: Plugin2::new(match_fn, create_fn),
+            match_fn,
+            create_fn,
         }
+    }
+
+    fn match_name(&self, scheme: &str) -> bool {
+        (self.match_fn)(scheme)
+    }
+
+    fn create(
+        &self,
+        input: &AsyncAdapterStoreInput,
+    ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+        (self.create_fn)(input)
     }
 }
 
 /// A runtime asynchronous adapter store plugin for dynamic registration.
 #[cfg(feature = "async")]
-pub type AsyncAdapterStoreRuntimePlugin = RuntimePlugin2<
-    AsyncPipelineStage,
-    AsyncAdapterStoreInput,
-    AsyncPipelineStage,
-    PipelineCreateError,
->;
+#[allow(clippy::type_complexity)]
+pub struct AsyncAdapterStoreRuntimePlugin {
+    match_fn: Box<dyn Fn(&str) -> bool + Send + Sync + 'static>,
+    create_fn: Box<
+        dyn Fn(
+                &AsyncAdapterStoreInput,
+            ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>
+            + Send
+            + Sync
+            + 'static,
+    >,
+}
+
+#[cfg(feature = "async")]
+impl AsyncAdapterStoreRuntimePlugin {
+    /// Create a new runtime asynchronous adapter plugin.
+    #[must_use]
+    pub fn new<M, C>(match_fn: M, create_fn: C) -> Self
+    where
+        M: Fn(&str) -> bool + Send + Sync + 'static,
+        C: Fn(
+                &AsyncAdapterStoreInput,
+            ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Self {
+            match_fn: Box::new(match_fn),
+            create_fn: Box::new(create_fn),
+        }
+    }
+
+    fn match_name(&self, scheme: &str) -> bool {
+        (self.match_fn)(scheme)
+    }
+
+    fn create(
+        &self,
+        input: &AsyncAdapterStoreInput,
+    ) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+        (self.create_fn)(input)
+    }
+}
 
 /// Global runtime registry for asynchronous adapter store plugins.
 ///
@@ -254,12 +310,11 @@ pub fn unregister_async_adapter_store_scheme(
 #[cfg(feature = "async")]
 pub fn try_create_async_adapter_stage(
     input: &AsyncAdapterStoreInput,
-    prev: &AsyncPipelineStage,
-) -> Result<AsyncPipelineStage, PipelineCreateError> {
+) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
     let result = ASYNC_ADAPTER_STORE_RUNTIME_REGISTRY.with_plugins(|plugins| {
         for plugin in plugins {
             if plugin.match_name(&input.scheme) {
-                return Some(plugin.create(input, prev));
+                return Some(plugin.create(input));
             }
         }
         None
@@ -269,13 +324,13 @@ pub fn try_create_async_adapter_stage(
     }
 
     let mut matches =
-        inventory::iter::<AsyncAdapterStorePlugin>().filter(|p| p.plugin.match_name(&input.scheme));
+        inventory::iter::<AsyncAdapterStorePlugin>().filter(|p| p.match_name(&input.scheme));
     let Some(first) = matches.next() else {
-        return Err(zarrs_plugin::PluginUnsupportedError::new(
+        let error = PipelineCreateError::from(zarrs_plugin::PluginUnsupportedError::new(
             input.scheme.clone(),
             "async adapter store scheme".to_string(),
-        )
-        .into());
+        ));
+        return Box::pin(async move { Err(error) });
     };
     let others: Vec<&'static str> = matches.map(|p| p.source_crate).collect();
     if !others.is_empty() {
@@ -286,7 +341,32 @@ pub fn try_create_async_adapter_stage(
             others
         );
     }
-    first.plugin.create(input, prev)
+    first.create(input)
+}
+
+#[cfg(feature = "async")]
+fn create_zarr3_stage(
+    input: &AsyncAdapterStoreInput,
+) -> BoxFuture<'static, Result<AsyncPipelineStage, PipelineCreateError>> {
+    let stage = input.previous_stage.clone();
+    let rest = input.rest.clone();
+    Box::pin(async move {
+        if !rest.is_empty() {
+            return Err(PipelineCreateError::InvalidSegment {
+                scheme: "zarr3".to_string(),
+                rest,
+                reason: "zarr3: does not accept a scheme-specific part".to_string(),
+            });
+        }
+        stage.ok_or_else(|| {
+            PipelineCreateError::other("zarr3: requires a preceding async pipeline stage")
+        })
+    })
+}
+
+#[cfg(feature = "async")]
+inventory::submit! {
+    AsyncAdapterStorePlugin::new("zarrs_url_pipeline", |s| s == "zarr3", create_zarr3_stage)
 }
 
 #[cfg(test)]
