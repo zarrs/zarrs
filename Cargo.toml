@@ -60,11 +60,11 @@ version = "0.4.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.4.3"
+version = "0.4.4"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.3.9"
+version = "0.3.10"
 path = "zarrs_filesystem"
 
 [workspace.dependencies.zarrs_object_store]

@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
+- Bump `zarrs_storage` to 0.4.4
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 - **Behavioural change**: `ArrayOps::subchunk_shape()` now returns the subchunk shape of the subchunk grid (if regular) and supersedes the functionality of `effective_subchunk_shape`()

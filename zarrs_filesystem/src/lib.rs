@@ -91,9 +91,7 @@ impl FilesystemStore {
     /// Create a new file system store at a given `base_path`.
     ///
     /// # Errors
-    /// Returns a [`FilesystemStoreCreateError`] if `base_directory`:
-    ///   - is not valid, or
-    ///   - it points to an existing file rather than a directory.
+    /// Returns a [`FilesystemStoreCreateError`] if `base_path` is empty.
     pub fn new<P: AsRef<Path>>(base_path: P) -> Result<Self, FilesystemStoreCreateError> {
         Self::new_with_options(base_path, FilesystemStoreOptions::default())
     }
@@ -101,9 +99,7 @@ impl FilesystemStore {
     /// Create a new file system store at a given `base_path` and `options`.
     ///
     /// # Errors
-    /// Returns a [`FilesystemStoreCreateError`] if `base_directory`:
-    ///   - is not valid, or
-    ///   - it points to an existing file rather than a directory.
+    /// Returns a [`FilesystemStoreCreateError`] if `base_path` is empty.
     pub fn new_with_options<P: AsRef<Path>>(
         base_path: P,
         options: FilesystemStoreOptions,
