@@ -63,7 +63,6 @@
 //! In run-length encoding, `[value, count]` represents `count` repetitions of `value`.
 //! Scalar values represent a regular grid with fixed-size chunks.
 
-use itertools::Itertools;
 use std::num::NonZeroU64;
 use thiserror::Error;
 
@@ -112,23 +111,6 @@ enum RectilinearChunkGridDimension {
 #[error("rectilinear chunk grid configuration: {_1:?} not compatible with array shape {_0:?}")]
 pub struct RectilinearChunkGridCreateError(ArrayShape, Vec<ChunkEdgeLengths>);
 
-/// Expand run-length encoding to explicit chunk sizes.
-///
-/// Only applies to varying chunk edge lengths.
-fn expand_varying_chunks(elements: &[RunLengthElement]) -> Vec<NonZeroU64> {
-    let mut result = Vec::new();
-    for element in elements {
-        match element {
-            RunLengthElement::Single(value) => result.push(*value),
-            RunLengthElement::Repeated([value, count]) => {
-                let count = count.get();
-                result.extend(std::iter::repeat_n(*value, usize::try_from(count).unwrap()));
-            }
-        }
-    }
-    result
-}
-
 impl RectilinearChunkGrid {
     /// Create a new `rectilinear` chunk grid with chunk shapes `chunk_shapes`.
     ///
@@ -152,7 +134,7 @@ impl RectilinearChunkGrid {
                     RectilinearChunkGridDimension::Fixed(*chunk_size)
                 }
                 ChunkEdgeLengths::Varying(elements) => {
-                    let chunk_sizes = expand_varying_chunks(elements);
+                    let chunk_sizes = ChunkEdgeLengths::decode(elements);
                     RectilinearChunkGridDimension::Varying(
                         chunk_sizes
                             .iter()
@@ -200,26 +182,6 @@ impl RectilinearChunkGrid {
     }
 }
 
-/// Compress a sequence of chunk sizes into run-length encoded form.
-///
-/// Consecutive repeated values are combined into `RunLengthElement::Repeated([value, count])`.
-/// Single values remain as `RunLengthElement::Single(value)`.
-fn compress_run_length(sizes: &[NonZeroU64]) -> Vec<RunLengthElement> {
-    sizes
-        .iter()
-        .chunk_by(|&&size| size)
-        .into_iter()
-        .map(|(size, group)| {
-            let count = group.count() as u64;
-            if count == 1 {
-                RunLengthElement::Single(size)
-            } else {
-                RunLengthElement::Repeated([size, NonZeroU64::new(count).unwrap()])
-            }
-        })
-        .collect()
-}
-
 unsafe impl ChunkGridTraits for RectilinearChunkGrid {
     fn create(
         metadata: &MetadataV3,
@@ -242,7 +204,7 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                 RectilinearChunkGridDimension::Fixed(size) => ChunkEdgeLengths::Scalar(*size),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let sizes: Vec<NonZeroU64> = offsets_sizes.iter().map(|os| os.size).collect();
-                    ChunkEdgeLengths::Varying(compress_run_length(&sizes))
+                    ChunkEdgeLengths::encode(&sizes)
                 }
             })
             .collect();
@@ -621,7 +583,7 @@ mod tests {
         // Second dimension should be scalar
         assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
 
-        // Verify that expand_varying_chunks correctly expands RunLengthElement::Repeated
+        // Verify that ChunkEdgeLengths::decode correctly expands RunLengthElement::Repeated
         // The RLE [[5, 3], [15, 2], 20, 35] should expand to [5, 5, 5, 15, 15, 20, 35]
         // Total = 5+5+5+15+15+20+35 = 100
         let array_shape: ArrayShape = vec![100, 100];
@@ -673,15 +635,11 @@ mod tests {
         assert!(matches!(&elements[2], RunLengthElement::Single(val) if val.get() == 20));
         assert!(matches!(&elements[3], RunLengthElement::Single(val) if val.get() == 35));
 
-        // Second dimension should be compressed: [[10, 10]]
-        let elements = match &chunk_shapes[1] {
-            ChunkEdgeLengths::Varying(elements) => elements,
-            _ => panic!("Expected Varying"),
-        };
-        assert_eq!(elements.len(), 1);
-        assert!(
-            matches!(&elements[0], RunLengthElement::Repeated([val, count]) if val.get() == 10 && count.get() == 10)
-        );
+        // Second dimension should be fixed scalar: 10
+        assert!(matches!(
+            &chunk_shapes[1],
+            ChunkEdgeLengths::Scalar(s) if s.get() == 10
+        ));
     }
 
     #[test]

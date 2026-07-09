@@ -58,10 +58,6 @@ impl<C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<C>
 where
     C: ChunkCache + 'static,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
         self.cache.invalidate_chunk(&self.chunk_indices);
@@ -213,7 +209,7 @@ mod tests {
         assert!(cached.cache().is_empty());
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![0, 0]);
 
-        assert!(!encoder.into_dyn_decoder().exists().unwrap());
+        assert!(!encoder.exists().unwrap());
     }
 
     fn test_failed_partial_encode_invalidates<C>(cache: C)

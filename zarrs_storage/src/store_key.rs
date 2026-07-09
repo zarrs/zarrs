@@ -18,6 +18,13 @@ pub struct StoreKeyError(String);
 pub type StoreKeys = Vec<StoreKey>;
 
 impl StoreKey {
+    /// Returns the root store key.
+    #[must_use]
+    pub fn root() -> Self {
+        // SAFETY: The empty string is a valid store key.
+        unsafe { Self::new_unchecked(String::default()) }
+    }
+
     /// Create a new Zarr abstract store key from `key`.
     ///
     /// # Errors
@@ -55,11 +62,14 @@ impl StoreKey {
     ///
     /// Additional checks (not in the specification):
     /// - a key which starts with '/' is invalid, and
-    /// - a key that contains '//' is invalid, and
-    /// - a key cannot be an empty string.
+    /// - a key that contains '//' is invalid.
+    ///
+    /// The empty string is a valid key: it addresses a store's root resource as a single blob
+    /// (e.g. a [`FilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.FilesystemStore.html)
+    /// rooted directly at a file, rather than a directory).
     #[must_use]
     pub fn validate(key: &str) -> bool {
-        !key.starts_with('/') && !key.ends_with('/') && !key.is_empty() && !key.contains("//")
+        !key.starts_with('/') && !key.ends_with('/') && !key.contains("//")
     }
 
     /// Returns true if the key has prefix `prefix`.
@@ -71,7 +81,11 @@ impl StoreKey {
     /// Convert to a [`StoreKey`].
     #[must_use]
     pub fn to_prefix(&self) -> StorePrefix {
-        unsafe { StorePrefix::new_unchecked(self.0.clone() + "/") }
+        if self.0.is_empty() {
+            StorePrefix::root()
+        } else {
+            unsafe { StorePrefix::new_unchecked(self.0.clone() + "/") }
+        }
     }
 
     /// Returns the parent of this key.
@@ -128,5 +142,17 @@ mod tests {
             StoreKey::new("a").unwrap().parent(),
             StorePrefix::new("").unwrap()
         );
+    }
+
+    #[test]
+    fn empty_key_is_valid() {
+        // The empty key addresses a store's root resource as a single blob (e.g. a
+        // `FilesystemStore` rooted directly at a file rather than a directory).
+        let key = StoreKey::new("").unwrap();
+        assert_eq!(key, StoreKey::root());
+        assert_eq!(key.to_string(), "");
+        assert_eq!(key.to_prefix(), StorePrefix::root());
+        assert_eq!(key.parent(), StorePrefix::root());
+        assert!(key.has_prefix(&StorePrefix::root()));
     }
 }
