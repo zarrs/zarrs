@@ -149,8 +149,8 @@ pub enum SubchunkGrid {
     None,
     /// A subchunk grid is resolvable and congruent across each dimension for the whole array.
     Array(ChunkGrid),
-    // /// A chunk-local subchunk grid can be resolved without reading encoded chunk bytes.
-    // ChunkLocalKnown,
+    /// A chunk-local subchunk grid is resolvable via [`ArrayPartialDecoderTraits::local_subchunk_grid`].
+    ChunkLocal,
     // /// A chunk-local subchunk grid requires opening the encoded chunk.
     // ChunkLocalDynamic,
 }

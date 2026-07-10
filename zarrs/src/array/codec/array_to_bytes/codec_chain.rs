@@ -494,9 +494,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         {
             SubchunkGrid::None => return Ok(SubchunkGrid::None),
             SubchunkGrid::Array(subchunk_grid) => subchunk_grid,
-            // local @ (SubchunkGrid::ChunkLocalKnown | SubchunkGrid::ChunkLocalDynamic) => {
-            //     return Ok(local);
-            // }
+            local @ SubchunkGrid::ChunkLocal => return Ok(local)
         };
 
         for (codec, decoded_chunk_grid) in self
@@ -508,9 +506,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             subchunk_grid = match codec.decoded_subchunk_grid(decoded_chunk_grid, &subchunk_grid)? {
                 SubchunkGrid::None => return Ok(SubchunkGrid::None),
                 SubchunkGrid::Array(decoded_subchunk_grid) => decoded_subchunk_grid,
-                // local @ (SubchunkGrid::ChunkLocalKnown | SubchunkGrid::ChunkLocalDynamic) => {
-                //     return Ok(local);
-                // }
+                local @ SubchunkGrid::ChunkLocal => return Ok(local),
             };
         }
 
