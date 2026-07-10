@@ -207,29 +207,19 @@ impl_kernel_to_f64_int_small!(i8, i16, i32, u8, u16, u32);
 
 impl KernelToF64 for i64 {
     const SIZE: usize = size_of::<i64>();
-    #[expect(clippy::cast_precision_loss)]
     #[inline]
     fn read_to_f64(bytes: &[u8], rounding: CastValueRoundingMode) -> f64 {
         let value = <i64 as KernelInt>::read(bytes);
-        if value.unsigned_abs() < (1_u64 << 53) {
-            value as f64
-        } else {
-            integer_magnitude_to_f64(u128::from(value.unsigned_abs()), value < 0, rounding)
-        }
+        integer_magnitude_to_f64(u128::from(value.unsigned_abs()), value < 0, rounding)
     }
 }
 
 impl KernelToF64 for u64 {
     const SIZE: usize = size_of::<u64>();
-    #[expect(clippy::cast_precision_loss)]
     #[inline]
     fn read_to_f64(bytes: &[u8], rounding: CastValueRoundingMode) -> f64 {
         let value = <u64 as KernelInt>::read(bytes);
-        if value < (1_u64 << 53) {
-            value as f64
-        } else {
-            integer_magnitude_to_f64(u128::from(value), false, rounding)
-        }
+        integer_magnitude_to_f64(u128::from(value), false, rounding)
     }
 }
 
