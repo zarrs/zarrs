@@ -11,9 +11,9 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_data_type::codec_traits::cast_value::{
-    CastValueDataTypeExt, CastValueDataTypeTraits,
+    CastValueDataTypeExt, CastValueDataTypeTraits, CastValueKernel,
     CastValueOutOfRangeMode as DataTypeCastValueOutOfRangeMode,
-    CastValueRoundingMode as DataTypeCastValueRoundingMode,
+    CastValueRoundingMode as DataTypeCastValueRoundingMode, select_cast_kernel,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::cast_value::{
@@ -45,8 +45,10 @@ struct CastValueCodecBound {
     encoded_fill_value: FillValue,
     encode_scalar_map: Option<ScalarMap>,
     decode_scalar_map: Option<ScalarMap>,
-    rounding: Option<CastValueRoundingMode>,
-    out_of_range: Option<CastValueOutOfRangeMode>,
+    rounding: DataTypeCastValueRoundingMode,
+    out_of_range: Option<DataTypeCastValueOutOfRangeMode>,
+    encode_kernel: Option<CastValueKernel>,
+    decode_kernel: Option<CastValueKernel>,
 }
 
 impl CastValueUnbound {
@@ -63,16 +65,8 @@ impl CastValueUnbound {
                 let target = target_data_type
                     .codec_castvalue()
                     .map_err(|err| PluginCreateError::Other(err.to_string()))?;
-                if matches!(
-                    configuration.out_of_range,
-                    Some(CastValueOutOfRangeMode::Wrap)
-                ) && !target.cast_value_is_integral()
-                {
-                    return Err(PluginCreateError::Other(
-                        "cast_value out_of_range=wrap is only valid for integral target data types"
-                            .to_string(),
-                    ));
-                }
+                validate_wrap_mode(&target_data_type, target, configuration.out_of_range)
+                    .map_err(|err| PluginCreateError::Other(err.to_string()))?;
                 Ok(Self {
                     target_data_type,
                     configuration: configuration.clone(),
@@ -148,13 +142,26 @@ impl UnboundArrayToArrayCodecTraits for CastValueUnbound {
             .transpose()
             .map_err(CodecCreateError::other)?;
 
+        let rounding = map_rounding(self.configuration.rounding);
+        let out_of_range = map_out_of_range(self.configuration.out_of_range);
+        // Select monomorphised bulk kernels when both data types expose a
+        // numeric representation; otherwise the generic scalar path is used.
+        let source_repr = source.cast_value_repr();
+        let target_repr = target.cast_value_repr();
+        let encode_kernel = source_repr.zip(target_repr).and_then(|(source, target)| {
+            select_cast_kernel(source, target, rounding, out_of_range)
+        });
+        let decode_kernel = source_repr.zip(target_repr).and_then(|(source, target)| {
+            select_cast_kernel(target, source, rounding, out_of_range)
+        });
         let encoded = cast_element(
             fill_value.as_ne_bytes(),
             source,
             target,
             encode_scalar_map.as_ref(),
-            self.configuration.rounding,
-            self.configuration.out_of_range,
+            encode_kernel.as_ref(),
+            rounding,
+            out_of_range,
         )
         .map_err(CodecCreateError::other)?;
         let decoded = cast_element(
@@ -162,8 +169,9 @@ impl UnboundArrayToArrayCodecTraits for CastValueUnbound {
             target,
             source,
             decode_scalar_map.as_ref(),
-            self.configuration.rounding,
-            self.configuration.out_of_range,
+            decode_kernel.as_ref(),
+            rounding,
+            out_of_range,
         )
         .map_err(CodecCreateError::other)?;
         if decoded != fill_value.as_ne_bytes() {
@@ -178,8 +186,10 @@ impl UnboundArrayToArrayCodecTraits for CastValueUnbound {
             encoded_fill_value: FillValue::new(encoded),
             encode_scalar_map,
             decode_scalar_map,
-            rounding: self.configuration.rounding,
-            out_of_range: self.configuration.out_of_range,
+            rounding,
+            out_of_range,
+            encode_kernel,
+            decode_kernel,
         }))
     }
 }
@@ -241,6 +251,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
                 scalar_map: self.encode_scalar_map.as_ref(),
                 rounding: self.rounding,
                 out_of_range: self.out_of_range,
+                kernel: self.encode_kernel,
             },
         )?))
     }
@@ -263,6 +274,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
                 scalar_map: self.decode_scalar_map.as_ref(),
                 rounding: self.rounding,
                 out_of_range: self.out_of_range,
+                kernel: self.decode_kernel,
             },
         )?))
     }
@@ -333,6 +345,8 @@ impl CastValueCodecBound {
             self.decode_scalar_map.clone(),
             self.rounding,
             self.out_of_range,
+            self.encode_kernel,
+            self.decode_kernel,
         )
     }
 }
@@ -365,8 +379,9 @@ pub(super) struct CastBytesContext<'a> {
     pub(super) source: &'a dyn CastValueDataTypeTraits,
     pub(super) target: &'a dyn CastValueDataTypeTraits,
     pub(super) scalar_map: Option<&'a ScalarMap>,
-    pub(super) rounding: Option<CastValueRoundingMode>,
-    pub(super) out_of_range: Option<CastValueOutOfRangeMode>,
+    pub(super) rounding: DataTypeCastValueRoundingMode,
+    pub(super) out_of_range: Option<DataTypeCastValueOutOfRangeMode>,
+    pub(super) kernel: Option<CastValueKernel>,
 }
 
 pub(super) fn cast_bytes(
@@ -391,18 +406,59 @@ pub(super) fn cast_bytes(
         ));
     }
     let num_elements = bytes.len() / source_size;
-    let mut out = Vec::with_capacity(num_elements * target_size);
-    for source_bytes in bytes.chunks_exact(source_size) {
-        out.extend(cast_element(
-            source_bytes,
-            context.source,
-            context.target,
-            context.scalar_map,
-            context.rounding,
-            context.out_of_range,
-        )?);
+    let mut output = Vec::with_capacity(num_elements * target_size);
+    if let Some(scalar_map) = context.scalar_map {
+        for source_bytes in bytes.chunks_exact(source_size) {
+            if let Some(mapped) = scalar_map.get(source_bytes) {
+                output.extend_from_slice(mapped);
+            } else {
+                cast_element_into(
+                    source_bytes,
+                    context.source,
+                    context.target,
+                    context.kernel.as_ref(),
+                    context.rounding,
+                    context.out_of_range,
+                    &mut output,
+                )?;
+            }
+        }
+    } else if let Some(kernel) = &context.kernel {
+        kernel
+            .cast(bytes, &mut output)
+            .map_err(|err| CodecError::Other(err.to_string()))?;
+    } else {
+        context
+            .source
+            .cast_value_cast_slice(
+                bytes,
+                source_size,
+                context.target,
+                context.rounding,
+                context.out_of_range,
+                &mut output,
+            )
+            .map_err(|err| CodecError::Other(err.to_string()))?;
     }
-    Ok(out)
+    Ok(output)
+}
+
+/// Cast one element via the kernel if selected, else the generic scalar path.
+fn cast_element_into(
+    source_bytes: &[u8],
+    source: &dyn CastValueDataTypeTraits,
+    target: &dyn CastValueDataTypeTraits,
+    kernel: Option<&CastValueKernel>,
+    rounding: DataTypeCastValueRoundingMode,
+    out_of_range: Option<DataTypeCastValueOutOfRangeMode>,
+    output: &mut Vec<u8>,
+) -> Result<(), CodecError> {
+    if let Some(kernel) = kernel {
+        kernel.cast(source_bytes, output)
+    } else {
+        source.cast_value_cast(source_bytes, target, rounding, out_of_range, output)
+    }
+    .map_err(|err| CodecError::Other(err.to_string()))
 }
 
 fn cast_element(
@@ -410,20 +466,24 @@ fn cast_element(
     source: &dyn CastValueDataTypeTraits,
     target: &dyn CastValueDataTypeTraits,
     scalar_map: Option<&ScalarMap>,
-    rounding: Option<CastValueRoundingMode>,
-    out_of_range: Option<CastValueOutOfRangeMode>,
+    kernel: Option<&CastValueKernel>,
+    rounding: DataTypeCastValueRoundingMode,
+    out_of_range: Option<DataTypeCastValueOutOfRangeMode>,
 ) -> Result<Vec<u8>, CodecError> {
     if let Some(mapped) = scalar_map.and_then(|map| map.get(source_bytes)) {
         return Ok(mapped.clone());
     }
-    source
-        .cast_value_cast(
-            source_bytes,
-            target,
-            map_rounding(rounding),
-            map_out_of_range(out_of_range),
-        )
-        .map_err(|err| CodecError::Other(err.to_string()))
+    let mut output = Vec::new();
+    cast_element_into(
+        source_bytes,
+        source,
+        target,
+        kernel,
+        rounding,
+        out_of_range,
+        &mut output,
+    )?;
+    Ok(output)
 }
 
 fn map_rounding(rounding: Option<CastValueRoundingMode>) -> DataTypeCastValueRoundingMode {

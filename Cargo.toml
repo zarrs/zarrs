@@ -44,7 +44,7 @@ version = "0.3.0"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.9.0"
+version = "0.9.1"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]

@@ -9,8 +9,9 @@ use zarrs_storage::StorageError;
 
 use super::cast_value_codec::{CastBytesContext, ScalarMap, cast_bytes};
 use crate::array::{DataType, Indexer};
-use zarrs_data_type::codec_traits::cast_value::CastValueDataTypeExt;
-use zarrs_metadata_ext::codec::cast_value::{CastValueOutOfRangeMode, CastValueRoundingMode};
+use zarrs_data_type::codec_traits::cast_value::{
+    CastValueDataTypeExt, CastValueKernel, CastValueOutOfRangeMode, CastValueRoundingMode,
+};
 
 /// Partial encoder and decoder for the `cast_value` codec.
 pub(crate) struct CastValueCodecPartial<T: ?Sized> {
@@ -19,19 +20,24 @@ pub(crate) struct CastValueCodecPartial<T: ?Sized> {
     encoded_data_type: DataType,
     encode_scalar_map: Option<ScalarMap>,
     decode_scalar_map: Option<ScalarMap>,
-    rounding: Option<CastValueRoundingMode>,
+    rounding: CastValueRoundingMode,
     out_of_range: Option<CastValueOutOfRangeMode>,
+    encode_kernel: Option<CastValueKernel>,
+    decode_kernel: Option<CastValueKernel>,
 }
 
 impl<T: ?Sized> CastValueCodecPartial<T> {
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
         decoded_data_type: &DataType,
         encoded_data_type: &DataType,
         encode_scalar_map: Option<ScalarMap>,
         decode_scalar_map: Option<ScalarMap>,
-        rounding: Option<CastValueRoundingMode>,
+        rounding: CastValueRoundingMode,
         out_of_range: Option<CastValueOutOfRangeMode>,
+        encode_kernel: Option<CastValueKernel>,
+        decode_kernel: Option<CastValueKernel>,
     ) -> Result<Self, CodecError> {
         decoded_data_type.codec_castvalue()?;
         encoded_data_type.codec_castvalue()?;
@@ -45,6 +51,8 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
             decode_scalar_map,
             rounding,
             out_of_range,
+            encode_kernel,
+            decode_kernel,
         })
     }
 
@@ -54,6 +62,7 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
         source_data_type: &DataType,
         target_data_type: &DataType,
         scalar_map: Option<&ScalarMap>,
+        kernel: Option<CastValueKernel>,
     ) -> Result<ArrayBytes<'static>, CodecError> {
         let source = source_data_type.codec_castvalue()?;
         let target = target_data_type.codec_castvalue()?;
@@ -67,6 +76,7 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
                 scalar_map,
                 rounding: self.rounding,
                 out_of_range: self.out_of_range,
+                kernel,
             },
         )?))
     }
@@ -77,6 +87,7 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
             &self.decoded_data_type,
             &self.encoded_data_type,
             self.encode_scalar_map.as_ref(),
+            self.encode_kernel,
         )
     }
 
@@ -86,6 +97,7 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
             &self.encoded_data_type,
             &self.decoded_data_type,
             self.decode_scalar_map.as_ref(),
+            self.decode_kernel,
         )
     }
 }
@@ -134,10 +146,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for CastValueCodecPartial<T>
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
     }
@@ -203,10 +211,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for CastValueCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase().await
     }
