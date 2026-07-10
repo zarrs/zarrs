@@ -37,10 +37,9 @@ use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
   v3: "zarrs.regular_bounded", []
@@ -94,19 +93,12 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
         crate::warn_experimental_extension(metadata.name(), "chunk grid");
         let configuration: RegularBoundedChunkGridConfiguration =
             metadata.to_typed_configuration()?;
-        let chunk_grid = RegularBoundedChunkGrid::new(
-            array_shape.clone(),
-            configuration.chunk_shape,
-        )
-        .map_err(|_| {
-            PluginCreateError::from(
-                "`regular_bounded` chunk shape and array shape have inconsistent dimensionality",
-            )
-        })?;
+        let chunk_grid =
+            RegularBoundedChunkGrid::new(array_shape.clone(), configuration.chunk_shape)?;
         Ok(ChunkGrid::new(chunk_grid))
     }
 

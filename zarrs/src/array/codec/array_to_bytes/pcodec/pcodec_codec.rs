@@ -197,11 +197,8 @@ impl ArrayCodecTraits for PcodecCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PcodecCodecBound {}
+
 impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>

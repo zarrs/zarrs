@@ -48,7 +48,18 @@
 //! # "#;
 //! # use zarrs::metadata_ext::codec::sharding::ShardingCodecConfigurationV1;
 //! # serde_json::from_str::<ShardingCodecConfigurationV1>(JSON).unwrap();
+//! ```
 //!
+//! ### Advanced Usage
+//!
+//! #### Retrieving Encoded Subchunks
+//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
+//! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
+//! 2. create a storage partial decoder for the shard object,
+//! 3. construct the sharding partial decoder with the bound codec accessors, and
+//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
+//!
+//! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
 
 mod sharding_codec;
 mod sharding_codec_builder;
@@ -59,8 +70,8 @@ mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
 #[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
+pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 use std::borrow::Cow;
 use std::num::NonZeroU64;
@@ -71,8 +82,7 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound,
     DataType, FillValue, RecommendedConcurrency, ravel_indices,
 };
-pub use sharding_codec::ShardingCodec;
-pub(crate) use sharding_codec::ShardingCodecBound;
+pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
@@ -111,6 +121,7 @@ fn calculate_chunks_per_shard(
             if num::Integer::is_multiple_of(&s, &c) {
                 Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
             } else {
+                // TODO: Permit this path if/when https://github.com/zarr-developers/zarr-specs/pull/370 merges
                 Err(CodecError::Other(
                     format!("invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {shard_shape:?}")
                 ))
@@ -182,12 +193,19 @@ fn subchunk_byte_range(
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
 
-        let shard_index_idx =
-            ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
+        let shard_index_idx = ravel_indices(chunk_indices, &chunks_per_shard).ok_or_else(|| {
+            CodecError::Other(format!(
+                "subchunk indices {chunk_indices:?} are out of bounds for chunks per shard {chunks_per_shard:?}"
+            ))
+        })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
-        Ok(Some(ByteRange::new(offset..offset + size)))
+        if offset == u64::MAX && size == u64::MAX {
+            Ok(None)
+        } else {
+            Ok(Some(ByteRange::new(offset..offset + size)))
+        }
     } else {
         Ok(None)
     }

@@ -35,13 +35,12 @@ use crate::array::{
     ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 
@@ -77,6 +76,12 @@ pub struct RectangularChunkGridCreateError(
     ArrayShape,
     Vec<RectangularChunkGridDimensionConfiguration>,
 );
+
+impl From<RectangularChunkGridCreateError> for ChunkGridCreateError {
+    fn from(value: RectangularChunkGridCreateError) -> Self {
+        Self::Other(value.to_string())
+    }
+}
 
 impl RectangularChunkGrid {
     /// Create a new `rectangular` chunk grid with chunk shapes `chunk_shapes`.
@@ -154,11 +159,11 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
         crate::warn_experimental_extension(metadata.name(), "chunk grid");
         let configuration: RectangularChunkGridConfiguration = metadata.to_typed_configuration()?;
-        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
-            .map_err(|err| PluginCreateError::Other(err.to_string()))?;
+        let chunk_grid =
+            RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)?;
         Ok(ChunkGrid::new(chunk_grid))
     }
 

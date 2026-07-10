@@ -212,6 +212,8 @@ impl ArrayCodecTraits for ZfpCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for ZfpCodecBound {}
+
 impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>

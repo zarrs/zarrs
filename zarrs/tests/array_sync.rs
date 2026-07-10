@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits, CodecOptions,
-};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
 
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
@@ -118,14 +116,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, array_path)
     .unwrap();
 
-    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
-    assert_eq!(
-        array
-            .codecs_bound()
-            .partial_decode_granularity(&chunk_shape)
-            .unwrap(),
-        [NonZeroU64::new(2).unwrap(); 2]
-    );
+    assert!(array.subchunk_grid().is_none());
 
     array_sync_read(&array)?;
 
@@ -156,13 +147,13 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = builder.build(store, array_path).unwrap();
 
-    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
         array
-            .codecs_bound()
-            .partial_decode_granularity(&chunk_shape)
+            .subchunk_grid()
+            .unwrap()
+            .chunk_shape(&vec![0; array.dimensionality()])
             .unwrap(),
-        [NonZeroU64::new(1).unwrap(); 2]
+        Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
 
     array_sync_read(&array)?;

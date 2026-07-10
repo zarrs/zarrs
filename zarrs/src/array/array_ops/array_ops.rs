@@ -70,23 +70,18 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
+    /// Return the subchunk shape if the subchunk grid has a regular chunk shape.
     ///
-    /// Returns [`None`] for an unsharded array.
+    /// Returns [`None`] if the array does not expose subchunks, or if the
+    /// resolved subchunk grid has varying edge lengths.
     #[must_use]
     fn subchunk_shape(&self) -> Option<ChunkShape>;
 
     /// Retrieve the subchunk grid.
     ///
-    /// Returns the normal chunk grid for an unsharded array.
+    /// Returns [`None`] if the subchunk grid cannot be globally resolved (i.e. it is non-existent or chunk-local).
     #[must_use]
-    fn subchunk_grid(&self) -> &ChunkGrid;
-
-    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
-    ///
-    /// Returns the normal chunk grid shape for an unsharded array.
-    #[must_use]
-    fn subchunk_grid_shape(&self) -> ArrayShape;
+    fn subchunk_grid(&self) -> Option<&ChunkGrid>;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;
@@ -104,16 +99,6 @@ pub trait ArrayOps {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     #[allow(clippy::missing_errors_doc)]
     fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
-
-    /// Return the partial decode granularity of the chunk at `chunk_indices`.
-    ///
-    /// # Errors
-    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
-    ///
-    /// # Panics
-    /// Panics if any component of the shape of the chunk at `chunk_indices` exceeds [`usize::MAX`].
-    #[allow(clippy::missing_errors_doc)]
-    fn partial_decode_granularity(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
 
     /// Return an array subset that spans the entire array.
     fn subset_all(&self) -> ArraySubset;
@@ -170,4 +155,20 @@ pub trait ArrayOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError>;
+}
+
+pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<ChunkShape> {
+    let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
+    for dimension in 0..chunk_grid.dimensionality() {
+        let edge_lengths = chunk_grid.chunk_edge_lengths(dimension).ok()?;
+        let (&edge_length, remaining_edge_lengths) = edge_lengths.split_first()?;
+        if remaining_edge_lengths
+            .iter()
+            .any(|remaining_edge_length| *remaining_edge_length != edge_length)
+        {
+            return None;
+        }
+        chunk_shape.push(edge_length);
+    }
+    Some(chunk_shape)
 }

@@ -195,6 +195,13 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
         self.input_handle.size_held()
     }
 
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
+    }
+
     fn partial_decode(
         &self,
         indexer: &dyn crate::array::Indexer,
@@ -273,6 +280,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
 
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
     }
 
     async fn partial_decode<'a>(

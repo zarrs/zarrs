@@ -3,16 +3,18 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShape, DataType, FillValue,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShape, DataType, FillValue,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
@@ -27,6 +29,50 @@ use zarrs_metadata::v3::MetadataV3;
 
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
+
+fn cumulative_boundaries(edge_lengths: &[NonZeroU64]) -> Vec<u64> {
+    let mut offset = 0;
+    let mut boundaries = Vec::with_capacity(edge_lengths.len() + 1);
+    boundaries.push(offset);
+    for edge_length in edge_lengths {
+        offset += edge_length.get();
+        boundaries.push(offset);
+    }
+    boundaries
+}
+
+fn validate_subchunk_grid_refines_chunk_grid(
+    chunk_grid: &ChunkGrid,
+    subchunk_grid: &ChunkGrid,
+) -> Result<(), ChunkGridCreateError> {
+    if chunk_grid.dimensionality() != subchunk_grid.dimensionality() {
+        return Err(ChunkGridCreateError::new(format!(
+            "subchunk grid dimensionality {} does not match chunk grid dimensionality {}",
+            subchunk_grid.dimensionality(),
+            chunk_grid.dimensionality()
+        )));
+    }
+
+    for dim in 0..chunk_grid.dimensionality() {
+        let chunk_boundaries = cumulative_boundaries(&chunk_grid.chunk_edge_lengths(dim)?);
+        let subchunk_boundaries = cumulative_boundaries(&subchunk_grid.chunk_edge_lengths(dim)?);
+        if chunk_boundaries.last() != subchunk_boundaries.last() {
+            return Err(ChunkGridCreateError::Other(format!(
+                "subchunk grid edge lengths in dimension {dim} do not sum to chunk grid edge lengths"
+            )));
+        }
+        if !chunk_boundaries
+            .iter()
+            .all(|boundary| subchunk_boundaries.binary_search(boundary).is_ok())
+        {
+            return Err(ChunkGridCreateError::Other(format!(
+                "subchunk grid boundaries in dimension {dim} do not align with chunk grid boundaries"
+            )));
+        }
+    }
+
+    Ok(())
+}
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
@@ -414,6 +460,78 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        if matches!(decoded_chunk_grid, ChunkGridDecodedRef::Array(grid) if grid.array_shape().contains(&0))
+        {
+            return Ok(ChunkGridDecoded::None);
+        }
+
+        let mut chunk_grids = Vec::with_capacity(self.array_to_array.len() + 1);
+        let mut mapped_chunk_grid: ChunkGridDecoded = decoded_chunk_grid.into();
+        if let ChunkGridDecoded::Array(chunk_grid) = &mapped_chunk_grid {
+            chunk_grids.push(chunk_grid.clone());
+        }
+        for codec in &self.array_to_array {
+            if matches!(mapped_chunk_grid, ChunkGridDecoded::None) {
+                return Ok(ChunkGridDecoded::None);
+            }
+            let decoded_grid_is_global = matches!(mapped_chunk_grid, ChunkGridDecoded::Array(_));
+            let encoded_chunk_grid = codec.encoded_chunk_grid((&mapped_chunk_grid).into())?;
+            match &encoded_chunk_grid {
+                ChunkGridEncoded::None => return Ok(ChunkGridDecoded::None),
+                ChunkGridEncoded::Array(encoded_chunk_grid) => {
+                    if !decoded_grid_is_global {
+                        return Err(ChunkGridCreateError::new(
+                            "a codec mapped a chunk-local grid to a global chunk grid",
+                        ));
+                    }
+                    chunk_grids.push(encoded_chunk_grid.clone());
+                }
+                ChunkGridEncoded::ChunkLocal => {}
+            }
+            mapped_chunk_grid = encoded_chunk_grid;
+        }
+
+        let mut subchunk_grid = match self
+            .array_to_bytes
+            .decoded_subchunk_grid((&mapped_chunk_grid).into())?
+        {
+            ChunkGridDecoded::None => return Ok(ChunkGridDecoded::None),
+            ChunkGridDecoded::Array(subchunk_grid) => subchunk_grid,
+            local @ ChunkGridDecoded::ChunkLocal => return Ok(local),
+        };
+
+        if chunk_grids.len() != self.array_to_array.len() + 1 {
+            return Err(ChunkGridCreateError::new(
+                "a codec returned a global subchunk grid for a chunk-local chunk grid",
+            ));
+        }
+
+        for (codec, decoded_chunk_grid) in self
+            .array_to_array
+            .iter()
+            .rev()
+            .zip(chunk_grids.iter().rev().skip(1))
+        {
+            subchunk_grid = match codec.decoded_subchunk_grid(
+                decoded_chunk_grid.into(),
+                ChunkGridEncodedRef::Array(&subchunk_grid),
+            )? {
+                ChunkGridDecoded::None => return Ok(ChunkGridDecoded::None),
+                ChunkGridDecoded::Array(decoded_subchunk_grid) => decoded_subchunk_grid,
+                local @ ChunkGridDecoded::ChunkLocal => return Ok(local),
+            };
+        }
+
+        validate_subchunk_grid_refines_chunk_grid(&chunk_grids[0], &subchunk_grid)?;
+        Ok(ChunkGridDecoded::Array(subchunk_grid))
+    }
+}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -422,35 +540,6 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
 impl ArrayToBytesCodecTraits for CodecChainBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
-    }
-
-    fn partial_decode_granularity(
-        &self,
-        decoded_shape: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
-        array_shapes.push(decoded_shape.to_vec());
-        for codec in &self.array_to_array {
-            let decoded_shape = array_shapes.last().expect("array_shapes is non-empty");
-            let encoded_shape = codec.encoded_shape(decoded_shape)?;
-            array_shapes.push(encoded_shape);
-        }
-
-        let encoded_shape = array_shapes.last().expect("array_shapes is non-empty");
-        let mut granularity = self
-            .array_to_bytes
-            .partial_decode_granularity(encoded_shape)?;
-
-        for (codec, decoded_shape) in self
-            .array_to_array
-            .iter()
-            .rev()
-            .zip(array_shapes.iter().rev().skip(1))
-        {
-            granularity = codec.partial_decode_granularity(decoded_shape, &granularity)?;
-        }
-
-        Ok(granularity)
     }
 
     fn encode<'a>(

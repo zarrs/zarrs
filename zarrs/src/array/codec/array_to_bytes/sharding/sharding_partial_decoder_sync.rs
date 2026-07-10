@@ -11,8 +11,9 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, CodecChainBound,
-    DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
+    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits,
+    CodecChainBound, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer,
+    IndexerError, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
@@ -24,7 +25,7 @@ use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Partial decoder for the sharding codec.
-pub(crate) struct ShardingPartialDecoder {
+pub struct ShardingPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: ChunkShape,
     subchunk_shape: ChunkShape,
@@ -37,7 +38,7 @@ pub(crate) struct ShardingPartialDecoder {
 impl ShardingPartialDecoder {
     /// Create a new partial decoder for the sharding codec.
     #[expect(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
@@ -69,7 +70,7 @@ impl ShardingPartialDecoder {
     /// Retrieve the byte range of an encoded subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) fn subchunk_byte_range(
+    pub fn subchunk_byte_range(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
@@ -84,7 +85,7 @@ impl ShardingPartialDecoder {
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) fn retrieve_subchunk_encoded(
+    pub fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
@@ -215,6 +216,17 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             indexer,
             options,
         )
+    }
+
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 
     fn partial_decode_into(

@@ -11,8 +11,6 @@ use super::super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::super::*;
 use super::ArrayReadOps;
 use crate::array::ArrayBytes;
-use crate::array::array_sharded_ext::subchunk_shard_index_and_chunk_index;
-use crate::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -291,51 +289,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError> {
-        let codecs = self.codecs_bound();
-        let Some(sharding_codec) = codecs
-            .array_to_bytes_codec()
-            .as_any()
-            .downcast_ref::<ShardingCodecBound>()
-        else {
-            return Err(ArrayError::UnsupportedMethod(
-                "the array is not exclusively sharded".to_string(),
-            ));
-        };
-        if !codecs.array_to_array_codecs().is_empty() || !codecs.bytes_to_bytes_codecs().is_empty()
-        {
-            return Err(ArrayError::UnsupportedMethod(
-                "the array is not exclusively sharded".to_string(),
-            ));
-        }
-
-        let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
-        let input_handle = Arc::new((storage_transformer, self.chunk_key(&shard_indices)));
-        let partial_decoder = ShardingPartialDecoder::new(
-            input_handle,
-            self.chunk_shape(&shard_indices)?,
-            sharding_codec.subchunk_shape.clone(),
-            sharding_codec.inner_codecs.clone(),
-            &sharding_codec.index_codecs,
-            sharding_codec.index_location,
-            self.codec_options(),
-            sharding_codec.options.clone(),
-        )?;
-
-        Ok(partial_decoder
-            .retrieve_subchunk_encoded(&subchunk_indices_in_shard)?
-            .map(Vec::from))
-    }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk_opt<T: FromArrayBytes>(
@@ -624,10 +577,10 @@ mod tests {
             .collect();
         array.store_array_subset(&array.subset_all(), &data)?;
 
-        let subchunk_grid = array.subchunk_grid();
         if sharded {
+            let subchunk_grid = array.subchunk_grid().unwrap();
             assert_eq!(
-                array.subchunk_shape(),
+                subchunk_grid.chunk_shape(&vec![0; array.dimensionality()])?,
                 Some(vec![NonZeroU64::new(2).unwrap(); 2])
             );
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
@@ -636,6 +589,13 @@ mod tests {
             let test =
                 array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &CodecOptions::default())?;
             assert_eq!(compare, test);
+
+            let local_subchunk_grid =
+                array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
+            assert_eq!(
+                local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
+                vec![NonZeroU64::new(2).unwrap(); 2]
+            );
 
             #[cfg(feature = "ndarray")]
             {
@@ -663,26 +623,22 @@ mod tests {
                 )?;
                 assert_eq!(compare, test);
             }
-
-            assert!(array.retrieve_encoded_subchunk(&[0, 0])?.is_some());
         } else {
-            assert_eq!(array.subchunk_shape(), None);
-            assert_eq!(subchunk_grid.grid_shape(), &[2, 2]);
-
-            let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?;
-            let test =
-                array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())?;
-            assert_eq!(compare, test);
+            assert!(array.subchunk_grid().is_none());
+            assert!(
+                array
+                    .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
+                    .is_none()
+            );
 
             let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
-            let compare = array.retrieve_chunks::<Vec<u16>>(&chunks)?;
-            let test =
-                array.retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default())?;
-            assert_eq!(compare, test);
-
             assert!(matches!(
-                array.retrieve_encoded_subchunk(&[0, 0]),
-                Err(ArrayError::UnsupportedMethod(_))
+                array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default()),
+                Err(ArrayError::MissingSubchunkGrid)
+            ));
+            assert!(matches!(
+                array.retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default()),
+                Err(ArrayError::MissingSubchunkGrid)
             ));
         }
 
@@ -708,44 +664,5 @@ mod tests {
     #[test]
     fn array_read_ops_subchunks_unsharded() -> Result<(), Box<dyn std::error::Error>> {
         array_read_ops_subchunks_impl(false)
-    }
-
-    #[test]
-    fn array_read_ops_encoded_subchunk_missing() -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(MemoryStore::default());
-        let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
-        builder.subchunk_shape(vec![2, 2]);
-        let array = builder.build(store, "/array")?;
-
-        assert_eq!(array.retrieve_encoded_subchunk(&[0, 0])?, None);
-        Ok(())
-    }
-
-    #[test]
-    fn array_read_ops_encoded_subchunk_outer_codec_unsupported()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use crate::array::codec::{ShardingCodecBuilder, TransposeCodec};
-        use zarrs_metadata_ext::codec::transpose::TransposeOrder;
-
-        let store = Arc::new(MemoryStore::default());
-        let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
-        builder
-            .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
-                &[1, 0],
-            )?))])
-            .array_to_bytes_codec(Arc::new(
-                ShardingCodecBuilder::new(
-                    vec![NonZeroU64::new(2).unwrap(); 2],
-                    &data_type::uint16(),
-                )
-                .build(),
-            ));
-        let array = builder.build(store, "/array")?;
-
-        assert!(matches!(
-            array.retrieve_encoded_subchunk(&[0, 0]),
-            Err(ArrayError::UnsupportedMethod(_))
-        ));
-        Ok(())
     }
 }
