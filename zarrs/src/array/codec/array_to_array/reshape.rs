@@ -86,14 +86,20 @@ fn get_encoded_shape(
             ReshapeDim::InputDims(input_dims) => {
                 let mut product = NonZeroU64::new(1).unwrap();
                 for input_dim in input_dims {
-                    let input_shape = *decoded_shape
-                        .get(usize::try_from(*input_dim).unwrap())
+                    let input_shape = usize::try_from(*input_dim)
+                        .ok()
+                        .and_then(|input_dim| decoded_shape.get(input_dim))
+                        .copied()
                         .ok_or_else(|| {
                             CodecError::Other(
                                 format!("reshape codec shape references a dimension ({input_dim}) larger than the chunk dimensionality ({})", decoded_shape.len()),
                             )
                         })?;
-                    product = product.checked_mul(input_shape).unwrap();
+                    product = product.checked_mul(input_shape).ok_or_else(|| {
+                        CodecError::Other(format!(
+                            "reshape codec encoded dimension overflows u64 for decoded shape {decoded_shape:?}"
+                        ))
+                    })?;
                 }
                 encoded_shape.push(product);
             }
@@ -104,8 +110,17 @@ fn get_encoded_shape(
         }
     }
 
-    let num_elements_input = decoded_shape.iter().map(|u| u.get()).product::<u64>();
-    let num_elements_output = encoded_shape.iter().map(|u| u.get()).product::<u64>();
+    let num_elements = |shape: &[NonZeroU64]| {
+        shape.iter().try_fold(1u64, |product, dim| {
+            product.checked_mul(dim.get()).ok_or_else(|| {
+                CodecError::Other(format!(
+                    "reshape codec shape element count overflows u64: {shape:?}"
+                ))
+            })
+        })
+    };
+    let num_elements_input = num_elements(decoded_shape)?;
+    let num_elements_output = num_elements(&encoded_shape)?;
     if let Some(fill_index) = fill_index {
         let (quot, rem) = num_elements_input.div_rem(&num_elements_output);
         if rem == 0 {
@@ -379,6 +394,19 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn codec_reshape_shape_overflow() {
+        let decoded_shape = [nz(u64::MAX), nz(2)];
+        let grouped_shape = ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]);
+        assert!(get_encoded_shape(&grouped_shape, &decoded_shape).is_err());
+
+        let fixed_shape = ReshapeShape(vec![
+            ReshapeDim::Size(nz(u64::MAX)),
+            ReshapeDim::Size(nz(2)),
+        ]);
+        assert!(get_encoded_shape(&fixed_shape, &[nz(1)]).is_err());
     }
 
     fn test_reshape_partial_decode_granularity(
