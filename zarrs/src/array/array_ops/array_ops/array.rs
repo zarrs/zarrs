@@ -221,10 +221,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        match &self.subchunk_grid {
-            ChunkGridDecoded::Array(subchunk_grid) => maybe_regular_chunk_grid_shape(subchunk_grid),
-            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
-        }
+        self.subchunk_grid().and_then(maybe_regular_chunk_grid_shape)
     }
 
     pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
