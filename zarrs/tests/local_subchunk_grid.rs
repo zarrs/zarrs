@@ -22,9 +22,10 @@ use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, PartialDecoderCapability, PartialEncoderCapability,
-    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
+    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToArrayCodecTraits,
+    register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -173,6 +174,15 @@ impl zarrs_codec::ArrayCodecTraits for DynamicLocalSubchunkCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCodecBound {
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, zarrs::array::ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::ChunkLocal)
+    }
+}
+
 impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -183,13 +193,6 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
         Ok(BytesRepresentation::FixedSize(header_len(shape.len())))
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, zarrs::array::ChunkGridCreateError> {
-        Ok(ChunkGridDecoded::ChunkLocal)
     }
 
     fn encode<'a>(
@@ -430,25 +433,7 @@ impl ArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
     }
 }
 
-impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
-        self
-    }
-
-    fn encoded_data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        Ok(vec![
-            NonZeroU64::new(decoded_shape.num_elements_u64()).unwrap(),
-        ])
-    }
-
+impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCodecBound {
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -469,6 +454,26 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
+    }
+}
+
+impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(vec![
+            NonZeroU64::new(decoded_shape.num_elements_u64()).unwrap(),
+        ])
     }
 
     fn encode<'a>(
@@ -577,18 +582,7 @@ impl ArrayCodecTraits for TestSubchunkingCodecBound {
     }
 }
 
-impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self
-    }
-
-    fn encoded_representation(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
-        Ok(BytesRepresentation::UnboundedSize)
-    }
-
+impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBound {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -606,6 +600,19 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
                 )?),
             )),
         }
+    }
+}
+
+impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self
+    }
+
+    fn encoded_representation(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentation, CodecError> {
+        Ok(BytesRepresentation::UnboundedSize)
     }
 
     fn encode<'a>(

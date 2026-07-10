@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
@@ -11,10 +10,9 @@ use crate::array::{ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -150,6 +148,8 @@ impl ArrayCodecTraits for BitroundCodecBound {
     }
 }
 
+impl ArrayToArrayCodecSubchunkingIdentityTraits for BitroundCodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -170,21 +170,6 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         Ok(decoded_shape.to_vec())
-    }
-
-    fn encoded_chunk_grid(
-        &self,
-        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
-        Ok(decoded_chunk_grid.into())
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        Ok(encoded_subchunk_grid.into())
     }
 
     fn encode<'a>(

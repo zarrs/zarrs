@@ -160,6 +160,8 @@ macro_rules! vlen_v2_codec {
             }
         }
 
+        impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for [<$struct Bound>] {}
+
         #[cfg_attr(
             all(feature = "async", not(target_arch = "wasm32")),
             async_trait::async_trait
@@ -168,13 +170,6 @@ macro_rules! vlen_v2_codec {
         impl ArrayToBytesCodecTraits for [<$struct Bound>] {
             fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
                 self as Arc<dyn ArrayToBytesCodecTraits>
-            }
-
-            fn decoded_subchunk_grid(
-                &self,
-                _chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
-            ) -> Result<zarrs_codec::ChunkGridDecoded, zarrs_chunk_grid::ChunkGridCreateError> {
-                Ok(zarrs_codec::ChunkGridDecoded::None)
             }
 
             fn encode<'a>(

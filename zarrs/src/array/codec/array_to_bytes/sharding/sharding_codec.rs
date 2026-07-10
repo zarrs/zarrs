@@ -311,16 +311,7 @@ impl ArrayCodecTraits for ShardingCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for ShardingCodecBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self as Arc<dyn ArrayToBytesCodecTraits>
-    }
-
+impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -332,6 +323,17 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             )),
             ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridDecoded::ChunkLocal),
         }
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for ShardingCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
     fn encode<'a>(

@@ -146,37 +146,7 @@ impl ArrayCodecTraits for SqueezeCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for SqueezeCodecBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
-        self as Arc<dyn ArrayToArrayCodecTraits>
-    }
-
-    fn encoded_data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        let encoded_shape: Vec<_> = decoded_shape
-            .iter()
-            .filter(|dim| dim.get() > 1)
-            .copied()
-            .collect();
-        if encoded_shape.is_empty() {
-            Ok(vec![NonZeroU64::new(1).unwrap()])
-        } else {
-            Ok(encoded_shape)
-        }
-    }
-
+impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -229,7 +199,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
             return Ok(ChunkGridDecoded::None);
         };
-        // Empty chunk grids have no subchunk grid
         if decoded_chunk_grid.array_shape().contains(&0) {
             return Ok(ChunkGridDecoded::None);
         }
@@ -274,6 +243,38 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToArrayCodecTraits for SqueezeCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        let encoded_shape: Vec<_> = decoded_shape
+            .iter()
+            .filter(|dim| dim.get() > 1)
+            .copied()
+            .collect();
+        if encoded_shape.is_empty() {
+            Ok(vec![NonZeroU64::new(1).unwrap()])
+        } else {
+            Ok(encoded_shape)
+        }
     }
 
     fn encode<'a>(

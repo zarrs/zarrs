@@ -1,16 +1,14 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -164,6 +162,8 @@ impl ArrayCodecTraits for ZfpyCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for ZfpyCodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -172,13 +172,6 @@ impl ArrayCodecTraits for ZfpyCodecBound {
 impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
@@ -17,8 +16,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    ChunkGridDecoded, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -175,6 +174,8 @@ impl ArrayCodecTraits for BytesCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for BytesCodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -183,13 +184,6 @@ impl ArrayCodecTraits for BytesCodecBound {
 impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

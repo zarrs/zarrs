@@ -147,6 +147,23 @@ impl ArrayCodecTraits for ReshapeCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        encoded_chunk_grid(&self.shape, decoded_chunk_grid)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
+    }
+}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -167,21 +184,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         super::get_encoded_shape(&self.shape, decoded_shape)
-    }
-
-    fn encoded_chunk_grid(
-        &self,
-        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
-        encoded_chunk_grid(&self.shape, decoded_chunk_grid)
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
     }
 
     fn encode<'a>(

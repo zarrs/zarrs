@@ -23,8 +23,14 @@ pub use array_bytes_fixed_disjoint_view::{
 mod codec_traits;
 pub use codec_traits::array::ArrayCodecTraits;
 pub use codec_traits::array_partial_sync::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
-pub use codec_traits::array_to_array::{ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits};
-pub use codec_traits::array_to_bytes::{ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits};
+pub use codec_traits::array_to_array::{
+    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecSubchunkingTraits,
+    ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits,
+};
+pub use codec_traits::array_to_bytes::{
+    ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
+};
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};

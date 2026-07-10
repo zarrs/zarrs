@@ -1,5 +1,5 @@
 use inherent::inherent;
-use zarrs_codec::ArrayToBytesCodecTraits;
+use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 
 use super::super::*;
 use super::ArrayMutOps;

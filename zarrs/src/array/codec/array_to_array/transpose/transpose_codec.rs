@@ -157,33 +157,7 @@ impl ArrayCodecTraits for TransposeCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for TransposeCodecBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
-        self as Arc<dyn ArrayToArrayCodecTraits>
-    }
-
-    fn encoded_data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        if self.order.0.len() != decoded_shape.len() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match array dimensionality".to_string(),
-            ));
-        }
-        Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
-    }
-
+impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -244,6 +218,34 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToArrayCodecTraits for TransposeCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        if self.order.0.len() != decoded_shape.len() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
+        }
+        Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
     fn encode<'a>(

@@ -12,6 +12,36 @@ use crate::{
     CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
     decode_into_array_bytes_target,
 };
+
+/// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
+pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
+    /// Return the decoded subchunk grid created by this codec.
+    ///
+    /// A chunk-local input permits [`ChunkGridDecoded::ChunkLocal`] when the codec
+    /// can expose a concrete subchunk grid for each chunk at runtime.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+}
+
+/// Marker trait for array-to-bytes codecs that do not expose subchunk grids.
+pub trait ArrayToBytesCodecNoSubchunkingTraits {}
+
+impl<T> ArrayToBytesCodecSubchunkingTraits for T
+where
+    T: ArrayCodecTraits + ArrayToBytesCodecNoSubchunkingTraits + ?Sized,
+{
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
+    }
+}
 #[cfg(feature = "async")]
 use crate::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -60,7 +90,7 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
 
@@ -72,18 +102,6 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError>;
-
-    /// Return the decoded subchunk grid created by this codec.
-    ///
-    /// A chunk-local input permits [`ChunkGridDecoded::ChunkLocal`] when the codec
-    /// can expose a concrete subchunk grid for each chunk at runtime.
-    ///
-    /// # Errors
-    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
-    fn decoded_subchunk_grid(
-        &self,
-        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///

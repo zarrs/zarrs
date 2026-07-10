@@ -460,21 +460,11 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for CodecChainBound {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self
-    }
-
+impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        // Empty chunk grids have no subchunk grid
         if matches!(decoded_chunk_grid, ChunkGridDecodedRef::Array(grid) if grid.array_shape().contains(&0))
         {
             return Ok(ChunkGridDecoded::None);
@@ -539,6 +529,17 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         validate_subchunk_grid_refines_chunk_grid(&chunk_grids[0], &subchunk_grid)?;
         Ok(ChunkGridDecoded::Array(subchunk_grid))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for CodecChainBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self
     }
 
     fn encode<'a>(

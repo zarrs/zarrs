@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
@@ -11,10 +10,10 @@ use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -493,6 +492,8 @@ impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
     }
 }
 
+impl ArrayToArrayCodecSubchunkingIdentityTraits for FixedScaleOffsetCodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -509,21 +510,6 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
 
     fn encoded_fill_value(&self) -> &FillValue {
         &self.encoded_fill_value
-    }
-
-    fn encoded_chunk_grid(
-        &self,
-        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
-        Ok(decoded_chunk_grid.into())
-    }
-
-    fn decoded_subchunk_grid(
-        &self,
-        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        Ok(encoded_subchunk_grid.into())
     }
 
     fn encode<'a>(
