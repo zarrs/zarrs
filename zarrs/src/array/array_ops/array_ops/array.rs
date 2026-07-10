@@ -221,7 +221,8 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        self.subchunk_grid().and_then(maybe_regular_chunk_grid_shape)
+        self.subchunk_grid()
+            .and_then(maybe_regular_chunk_grid_shape)
     }
 
     pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
