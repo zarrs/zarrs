@@ -2,6 +2,30 @@
 //!
 //! Permutes the dimensions of arrays.
 //!
+//! ### Subchunking
+//!
+//! `transpose` permutes chunk and subchunk axes in the forward direction and
+//! applies the inverse permutation when mapping downstream subchunks back:
+//!
+//! ```text
+//! decoded grid [2, 3]                 encoded grid [3, 2]
+//! +---+---+---+                       +---+---+
+//! | A | B | C |  -- order [1, 0] --> | A | D |
+//! +---+---+---+                       +---+---+
+//! | D | E | F |                       | B | E |
+//! +---+---+---+                       +---+---+
+//!                                     | C | F |
+//!                                     +---+---+
+//!
+//! encoded subchunk axes [0, 1] -- inverse order --> decoded axes [1, 0]
+//! ```
+//!
+//! Every rectilinear edge-length sequence is preserved, including varying
+//! edges; this codec neither splits nor combines spans. The permutation length
+//! must match both grids' dimensionality. The mapped grid is rectilinear, so a
+//! non-rectilinear grid cannot retain topology not represented by independent
+//! per-axis edge lengths.
+//!
 //! ### Compatible Implementations
 //! This is a core codec and should be compatible with all Zarr V3 implementations that support it.
 //!

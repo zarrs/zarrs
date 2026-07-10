@@ -106,6 +106,13 @@ where
         self.input_handle.size_held()
     }
 
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        todo!()
+    }
+
     fn partial_decode(
         &self,
         indexer: &dyn crate::array::Indexer,
@@ -134,6 +141,13 @@ where
 
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        todo!()
     }
 
     fn size_held(&self) -> usize {

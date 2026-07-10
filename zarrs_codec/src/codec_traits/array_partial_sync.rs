@@ -33,12 +33,8 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the local grid cannot be resolved.
-    fn local_subchunk_grid(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        Ok(None)
-    }
+    fn local_subchunk_grid(&self, _options: &CodecOptions)
+    -> Result<Option<ChunkGrid>, CodecError>;
 
     /// Partially decode a chunk.
     ///

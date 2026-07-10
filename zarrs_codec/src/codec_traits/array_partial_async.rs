@@ -38,9 +38,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     async fn local_subchunk_grid(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        Ok(None)
-    }
+    ) -> Result<Option<ChunkGrid>, CodecError>;
 
     /// Partially decode a chunk.
     ///
