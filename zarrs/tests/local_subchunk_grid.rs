@@ -10,8 +10,8 @@ use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits, ArrayReadOps,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid,
-    ChunkGridDecoded, ChunkShape, ChunkShapeTraits, Codec, CodecCreateError, CodecError,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
+    ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
     RecommendedConcurrency, UnboundArrayToBytesCodecTraits, data_type,
 };
@@ -20,10 +20,13 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::StorageError;
 use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    PartialDecoderCapability, PartialEncoderCapability, register_codec_v3, unregister_codec_v3,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, PartialDecoderCapability, PartialEncoderCapability,
+    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
 };
-use zarrs_plugin::{RuntimePlugin, ZarrVersion};
+use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
 #[derive(Clone, Debug)]
 struct DynamicLocalSubchunkCodec;
@@ -338,4 +341,363 @@ fn dynamic_local_subchunk_grid_transforms_through_transpose()
 
     assert!(unregister_codec_v3(&handle));
     Ok(())
+}
+
+#[derive(Debug)]
+struct LocalOnlyReshapeGridCodec {
+    reject_chunk_local: bool,
+}
+
+#[derive(Debug)]
+struct LocalOnlyReshapeGridCodecBound {
+    data_type: DataType,
+    fill_value: FillValue,
+    reject_chunk_local: bool,
+}
+
+impl ExtensionName for LocalOnlyReshapeGridCodec {
+    fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+        None
+    }
+}
+
+impl CodecTraits for LocalOnlyReshapeGridCodec {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        None
+    }
+
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
+    }
+
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
+    }
+}
+
+impl UnboundArrayToArrayCodecTraits for LocalOnlyReshapeGridCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self
+    }
+
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        _opts: &zarrs_codec::CodecSpecificOptions,
+    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecCreateError> {
+        Ok(self)
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        Ok(Arc::new(LocalOnlyReshapeGridCodecBound {
+            data_type,
+            fill_value,
+            reject_chunk_local: self.reject_chunk_local,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn encoded_fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(vec![
+            NonZeroU64::new(decoded_shape.num_elements_u64()).unwrap(),
+        ])
+    }
+
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        match decoded_chunk_grid {
+            ChunkGridDecodedRef::None => Ok(ChunkGridEncoded::None),
+            ChunkGridDecodedRef::Array(_) => Ok(ChunkGridEncoded::ChunkLocal),
+            ChunkGridDecodedRef::ChunkLocal if self.reject_chunk_local => {
+                Ok(ChunkGridEncoded::None)
+            }
+            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridEncoded::ChunkLocal),
+        }
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(encoded_subchunk_grid.into())
+    }
+
+    fn encode<'a>(
+        &self,
+        _bytes: ArrayBytes<'a>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn decode<'a>(
+        &self,
+        _bytes: ArrayBytes<'a>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+}
+
+#[derive(Debug)]
+struct TestSubchunkingCodec {
+    expose_subchunks: bool,
+}
+
+impl ExtensionName for TestSubchunkingCodec {
+    fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+        None
+    }
+}
+
+impl CodecTraits for TestSubchunkingCodec {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        None
+    }
+
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
+    }
+
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
+    }
+}
+
+impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self.clone()
+    }
+
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        _opts: &zarrs_codec::CodecSpecificOptions,
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
+        Ok(self)
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        Ok(Arc::new(TestSubchunkingCodecBound {
+            data_type,
+            fill_value,
+            expose_subchunks: self.expose_subchunks,
+        }))
+    }
+}
+
+#[derive(Debug)]
+struct TestSubchunkingCodecBound {
+    data_type: DataType,
+    fill_value: FillValue,
+    expose_subchunks: bool,
+}
+
+impl ArrayCodecTraits for TestSubchunkingCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self
+    }
+
+    fn encoded_representation(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentation, CodecError> {
+        Ok(BytesRepresentation::UnboundedSize)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        if !self.expose_subchunks {
+            return Ok(ChunkGridDecoded::None);
+        }
+        match decoded_chunk_grid {
+            ChunkGridDecodedRef::None => Ok(ChunkGridDecoded::None),
+            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridDecoded::ChunkLocal),
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => Ok(ChunkGridDecoded::Array(
+                ChunkGrid::new(RegularChunkGrid::new(
+                    decoded_chunk_grid.array_shape().to_vec(),
+                    vec![NonZeroU64::new(3).unwrap()],
+                )?),
+            )),
+        }
+    }
+
+    fn encode<'a>(
+        &self,
+        _bytes: ArrayBytes<'a>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn decode<'a>(
+        &self,
+        _bytes: ArrayBytesRaw<'a>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+}
+
+fn local_only_grid_chain(expose_subchunks: bool, reject_chunk_local: bool) -> Arc<CodecChainBound> {
+    let data_type = data_type::uint8();
+    let fill_value = FillValue::from(0u8);
+    let mut array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>> =
+        vec![Arc::new(LocalOnlyReshapeGridCodec {
+            reject_chunk_local: false,
+        })];
+    if reject_chunk_local {
+        array_to_array.push(Arc::new(LocalOnlyReshapeGridCodec {
+            reject_chunk_local: true,
+        }));
+    }
+    CodecChain::new(
+        array_to_array,
+        Arc::new(TestSubchunkingCodec { expose_subchunks }),
+        vec![],
+    )
+    .with_context(data_type, fill_value)
+    .unwrap()
+}
+
+#[test]
+fn codec_chain_discovers_chunk_local_grid_after_global_mapping_fails() {
+    let decoded_chunk_grid = ChunkGrid::new(
+        RegularChunkGrid::new(
+            vec![4, 6],
+            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(6).unwrap()],
+        )
+        .unwrap(),
+    );
+    let chain = local_only_grid_chain(true, false);
+    assert!(matches!(
+        chain
+            .decoded_subchunk_grid((&decoded_chunk_grid).into())
+            .unwrap(),
+        ChunkGridDecoded::ChunkLocal
+    ));
+}
+
+#[test]
+fn codec_chain_does_not_infer_chunk_local_without_downstream_subchunks() {
+    let decoded_chunk_grid = ChunkGrid::new(
+        RegularChunkGrid::new(
+            vec![4, 6],
+            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(6).unwrap()],
+        )
+        .unwrap(),
+    );
+    let chain = local_only_grid_chain(false, false);
+    assert!(matches!(
+        chain
+            .decoded_subchunk_grid((&decoded_chunk_grid).into())
+            .unwrap(),
+        ChunkGridDecoded::None
+    ));
+}
+
+#[test]
+fn codec_chain_allows_later_array_codec_to_reject_chunk_local() {
+    let decoded_chunk_grid = ChunkGrid::new(
+        RegularChunkGrid::new(
+            vec![4, 6],
+            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(6).unwrap()],
+        )
+        .unwrap(),
+    );
+    let chain = local_only_grid_chain(true, true);
+    assert!(matches!(
+        chain
+            .decoded_subchunk_grid((&decoded_chunk_grid).into())
+            .unwrap(),
+        ChunkGridDecoded::None
+    ));
 }
