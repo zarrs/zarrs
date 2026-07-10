@@ -29,6 +29,13 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         self.bytes.size()
     }
 
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
+    }
+
     fn partial_decode(
         &self,
         indexer: &dyn Indexer,

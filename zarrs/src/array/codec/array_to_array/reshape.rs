@@ -28,8 +28,37 @@
 //! # use zarrs::metadata_ext::codec::reshape::ReshapeCodecConfiguration;
 //! # let configuration: ReshapeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
+//!
+//! ### Subchunking
+//!
+//! A codec chain maps the decoded chunk grid through `reshape` before asking a
+//! downstream codec, such as `sharding`, for its subchunks. It then maps those
+//! subchunks back to the decoded representation. For example:
+//!
+//! ```text
+//! decoded grid [2, 8], chunks [1, 4]   encoded grid [16], chunks [4]
+//! +----+----+                          +----+----+----+----+
+//! | A  | B  |  -- reshape [[0, 1]] --> | A  | B  | C  | D  |
+//! +----+----+     (encode)             +----+----+----+----+
+//! | C  | D  |                                    | sharding codec
+//! +----+----+                                    | chunk_shape: [2]
+//!                                                | (encode)
+//!                                                v
+//! decoded subchunks [1, 2]             downstream encoded subchunks [2]
+//! +--+--+--+--+                        +--+--+--+--+--+--+--+--+
+//! |A0|A1|B0|B1| <- reshape [[0, 1]] -- |A0|A1|B0|B1|C0|C1|D0|D1|
+//! +--+--+--+--+    (decode)            +--+--+--+--+--+--+--+--+
+//! |C0|C1|D0|D1|
+//! +--+--+--+--+
+//! ```
+//!
+//! The boxes are chunk or subchunk boundaries.
+//! A subchunk can be resolved when its linear span is an n-dimensional box in both representations.
+//! With some chunk grids, the global subchunk grid may not be fully resolvable.
+//! However, the local subchunk grid of an individual chunk can still be recovered via [`ArrayPartialDecoderTraits::local_subchunk_grid`](zarrs_codec::ArrayPartialDecoderTraits::local_subchunk_grid).
 
 mod reshape_codec;
+mod reshape_codec_grid_mapping;
 mod reshape_codec_partial;
 
 use std::num::NonZeroU64;
@@ -58,14 +87,20 @@ fn get_encoded_shape(
             ReshapeDim::InputDims(input_dims) => {
                 let mut product = NonZeroU64::new(1).unwrap();
                 for input_dim in input_dims {
-                    let input_shape = *decoded_shape
-                        .get(usize::try_from(*input_dim).unwrap())
+                    let input_shape = usize::try_from(*input_dim)
+                        .ok()
+                        .and_then(|input_dim| decoded_shape.get(input_dim))
+                        .copied()
                         .ok_or_else(|| {
                             CodecError::Other(
                                 format!("reshape codec shape references a dimension ({input_dim}) larger than the chunk dimensionality ({})", decoded_shape.len()),
                             )
                         })?;
-                    product = product.checked_mul(input_shape).unwrap();
+                    product = product.checked_mul(input_shape).ok_or_else(|| {
+                        CodecError::Other(format!(
+                            "reshape codec encoded dimension overflows u64 for decoded shape {decoded_shape:?}"
+                        ))
+                    })?;
                 }
                 encoded_shape.push(product);
             }
@@ -76,8 +111,17 @@ fn get_encoded_shape(
         }
     }
 
-    let num_elements_input = decoded_shape.iter().map(|u| u.get()).product::<u64>();
-    let num_elements_output = encoded_shape.iter().map(|u| u.get()).product::<u64>();
+    let num_elements = |shape: &[NonZeroU64]| {
+        shape.iter().try_fold(1u64, |product, dim| {
+            product.checked_mul(dim.get()).ok_or_else(|| {
+                CodecError::Other(format!(
+                    "reshape codec shape element count overflows u64: {shape:?}"
+                ))
+            })
+        })
+    };
+    let num_elements_input = num_elements(decoded_shape)?;
+    let num_elements_output = num_elements(&encoded_shape)?;
     if let Some(fill_index) = fill_index {
         let (quot, rem) = num_elements_input.div_rem(&num_elements_output);
         if rem == 0 {
@@ -146,11 +190,13 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
-        ArrayPartialDecoderTraits, CodecOptions, UnboundArrayToArrayCodecTraits,
-        UnboundArrayToBytesCodecTraits,
+        ArrayPartialDecoderTraits, ChunkGridDecoded, ChunkGridEncoded, CodecOptions,
+        UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
 
     fn nz(value: u64) -> NonZeroU64 {
@@ -352,62 +398,129 @@ mod tests {
     }
 
     #[test]
+    fn codec_reshape_shape_overflow() {
+        let decoded_shape = [nz(u64::MAX), nz(2)];
+        let grouped_shape = ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]);
+        assert!(get_encoded_shape(&grouped_shape, &decoded_shape).is_err());
+
+        let fixed_shape = ReshapeShape(vec![
+            ReshapeDim::Size(nz(u64::MAX)),
+            ReshapeDim::Size(nz(2)),
+        ]);
+        assert!(get_encoded_shape(&fixed_shape, &[nz(1)]).is_err());
+    }
+
+    fn test_reshape_partial_decode_granularity(
+        reshape_shape: ReshapeShape,
+        decoded_shape: Vec<u64>,
+        encoded_subchunk_shape: Vec<NonZeroU64>,
+        expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
+    ) {
+        let decoded_shape_nonzero = decoded_shape
+            .iter()
+            .copied()
+            .map(NonZeroU64::new)
+            .collect::<Option<Vec<_>>>()
+            .unwrap();
+        let codec = Arc::new(ReshapeCodec::new(reshape_shape))
+            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .unwrap();
+        let encoded_shape = codec
+            .encoded_shape(&decoded_shape_nonzero)
+            .unwrap()
+            .into_iter()
+            .map(NonZeroU64::get)
+            .collect();
+        let chunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(decoded_shape.clone(), decoded_shape_nonzero).unwrap(),
+        );
+        let encoded_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(encoded_shape, encoded_subchunk_shape).unwrap());
+        let subchunk_grid = codec
+            .decoded_subchunk_grid((&chunk_grid).into(), (&encoded_subchunk_grid).into())
+            .unwrap();
+        let ChunkGridDecoded::Array(subchunk_grid) = subchunk_grid else {
+            panic!("expected array subchunk grid");
+        };
+        for (axis, expected_subchunk_grid_edge_lengths_axis) in
+            expected_subchunk_grid_edge_lengths.into_iter().enumerate()
+        {
+            assert_eq!(
+                subchunk_grid.chunk_edge_lengths(axis).unwrap(),
+                expected_subchunk_grid_edge_lengths_axis
+            );
+        }
+    }
+
+    #[test]
     fn codec_reshape_partial_decode_granularity() {
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0]),
-            ReshapeDim::InputDims(vec![1]),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(4), nz(6)], &[nz(2), nz(3)])
-                .unwrap(),
-            vec![nz(2), nz(3)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![0]),
+                ReshapeDim::InputDims(vec![1]),
+            ]),
+            vec![4, 6],
+            vec![nz(2), nz(3)],
+            vec![vec![nz(2), nz(2)], vec![nz(3), nz(3)]],
         );
 
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0, 1]),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(5)])
-                .unwrap(),
-            vec![nz(1), nz(5)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(5)],
+            vec![vec![nz(1), nz(1)], vec![nz(5), nz(5), nz(5), nz(5)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(20)])
-                .unwrap(),
-            vec![nz(1), nz(20)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(20)],
+            vec![vec![nz(1), nz(1)], vec![nz(20)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(20)], &[nz(40)])
-                .unwrap(),
-            vec![nz(2), nz(20)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+            vec![2, 20],
+            vec![nz(40)],
+            vec![vec![nz(2)], vec![nz(20)]],
         );
 
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::Size(nz(2)),
-            ReshapeDim::Size(nz(3)),
-            ReshapeDim::Size(nz(2)),
-        ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
-        .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(12)], &[nz(1), nz(1), nz(2)])
-                .unwrap(),
-            vec![nz(2)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::Size(nz(2)),
+                ReshapeDim::Size(nz(3)),
+                ReshapeDim::Size(nz(2)),
+            ]),
+            vec![12],
+            vec![nz(1), nz(1), nz(2)],
+            vec![vec![nz(2), nz(2), nz(2), nz(2), nz(2), nz(2)]],
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(12)], &[nz(1), nz(3), nz(2)])
-                .unwrap(),
-            vec![nz(6)]
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::Size(nz(2)),
+                ReshapeDim::Size(nz(3)),
+                ReshapeDim::Size(nz(2)),
+            ]),
+            vec![12],
+            vec![nz(1), nz(3), nz(2)],
+            vec![vec![nz(6), nz(6)]],
+        );
+
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![2]),
+                ReshapeDim::InputDims(vec![0, 1]),
+            ]),
+            vec![2, 3, 4],
+            vec![nz(1), nz(6)],
+            vec![vec![nz(2)], vec![nz(3)], vec![nz(1); 4]],
+        );
+        test_reshape_partial_decode_granularity(
+            ReshapeShape(vec![
+                ReshapeDim::InputDims(vec![2]),
+                ReshapeDim::InputDims(vec![0, 1]),
+            ]),
+            vec![2, 3, 4],
+            vec![nz(2), nz(6)],
+            vec![vec![nz(2)], vec![nz(3)], vec![nz(2); 2]],
         );
 
         let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
@@ -416,22 +529,356 @@ mod tests {
         ])))
         .with_context(data_type::uint8(), FillValue::from(0u8))
         .unwrap();
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1), nz(6)])
-                .unwrap(),
-            vec![nz(2), nz(3), nz(4)]
+        let chunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(vec![2, 3, 4], vec![nz(2), nz(3), nz(4)]).unwrap(),
         );
-        assert_eq!(
-            codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(2), nz(6)])
-                .unwrap(),
-            vec![nz(1), nz(3), nz(4)]
-        );
+        let encoded_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(vec![4], vec![nz(1)]).unwrap());
         assert!(
             codec
-                .partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1)])
+                .decoded_subchunk_grid((&chunk_grid).into(), (&encoded_subchunk_grid).into(),)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn codec_reshape_partial_decode_varying_grouped_edges() {
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0]),
+            ReshapeDim::InputDims(vec![1, 2]),
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
+        let decoded_chunk_grid = ChunkGrid::new(
+            RectilinearChunkGrid::new(
+                vec![4, 7, 2],
+                &[
+                    ChunkEdgeLengths::Scalar(nz(2)),
+                    ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(4).into()]),
+                    ChunkEdgeLengths::Scalar(nz(2)),
+                ],
+            )
+            .unwrap(),
+        );
+        let encoded_subchunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(vec![4, 14], vec![nz(2), nz(2)]).unwrap());
+
+        let ChunkGridDecoded::Array(decoded_subchunk_grid) = codec
+            .decoded_subchunk_grid(
+                (&decoded_chunk_grid).into(),
+                (&encoded_subchunk_grid).into(),
+            )
+            .unwrap()
+        else {
+            panic!("expected decoded subchunk grid");
+        };
+        assert_eq!(
+            decoded_subchunk_grid.chunk_edge_lengths(0).unwrap(),
+            vec![nz(2); 2]
+        );
+        assert_eq!(
+            decoded_subchunk_grid.chunk_edge_lengths(1).unwrap(),
+            vec![nz(1); 7]
+        );
+        assert_eq!(
+            decoded_subchunk_grid.chunk_edge_lengths(2).unwrap(),
+            vec![nz(2)]
+        );
+    }
+
+    #[test]
+    fn codec_reshape_partial_decode_declines_non_rectilinear_spans() {
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
+        let decoded_chunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(vec![2, 4], vec![nz(2), nz(4)]).unwrap());
+        let encoded_subchunk_grid = ChunkGrid::new(
+            RectilinearChunkGrid::new(
+                vec![8],
+                &[ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(5).into()])],
+            )
+            .unwrap(),
+        );
+
+        assert!(matches!(
+            codec
+                .decoded_subchunk_grid(
+                    (&decoded_chunk_grid).into(),
+                    (&encoded_subchunk_grid).into(),
+                )
+                .unwrap(),
+            ChunkGridDecoded::None
+        ));
+    }
+
+    #[test]
+    fn codec_reshape_encoded_chunk_grid() {
+        struct TestCase {
+            name: &'static str,
+            reshape_shape: ReshapeShape,
+            decoded_chunk_grid: ChunkGrid,
+            expected_array_shape: Vec<u64>,
+            expected_chunk_edge_lengths: Vec<Vec<NonZeroU64>>,
+        }
+
+        let cases = [
+            TestCase {
+                name: "no-op reshape clones the decoded grid",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0]),
+                    ReshapeDim::InputDims(vec![1]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RectilinearChunkGrid::new(
+                        vec![7, 6],
+                        &[
+                            ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(4).into()]),
+                            ChunkEdgeLengths::Scalar(nz(2)),
+                        ],
+                    )
+                    .unwrap(),
+                ),
+                expected_array_shape: vec![7, 6],
+                expected_chunk_edge_lengths: vec![vec![nz(3), nz(4)], vec![nz(2); 3]],
+            },
+            TestCase {
+                name: "2D-to-1D flatten with contiguous chunks",
+                reshape_shape: ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![2, 20], vec![nz(1), nz(5)]).unwrap(),
+                ),
+                expected_array_shape: vec![40],
+                expected_chunk_edge_lengths: vec![vec![nz(5); 8]],
+            },
+            TestCase {
+                name: "fixed 1D-to-ND reshape evaluated per chunk",
+                reshape_shape: ReshapeShape(vec![ReshapeDim::Size(nz(2)), ReshapeDim::Size(nz(3))]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![12], vec![nz(6)]).unwrap(),
+                ),
+                expected_array_shape: vec![2, 6],
+                expected_chunk_edge_lengths: vec![vec![nz(2)], vec![nz(3); 2]],
+            },
+            TestCase {
+                name: "auto dimension with regular chunks",
+                reshape_shape: ReshapeShape(vec![ReshapeDim::Size(nz(2)), ReshapeDim::auto()]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![12], vec![nz(4)]).unwrap(),
+                ),
+                expected_array_shape: vec![2, 6],
+                expected_chunk_edge_lengths: vec![vec![nz(2)], vec![nz(2); 3]],
+            },
+            TestCase {
+                name: "rectilinear identity prefix with reshaped suffix",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0]),
+                    ReshapeDim::InputDims(vec![1, 2]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RectilinearChunkGrid::new(
+                        vec![7, 2, 20],
+                        &[
+                            ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(4).into()]),
+                            ChunkEdgeLengths::Scalar(nz(1)),
+                            ChunkEdgeLengths::Scalar(nz(5)),
+                        ],
+                    )
+                    .unwrap(),
+                ),
+                expected_array_shape: vec![7, 40],
+                expected_chunk_edge_lengths: vec![vec![nz(3), nz(4)], vec![nz(5); 8]],
+            },
+            TestCase {
+                name: "rectilinear identity suffix with reshaped prefix",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0, 1]),
+                    ReshapeDim::InputDims(vec![2]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RectilinearChunkGrid::new(
+                        vec![2, 20, 7],
+                        &[
+                            ChunkEdgeLengths::Scalar(nz(1)),
+                            ChunkEdgeLengths::Scalar(nz(5)),
+                            ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(4).into()]),
+                        ],
+                    )
+                    .unwrap(),
+                ),
+                expected_array_shape: vec![40, 7],
+                expected_chunk_edge_lengths: vec![vec![nz(5); 8], vec![nz(3), nz(4)]],
+            },
+            TestCase {
+                name: "multiple independent grouped partitions",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0, 1]),
+                    ReshapeDim::InputDims(vec![2, 3]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![2, 3, 4, 5], vec![nz(1), nz(3), nz(2), nz(5)])
+                        .unwrap(),
+                ),
+                expected_array_shape: vec![6, 20],
+                expected_chunk_edge_lengths: vec![vec![nz(3); 2], vec![nz(10); 2]],
+            },
+            TestCase {
+                name: "reordered input dimension partitions",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![1]),
+                    ReshapeDim::InputDims(vec![0]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![2, 8], vec![nz(1), nz(4)]).unwrap(),
+                ),
+                expected_array_shape: vec![8, 2],
+                expected_chunk_edge_lengths: vec![vec![nz(4); 2], vec![nz(1); 2]],
+            },
+            TestCase {
+                name: "flatten with non-contiguous decoded chunks",
+                reshape_shape: ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![2, 20], vec![nz(2), nz(5)]).unwrap(),
+                ),
+                expected_array_shape: vec![40],
+                expected_chunk_edge_lengths: vec![vec![nz(10); 4]],
+            },
+            TestCase {
+                name: "grouped partition with varying chunking",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0]),
+                    ReshapeDim::InputDims(vec![1, 2]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RectilinearChunkGrid::new(
+                        vec![4, 7, 2],
+                        &[
+                            ChunkEdgeLengths::Scalar(nz(2)),
+                            ChunkEdgeLengths::Varying(vec![nz(3).into(), nz(4).into()]),
+                            ChunkEdgeLengths::Scalar(nz(2)),
+                        ],
+                    )
+                    .unwrap(),
+                ),
+                expected_array_shape: vec![4, 14],
+                expected_chunk_edge_lengths: vec![vec![nz(2); 2], vec![nz(6), nz(8)]],
+            },
+            TestCase {
+                name: "grouped partition with non-contiguous chunks",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::InputDims(vec![0]),
+                    ReshapeDim::InputDims(vec![1, 2]),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![4, 2, 20], vec![nz(2), nz(2), nz(5)]).unwrap(),
+                ),
+                expected_array_shape: vec![4, 40],
+                expected_chunk_edge_lengths: vec![vec![nz(2); 2], vec![nz(10); 4]],
+            },
+        ];
+
+        for case in cases {
+            let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
+                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .unwrap();
+            let ChunkGridEncoded::Array(encoded_chunk_grid) = codec
+                .encoded_chunk_grid((&case.decoded_chunk_grid).into())
+                .unwrap()
+            else {
+                panic!("{}: expected encoded chunk grid", case.name);
+            };
+
+            assert_eq!(
+                encoded_chunk_grid.array_shape(),
+                case.expected_array_shape,
+                "{}",
+                case.name
+            );
+            for (axis, expected_edge_lengths) in
+                case.expected_chunk_edge_lengths.into_iter().enumerate()
+            {
+                assert_eq!(
+                    encoded_chunk_grid.chunk_edge_lengths(axis).unwrap(),
+                    expected_edge_lengths,
+                    "{} axis {axis}",
+                    case.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn codec_reshape_encoded_chunk_grid_rejects_invalid_per_chunk_reshape() {
+        struct TestCase {
+            name: &'static str,
+            reshape_shape: ReshapeShape,
+            decoded_chunk_grid: ChunkGrid,
+        }
+
+        let cases = [
+            TestCase {
+                name: "fixed shape has the wrong element count for each chunk",
+                reshape_shape: ReshapeShape(vec![
+                    ReshapeDim::Size(nz(2)),
+                    ReshapeDim::Size(nz(3)),
+                    ReshapeDim::Size(nz(2)),
+                ]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![12], vec![nz(6)]).unwrap(),
+                ),
+            },
+            TestCase {
+                name: "auto dimension cannot be resolved for each chunk",
+                reshape_shape: ReshapeShape(vec![ReshapeDim::Size(nz(3)), ReshapeDim::auto()]),
+                decoded_chunk_grid: ChunkGrid::new(
+                    RegularChunkGrid::new(vec![12], vec![nz(4)]).unwrap(),
+                ),
+            },
+        ];
+
+        for case in cases {
+            let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
+                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .unwrap();
+
+            assert!(
+                matches!(
+                    codec
+                        .encoded_chunk_grid((&case.decoded_chunk_grid).into())
+                        .unwrap(),
+                    ChunkGridEncoded::None
+                ),
+                "{}: expected no encoded chunk grid",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn codec_reshape_encoded_chunk_grid_supports_array_shape_incompatible_reshape() {
+        // Snapshot tests use this codec to reshape each decoded [4, 6] chunk
+        // into an encoded [24] chunk.
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![ReshapeDim::Size(nz(
+            24,
+        ))])))
+        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .unwrap();
+
+        let decoded_chunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(vec![8, 24], vec![nz(4), nz(6)]).unwrap());
+
+        let ChunkGridEncoded::Array(encoded_chunk_grid) = codec
+            .encoded_chunk_grid((&decoded_chunk_grid).into())
+            .unwrap()
+        else {
+            panic!("fixed per-chunk reshape is supported");
+        };
+        assert_eq!(encoded_chunk_grid.array_shape(), &[192]);
+        assert_eq!(
+            encoded_chunk_grid.chunk_edge_lengths(0).unwrap(),
+            vec![nz(24); 8]
         );
     }
 

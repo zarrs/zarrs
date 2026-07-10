@@ -168,6 +168,13 @@ where
         }
     }
 
+    fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<super::ChunkGrid>, CodecError> {
+        self.input_output_handle.local_subchunk_grid(options)
+    }
+
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
     }
@@ -251,6 +258,13 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
+    }
+
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
     }
 
     fn partial_decode(
@@ -473,6 +487,13 @@ where
         self.input_output_handle.size_held()
     }
 
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
+    }
+
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
     }
@@ -601,6 +622,13 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(None)
     }
 
     async fn partial_decode<'a>(

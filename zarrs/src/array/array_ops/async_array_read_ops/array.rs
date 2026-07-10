@@ -13,12 +13,6 @@ use super::super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::super::*;
 use super::AsyncArrayReadOps;
-use crate::array::array_sharded_ext::{
-    subchunk_shard_index_and_chunk_index, subchunk_shard_index_and_subset,
-};
-use crate::array::codec::array_to_bytes::sharding::{
-    AsyncShardingPartialDecoder, ShardingCodecBound,
-};
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
@@ -339,81 +333,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
-    pub async fn async_retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError> {
-        let codecs = self.codecs_bound();
-        let Some(sharding_codec) = codecs
-            .array_to_bytes_codec()
-            .as_any()
-            .downcast_ref::<ShardingCodecBound>()
-        else {
-            return Err(ArrayError::UnsupportedMethod(
-                "the array is not exclusively sharded".to_string(),
-            ));
-        };
-        if !codecs.array_to_array_codecs().is_empty() || !codecs.bytes_to_bytes_codecs().is_empty()
-        {
-            return Err(ArrayError::UnsupportedMethod(
-                "the array is not exclusively sharded".to_string(),
-            ));
-        }
-
-        let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
-        let input_handle = Arc::new((storage_transformer, self.chunk_key(&shard_indices)));
-        let partial_decoder = AsyncShardingPartialDecoder::new(
-            input_handle,
-            self.chunk_shape(&shard_indices)?,
-            sharding_codec.subchunk_shape.clone(),
-            sharding_codec.inner_codecs.clone(),
-            &sharding_codec.index_codecs,
-            sharding_codec.index_location,
-            self.codec_options(),
-            sharding_codec.options.clone(),
-        )
-        .await?;
-
-        Ok(partial_decoder
-            .retrieve_subchunk_encoded(&subchunk_indices_in_shard)
-            .await?
-            .map(Vec::from))
-    }
-
     pub async fn async_retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
-        self.async_retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
-            .await
-    }
+    ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let array_subset = self
-            .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
-        self.async_retrieve_array_subset_opt(&array_subset, options)
-            .await
-    }
+    ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_array_subset_into_opt(
         &self,

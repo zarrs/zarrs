@@ -160,6 +160,8 @@ macro_rules! vlen_v2_codec {
             }
         }
 
+        impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for [<$struct Bound>] {}
+
         #[cfg_attr(
             all(feature = "async", not(target_arch = "wasm32")),
             async_trait::async_trait

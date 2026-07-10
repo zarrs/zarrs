@@ -4,6 +4,7 @@ use derive_more::From;
 use serde::Serialize;
 
 use crate::array::{ArrayCreateError, ArrayShape, ChunkShape};
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
@@ -25,8 +26,8 @@ impl ArrayBuilderChunkGridMetadata {
             ArrayBuilderChunkGridMetadataImpl::Metadata(metadata) => Ok(metadata.clone()),
             ArrayBuilderChunkGridMetadataImpl::MetadataString(metadata) => {
                 let metadata = MetadataV3::try_from(metadata.as_str()).map_err(|_| {
-                    ArrayCreateError::ChunkGridCreateError(zarrs_plugin::PluginCreateError::from(
-                        "chunk grid string cannot be parsed as metadata",
+                    ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::Other(
+                        "chunk grid string cannot be parsed as metadata".to_string(),
                     ))
                 })?;
                 Ok(metadata)

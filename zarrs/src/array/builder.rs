@@ -15,6 +15,7 @@ use super::{
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::node::NodePath;
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
@@ -550,7 +551,13 @@ impl ArrayBuilder {
                 .copied()
                 .map(NonZeroU64::try_from)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| ArrayCreateError::InvalidSubchunkShape(subchunk_shape.clone()))?;
+                .map_err(|_| {
+                    ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::other(
+                        ChunkGridCreateError::other(
+                            "`subchunk_shape` shape must have all non-zero elements".to_string(),
+                        ),
+                    ))
+                })?;
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
             sharding_builder
@@ -618,6 +625,7 @@ mod tests {
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::codec::ShardingCodecBound;
     use crate::array::data_type;
+    use zarrs_chunk_grid::ChunkGridCreateError;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
     use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
@@ -682,7 +690,13 @@ mod tests {
         let storage = Arc::new(MemoryStore::new());
         // Invalid chunk shape
         let builder = ArrayBuilder::new(vec![8, 8], vec![2, 2, 2], data_type::int8(), 0i8);
-        assert!(builder.build(storage.clone(), "/").is_err());
+        let err = builder.build(storage.clone(), "/").unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayCreateError::ChunkGridCreateError(
+                ChunkGridCreateError::IncompatibleDimensionalityError(_)
+            )
+        ));
         // Invalid fill value, but okay when interpreted as fill value metadata
         let builder = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::int8(), 0i16);
         assert!(builder.build(storage.clone(), "/").is_ok());
@@ -693,6 +707,14 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::int8(), 0i8);
         builder.dimension_names(["z", "y", "x"].into());
         assert!(builder.build(storage.clone(), "/").is_err());
+
+        let mut builder = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::int8(), 0i8);
+        builder.subchunk_shape(vec![0, 1]);
+        let err = builder.build(storage, "/").unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::Other(str)) if str.contains("`subchunk_shape` shape must have all non-zero elements")
+        ));
     }
 
     #[test]

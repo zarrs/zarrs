@@ -5,12 +5,16 @@ use std::error::Error;
 use std::sync::Arc;
 
 use object_store::memory::InMemory;
+use zarrs::array::codec::array_to_bytes::sharding::{
+    AsyncShardingPartialDecoder, ShardingCodecBound,
+};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
     FillValue, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
+use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
 use zarrs_object_store::AsyncObjectStore;
 
 type AsyncStore = AsyncObjectStore<InMemory>;
@@ -168,12 +172,6 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
             .len(),
         chunks.num_elements_usize()
     );
-    assert!(
-        array
-            .async_retrieve_encoded_subchunk(&[1, 1])
-            .await?
-            .is_some()
-    );
     let decoder = array.async_partial_decoder(&[0, 0]).await?;
     assert!(decoder.exists().await?);
     assert_eq!(
@@ -191,6 +189,67 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
             .exists()
             .await?
     );
+    Ok(())
+}
+
+async fn sharding_partial_decoder<A: AsyncArrayReadOps>(
+    array: &A,
+) -> Result<AsyncShardingPartialDecoder, Box<dyn Error>>
+where
+    A::Storage: AsyncReadableStorageTraits + 'static,
+{
+    let codecs_bound = array.codecs_bound();
+    let sharding_codec = codecs_bound
+        .array_to_bytes_codec()
+        .as_any()
+        .downcast_ref::<ShardingCodecBound>()
+        .ok_or("array-to-bytes codec is not sharding")?;
+    let storage_handle = Arc::new(StorageHandle::new(array.storage()));
+    let storage_transformer = array
+        .storage_transformers()
+        .create_async_readable_transformer(storage_handle)
+        .await?;
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0])));
+
+    Ok(AsyncShardingPartialDecoder::new(
+        input_handle,
+        array.chunk_shape(&[0, 0])?,
+        sharding_codec.subchunk_shape().clone(),
+        sharding_codec.inner_codecs().clone(),
+        sharding_codec.index_codecs(),
+        sharding_codec.index_location(),
+        array.codec_options(),
+        sharding_codec.options().clone(),
+    )
+    .await?)
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
+    let array = fixed_fixture();
+    populate(&array).await?;
+
+    let decoder = sharding_partial_decoder(&array).await?;
+
+    assert!(decoder.retrieve_subchunk_encoded(&[1, 1]).await?.is_some());
+    assert!(decoder.retrieve_subchunk_encoded(&[3, 3]).await.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
+    let array = fixed_fixture();
+
+    let decoder = sharding_partial_decoder(&array).await?;
+    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0]).await?, None);
+
+    array
+        .async_store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])
+        .await?;
+    let decoder = sharding_partial_decoder(&array).await?;
+    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1]).await?, None);
     Ok(())
 }
 

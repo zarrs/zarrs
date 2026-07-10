@@ -66,7 +66,7 @@
 use std::num::NonZeroU64;
 use thiserror::Error;
 
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectilinear::{
@@ -77,7 +77,6 @@ use crate::array::{
     ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RectilinearChunkGrid, v3: "rectilinear");
 
@@ -110,6 +109,12 @@ enum RectilinearChunkGridDimension {
 #[derive(Clone, Debug, Error)]
 #[error("rectilinear chunk grid configuration: {_1:?} not compatible with array shape {_0:?}")]
 pub struct RectilinearChunkGridCreateError(ArrayShape, Vec<ChunkEdgeLengths>);
+
+impl From<RectilinearChunkGridCreateError> for ChunkGridCreateError {
+    fn from(value: RectilinearChunkGridCreateError) -> Self {
+        Self::Other(value.to_string())
+    }
+}
 
 impl RectilinearChunkGrid {
     /// Create a new `rectilinear` chunk grid with chunk shapes `chunk_shapes`.
@@ -186,13 +191,12 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
         let configuration: RectilinearChunkGridConfiguration = metadata.to_typed_configuration()?;
         let chunk_shapes = match &configuration {
             RectilinearChunkGridConfiguration::Inline { chunk_shapes } => chunk_shapes.clone(),
         };
-        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes)
-            .map_err(|err| PluginCreateError::Other(err.to_string()))?;
+        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes)?;
         Ok(ChunkGrid::new(chunk_grid))
     }
 

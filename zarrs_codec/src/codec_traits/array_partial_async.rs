@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use zarrs_chunk_grid::Indexer;
+use zarrs_chunk_grid::{ChunkGrid, Indexer};
 use zarrs_data_type::DataType;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
@@ -27,6 +27,18 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
+
+    /// Return the chunk-local subchunk grid for this decoder, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk handled by this partial decoder,
+    /// not to the full array.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid cannot be resolved.
+    async fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError>;
 
     /// Partially decode a chunk.
     ///

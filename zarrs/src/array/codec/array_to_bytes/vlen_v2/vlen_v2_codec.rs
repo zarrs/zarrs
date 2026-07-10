@@ -109,6 +109,8 @@ impl ArrayCodecTraits for VlenV2CodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for VlenV2CodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait

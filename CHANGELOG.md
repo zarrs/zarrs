@@ -14,11 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
-  - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
-  - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
+  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
+- Add `ArrayReadOps::local_subchunk_grid` for chunk-local subchunk grids
+- Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 
 ### Changed
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -32,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_storage` to 0.4.4
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
+- **Behavioural change**: `ArrayOps::subchunk_shape()` now returns the subchunk shape of the subchunk grid (if regular) and supersedes the functionality of `effective_subchunk_shape`()
+  - Previously this returned the `sharding_indexed` codec `chunk_shape`
 - **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
 - **Breaking**: `Hierarchy::open_opt` now takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
 - **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
@@ -42,11 +45,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
+- **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
+- Bump `zarrs_metadata_ext` to 0.4.5
+- **Breaking**: Change `ArrayOps::subchunk_grid()` to return `Option<&ChunkGrid>` and return `None` when an array does not have a subchunk grid
+  - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
-- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+  - Most methods have become part of `ArrayReadOps`'
+  - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
+- **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
+- **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 

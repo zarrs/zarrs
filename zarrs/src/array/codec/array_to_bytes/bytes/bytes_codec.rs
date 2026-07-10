@@ -174,6 +174,8 @@ impl ArrayCodecTraits for BytesCodecBound {
     }
 }
 
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for BytesCodecBound {}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait

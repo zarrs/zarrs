@@ -2,7 +2,8 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::get_reshaped_indexer;
-use crate::array::{DataType, FillValue};
+use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
+use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
@@ -49,7 +50,6 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         input_handle: Arc<T>,
         decoded_shape: &[NonZeroU64],
         data_type: &DataType,
-        _fill_value: &FillValue,
         encoded_shape: Vec<NonZeroU64>,
     ) -> Self {
         Self {
@@ -58,6 +58,18 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
             encoded_shape,
             data_type: data_type.clone(),
         }
+    }
+
+    fn map_local_subchunk_grid(
+        &self,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        reshape_rectilinear_grid(
+            &self.encoded_shape,
+            &self.decoded_shape,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 
@@ -106,6 +118,13 @@ where
         self.input_handle.size_held()
     }
 
+    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options)? else {
+            return Ok(None);
+        };
+        self.map_local_subchunk_grid(&encoded_subchunk_grid)
+    }
+
     fn partial_decode(
         &self,
         indexer: &dyn crate::array::Indexer,
@@ -134,6 +153,17 @@ where
 
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options).await?
+        else {
+            return Ok(None);
+        };
+        self.map_local_subchunk_grid(&encoded_subchunk_grid)
     }
 
     fn size_held(&self) -> usize {

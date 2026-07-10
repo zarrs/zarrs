@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 
 use super::super::*;
 use super::ArrayMutOps;
@@ -35,10 +36,9 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid = crate::array::array_sharded_ext::create_subchunk_grid(
-            &self.chunk_grid,
-            self.codecs_bound.as_ref(),
-        );
+        self.subchunk_grid = self
+            .codecs_bound
+            .decoded_subchunk_grid((&self.chunk_grid).into())?;
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;

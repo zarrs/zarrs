@@ -1,6 +1,5 @@
 use super::*;
 use crate::array::ArrayBytes;
-use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -260,57 +259,44 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         .collect()
     }
 
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// Only supported for arrays where the array-to-bytes codec is `sharding_indexed` and there
-    /// are no array-to-array or bytes-to-bytes codecs.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if the array is not exclusively sharded, the subchunk indices are
-    /// invalid, decoding the shard index fails, or there is an underlying store error.
-    fn retrieve_encoded_subchunk(
-        &self,
-        subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
-
     /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
     ///
-    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
-    ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the subchunk indices are invalid, there is a codec decoding
-    /// error, or there is an underlying store error.
+    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, the subchunk indices
+    /// are invalid, there is a codec decoding error, or there is an underlying store error.
     fn retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
-        self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
+        let subchunk_grid = self
+            .subchunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+        self.retrieve_array_subset_opt(&array_subset, options)
     }
 
     /// Read and decode the subchunks at `subchunks` with explicit codec options.
     ///
-    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
-    ///
     /// # Errors
-    /// Returns an [`ArrayError`] if any subchunk indices are invalid, there is a codec decoding
-    /// error, or there is an underlying store error.
+    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, any subchunk indices
+    /// are invalid, there is a codec decoding error, or there is an underlying store error.
     fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let array_subset = self
+        let subchunk_grid = self
             .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
         self.retrieve_array_subset_opt(&array_subset, options)
     }
 
@@ -364,4 +350,20 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Return the chunk-local subchunk grid for a chunk, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid cannot be resolved.
+    fn local_subchunk_grid(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.partial_decoder_opt(chunk_indices, options)?
+            .local_subchunk_grid(options)
+            .map_err(ArrayError::CodecError)
+    }
 }

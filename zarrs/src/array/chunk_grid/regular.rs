@@ -28,11 +28,10 @@ use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
@@ -58,6 +57,12 @@ pub struct RegularChunkGridCreateError(ArrayShape, ChunkShape);
 impl From<RegularChunkGridCreateError> for IncompatibleDimensionalityError {
     fn from(value: RegularChunkGridCreateError) -> Self {
         Self::new(value.1.len(), value.0.len())
+    }
+}
+
+impl From<RegularChunkGridCreateError> for ChunkGridCreateError {
+    fn from(value: RegularChunkGridCreateError) -> Self {
+        IncompatibleDimensionalityError::from(value).into()
     }
 }
 
@@ -108,14 +113,9 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
         let configuration: RegularChunkGridConfiguration = metadata.to_typed_configuration()?;
-        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
-            .map_err(|_| {
-                PluginCreateError::from(
-                    "regular chunk shape and array shape have inconsistent dimensionality",
-                )
-            })?;
+        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)?;
         Ok(ChunkGrid::new(chunk_grid))
     }
 

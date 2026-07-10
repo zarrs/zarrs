@@ -6,10 +6,10 @@ use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use zarrs_chunk_grid::ChunkGridTraits;
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
-use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::chunk_grid::{RegularBoundedChunkGrid, RegularChunkGrid};
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
@@ -101,6 +101,17 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 
     fn size_held(&self) -> usize {
         self.shard_index.lock().unwrap().len()
+    }
+
+    fn local_subchunk_grid(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RegularBoundedChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 
     fn partial_decode(

@@ -1,16 +1,71 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
 use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
+    CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
 };
 #[cfg(feature = "async")]
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+
+/// Subchunking traits for an array-to-array codec bound to a data type and fill value.
+pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
+    /// Map a chunk grid from the decoded representation to the encoded representation.
+    ///
+    /// [`ChunkGridEncoded::ChunkLocal`] indicates that the codec can
+    /// propagate a concrete grid for each chunk at runtime, but no global
+    /// encoded grid exists. A codec must not map `ChunkLocal` back to `Array`.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid is not supported by this codec.
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError>;
+
+    /// Map a subchunk grid from the encoded representation to the decoded representation.
+    ///
+    /// Returns [`None`] if this codec cannot preserve or transform the subchunk grid.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid or encoded subchunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+}
+
+/// Marker trait for array-to-array codecs with identity subchunking mappings.
+///
+/// Implement this trait only when the codec preserves element ordering and chunk shape.
+pub trait ArrayToArrayCodecSubchunkingIdentityTraits {}
+
+impl<T> ArrayToArrayCodecSubchunkingTraits for T
+where
+    T: ArrayCodecTraits + ArrayToArrayCodecSubchunkingIdentityTraits + ?Sized,
+{
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        Ok(decoded_chunk_grid.into())
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(encoded_subchunk_grid.into())
+    }
+}
 
 /// Traits for array to array codecs.
 #[cfg_attr(
@@ -56,7 +111,7 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
+pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
 

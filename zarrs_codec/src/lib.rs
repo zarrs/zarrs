@@ -23,8 +23,14 @@ pub use array_bytes_fixed_disjoint_view::{
 mod codec_traits;
 pub use codec_traits::array::ArrayCodecTraits;
 pub use codec_traits::array_partial_sync::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
-pub use codec_traits::array_to_array::{ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits};
-pub use codec_traits::array_to_bytes::{ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits};
+pub use codec_traits::array_to_array::{
+    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecSubchunkingTraits,
+    ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits,
+};
+pub use codec_traits::array_to_bytes::{
+    ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
+};
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
@@ -68,7 +74,8 @@ use zarrs_storage::byte_range::InvalidByteRangeError;
 use std::sync::{Arc, LazyLock};
 
 use zarrs_chunk_grid::{
-    ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, Indexer, IndexerError,
+    ArraySubset, ArraySubsetError, ChunkGrid, IncompatibleDimensionalityError, Indexer,
+    IndexerError,
 };
 use zarrs_data_type::{DataType, DataTypeFillValueError, FillValue};
 use zarrs_metadata::v2::MetadataV2;
@@ -140,6 +147,77 @@ pub struct PartialEncoderCapability {
     /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
     pub partial_encode: bool,
 }
+
+mod chunk_grid_mapped {
+    use super::ChunkGrid;
+
+    /// Describes a chunk grid mapped to a representation in a codec chain.
+    #[derive(Debug, Clone)]
+    pub enum ChunkGridMapped {
+        /// No chunk grid is available.
+        None,
+        /// A chunk grid is resolvable for the whole array.
+        Array(ChunkGrid),
+        /// No global grid exists, but a grid is resolvable for each chunk via
+        /// [`ArrayPartialDecoderTraits::local_subchunk_grid`](crate::ArrayPartialDecoderTraits::local_subchunk_grid).
+        ChunkLocal,
+    }
+
+    /// A borrowed chunk grid mapped to a representation in a codec chain.
+    #[derive(Debug, Clone, Copy)]
+    pub enum ChunkGridMappedRef<'a> {
+        /// No chunk grid is available.
+        None,
+        /// A chunk grid is resolvable for the whole array.
+        Array(&'a ChunkGrid),
+        /// No global grid exists, but a grid is resolvable for each chunk.
+        ChunkLocal,
+    }
+
+    impl From<Option<ChunkGrid>> for ChunkGridMapped {
+        fn from(chunk_grid: Option<ChunkGrid>) -> Self {
+            chunk_grid.map_or(Self::None, Self::Array)
+        }
+    }
+
+    impl<'a> From<&'a ChunkGrid> for ChunkGridMappedRef<'a> {
+        fn from(chunk_grid: &'a ChunkGrid) -> Self {
+            Self::Array(chunk_grid)
+        }
+    }
+
+    impl<'a> From<&'a ChunkGridMapped> for ChunkGridMappedRef<'a> {
+        fn from(chunk_grid: &'a ChunkGridMapped) -> Self {
+            match chunk_grid {
+                ChunkGridMapped::None => Self::None,
+                ChunkGridMapped::Array(chunk_grid) => Self::Array(chunk_grid),
+                ChunkGridMapped::ChunkLocal => Self::ChunkLocal,
+            }
+        }
+    }
+
+    impl From<ChunkGridMappedRef<'_>> for ChunkGridMapped {
+        fn from(chunk_grid: ChunkGridMappedRef<'_>) -> Self {
+            match chunk_grid {
+                ChunkGridMappedRef::None => Self::None,
+                ChunkGridMappedRef::Array(chunk_grid) => Self::Array(chunk_grid.clone()),
+                ChunkGridMappedRef::ChunkLocal => Self::ChunkLocal,
+            }
+        }
+    }
+}
+
+/// A chunk grid mapped to the decoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMapped as ChunkGridDecoded;
+
+/// A chunk grid mapped to the encoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMapped as ChunkGridEncoded;
+
+/// A borrowed chunk grid mapped to the decoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMappedRef as ChunkGridDecodedRef;
+
+/// A borrowed chunk grid mapped to the encoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMappedRef as ChunkGridEncodedRef;
 
 /// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
