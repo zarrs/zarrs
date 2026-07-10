@@ -289,7 +289,7 @@ fn scalar_to_rounded_integer(
                 return Err(CastValueError::NotRepresentable);
             }
             let value = round_float_to_integer(value.to_f64(), rounding);
-            if value >= TWO_POW_127 || value < -TWO_POW_127 {
+            if !(-TWO_POW_127..TWO_POW_127).contains(&value) {
                 Ok(RoundedScalar::Big(value))
             } else {
                 #[expect(clippy::cast_possible_truncation)]
