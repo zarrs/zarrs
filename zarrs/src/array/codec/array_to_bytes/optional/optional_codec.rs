@@ -11,13 +11,12 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::{CodecChain, CodecChainBound};
-use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkGrid, DataType,
-};
+use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid, UnboundArrayToBytesCodecTraits,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
 
@@ -394,9 +393,9 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::None)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

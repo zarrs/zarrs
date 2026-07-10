@@ -2,30 +2,6 @@
 //!
 //! Permutes the dimensions of arrays.
 //!
-//! ### Subchunking
-//!
-//! `transpose` permutes chunk and subchunk axes in the forward direction and
-//! applies the inverse permutation when mapping downstream subchunks back:
-//!
-//! ```text
-//! decoded grid [2, 3]                 encoded grid [3, 2]
-//! +---+---+---+                       +---+---+
-//! | A | B | C |  -- order [1, 0] --> | A | D |
-//! +---+---+---+                       +---+---+
-//! | D | E | F |                       | B | E |
-//! +---+---+---+                       +---+---+
-//!                                     | C | F |
-//!                                     +---+---+
-//!
-//! encoded subchunk axes [0, 1] -- inverse order --> decoded axes [1, 0]
-//! ```
-//!
-//! Every rectilinear edge-length sequence is preserved, including varying
-//! edges; this codec neither splits nor combines spans. The permutation length
-//! must match both grids' dimensionality. The mapped grid is rectilinear, so a
-//! non-rectilinear grid cannot retain topology not represented by independent
-//! per-axis edge lengths.
-//!
 //! ### Compatible Implementations
 //! This is a core codec and should be compatible with all Zarr V3 implementations that support it.
 //!
@@ -49,6 +25,42 @@
 //! # use zarrs::metadata_ext::codec::transpose::TransposeCodecConfiguration;
 //! # let configuration: TransposeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
+//!
+//! ### Subchunking
+//!
+//! A codec chain maps the decoded chunk grid through `transpose` before asking
+//! a downstream codec, such as `sharding`, for its subchunks. The sharding
+//! chunk shape is expressed in the transposed representation. On decode,
+//! `transpose` applies the inverse permutation to the subchunk grid:
+//!
+//! ```text
+//! decoded chunk [2, 3]           encoded chunk [3, 2]
+//! +-----------+                  +-------+
+//! | a  b  c   | -- transpose --> | a  d  |
+//! | d  e  f   |    order [1, 0]  | b  e  |
+//! +-----------+    (encode)      | c  f  |
+//!                                +-------+
+//!                                   | sharding codec
+//!                                   | chunk_shape: [1, 2]
+//!                                   | (encode)
+//!                                   v
+//! decoded subchunks [2, 1]       encoded subchunks [1, 2]
+//! +---+---+---+                  +-------+
+//! | a | b | c | <- transpose --  | a  d  |
+//! | d | e | f |    order [1, 0]  +-------+
+//! +---+---+---+    (decode)      | b  e  |
+//!                                +-------+
+//!                                | c  f  |
+//!                                +-------+
+//! ```
+//!
+//! Every rectilinear edge-length sequence is preserved, including varying
+//! edges; this codec neither splits nor combines spans. The permutation length
+//! must match both grids' dimensionality. The mapped grid is rectilinear, so a
+//! non-rectilinear grid cannot retain topology not represented by independent
+//! per-axis edge lengths. If an earlier codec has already made the grid
+//! chunk-local, transpose preserves that capability and applies the
+//! permutation when each concrete chunk grid is resolved.
 
 mod transpose_codec;
 mod transpose_codec_partial;

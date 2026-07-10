@@ -1,5 +1,4 @@
 use super::*;
-use zarrs_codec::SubchunkGrid;
 
 mod array;
 mod array_cached;
@@ -80,13 +79,9 @@ pub trait ArrayOps {
 
     /// Retrieve the subchunk grid.
     ///
-    /// Returns [`None`] if the array does not have a subchunk grid.
+    /// Returns [`None`] if the subchunk grid cannot be globally resolved (i.e. it is non-existent or chunk-local).
     #[must_use]
     fn subchunk_grid(&self) -> Option<&ChunkGrid>;
-
-    /// Return subchunk grid information exposed by the codec chain.
-    #[must_use]
-    fn subchunk_grid_kind(&self) -> &SubchunkGrid;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;

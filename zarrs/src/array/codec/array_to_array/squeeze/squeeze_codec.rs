@@ -8,9 +8,10 @@ use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    SubchunkGrid, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -19,6 +20,7 @@ use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodec
 use zarrs_plugin::PluginCreateError;
 
 /// A Squeeze codec implementation.
+// #[deprecated(since = "0.24.0", note = "The squeeze codec is superseded by the reshape codec")]
 #[derive(Clone, Debug)]
 pub struct SqueezeCodec {}
 
@@ -177,10 +179,13 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
 
     fn encoded_chunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+            return Ok(decoded_chunk_grid.into());
+        };
         if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(None);
+            return Ok(ChunkGridEncoded::None);
         }
 
         let mut array_shape = Vec::new();
@@ -190,7 +195,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
             let Some(squeeze) = squeeze_chunk_edge_lengths(&edge_lengths) else {
-                return Ok(None);
+                return Ok(ChunkGridEncoded::ChunkLocal);
             };
             if !squeeze {
                 let edge_lengths = decoded_chunk_grid
@@ -208,20 +213,25 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             chunk_shapes
         };
 
-        Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
-            array_shape,
-            &chunk_shapes,
-        )?)))
+        Ok(ChunkGridEncoded::Array(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)?,
+        )))
     }
 
     fn decoded_subchunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        let ChunkGridEncodedRef::Array(encoded_subchunk_grid) = encoded_subchunk_grid else {
+            return Ok(encoded_subchunk_grid.into());
+        };
+        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+            return Ok(ChunkGridDecoded::None);
+        };
         // Empty chunk grids have no subchunk grid
         if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(SubchunkGrid::None);
+            return Ok(ChunkGridDecoded::None);
         }
 
         let mut squeeze = Vec::with_capacity(decoded_chunk_grid.dimensionality());
@@ -230,7 +240,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
             let Some(squeeze_dim) = squeeze_chunk_edge_lengths(&edge_lengths) else {
-                return Ok(SubchunkGrid::None);
+                return Ok(ChunkGridDecoded::None);
             };
             squeeze.push(squeeze_dim);
         }
@@ -261,7 +271,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             })
             .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
 
-        Ok(SubchunkGrid::Array(ChunkGrid::new(
+        Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
     }

@@ -5,11 +5,12 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::super::zfp::ZfpCodec;
-use crate::array::{BytesRepresentation, ChunkGrid, DataType, FillValue};
+use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -175,9 +176,9 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::None)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

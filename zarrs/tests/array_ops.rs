@@ -8,7 +8,11 @@ use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
     ChunkCachePartialDecoderLruChunkLimit,
 };
-use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
+use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
+use zarrs::array::codec::array_to_bytes::sharding::{
+    ShardingCodecBound, ShardingCodecBuilder, ShardingPartialDecoder,
+};
+use zarrs::array::codec::{ReshapeCodec, SqueezeCodec};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
     ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
@@ -21,6 +25,10 @@ use zarrs::storage::{ReadableStorageTraits, StorageHandle};
 
 type TestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 type TestResult = Result<(), Box<dyn Error>>;
+
+const fn nz(value: u64) -> NonZeroU64 {
+    NonZeroU64::new(value).unwrap()
+}
 
 fn fixture() -> (Arc<Array<TestStore>>, Arc<TestStore>) {
     let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
@@ -318,6 +326,77 @@ fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
     array.store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])?;
     let decoder = sharding_partial_decoder(array.as_ref())?;
     assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1])?, None);
+    Ok(())
+}
+
+#[test]
+fn array_ops_subchunks_with_reshape_codec() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let sharding_builder = ShardingCodecBuilder::new(vec![nz(3)], &data_type);
+
+    let mut builder = ArrayBuilder::new(vec![4, 6], vec![2, 6], data_type, 0u16);
+    builder
+        .array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(ReshapeShape::new([nz(
+            12,
+        )
+        .into()])?))])
+        .array_to_bytes_codec(sharding_builder.build_arc());
+    let array = builder.build(store, "/array")?;
+
+    let data: Vec<u16> = (0..array.shape().iter().product())
+        .map(|i| u16::try_from(i).unwrap())
+        .collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(3)]));
+    assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[4, 2]);
+
+    let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 1], &CodecOptions::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[2..3, 3..6])?;
+    assert_eq!(subchunk, compare);
+    assert_eq!(subchunk, [15, 16, 17]);
+
+    let subchunks = ArraySubset::new_with_ranges(&[1..3, 0..2]);
+    let subchunk_range =
+        array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..3, 0..6])?;
+    assert_eq!(subchunk_range, compare);
+
+    Ok(())
+}
+
+#[test]
+fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let sharding_builder = ShardingCodecBuilder::new(vec![nz(2)], &data_type);
+
+    let mut builder = ArrayBuilder::new(vec![2, 4], vec![1, 4], data_type, 0u16);
+    builder
+        .array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())])
+        .array_to_bytes_codec(sharding_builder.build_arc());
+    let array = builder.build(store, "/array")?;
+
+    let data: Vec<u16> = (0..array.shape().iter().product())
+        .map(|i| u16::try_from(i).unwrap())
+        .collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(2)]));
+    assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[2, 2]);
+
+    let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..2, 2..4])?;
+    assert_eq!(subchunk, compare);
+    assert_eq!(subchunk, [6, 7]);
+
+    let subchunks = ArraySubset::new_with_ranges(&[0..2, 1..2]);
+    let subchunk_range =
+        array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[0..2, 2..4])?;
+    assert_eq!(subchunk_range, compare);
+
     Ok(())
 }
 

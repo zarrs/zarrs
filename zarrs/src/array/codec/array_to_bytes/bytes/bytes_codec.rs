@@ -10,15 +10,15 @@ use super::{
     bytes_codec_partial,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShapeTraits, DataType,
-    DataTypeSize, FillValue,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
+    FillValue,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid,
+    ChunkGridDecoded, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -187,9 +187,9 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::None)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

@@ -1,5 +1,4 @@
-//! These tests are fully disabled for now pending investigation of "sparse chunk grids", which might be a better API
-#![cfg(any())]
+//! Local subchunk grid tests.
 
 use std::borrow::Cow;
 use std::num::NonZeroU64;
@@ -11,10 +10,10 @@ use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits, ArrayReadOps,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
-    ChunkShapeTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, DataType, DataTypeSize, FillValue, RecommendedConcurrency, SubchunkGrid,
-    UnboundArrayToBytesCodecTraits, data_type,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid,
+    ChunkGridDecoded, ChunkShape, ChunkShapeTraits, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -185,9 +184,9 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, zarrs::array::ChunkGridCreateError> {
-        Ok(SubchunkGrid::ChunkLocalDynamic)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, zarrs::array::ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::ChunkLocal)
     }
 
     fn encode<'a>(
@@ -285,10 +284,7 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
     array.store_array_subset(&array.subset_all(), &data)?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
-    assert!(matches!(
-        reopened.subchunk_grid_kind(),
-        SubchunkGrid::ChunkLocalDynamic
-    ));
+    assert!(reopened.subchunk_grid().is_none());
 
     let first = reopened
         .local_subchunk_grid(&[0, 0], &CodecOptions::default())?

@@ -2,7 +2,6 @@ use inherent::inherent;
 
 use super::super::*;
 use super::ArrayOps;
-use zarrs_codec::SubchunkGrid;
 
 #[inherent]
 impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
@@ -94,10 +93,6 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
 
     pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
         self.array().subchunk_grid()
-    }
-
-    pub fn subchunk_grid_kind(&self) -> &SubchunkGrid {
-        self.array().subchunk_grid_kind()
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

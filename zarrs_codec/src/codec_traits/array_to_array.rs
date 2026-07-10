@@ -1,14 +1,15 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
 use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits, SubchunkGrid,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
+    CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
 };
 #[cfg(feature = "async")]
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -77,14 +78,16 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 
     /// Map a chunk grid from the decoded representation to the encoded representation.
     ///
-    /// Returns [`None`] if this codec cannot preserve or transform the chunk grid.
+    /// [`ChunkGridEncoded::ChunkLocal`] indicates that the codec can
+    /// propagate a concrete grid for each chunk at runtime, but no global
+    /// encoded grid exists. A codec must not map `ChunkLocal` back to `Array`.
     ///
     /// # Errors
     /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid is not supported by this codec.
     fn encoded_chunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError>;
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError>;
 
     /// Map a subchunk grid from the encoded representation to the decoded representation.
     ///
@@ -94,9 +97,9 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Returns a [`ChunkGridCreateError`] if the decoded chunk grid or encoded subchunk grid is not supported by this codec.
     fn decoded_subchunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError>;
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
 
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///

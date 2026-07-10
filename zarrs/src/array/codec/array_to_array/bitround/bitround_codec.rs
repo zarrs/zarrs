@@ -7,13 +7,14 @@ use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
     bitround_codec_partial, round_bytes,
 };
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    SubchunkGrid, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -173,17 +174,17 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
 
     fn encoded_chunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(Some(decoded_chunk_grid.clone()))
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        Ok(decoded_chunk_grid.into())
     }
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::Array(encoded_subchunk_grid.clone()))
+        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(encoded_subchunk_grid.into())
     }
 
     fn encode<'a>(

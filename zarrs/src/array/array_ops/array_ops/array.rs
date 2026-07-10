@@ -9,7 +9,7 @@ use super::{ArrayOps, maybe_regular_chunk_grid_shape};
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
-use zarrs_codec::SubchunkGrid;
+use zarrs_codec::ChunkGridDecoded;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
@@ -222,20 +222,16 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
 
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
         match &self.subchunk_grid {
-            SubchunkGrid::Array(subchunk_grid) => maybe_regular_chunk_grid_shape(subchunk_grid),
-            SubchunkGrid::None | SubchunkGrid::ChunkLocal => None,
+            ChunkGridDecoded::Array(subchunk_grid) => maybe_regular_chunk_grid_shape(subchunk_grid),
+            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
         }
     }
 
     pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
         match &self.subchunk_grid {
-            SubchunkGrid::Array(subchunk_grid) => Some(subchunk_grid),
-            SubchunkGrid::None | SubchunkGrid::ChunkLocal => None,
+            ChunkGridDecoded::Array(subchunk_grid) => Some(subchunk_grid),
+            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
         }
-    }
-
-    pub fn subchunk_grid_kind(&self) -> &SubchunkGrid {
-        &self.subchunk_grid
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

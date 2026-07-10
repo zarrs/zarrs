@@ -29,9 +29,10 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, SubchunkGrid, UnboundArrayToBytesCodecTraits,
+    BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -322,12 +323,15 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::Array(regular_subchunk_grid(
-            decoded_chunk_grid,
-            &self.subchunk_shape,
-        )?))
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        match decoded_chunk_grid {
+            ChunkGridDecodedRef::None => Ok(ChunkGridDecoded::None),
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => Ok(ChunkGridDecoded::Array(
+                regular_subchunk_grid(decoded_chunk_grid, &self.subchunk_shape)?,
+            )),
+            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridDecoded::ChunkLocal),
+        }
     }
 
     fn encode<'a>(

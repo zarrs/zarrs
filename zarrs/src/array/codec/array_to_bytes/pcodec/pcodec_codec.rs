@@ -11,14 +11,13 @@ use super::{
     PcodecDataTypeExt, PcodecDeltaEncodingOrder, PcodecElementType,
 };
 use crate::array::{
-    ChunkGrid, ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice,
-    transmute_to_bytes_vec,
+    ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkGrid,
+    ChunkGridDecoded, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -211,9 +210,9 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        Ok(SubchunkGrid::None)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

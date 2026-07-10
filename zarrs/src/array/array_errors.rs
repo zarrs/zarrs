@@ -97,7 +97,9 @@ pub enum ArrayError {
     #[error("invalid chunk grid indices: {_0:?}")]
     InvalidChunkGridIndicesError(Vec<u64>),
     /// The array does not have a subchunk grid.
-    #[error("array does not have a subchunk grid")]
+    #[error(
+        "array does not have a subchunk grid, or the chunk grid/codec configuration makes the subchunk grid unresolvable"
+    )]
     MissingSubchunkGrid,
     /// Incompatible dimensionality.
     #[error(transparent)]

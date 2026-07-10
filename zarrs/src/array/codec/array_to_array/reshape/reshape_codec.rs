@@ -10,15 +10,16 @@ use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    SubchunkGrid, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::reshape::{
-    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
+    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
 use zarrs_plugin::PluginCreateError;
 
@@ -36,97 +37,19 @@ struct ReshapeCodecBound {
     fill_value: FillValue,
 }
 
-/// Return the row-major linear length of an encoded granule if every encoded
-/// granule is contiguous in linear storage order.
-///
-/// Returns `None` if the granularity does not tile the encoded shape or if an
-/// encoded granule spans a non-contiguous rectangle in row-major order.
-fn encoded_granularity_linear_interval_len(
-    encoded_shape: &[NonZeroU64],
-    encoded_granularity: &[NonZeroU64],
-) -> Option<u64> {
-    for (shape, granularity) in encoded_shape.iter().zip(encoded_granularity) {
-        if granularity.get() > shape.get() || !shape.get().is_multiple_of(granularity.get()) {
-            return None;
-        }
-    }
-
-    let Some(first_non_unit_axis) = encoded_granularity
-        .iter()
-        .position(|granularity| granularity.get() > 1)
-    else {
-        return Some(1);
-    };
-
-    let mut interval_len = 1u64;
-    for (axis, (shape, granularity)) in encoded_shape
-        .iter()
-        .zip(encoded_granularity)
-        .enumerate()
-        .skip(first_non_unit_axis)
-    {
-        if axis > first_non_unit_axis && granularity != shape {
-            return None;
-        }
-        interval_len = interval_len.checked_mul(granularity.get())?;
-    }
-
-    Some(interval_len)
-}
-
-/// Convert a row-major linear interval length into a decoded rectangular
-/// granularity.
-///
-/// Returns `None` if the interval cannot tile `decoded_shape` as regular
-/// row-major rectangles.
-fn decoded_granularity_from_linear_interval(
-    decoded_shape: &[NonZeroU64],
-    interval_len: u64,
-) -> Option<ChunkShape> {
-    if interval_len == 0 {
-        return None;
-    }
-
-    let num_elements = decoded_shape
-        .iter()
-        .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
-    if interval_len > num_elements || !num_elements.is_multiple_of(interval_len) {
-        return None;
-    }
-    if interval_len == num_elements {
-        return Some(decoded_shape.to_vec());
-    }
-
-    let mut granularity = vec![NonZeroU64::new(1).unwrap(); decoded_shape.len()];
-    let mut remaining = interval_len;
-    for (dim, decoded_dim) in decoded_shape.iter().enumerate().rev() {
-        if remaining == 1 {
-            break;
-        }
-
-        let decoded_dim = decoded_dim.get();
-        if remaining >= decoded_dim {
-            if !remaining.is_multiple_of(decoded_dim) {
-                return None;
-            }
-            granularity[dim] = NonZeroU64::new(decoded_dim).unwrap();
-            remaining /= decoded_dim;
-        } else {
-            if !decoded_dim.is_multiple_of(remaining) {
-                return None;
-            }
-            granularity[dim] = NonZeroU64::new(remaining).unwrap();
-            remaining = 1;
-        }
-    }
-
-    (remaining == 1).then_some(granularity)
-}
-
 fn chunk_edge_lengths_to_regular_granularity(
     chunk_grid: &ChunkGrid,
 ) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
-    let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
+    get_regular_granularity_for_dimensions(chunk_grid)
+}
+
+/// Return the common chunk edge length for each dimension.
+///
+/// Returns `None` if any dimension is empty or has varying edge lengths.
+fn get_regular_granularity_for_dimensions(
+    chunk_grid: &ChunkGrid,
+) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
+    let mut granularity = Vec::with_capacity(chunk_grid.dimensionality());
     for dim in 0..chunk_grid.dimensionality() {
         let edge_lengths = chunk_grid
             .chunk_edge_lengths(dim)
@@ -137,9 +60,342 @@ fn chunk_edge_lengths_to_regular_granularity(
         if edge_lengths.iter().any(|&edge_length| edge_length != first) {
             return Ok(None);
         }
-        chunk_shape.push(first);
+        granularity.push(first);
     }
-    Ok(Some(chunk_shape))
+    Ok(Some(granularity))
+}
+
+fn input_dim_partitions(
+    reshape_shape: &ReshapeShape,
+    decoded_dimensionality: usize,
+) -> Option<Vec<Vec<usize>>> {
+    let mut seen = vec![false; decoded_dimensionality];
+    let mut partitions = Vec::with_capacity(reshape_shape.0.len());
+    for reshape_dim in &reshape_shape.0 {
+        let ReshapeDim::InputDims(input_dims) = reshape_dim else {
+            return None;
+        };
+        if input_dims.is_empty() {
+            return None;
+        }
+        let input_dims = input_dims
+            .iter()
+            .copied()
+            .map(usize::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        for &input_dim in &input_dims {
+            let seen = seen.get_mut(input_dim)?;
+            if *seen {
+                return None;
+            }
+            *seen = true;
+        }
+        partitions.push(input_dims);
+    }
+    seen.into_iter().all(|seen| seen).then_some(partitions)
+}
+
+fn input_dim_partitions_are_identity(partitions: &[Vec<usize>]) -> bool {
+    partitions
+        .iter()
+        .enumerate()
+        .all(|(dim, partition)| partition.as_slice() == [dim])
+}
+
+fn cartesian_product_edge_lengths(edge_lengths: &[Vec<NonZeroU64>]) -> Option<Vec<NonZeroU64>> {
+    let mut products = vec![NonZeroU64::new(1).unwrap()];
+    for edges in edge_lengths {
+        let capacity = products.len().checked_mul(edges.len())?;
+        let mut next = Vec::with_capacity(capacity);
+        for product in products {
+            for edge in edges {
+                next.push(NonZeroU64::new(product.get().checked_mul(edge.get())?)?);
+            }
+        }
+        products = next;
+    }
+    Some(products)
+}
+
+fn encoded_chunk_grid_for_input_dim_partitions(
+    partitions: &[Vec<usize>],
+    decoded_chunk_grid: &ChunkGrid,
+) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    let mut array_shape = Vec::with_capacity(partitions.len());
+    let mut chunk_shapes = Vec::with_capacity(partitions.len());
+    for partition in partitions {
+        let edge_lengths = partition
+            .iter()
+            .map(|&dim| decoded_chunk_grid.chunk_edge_lengths(dim))
+            .collect::<Result<Vec<_>, _>>()?;
+        let Some(encoded_edge_lengths) = cartesian_product_edge_lengths(&edge_lengths) else {
+            return Ok(None);
+        };
+        let Some(encoded_dim_shape) = encoded_edge_lengths
+            .iter()
+            .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))
+        else {
+            return Ok(None);
+        };
+        array_shape.push(encoded_dim_shape);
+        chunk_shapes.push(ChunkEdgeLengths::encode(&encoded_edge_lengths));
+    }
+
+    Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+        array_shape,
+        &chunk_shapes,
+    )?)))
+}
+
+fn repeat_shape(grid_shape: &[u64], dimensionality: usize) -> Option<Vec<u64>> {
+    if dimensionality == 0 {
+        return None;
+    }
+    let num_chunks = grid_shape
+        .iter()
+        .try_fold(1u64, |product, count| product.checked_mul(*count))?;
+    let mut repeats = vec![1; dimensionality];
+    *repeats.last_mut().unwrap() = num_chunks;
+    Some(repeats)
+}
+
+fn repeated_chunk_grid(
+    chunk_shape: &[NonZeroU64],
+    repeats: &[u64],
+) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    let mut array_shape = Vec::with_capacity(chunk_shape.len());
+    let mut chunk_shapes = Vec::with_capacity(chunk_shape.len());
+    for (edge, repeat) in chunk_shape.iter().zip(repeats) {
+        let Some(shape) = edge.get().checked_mul(*repeat) else {
+            return Ok(None);
+        };
+        let Ok(repeat) = usize::try_from(*repeat) else {
+            return Ok(None);
+        };
+        array_shape.push(shape);
+        chunk_shapes.push(ChunkEdgeLengths::encode(&vec![*edge; repeat]));
+    }
+    Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+        array_shape,
+        &chunk_shapes,
+    )?)))
+}
+
+fn split_edge_refinements(
+    outer_edges: &[NonZeroU64],
+    refined_edges: &[NonZeroU64],
+) -> Option<Vec<Vec<NonZeroU64>>> {
+    let mut refined = refined_edges.iter().copied();
+    let mut groups = Vec::with_capacity(outer_edges.len());
+    for outer_edge in outer_edges {
+        let mut group = Vec::new();
+        let mut sum = 0u64;
+        while sum < outer_edge.get() {
+            let edge = refined.next()?;
+            sum = sum.checked_add(edge.get())?;
+            if sum > outer_edge.get() {
+                return None;
+            }
+            group.push(edge);
+        }
+        groups.push(group);
+    }
+    refined.next().is_none().then_some(groups)
+}
+
+fn unravel_flat_index(mut index: usize, shape: &[usize]) -> Vec<usize> {
+    let mut indices = vec![0; shape.len()];
+    for (index_out, size) in indices.iter_mut().zip(shape).rev() {
+        *index_out = index % size;
+        index /= size;
+    }
+    indices
+}
+
+/// Map a sequence of contiguous row-major intervals to a rectilinear grid.
+pub(super) fn decoded_edge_lengths_from_linear_intervals(
+    decoded_shape: &[NonZeroU64],
+    intervals: &[NonZeroU64],
+) -> Option<Vec<Vec<NonZeroU64>>> {
+    let num_elements = decoded_shape
+        .iter()
+        .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+    if intervals
+        .iter()
+        .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))?
+        != num_elements
+    {
+        return None;
+    }
+
+    for pivot in 0..decoded_shape.len() {
+        let trailing = decoded_shape[pivot + 1..]
+            .iter()
+            .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+        let outer_repeats = decoded_shape[..pivot]
+            .iter()
+            .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+        let outer_repeats = usize::try_from(outer_repeats).ok()?;
+
+        let mut pivot_edges = Vec::new();
+        let mut pivot_sum = 0u64;
+        for interval in intervals {
+            if !interval.get().is_multiple_of(trailing) {
+                break;
+            }
+            let edge = interval.get() / trailing;
+            pivot_sum = pivot_sum.checked_add(edge)?;
+            if pivot_sum > decoded_shape[pivot].get() {
+                break;
+            }
+            pivot_edges.push(NonZeroU64::new(edge)?);
+            if pivot_sum == decoded_shape[pivot].get() {
+                break;
+            }
+        }
+        if pivot_sum != decoded_shape[pivot].get() {
+            continue;
+        }
+        let expected_len = pivot_edges.len().checked_mul(outer_repeats)?;
+        if intervals.len() != expected_len {
+            continue;
+        }
+        let expected_intervals = (0..outer_repeats)
+            .flat_map(|_| pivot_edges.iter())
+            .map(|edge| NonZeroU64::new(edge.get().checked_mul(trailing)?))
+            .collect::<Option<Vec<_>>>()?;
+        if intervals != expected_intervals {
+            continue;
+        }
+
+        let mut edge_lengths = Vec::with_capacity(decoded_shape.len());
+        for dim in &decoded_shape[..pivot] {
+            edge_lengths.push(vec![
+                NonZeroU64::new(1).unwrap();
+                usize::try_from(dim.get()).ok()?
+            ]);
+        }
+        edge_lengths.push(pivot_edges);
+        for dim in &decoded_shape[pivot + 1..] {
+            edge_lengths.push(vec![*dim]);
+        }
+        return Some(edge_lengths);
+    }
+    None
+}
+
+pub(super) fn linear_intervals_from_rectilinear_grid(
+    shape: &[NonZeroU64],
+    grid: &ChunkGrid,
+) -> Result<Option<Vec<NonZeroU64>>, ChunkGridCreateError> {
+    if grid.dimensionality() != shape.len()
+        || !grid
+            .array_shape()
+            .iter()
+            .zip(shape)
+            .all(|(grid, shape)| *grid == shape.get())
+    {
+        return Ok(None);
+    }
+    let edge_lengths = (0..grid.dimensionality())
+        .map(|dim| grid.chunk_edge_lengths(dim))
+        .collect::<Result<Vec<_>, _>>()?;
+    for pivot in 0..shape.len() {
+        let leading_is_unit = edge_lengths[..pivot]
+            .iter()
+            .all(|edges| edges.iter().all(|edge| edge.get() == 1));
+        let trailing_is_full = edge_lengths[pivot + 1..]
+            .iter()
+            .zip(&shape[pivot + 1..])
+            .all(|(edges, shape)| edges.as_slice() == [*shape]);
+        if leading_is_unit && trailing_is_full {
+            return Ok(cartesian_product_edge_lengths(&edge_lengths));
+        }
+    }
+    Ok(None)
+}
+
+fn decoded_subchunk_grid_for_input_dim_partitions(
+    partitions: &[Vec<usize>],
+    decoded_chunk_grid: &ChunkGrid,
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    if encoded_subchunk_grid.dimensionality() != partitions.len() {
+        return Err(ChunkGridCreateError::new(format!(
+            "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {}",
+            encoded_subchunk_grid.dimensionality(),
+            partitions.len()
+        )));
+    }
+
+    let decoded_edge_lengths = (0..decoded_chunk_grid.dimensionality())
+        .map(|dim| decoded_chunk_grid.chunk_edge_lengths(dim))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut local_edges = decoded_edge_lengths
+        .iter()
+        .map(|edges| vec![None; edges.len()])
+        .collect::<Vec<Vec<Option<Vec<NonZeroU64>>>>>();
+
+    for (encoded_dim, partition) in partitions.iter().enumerate() {
+        let partition_edges = partition
+            .iter()
+            .map(|&dim| decoded_edge_lengths[dim].clone())
+            .collect::<Vec<_>>();
+        let Some(encoded_outer_edges) = cartesian_product_edge_lengths(&partition_edges) else {
+            return Ok(None);
+        };
+        let refined_edges = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+        let Some(refined_by_outer_chunk) =
+            split_edge_refinements(&encoded_outer_edges, &refined_edges)
+        else {
+            return Ok(None);
+        };
+        let partition_grid_shape = partition_edges.iter().map(Vec::len).collect::<Vec<_>>();
+
+        for (flat_index, intervals) in refined_by_outer_chunk.iter().enumerate() {
+            let indices = unravel_flat_index(flat_index, &partition_grid_shape);
+            let decoded_local_shape = partition
+                .iter()
+                .zip(&indices)
+                .map(|(&dim, &index)| decoded_edge_lengths[dim][index])
+                .collect::<Vec<_>>();
+            let Some(decoded_local_edges) =
+                decoded_edge_lengths_from_linear_intervals(&decoded_local_shape, intervals)
+            else {
+                return Ok(None);
+            };
+
+            for ((&decoded_dim, &outer_index), edges) in
+                partition.iter().zip(&indices).zip(decoded_local_edges)
+            {
+                let candidate = &mut local_edges[decoded_dim][outer_index];
+                if candidate
+                    .as_ref()
+                    .is_some_and(|candidate| candidate != &edges)
+                {
+                    return Ok(None);
+                }
+                *candidate = Some(edges);
+            }
+        }
+    }
+
+    let chunk_shapes = local_edges
+        .into_iter()
+        .map(|per_outer_chunk| {
+            per_outer_chunk
+                .into_iter()
+                .flatten()
+                .flatten()
+                .collect::<Vec<_>>()
+        })
+        .map(|edges| ChunkEdgeLengths::encode(&edges))
+        .collect::<Vec<_>>();
+    Ok(Some(ChunkGrid::new(RectilinearChunkGrid::new(
+        decoded_chunk_grid.array_shape().to_vec(),
+        &chunk_shapes,
+    )?)))
 }
 
 impl ReshapeCodec {
@@ -261,78 +517,157 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
 
     fn encoded_chunk_grid(
         &self,
-        _decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-        Ok(None)
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+            return Ok(decoded_chunk_grid.into());
+        };
+        if decoded_chunk_grid.array_shape().contains(&0) {
+            return Ok(ChunkGridEncoded::None);
+        }
+
+        if let Some(partitions) =
+            input_dim_partitions(&self.shape, decoded_chunk_grid.dimensionality())
+        {
+            if input_dim_partitions_are_identity(&partitions) {
+                return Ok(ChunkGridEncoded::Array(decoded_chunk_grid.clone()));
+            }
+            return encoded_chunk_grid_for_input_dim_partitions(&partitions, decoded_chunk_grid)
+                .map(ChunkGridEncoded::from);
+        }
+
+        // Other reshape forms can be repeated when every decoded chunk has the
+        // same shape. The reshape is evaluated on that chunk shape, rather
+        // than on the whole array shape.
+        let Some(decoded_chunk_shape) =
+            chunk_edge_lengths_to_regular_granularity(decoded_chunk_grid)?
+        else {
+            return Ok(ChunkGridEncoded::ChunkLocal);
+        };
+        let Ok(encoded_chunk_shape) = super::get_encoded_shape(&self.shape, &decoded_chunk_shape)
+        else {
+            return Ok(ChunkGridEncoded::None);
+        };
+        if encoded_chunk_shape == decoded_chunk_shape {
+            return Ok(ChunkGridEncoded::Array(decoded_chunk_grid.clone()));
+        }
+        let Some(repeats) =
+            repeat_shape(decoded_chunk_grid.grid_shape(), encoded_chunk_shape.len())
+        else {
+            return Ok(ChunkGridEncoded::None);
+        };
+        repeated_chunk_grid(&encoded_chunk_shape, &repeats).map(ChunkGridEncoded::from)
     }
 
     fn decoded_subchunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError> {
-        let decoded_shape = decoded_chunk_grid
-            .array_shape()
-            .iter()
-            .copied()
-            .map(NonZeroU64::new)
-            .collect::<Option<ChunkShape>>();
-        let Some(decoded_shape) = decoded_shape else {
-            return Ok(SubchunkGrid::None);
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        let ChunkGridEncodedRef::Array(encoded_subchunk_grid) = encoded_subchunk_grid else {
+            return Ok(encoded_subchunk_grid.into());
         };
+        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+            return Ok(ChunkGridDecoded::None);
+        };
+        if decoded_chunk_grid.array_shape().contains(&0) {
+            return Ok(ChunkGridDecoded::None);
+        }
 
-        let encoded_shape = super::get_encoded_shape(&self.shape, &decoded_shape)
+        if let Some(partitions) =
+            input_dim_partitions(&self.shape, decoded_chunk_grid.dimensionality())
+        {
+            if input_dim_partitions_are_identity(&partitions) {
+                if encoded_subchunk_grid.dimensionality() != partitions.len() {
+                    return Err(ChunkGridCreateError::new(format!(
+                        "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {}",
+                        encoded_subchunk_grid.dimensionality(),
+                        partitions.len()
+                    )));
+                }
+                return Ok(ChunkGridDecoded::Array(encoded_subchunk_grid.clone()));
+            }
+            return Ok(decoded_subchunk_grid_for_input_dim_partitions(
+                &partitions,
+                decoded_chunk_grid,
+                encoded_subchunk_grid,
+            )?
+            .map_or(ChunkGridDecoded::None, ChunkGridDecoded::Array));
+        }
+
+        let Some(decoded_chunk_shape) =
+            chunk_edge_lengths_to_regular_granularity(decoded_chunk_grid)?
+        else {
+            return Ok(ChunkGridDecoded::None);
+        };
+        let encoded_chunk_shape = super::get_encoded_shape(&self.shape, &decoded_chunk_shape)
             .map_err(|err| ChunkGridCreateError::new(err.to_string()))?;
-        if encoded_subchunk_grid.dimensionality() != encoded_shape.len() {
+        if encoded_subchunk_grid.dimensionality() != encoded_chunk_shape.len() {
             return Err(ChunkGridCreateError::new(format!(
                 "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {}",
                 encoded_subchunk_grid.dimensionality(),
-                encoded_shape.len()
+                encoded_chunk_shape.len()
             )));
         }
-
-        let Some(encoded_granularity) =
-            chunk_edge_lengths_to_regular_granularity(encoded_subchunk_grid)?
+        if encoded_chunk_shape == decoded_chunk_shape {
+            return Ok(ChunkGridDecoded::Array(encoded_subchunk_grid.clone()));
+        }
+        let Some(repeats) =
+            repeat_shape(decoded_chunk_grid.grid_shape(), encoded_chunk_shape.len())
         else {
-            return Ok(SubchunkGrid::None);
+            return Ok(ChunkGridDecoded::None);
         };
 
-        let decoded_granularity = if encoded_shape == decoded_shape {
-            encoded_granularity
-        } else if let Some(interval_len) =
-            encoded_granularity_linear_interval_len(&encoded_shape, &encoded_granularity)
-        {
-            decoded_granularity_from_linear_interval(&decoded_shape, interval_len)
-                .unwrap_or_else(|| decoded_shape.clone())
-        } else {
-            decoded_shape.clone()
+        let mut local_encoded_edges = Vec::with_capacity(encoded_chunk_shape.len());
+        for (dim, (chunk_edge, repeat)) in encoded_chunk_shape.iter().zip(&repeats).enumerate() {
+            let outer_edges = vec![
+                *chunk_edge;
+                usize::try_from(*repeat).map_err(|err| {
+                    ChunkGridCreateError::new(err.to_string())
+                })?
+            ];
+            let refined_edges = encoded_subchunk_grid.chunk_edge_lengths(dim)?;
+            let Some(refined_tiles) = split_edge_refinements(&outer_edges, &refined_edges) else {
+                return Ok(ChunkGridDecoded::None);
+            };
+            let Some(first) = refined_tiles.first() else {
+                return Ok(ChunkGridDecoded::None);
+            };
+            if refined_tiles.iter().any(|tile| tile != first) {
+                return Ok(ChunkGridDecoded::None);
+            }
+            local_encoded_edges.push(ChunkEdgeLengths::encode(first));
+        }
+        let local_encoded_grid = ChunkGrid::new(RectilinearChunkGrid::new(
+            encoded_chunk_shape.iter().map(|dim| dim.get()).collect(),
+            &local_encoded_edges,
+        )?);
+        let Some(intervals) =
+            linear_intervals_from_rectilinear_grid(&encoded_chunk_shape, &local_encoded_grid)?
+        else {
+            return Ok(ChunkGridDecoded::None);
         };
-
-        let chunk_shapes = decoded_shape
-            .iter()
-            .zip(&decoded_granularity)
-            .map(|(shape, granularity)| {
-                if !shape.get().is_multiple_of(granularity.get()) {
-                    return None;
+        let Some(local_decoded_edges) =
+            decoded_edge_lengths_from_linear_intervals(&decoded_chunk_shape, &intervals)
+        else {
+            return Ok(ChunkGridDecoded::None);
+        };
+        let chunk_shapes = local_decoded_edges
+            .into_iter()
+            .zip(decoded_chunk_grid.grid_shape())
+            .map(|(edges, repeat)| {
+                let repeat = usize::try_from(*repeat).ok()?;
+                let mut repeated = Vec::with_capacity(edges.len().checked_mul(repeat)?);
+                for _ in 0..repeat {
+                    repeated.extend_from_slice(&edges);
                 }
-                let edge_lengths =
-                    vec![*granularity; (shape.get() / granularity.get()) as usize];
-                Some(ChunkEdgeLengths::encode(&edge_lengths))
+                Some(ChunkEdgeLengths::encode(&repeated))
             })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| {
-                ChunkGridCreateError::new(format!(
-                    "decoded granularity {decoded_granularity:?} is incompatible with decoded shape {decoded_shape:?}"
-                ))
-            })?;
-
-        let chunk_shapes = if chunk_shapes.is_empty() {
-            vec![ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())]
-        } else {
-            chunk_shapes
+            .collect::<Option<Vec<_>>>();
+        let Some(chunk_shapes) = chunk_shapes else {
+            return Ok(ChunkGridDecoded::None);
         };
-
-        Ok(SubchunkGrid::Array(ChunkGrid::new(
+        Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
     }

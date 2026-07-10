@@ -68,9 +68,9 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
-    RecommendedConcurrency, SubchunkGrid, UnboundArrayToArrayCodecTraits,
+    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
@@ -386,7 +386,7 @@ pub struct Array<TStorage: ?Sized> {
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
     /// The subchunk grid information exposed by the codec chain.
-    subchunk_grid: SubchunkGrid,
+    subchunk_grid: ChunkGridDecoded,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
@@ -498,7 +498,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grid = codecs_bound.decoded_subchunk_grid(&chunk_grid)?;
+        let subchunk_grid = codecs_bound.decoded_subchunk_grid((&chunk_grid).into())?;
 
         // Create storage transformers
         let storage_transformers =
@@ -602,7 +602,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs_bound = codecs
             .clone()
             .with_context(data_type.clone(), fill_value.clone())?;
-        let subchunk_grid = codecs_bound.decoded_subchunk_grid(&chunk_grid)?;
+        let subchunk_grid = codecs_bound.decoded_subchunk_grid((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -717,7 +717,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid = self.codecs_bound.decoded_subchunk_grid(&self.chunk_grid)?;
+        self.subchunk_grid = self
+            .codecs_bound
+            .decoded_subchunk_grid((&self.chunk_grid).into())?;
 
         // Update metadata based on version
         match &mut self.metadata {

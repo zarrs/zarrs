@@ -9,9 +9,9 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    SubchunkGrid, UnboundArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, ChunkGridDecoded, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -121,9 +121,9 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
 
     fn decoded_subchunk_grid(
         &self,
-        _decoded_chunk_grid: &zarrs_chunk_grid::ChunkGrid,
-    ) -> Result<SubchunkGrid, zarrs_chunk_grid::ChunkGridCreateError> {
-        Ok(SubchunkGrid::None)
+        _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, zarrs_chunk_grid::ChunkGridCreateError> {
+        Ok(ChunkGridDecoded::None)
     }
 
     fn encode<'a>(

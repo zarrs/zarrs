@@ -31,10 +31,7 @@ where
         self.encoder.size_held()
     }
 
-    fn local_subchunk_grid(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
+    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
         self.encoder.local_subchunk_grid(options)
     }
 

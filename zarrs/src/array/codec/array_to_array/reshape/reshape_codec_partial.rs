@@ -2,7 +2,11 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::get_reshaped_indexer;
-use crate::array::{DataType, FillValue};
+use super::reshape_codec::{
+    decoded_edge_lengths_from_linear_intervals, linear_intervals_from_rectilinear_grid,
+};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
+use crate::array::{ChunkGrid, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
@@ -106,11 +110,36 @@ where
         self.input_handle.size_held()
     }
 
-    fn local_subchunk_grid(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        todo!()
+    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options)? else {
+            return Ok(None);
+        };
+        if encoded_subchunk_grid.dimensionality() != self.encoded_shape.len() {
+            return Err(CodecError::Other(
+                "local subchunk grid dimensionality is incompatible with reshape encoded dimensionality"
+                    .to_string(),
+            ));
+        }
+        let Some(intervals) =
+            linear_intervals_from_rectilinear_grid(&self.encoded_shape, &encoded_subchunk_grid)
+                .map_err(|err| CodecError::Other(err.to_string()))?
+        else {
+            return Ok(None);
+        };
+        let Some(edge_lengths) =
+            decoded_edge_lengths_from_linear_intervals(&self.decoded_shape, &intervals)
+        else {
+            return Ok(None);
+        };
+        let chunk_shapes = edge_lengths
+            .iter()
+            .map(|edges| ChunkEdgeLengths::encode(edges))
+            .collect::<Vec<_>>();
+        let array_shape = bytemuck::must_cast_slice(&self.decoded_shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 
     fn partial_decode(
@@ -145,9 +174,38 @@ where
 
     async fn local_subchunk_grid(
         &self,
-        _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        todo!()
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options).await?
+        else {
+            return Ok(None);
+        };
+        if encoded_subchunk_grid.dimensionality() != self.encoded_shape.len() {
+            return Err(CodecError::Other(
+                "local subchunk grid dimensionality is incompatible with reshape encoded dimensionality"
+                    .to_string(),
+            ));
+        }
+        let Some(intervals) =
+            linear_intervals_from_rectilinear_grid(&self.encoded_shape, &encoded_subchunk_grid)
+                .map_err(|err| CodecError::Other(err.to_string()))?
+        else {
+            return Ok(None);
+        };
+        let Some(edge_lengths) =
+            decoded_edge_lengths_from_linear_intervals(&self.decoded_shape, &intervals)
+        else {
+            return Ok(None);
+        };
+        let chunk_shapes = edge_lengths
+            .iter()
+            .map(|edges| ChunkEdgeLengths::encode(edges))
+            .collect::<Vec<_>>();
+        let array_shape = bytemuck::must_cast_slice(&self.decoded_shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 
     fn size_held(&self) -> usize {

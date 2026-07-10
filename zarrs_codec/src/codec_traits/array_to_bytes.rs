@@ -1,15 +1,16 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayCodecTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, SubchunkGrid, decode_into_array_bytes_target,
+    BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
+    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use crate::{
@@ -74,14 +75,15 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 
     /// Return the decoded subchunk grid created by this codec.
     ///
-    /// Returns [`None`] if this codec does not expose finer subchunk boundaries.
+    /// A chunk-local input permits [`ChunkGridDecoded::ChunkLocal`] when the codec
+    /// can expose a concrete subchunk grid for each chunk at runtime.
     ///
     /// # Errors
     /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
     fn decoded_subchunk_grid(
         &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<SubchunkGrid, ChunkGridCreateError>;
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
 
     /// Encode a chunk.
     ///

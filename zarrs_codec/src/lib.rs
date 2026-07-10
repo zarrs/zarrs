@@ -142,18 +142,76 @@ pub struct PartialEncoderCapability {
     pub partial_encode: bool,
 }
 
-/// Describes subchunk grid availability for a codec chain.
-#[derive(Debug, Clone)]
-pub enum SubchunkGrid {
-    /// The codec chain does not expose finer subchunk boundaries.
-    None,
-    /// A subchunk grid is resolvable and congruent across each dimension for the whole array.
-    Array(ChunkGrid),
-    /// A chunk-local subchunk grid is resolvable via [`ArrayPartialDecoderTraits::local_subchunk_grid`].
-    ChunkLocal,
-    // /// A chunk-local subchunk grid requires opening the encoded chunk.
-    // ChunkLocalDynamic,
+mod chunk_grid_mapped {
+    use super::ChunkGrid;
+
+    /// Describes a chunk grid mapped to a representation in a codec chain.
+    #[derive(Debug, Clone)]
+    pub enum ChunkGridMapped {
+        /// No chunk grid is available.
+        None,
+        /// A chunk grid is resolvable for the whole array.
+        Array(ChunkGrid),
+        /// No global grid exists, but a grid is resolvable for each chunk via
+        /// [`ArrayPartialDecoderTraits::local_subchunk_grid`](crate::ArrayPartialDecoderTraits::local_subchunk_grid).
+        ChunkLocal,
+    }
+
+    /// A borrowed chunk grid mapped to a representation in a codec chain.
+    #[derive(Debug, Clone, Copy)]
+    pub enum ChunkGridMappedRef<'a> {
+        /// No chunk grid is available.
+        None,
+        /// A chunk grid is resolvable for the whole array.
+        Array(&'a ChunkGrid),
+        /// No global grid exists, but a grid is resolvable for each chunk.
+        ChunkLocal,
+    }
+
+    impl From<Option<ChunkGrid>> for ChunkGridMapped {
+        fn from(chunk_grid: Option<ChunkGrid>) -> Self {
+            chunk_grid.map_or(Self::None, Self::Array)
+        }
+    }
+
+    impl<'a> From<&'a ChunkGrid> for ChunkGridMappedRef<'a> {
+        fn from(chunk_grid: &'a ChunkGrid) -> Self {
+            Self::Array(chunk_grid)
+        }
+    }
+
+    impl<'a> From<&'a ChunkGridMapped> for ChunkGridMappedRef<'a> {
+        fn from(chunk_grid: &'a ChunkGridMapped) -> Self {
+            match chunk_grid {
+                ChunkGridMapped::None => Self::None,
+                ChunkGridMapped::Array(chunk_grid) => Self::Array(chunk_grid),
+                ChunkGridMapped::ChunkLocal => Self::ChunkLocal,
+            }
+        }
+    }
+
+    impl From<ChunkGridMappedRef<'_>> for ChunkGridMapped {
+        fn from(chunk_grid: ChunkGridMappedRef<'_>) -> Self {
+            match chunk_grid {
+                ChunkGridMappedRef::None => Self::None,
+                ChunkGridMappedRef::Array(chunk_grid) => Self::Array(chunk_grid.clone()),
+                ChunkGridMappedRef::ChunkLocal => Self::ChunkLocal,
+            }
+        }
+    }
 }
+
+/// A chunk grid mapped to the decoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMapped as ChunkGridDecoded;
+
+/// A chunk grid mapped to the encoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMapped as ChunkGridEncoded;
+
+/// A borrowed chunk grid mapped to the decoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMappedRef as ChunkGridDecodedRef;
+
+/// A borrowed chunk grid mapped to the encoded representation of a codec.
+pub use chunk_grid_mapped::ChunkGridMappedRef as ChunkGridEncodedRef;
 
 /// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
