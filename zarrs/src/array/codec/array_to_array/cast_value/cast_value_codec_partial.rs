@@ -127,6 +127,13 @@ where
         self.input_output_handle.size_held()
     }
 
+    fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        self.input_output_handle.local_subchunk_grid(options)
+    }
+
     fn partial_decode(
         &self,
         indexer: &dyn Indexer,
@@ -184,6 +191,13 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
+    }
+
+    async fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        self.input_output_handle.local_subchunk_grid(options).await
     }
 
     async fn partial_decode<'a>(
