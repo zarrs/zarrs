@@ -1,12 +1,10 @@
-// TODO: reshape partial decoder
-
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -22,12 +20,7 @@ use zarrs_metadata_ext::codec::reshape::{
 };
 use zarrs_plugin::PluginCreateError;
 
-use super::reshape_codec_grid_mapping::{
-    GridMapping, decoded_subchunk_grid_for_input_dim_partitions,
-    decoded_subchunk_grid_for_repeated_chunks, encoded_chunk_grid_for_input_dim_partitions,
-    input_dim_partitions, input_dim_partitions_are_identity, regular_chunk_shape, repeat_shape,
-    repeated_chunk_grid,
-};
+use super::reshape_codec_grid_mapping::{decoded_subchunk_grid, encoded_chunk_grid};
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]
@@ -69,43 +62,6 @@ impl ReshapeCodec {
 }
 
 impl ReshapeCodecBound {
-    fn grid_mapping(
-        &self,
-        decoded_chunk_grid: &ChunkGrid,
-    ) -> Result<GridMapping, ChunkGridCreateError> {
-        if let Some(partitions) =
-            input_dim_partitions(&self.shape, decoded_chunk_grid.dimensionality())
-        {
-            return Ok(if input_dim_partitions_are_identity(&partitions) {
-                GridMapping::Identity
-            } else {
-                GridMapping::InputDimPartitions(partitions)
-            });
-        }
-
-        let Some(decoded_chunk_shape) = regular_chunk_shape(decoded_chunk_grid)? else {
-            return Ok(GridMapping::ChunkLocal);
-        };
-        let encoded_chunk_shape = match super::get_encoded_shape(&self.shape, &decoded_chunk_shape)
-        {
-            Ok(encoded_chunk_shape) => encoded_chunk_shape,
-            Err(err) => return Ok(GridMapping::InvalidShape(err)),
-        };
-        if encoded_chunk_shape == decoded_chunk_shape {
-            return Ok(GridMapping::Identity);
-        }
-        let Some(repeats) =
-            repeat_shape(decoded_chunk_grid.grid_shape(), encoded_chunk_shape.len())
-        else {
-            return Ok(GridMapping::Unrepresentable);
-        };
-        Ok(GridMapping::Repeated {
-            decoded_chunk_shape,
-            encoded_chunk_shape,
-            repeats,
-        })
-    }
-
     fn new_partial<T: ?Sized>(
         &self,
         input_handle: Arc<T>,
@@ -217,29 +173,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
-        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
-            return Ok(decoded_chunk_grid.into());
-        };
-        if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(ChunkGridEncoded::None);
-        }
-
-        match self.grid_mapping(decoded_chunk_grid)? {
-            GridMapping::Identity => Ok(ChunkGridEncoded::Array(decoded_chunk_grid.clone())),
-            GridMapping::InputDimPartitions(partitions) => {
-                encoded_chunk_grid_for_input_dim_partitions(&partitions, decoded_chunk_grid)
-                    .map(ChunkGridEncoded::from)
-            }
-            GridMapping::Repeated {
-                encoded_chunk_shape,
-                repeats,
-                ..
-            } => repeated_chunk_grid(&encoded_chunk_shape, &repeats).map(ChunkGridEncoded::from),
-            GridMapping::ChunkLocal => Ok(ChunkGridEncoded::ChunkLocal),
-            GridMapping::InvalidShape(_) | GridMapping::Unrepresentable => {
-                Ok(ChunkGridEncoded::None)
-            }
-        }
+        encoded_chunk_grid(&self.shape, decoded_chunk_grid)
     }
 
     fn decoded_subchunk_grid(
@@ -247,50 +181,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        let ChunkGridEncodedRef::Array(encoded_subchunk_grid) = encoded_subchunk_grid else {
-            return Ok(encoded_subchunk_grid.into());
-        };
-        let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
-            return Ok(ChunkGridDecoded::None);
-        };
-        if decoded_chunk_grid.array_shape().contains(&0) {
-            return Ok(ChunkGridDecoded::None);
-        }
-
-        match self.grid_mapping(decoded_chunk_grid)? {
-            GridMapping::Identity => {
-                let expected_dimensionality = decoded_chunk_grid.dimensionality();
-                if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
-                    return Err(ChunkGridCreateError::new(format!(
-                        "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {expected_dimensionality}",
-                        encoded_subchunk_grid.dimensionality(),
-                    )));
-                }
-                Ok(ChunkGridDecoded::Array(encoded_subchunk_grid.clone()))
-            }
-            GridMapping::InputDimPartitions(partitions) => {
-                Ok(decoded_subchunk_grid_for_input_dim_partitions(
-                    &partitions,
-                    decoded_chunk_grid,
-                    encoded_subchunk_grid,
-                )?
-                .map_or(ChunkGridDecoded::None, ChunkGridDecoded::Array))
-            }
-            GridMapping::Repeated {
-                decoded_chunk_shape,
-                encoded_chunk_shape,
-                repeats,
-            } => Ok(decoded_subchunk_grid_for_repeated_chunks(
-                decoded_chunk_grid,
-                encoded_subchunk_grid,
-                &decoded_chunk_shape,
-                &encoded_chunk_shape,
-                &repeats,
-            )?
-            .map_or(ChunkGridDecoded::None, ChunkGridDecoded::Array)),
-            GridMapping::InvalidShape(err) => Err(ChunkGridCreateError::new(err.to_string())),
-            GridMapping::ChunkLocal | GridMapping::Unrepresentable => Ok(ChunkGridDecoded::None),
-        }
+        decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
     }
 
     fn encode<'a>(

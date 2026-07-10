@@ -6,7 +6,7 @@
 //!
 //! ## Mapping a decoded chunk grid to an encoded chunk grid
 //!
-//! [`ReshapeCodecBound::grid_mapping`] chooses one of three useful mappings:
+//! [`grid_mapping`] chooses one of three useful mappings:
 //!
 //! 1. **Identity.** If every output dimension is the same single input dimension, the grid is
 //!    unchanged.
@@ -57,7 +57,9 @@
 use std::num::NonZeroU64;
 
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError};
-use zarrs_codec::CodecError;
+use zarrs_codec::{
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecError,
+};
 use zarrs_metadata::ChunkShape;
 use zarrs_metadata_ext::chunk_grid::rectilinear::ChunkEdgeLengths;
 use zarrs_metadata_ext::codec::reshape::{ReshapeDim, ReshapeShape};
@@ -65,7 +67,7 @@ use zarrs_metadata_ext::codec::reshape::{ReshapeDim, ReshapeShape};
 use crate::array::chunk_grid::repeat::{RepeatChunkGrid, RepeatChunkGridCreateError};
 use crate::array::chunk_grid::{RectilinearChunkGrid, RegularChunkGrid};
 
-pub(super) enum GridMapping {
+enum GridMapping {
     Identity,
     InputDimPartitions(Vec<Vec<usize>>),
     Repeated {
@@ -78,12 +80,123 @@ pub(super) enum GridMapping {
     Unrepresentable,
 }
 
+fn grid_mapping(
+    reshape_shape: &ReshapeShape,
+    decoded_chunk_grid: &ChunkGrid,
+) -> Result<GridMapping, ChunkGridCreateError> {
+    if let Some(partitions) =
+        input_dim_partitions(reshape_shape, decoded_chunk_grid.dimensionality())
+    {
+        return Ok(if input_dim_partitions_are_identity(&partitions) {
+            GridMapping::Identity
+        } else {
+            GridMapping::InputDimPartitions(partitions)
+        });
+    }
+
+    let Some(decoded_chunk_shape) = regular_chunk_shape(decoded_chunk_grid)? else {
+        return Ok(GridMapping::ChunkLocal);
+    };
+    let encoded_chunk_shape = match super::get_encoded_shape(reshape_shape, &decoded_chunk_shape) {
+        Ok(encoded_chunk_shape) => encoded_chunk_shape,
+        Err(err) => return Ok(GridMapping::InvalidShape(err)),
+    };
+    if encoded_chunk_shape == decoded_chunk_shape {
+        return Ok(GridMapping::Identity);
+    }
+    let Some(repeats) = repeat_shape(decoded_chunk_grid.grid_shape(), encoded_chunk_shape.len())
+    else {
+        return Ok(GridMapping::Unrepresentable);
+    };
+    Ok(GridMapping::Repeated {
+        decoded_chunk_shape,
+        encoded_chunk_shape,
+        repeats,
+    })
+}
+
+pub(super) fn encoded_chunk_grid(
+    reshape_shape: &ReshapeShape,
+    decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+) -> Result<ChunkGridEncoded, ChunkGridCreateError> {
+    let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+        return Ok(decoded_chunk_grid.into());
+    };
+    if decoded_chunk_grid.array_shape().contains(&0) {
+        return Ok(ChunkGridEncoded::None);
+    }
+
+    match grid_mapping(reshape_shape, decoded_chunk_grid)? {
+        GridMapping::Identity => Ok(ChunkGridEncoded::Array(decoded_chunk_grid.clone())),
+        GridMapping::InputDimPartitions(partitions) => {
+            encoded_chunk_grid_for_input_dim_partitions(&partitions, decoded_chunk_grid)
+                .map(ChunkGridEncoded::from)
+        }
+        GridMapping::Repeated {
+            encoded_chunk_shape,
+            repeats,
+            ..
+        } => repeated_chunk_grid(&encoded_chunk_shape, &repeats).map(ChunkGridEncoded::from),
+        GridMapping::ChunkLocal => Ok(ChunkGridEncoded::ChunkLocal),
+        GridMapping::InvalidShape(_) | GridMapping::Unrepresentable => Ok(ChunkGridEncoded::None),
+    }
+}
+
+pub(super) fn decoded_subchunk_grid(
+    reshape_shape: &ReshapeShape,
+    decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+    let ChunkGridEncodedRef::Array(encoded_subchunk_grid) = encoded_subchunk_grid else {
+        return Ok(encoded_subchunk_grid.into());
+    };
+    let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid else {
+        return Ok(ChunkGridDecoded::None);
+    };
+    if decoded_chunk_grid.array_shape().contains(&0) {
+        return Ok(ChunkGridDecoded::None);
+    }
+
+    match grid_mapping(reshape_shape, decoded_chunk_grid)? {
+        GridMapping::Identity => {
+            let expected_dimensionality = decoded_chunk_grid.dimensionality();
+            if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
+                return Err(ChunkGridCreateError::new(format!(
+                    "encoded subchunk grid dimensionality {} is incompatible with encoded dimensionality {expected_dimensionality}",
+                    encoded_subchunk_grid.dimensionality(),
+                )));
+            }
+            Ok(ChunkGridDecoded::Array(encoded_subchunk_grid.clone()))
+        }
+        GridMapping::InputDimPartitions(partitions) => {
+            Ok(decoded_subchunk_grid_for_input_dim_partitions(
+                &partitions,
+                decoded_chunk_grid,
+                encoded_subchunk_grid,
+            )?
+            .map_or(ChunkGridDecoded::None, ChunkGridDecoded::Array))
+        }
+        GridMapping::Repeated {
+            decoded_chunk_shape,
+            encoded_chunk_shape,
+            repeats,
+        } => Ok(decoded_subchunk_grid_for_repeated_chunks(
+            decoded_chunk_grid,
+            encoded_subchunk_grid,
+            &decoded_chunk_shape,
+            &encoded_chunk_shape,
+            &repeats,
+        )?
+        .map_or(ChunkGridDecoded::None, ChunkGridDecoded::Array)),
+        GridMapping::InvalidShape(err) => Err(ChunkGridCreateError::new(err.to_string())),
+        GridMapping::ChunkLocal | GridMapping::Unrepresentable => Ok(ChunkGridDecoded::None),
+    }
+}
+
 /// Return the chunk shape if every chunk has the same edge lengths.
 ///
 /// Returns `None` if any dimension is empty or has varying edge lengths.
-pub(super) fn regular_chunk_shape(
-    chunk_grid: &ChunkGrid,
-) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
+fn regular_chunk_shape(chunk_grid: &ChunkGrid) -> Result<Option<ChunkShape>, ChunkGridCreateError> {
     let mut chunk_shape = Vec::with_capacity(chunk_grid.dimensionality());
     for dim in 0..chunk_grid.dimensionality() {
         let edge_lengths = chunk_grid
@@ -100,7 +213,7 @@ pub(super) fn regular_chunk_shape(
     Ok(Some(chunk_shape))
 }
 
-pub(super) fn input_dim_partitions(
+fn input_dim_partitions(
     reshape_shape: &ReshapeShape,
     decoded_dimensionality: usize,
 ) -> Option<Vec<Vec<usize>>> {
@@ -131,7 +244,7 @@ pub(super) fn input_dim_partitions(
     seen.into_iter().all(|seen| seen).then_some(partitions)
 }
 
-pub(super) fn input_dim_partitions_are_identity(partitions: &[Vec<usize>]) -> bool {
+fn input_dim_partitions_are_identity(partitions: &[Vec<usize>]) -> bool {
     partitions
         .iter()
         .enumerate()
@@ -167,7 +280,7 @@ fn rectilinear_chunk_grid(
     )?))
 }
 
-pub(super) fn encoded_chunk_grid_for_input_dim_partitions(
+fn encoded_chunk_grid_for_input_dim_partitions(
     partitions: &[Vec<usize>],
     decoded_chunk_grid: &ChunkGrid,
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
@@ -195,7 +308,7 @@ pub(super) fn encoded_chunk_grid_for_input_dim_partitions(
     rectilinear_chunk_grid(array_shape, &edge_lengths).map(Some)
 }
 
-pub(super) fn repeat_shape(grid_shape: &[u64], dimensionality: usize) -> Option<Vec<u64>> {
+fn repeat_shape(grid_shape: &[u64], dimensionality: usize) -> Option<Vec<u64>> {
     if dimensionality == 0 {
         return None;
     }
@@ -207,7 +320,7 @@ pub(super) fn repeat_shape(grid_shape: &[u64], dimensionality: usize) -> Option<
     Some(repeats)
 }
 
-pub(super) fn repeated_chunk_grid(
+fn repeated_chunk_grid(
     chunk_shape: &[NonZeroU64],
     repeats: &[u64],
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
@@ -393,7 +506,7 @@ pub(super) fn reshape_rectilinear_grid(
     rectilinear_grid_from_intervals(target_shape, &intervals)
 }
 
-pub(super) fn decoded_subchunk_grid_for_input_dim_partitions(
+fn decoded_subchunk_grid_for_input_dim_partitions(
     partitions: &[Vec<usize>],
     decoded_chunk_grid: &ChunkGrid,
     encoded_subchunk_grid: &ChunkGrid,
@@ -474,7 +587,7 @@ pub(super) fn decoded_subchunk_grid_for_input_dim_partitions(
     )?))
 }
 
-pub(super) fn decoded_subchunk_grid_for_repeated_chunks(
+fn decoded_subchunk_grid_for_repeated_chunks(
     decoded_chunk_grid: &ChunkGrid,
     encoded_subchunk_grid: &ChunkGrid,
     decoded_chunk_shape: &[NonZeroU64],
