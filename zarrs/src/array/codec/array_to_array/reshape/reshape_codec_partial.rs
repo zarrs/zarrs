@@ -2,11 +2,8 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::get_reshaped_indexer;
-use super::reshape_codec::{
-    decoded_edge_lengths_from_linear_intervals, linear_intervals_from_rectilinear_grid,
-};
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, DataType, FillValue};
+use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
+use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
@@ -53,7 +50,6 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         input_handle: Arc<T>,
         decoded_shape: &[NonZeroU64],
         data_type: &DataType,
-        _fill_value: &FillValue,
         encoded_shape: Vec<NonZeroU64>,
     ) -> Self {
         Self {
@@ -62,6 +58,18 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
             encoded_shape,
             data_type: data_type.clone(),
         }
+    }
+
+    fn map_local_subchunk_grid(
+        &self,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        reshape_rectilinear_grid(
+            &self.encoded_shape,
+            &self.decoded_shape,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 
@@ -114,32 +122,7 @@ where
         let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options)? else {
             return Ok(None);
         };
-        if encoded_subchunk_grid.dimensionality() != self.encoded_shape.len() {
-            return Err(CodecError::Other(
-                "local subchunk grid dimensionality is incompatible with reshape encoded dimensionality"
-                    .to_string(),
-            ));
-        }
-        let Some(intervals) =
-            linear_intervals_from_rectilinear_grid(&self.encoded_shape, &encoded_subchunk_grid)
-                .map_err(|err| CodecError::Other(err.to_string()))?
-        else {
-            return Ok(None);
-        };
-        let Some(edge_lengths) =
-            decoded_edge_lengths_from_linear_intervals(&self.decoded_shape, &intervals)
-        else {
-            return Ok(None);
-        };
-        let chunk_shapes = edge_lengths
-            .iter()
-            .map(|edges| ChunkEdgeLengths::encode(edges))
-            .collect::<Vec<_>>();
-        let array_shape = bytemuck::must_cast_slice(&self.decoded_shape).to_vec();
-        Ok(Some(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+        self.map_local_subchunk_grid(&encoded_subchunk_grid)
     }
 
     fn partial_decode(
@@ -180,32 +163,7 @@ where
         else {
             return Ok(None);
         };
-        if encoded_subchunk_grid.dimensionality() != self.encoded_shape.len() {
-            return Err(CodecError::Other(
-                "local subchunk grid dimensionality is incompatible with reshape encoded dimensionality"
-                    .to_string(),
-            ));
-        }
-        let Some(intervals) =
-            linear_intervals_from_rectilinear_grid(&self.encoded_shape, &encoded_subchunk_grid)
-                .map_err(|err| CodecError::Other(err.to_string()))?
-        else {
-            return Ok(None);
-        };
-        let Some(edge_lengths) =
-            decoded_edge_lengths_from_linear_intervals(&self.decoded_shape, &intervals)
-        else {
-            return Ok(None);
-        };
-        let chunk_shapes = edge_lengths
-            .iter()
-            .map(|edges| ChunkEdgeLengths::encode(edges))
-            .collect::<Vec<_>>();
-        let array_shape = bytemuck::must_cast_slice(&self.decoded_shape).to_vec();
-        Ok(Some(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+        self.map_local_subchunk_grid(&encoded_subchunk_grid)
     }
 
     fn size_held(&self) -> usize {

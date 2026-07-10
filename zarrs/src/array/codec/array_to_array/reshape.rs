@@ -58,6 +58,7 @@
 //! However, the local subchunk grid of an individual chunk can still be recovered via [`ArrayPartialDecoderTraits::local_subchunk_grid`](zarrs_codec::ArrayPartialDecoderTraits::local_subchunk_grid).
 
 mod reshape_codec;
+mod reshape_codec_grid_mapping;
 mod reshape_codec_partial;
 
 use std::num::NonZeroU64;
