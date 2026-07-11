@@ -163,7 +163,7 @@ fn zarr_python_uses_nearest_even_for_directed_uint64_to_float(case: &CastValueMa
         && matches!(case.rounding.as_str(), "towards-zero" | "towards-negative")
 }
 
-// #[ignore = "requires generated data from tests/data/zarr_python_cast_value_matrix.py"]
+#[ignore = "requires generated data from tests/data/zarr_python_cast_value_matrix.py"]
 #[test]
 fn zarr_python_v3_cast_value_matrix_read() -> Result<(), Box<dyn Error>> {
     let root = Path::new("tests/data/zarr_python_compat/cast_value_matrix");
