@@ -2,15 +2,11 @@
 //!
 //! Performs a reshaping operation.
 //!
-//! <div class="warning">
-//! This codec is experimental and may be incompatible with other Zarr V3 implementations.
-//! </div>
-//!
 //! ### Compatible Implementations
 //! None
 //!
 //! ### Specification
-//! - <https://github.com/zarr-developers/zarr-extensions/blob/7295bf1ec15c978f1a63b90d55891712b950c797/codecs/reshape/README.md>
+//! - <https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/reshape>
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `reshape`

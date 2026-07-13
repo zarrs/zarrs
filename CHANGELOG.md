@@ -142,6 +142,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid a potential copy in `ShardingPartialDecoder::partial_decode_into`
 - Bump `zarrs_chunk_grid` to 0.5.1
 
+### Changed
+- Remove warnings from now-stable `reshape` codec
+
 ## [0.23.5] - 2026-03-03
 
 ### Changed
