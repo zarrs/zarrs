@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_metadata_ext` to 0.4.5
 - **Breaking**: Change `ArrayOps::subchunk_grid()` to return `Option<&ChunkGrid>` and return `None` when an array does not have a subchunk grid
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
+- Remove warnings from now-stable `reshape` codec
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
@@ -141,9 +142,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Avoid a potential copy in `ShardingPartialDecoder::partial_decode_into`
 - Bump `zarrs_chunk_grid` to 0.5.1
-
-### Changed
-- Remove warnings from now-stable `reshape` codec
 
 ## [0.23.5] - 2026-03-03
 
