@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
-  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}`
+  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity
+  - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
+    so nested sharding levels can be selected independently
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`

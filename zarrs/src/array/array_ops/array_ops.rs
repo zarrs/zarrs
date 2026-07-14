@@ -70,18 +70,37 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Return the subchunk shape if the subchunk grid has a regular chunk shape.
+    /// Return the level-zero subchunk shape if its grid has a regular chunk shape.
     ///
     /// Returns [`None`] if the array does not expose subchunks, or if the
     /// resolved subchunk grid has varying edge lengths.
     #[must_use]
     fn subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// Retrieve the subchunk grid.
+    /// Return the subchunk shape at `level` if its grid has a regular chunk shape.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    #[must_use]
+    fn subchunk_shape_at_level(&self, level: usize) -> Option<ChunkShape>;
+
+    /// Retrieve the level-zero subchunk grid.
     ///
     /// Returns [`None`] if the subchunk grid cannot be globally resolved (i.e. it is non-existent or chunk-local).
     #[must_use]
     fn subchunk_grid(&self) -> Option<&ChunkGrid>;
+
+    /// Return the globally resolved subchunk grid at `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// Returns [`None`] when the level is absent or cannot be resolved globally.
+    #[must_use]
+    fn subchunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid>;
+
+    /// Return the number of subchunk grid levels exposed by the codec hierarchy.
+    ///
+    /// This includes levels that cannot be resolved globally.
+    #[must_use]
+    fn subchunk_grid_count(&self) -> usize;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;

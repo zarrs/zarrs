@@ -168,11 +168,11 @@ where
         }
     }
 
-    fn local_subchunk_grid(
+    fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
-    ) -> Result<Option<super::ChunkGrid>, CodecError> {
-        self.input_output_handle.local_subchunk_grid(options)
+    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -260,11 +260,11 @@ where
         self.input_output_handle.size_held()
     }
 
-    fn local_subchunk_grid(
+    fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
     }
 
     fn partial_decode(
@@ -487,11 +487,11 @@ where
         self.input_output_handle.size_held()
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
-        _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options).await
     }
 
     fn data_type(&self) -> &super::DataType {
@@ -624,11 +624,11 @@ where
         self.input_output_handle.size_held()
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
     }
 
     async fn partial_decode<'a>(

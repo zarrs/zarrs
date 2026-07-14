@@ -145,8 +145,20 @@ pub trait AsyncArrayReadOps: ArrayOps {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        self.async_retrieve_subchunk_at_level_opt(0, subchunk_indices, options)
+            .await
+    }
+
+    /// Read and decode a subchunk from `level` asynchronously with explicit codec options.
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
         let subchunk_grid = self
-            .subchunk_grid()
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let array_subset = subchunk_grid
             .subset(subchunk_indices)?
@@ -162,8 +174,20 @@ pub trait AsyncArrayReadOps: ArrayOps {
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        self.async_retrieve_subchunks_at_level_opt(0, subchunks, options)
+            .await
+    }
+
+    /// Read and decode subchunks from `level` asynchronously with explicit codec options.
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
         let subchunk_grid = self
-            .subchunk_grid()
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
             ArrayError::InvalidArraySubset(
@@ -214,10 +238,26 @@ pub trait AsyncArrayReadOps: ArrayOps {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
-        self.async_partial_decoder_opt(chunk_indices, options)
-            .await?
-            .local_subchunk_grid(options)
+        self.async_local_subchunk_grid_at_level(0, chunk_indices, options)
             .await
-            .map_err(ArrayError::CodecError)
+    }
+
+    /// Async variant of [`ArrayReadOps::local_subchunk_grid_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        Ok(self
+            .async_partial_decoder_opt(chunk_indices, options)
+            .await?
+            .local_subchunk_grids(options)
+            .await
+            .map_err(ArrayError::CodecError)?
+            .into_iter()
+            .nth(level)
+            .flatten())
     }
 }

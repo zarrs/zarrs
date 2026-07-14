@@ -11,12 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
-- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderTraits::local_subchunk_grid` for chunk-local subchunk grids
+- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
-  - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid()` methods
+  - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
   - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
   - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
   - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids

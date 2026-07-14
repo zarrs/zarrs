@@ -225,6 +225,16 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`chunks_subset`](Array::chunks_subset) / [`chunks_subset_bounded`](Array::chunks_subset_bounded)
 ///  - [`chunks_in_array_subset`](Array::chunks_in_array_subset)
 ///
+/// Codec-defined subchunk grids are ordered from outermost to innermost. Query them with
+/// [`subchunk_grid_count`](Array::subchunk_grid_count),
+/// [`subchunk_grid_at_level`](Array::subchunk_grid_at_level), and
+/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level). Existing
+/// [`subchunk_grid`](Array::subchunk_grid) and [`subchunk_shape`](Array::subchunk_shape)
+/// methods select level zero.
+///
+/// Note that the chunk grid is not considered a subchunk grid.
+/// For a typical `sharding_indexed` encoded array, the level zero subchunk grid will be aligned to the subchunks within each shard.
+///
 /// An [`ArraySubset`] spanning the entire array can be retrieved with [`subset_all`](Array::subset_all).
 ///
 /// ## Example: Update an Array Chunk-by-Chunk (in Parallel)
@@ -386,8 +396,8 @@ pub struct Array<TStorage: ?Sized> {
     data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
-    /// The subchunk grid information exposed by the codec chain.
-    subchunk_grid: zarrs_codec::ChunkGridDecoded,
+    /// The subchunk grid hierarchy exposed by the codec chain, outermost first.
+    subchunk_grids: Vec<zarrs_codec::ChunkGridDecoded>,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
@@ -416,7 +426,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path: self.path.clone(),
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
-            subchunk_grid: self.subchunk_grid.clone(),
+            subchunk_grids: self.subchunk_grids.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
@@ -499,7 +509,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grid = codecs_bound.decoded_subchunk_grid((&chunk_grid).into())?;
+        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create storage transformers
         let storage_transformers =
@@ -534,7 +544,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
-            subchunk_grid,
+            subchunk_grids,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -603,7 +613,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs_bound = codecs
             .clone()
             .with_context(data_type.clone(), fill_value.clone())?;
-        let subchunk_grid = codecs_bound.decoded_subchunk_grid((&chunk_grid).into())?;
+        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -626,7 +636,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
-            subchunk_grid,
+            subchunk_grids,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -718,9 +728,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid = self
+        self.subchunk_grids = self
             .codecs_bound
-            .decoded_subchunk_grid((&self.chunk_grid).into())?;
+            .decoded_subchunk_grids((&self.chunk_grid).into())?;
 
         // Update metadata based on version
         match &mut self.metadata {
@@ -780,7 +790,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     path: self.path,
                     data_type: self.data_type,
                     chunk_grid: self.chunk_grid,
-                    subchunk_grid: self.subchunk_grid,
+                    subchunk_grids: self.subchunk_grids,
                     chunk_key_encoding: self.chunk_key_encoding,
                     fill_value: self.fill_value,
                     codecs: self.codecs,

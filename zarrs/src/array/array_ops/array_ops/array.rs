@@ -221,15 +221,27 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        self.subchunk_grid()
+        self.subchunk_shape_at_level(0)
+    }
+
+    pub fn subchunk_shape_at_level(&self, level: usize) -> Option<ChunkShape> {
+        self.subchunk_grid_at_level(level)
             .and_then(maybe_regular_chunk_grid_shape)
     }
 
     pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
-        match &self.subchunk_grid {
+        self.subchunk_grid_at_level(0)
+    }
+
+    pub fn subchunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
+        match self.subchunk_grids.get(level)? {
             ChunkGridDecoded::Array(subchunk_grid) => Some(subchunk_grid),
             ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
         }
+    }
+
+    pub fn subchunk_grid_count(&self) -> usize {
+        self.subchunk_grids.len()
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

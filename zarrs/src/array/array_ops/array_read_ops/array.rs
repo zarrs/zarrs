@@ -298,8 +298,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
+        subchunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;

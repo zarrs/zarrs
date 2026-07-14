@@ -2,11 +2,12 @@
 #![cfg(feature = "async")]
 
 use std::error::Error;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use object_store::memory::InMemory;
 use zarrs::array::codec::array_to_bytes::sharding::{
-    AsyncShardingPartialDecoder, ShardingCodecBound,
+    AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
@@ -19,6 +20,10 @@ use zarrs_object_store::AsyncObjectStore;
 
 type AsyncStore = AsyncObjectStore<InMemory>;
 type TestResult = Result<(), Box<dyn Error>>;
+
+const fn nz(value: u64) -> NonZeroU64 {
+    NonZeroU64::new(value).unwrap()
+}
 
 fn fixed_fixture() -> Array<AsyncStore> {
     let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
@@ -441,4 +446,39 @@ async fn array_supports_async_optional_operation_suite() -> TestResult {
     )
     .build(store, "/array")?;
     exercise_optional_ops(&array).await
+}
+
+#[tokio::test]
+async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
+    let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+    let data_type = data_type::uint16();
+    let inner = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
+    let mut outer = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
+    outer.array_to_bytes_codec(inner);
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16);
+    builder.array_to_bytes_codec(outer.build_arc());
+    let array = builder.build(store, "/nested")?;
+    array
+        .async_store_array_subset(&array.subset_all(), &(0..64).collect::<Vec<u16>>())
+        .await?;
+
+    assert_eq!(array.subchunk_grid_count(), 2);
+    assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
+    let options = CodecOptions::default();
+    assert_eq!(
+        array
+            .async_retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)
+            .await?,
+        [38, 39, 46, 47]
+    );
+    assert_eq!(
+        array
+            .async_local_subchunk_grid_at_level(1, &[0, 0], &options)
+            .await?
+            .unwrap()
+            .grid_shape(),
+        &[4, 4]
+    );
+
+    Ok(())
 }

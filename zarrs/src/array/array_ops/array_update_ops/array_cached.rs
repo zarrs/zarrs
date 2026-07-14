@@ -31,8 +31,11 @@ where
         self.encoder.size_held()
     }
 
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
-        self.encoder.local_subchunk_grid(options)
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.encoder.local_subchunk_grids(options)
     }
 
     fn partial_decode(

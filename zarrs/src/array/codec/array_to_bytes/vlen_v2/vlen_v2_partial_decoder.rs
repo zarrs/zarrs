@@ -68,11 +68,11 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         self.input_handle.size_held()
     }
 
-    fn local_subchunk_grid(
+    fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
     }
 
     fn partial_decode(
@@ -139,11 +139,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         self.input_handle.size_held()
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
     }
 
     async fn partial_decode<'a>(

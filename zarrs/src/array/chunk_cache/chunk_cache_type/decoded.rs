@@ -29,11 +29,11 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         self.bytes.size()
     }
 
-    fn local_subchunk_grid(
+    fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(None)
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
     }
 
     fn partial_decode(

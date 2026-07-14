@@ -79,15 +79,15 @@ use std::sync::Arc;
 
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
-    ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound,
-    DataType, FillValue, RecommendedConcurrency, ravel_indices,
+    ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChain,
+    CodecChainBound, DataType, FillValue, RecommendedConcurrency, ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
-    CodecOptions, CodecPluginV3, CodecTraitsV3,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, ChunkGridDecoded, Codec,
+    CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -100,6 +100,27 @@ zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
 // Register the V3 codec.
 inventory::submit! {
     CodecPluginV3::new::<ShardingCodec>()
+}
+
+fn nested_local_subchunk_grids(
+    subchunk_grid: ChunkGrid,
+    inner_codecs: &CodecChainBound,
+) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+    let mapped_subchunk_grid = ChunkGridDecoded::Array(subchunk_grid.clone());
+    let mut subchunk_grids = vec![Some(subchunk_grid)];
+    subchunk_grids.extend(
+        zarrs_codec::ArrayToBytesCodecSubchunkingTraits::decoded_subchunk_grids(
+            inner_codecs,
+            (&mapped_subchunk_grid).into(),
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))?
+        .into_iter()
+        .map(|grid| match grid {
+            ChunkGridDecoded::Array(grid) => Some(grid),
+            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
+        }),
+    );
+    Ok(subchunk_grids)
 }
 
 impl CodecTraitsV3 for ShardingCodec {
