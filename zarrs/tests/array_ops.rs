@@ -502,7 +502,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let mut builder = ArrayBuilder::new(vec![10, 10], vec![8, 8], data_type, 0u16);
     builder.array_to_bytes_codec(outer_sharding.build_arc());
     let edge = builder.build(Arc::new(MemoryStore::default()), "/edge")?;
-    edge.store_array_subset(&edge.subset_all(), &(0..100).collect::<Vec<u16>>())?;
+    edge.store_array_subset(&edge.subset_all(), (0..100).collect::<Vec<u16>>())?;
     assert_eq!(edge.subchunk_grid_count(), 2);
     assert_eq!(
         edge.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[4, 4], &options)?,
@@ -535,7 +535,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .into()])?))])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/reshape")?;
-        array.store_array_subset(&array.subset_all(), &(0..32).collect::<Vec<u16>>())?;
+        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(8)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(4)]));
         assert_eq!(
@@ -554,7 +554,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/squeeze")?;
-        array.store_array_subset(&array.subset_all(), &(0..8).collect::<Vec<u16>>())?;
+        array.store_array_subset(&array.subset_all(), (0..8).collect::<Vec<u16>>())?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(2)]));
         assert_eq!(
@@ -575,7 +575,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             )?))])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/transpose")?;
-        array.store_array_subset(&array.subset_all(), &(0..32).collect::<Vec<u16>>())?;
+        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
         assert_eq!(
