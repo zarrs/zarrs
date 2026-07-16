@@ -163,6 +163,20 @@ mod chunk_grid_mapped {
         ChunkLocal,
     }
 
+    impl ChunkGridMapped {
+        /// Return the chunk grid if it is resolvable for the whole array.
+        ///
+        /// Returns [`None`] for [`ChunkGridMapped::None`] and [`ChunkGridMapped::ChunkLocal`],
+        /// which are distinct: the latter indicates that a grid is resolvable per chunk.
+        #[must_use]
+        pub fn as_chunk_grid(&self) -> Option<&ChunkGrid> {
+            match self {
+                Self::Array(chunk_grid) => Some(chunk_grid),
+                Self::None | Self::ChunkLocal => None,
+            }
+        }
+    }
+
     /// A borrowed chunk grid mapped to a representation in a codec chain.
     #[derive(Debug, Clone, Copy)]
     pub enum ChunkGridMappedRef<'a> {
@@ -172,6 +186,20 @@ mod chunk_grid_mapped {
         Array(&'a ChunkGrid),
         /// No global grid exists, but a grid is resolvable for each chunk.
         ChunkLocal,
+    }
+
+    impl<'a> ChunkGridMappedRef<'a> {
+        /// Return the chunk grid if it is resolvable for the whole array.
+        ///
+        /// Returns [`None`] for [`ChunkGridMappedRef::None`] and [`ChunkGridMappedRef::ChunkLocal`],
+        /// which are distinct: the latter indicates that a grid is resolvable per chunk.
+        #[must_use]
+        pub fn as_chunk_grid(self) -> Option<&'a ChunkGrid> {
+            match self {
+                Self::Array(chunk_grid) => Some(chunk_grid),
+                Self::None | Self::ChunkLocal => None,
+            }
+        }
     }
 
     impl From<Option<ChunkGrid>> for ChunkGridMapped {
