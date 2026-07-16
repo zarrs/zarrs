@@ -4,9 +4,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArraySubset, ChunkGridDecodedRef, FillValue, data_type,
-};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
 
