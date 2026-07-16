@@ -175,11 +175,11 @@ impl zarrs_codec::ArrayCodecTraits for DynamicLocalSubchunkCodecBound {
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCodecBound {
-    fn decoded_subchunk_grid(
+    fn decoded_subchunk_grids(
         &self,
         _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, zarrs::array::ChunkGridCreateError> {
-        Ok(ChunkGridDecoded::ChunkLocal)
+    ) -> Result<Vec<ChunkGridDecoded>, zarrs::array::ChunkGridCreateError> {
+        Ok(vec![ChunkGridDecoded::ChunkLocal])
     }
 }
 
@@ -250,20 +250,23 @@ impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
         zero_bytes(&self.data_type, indexer.len())
     }
 
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         let Some(header) = self.input_handle.partial_decode(
             ByteRange::FromStart(0, Some(header_len(self.shape.len()))),
             options,
         )?
         else {
-            return Ok(None);
+            return Ok(vec![None]);
         };
         let subchunk_shape = decode_shape_header(&header, self.shape.len())?;
         let chunk_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(Some(ChunkGrid::new(
+        Ok(vec![Some(ChunkGrid::new(
             RegularChunkGrid::new(chunk_shape, subchunk_shape)
                 .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+        ))])
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -290,10 +293,18 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
     array.store_array_subset(&array.subset_all(), &data)?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
-    assert!(reopened.subchunk_grid().is_none());
+    assert!(matches!(
+        reopened.subchunk_grid(),
+        ChunkGridDecodedRef::ChunkLocal
+    ));
+    assert_eq!(reopened.subchunk_grids().len(), 1);
+    assert!(matches!(
+        reopened.subchunk_grid_at_level(0),
+        ChunkGridDecodedRef::ChunkLocal
+    ));
 
     let first = reopened
-        .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
+        .local_subchunk_grid_at_level(0, &[0, 0], &CodecOptions::default())?
         .unwrap();
     let second = reopened
         .local_subchunk_grid(&[1, 0], &CodecOptions::default())?
@@ -583,23 +594,24 @@ impl ArrayCodecTraits for TestSubchunkingCodecBound {
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBound {
-    fn decoded_subchunk_grid(
+    fn decoded_subchunk_grids(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         if !self.expose_subchunks {
-            return Ok(ChunkGridDecoded::None);
+            return Ok(Vec::new());
         }
-        match decoded_chunk_grid {
-            ChunkGridDecodedRef::None => Ok(ChunkGridDecoded::None),
-            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridDecoded::ChunkLocal),
-            ChunkGridDecodedRef::Array(decoded_chunk_grid) => Ok(ChunkGridDecoded::Array(
-                ChunkGrid::new(RegularChunkGrid::new(
+        let subchunk_grid = match decoded_chunk_grid {
+            ChunkGridDecodedRef::None => ChunkGridDecoded::None,
+            ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => {
+                ChunkGridDecoded::Array(ChunkGrid::new(RegularChunkGrid::new(
                     decoded_chunk_grid.array_shape().to_vec(),
                     vec![NonZeroU64::new(3).unwrap()],
-                )?),
-            )),
-        }
+                )?))
+            }
+        };
+        Ok(vec![subchunk_grid])
     }
 }
 

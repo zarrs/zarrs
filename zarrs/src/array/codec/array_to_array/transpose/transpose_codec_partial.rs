@@ -67,6 +67,33 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             &self.data_type,
         )
     }
+
+    fn map_local_subchunk_grid(
+        &self,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<ChunkGrid, CodecError> {
+        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
+                    .to_string(),
+            ));
+        }
+
+        let chunk_shapes = self
+            .order_inverse
+            .iter()
+            .map(|&encoded_dim| {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            })
+            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        Ok(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        ))
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
@@ -103,32 +130,18 @@ where
         }
     }
 
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
-        let Some(encoded_subchunk_grid) = self.input_output_handle.local_subchunk_grid(options)?
-        else {
-            return Ok(None);
-        };
-        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
             })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(Some(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+            .collect()
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -209,38 +222,19 @@ where
         }
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        let Some(encoded_subchunk_grid) = self
-            .input_output_handle
-            .local_subchunk_grid(options)
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)
             .await?
-        else {
-            return Ok(None);
-        };
-        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
             })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(Some(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+            .collect()
     }
 
     fn supports_partial_decode(&self) -> bool {

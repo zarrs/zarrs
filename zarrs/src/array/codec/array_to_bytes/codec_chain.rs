@@ -14,10 +14,10 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -461,74 +461,62 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
-    fn decoded_subchunk_grid(
+    fn decoded_subchunk_grids(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        if matches!(decoded_chunk_grid, ChunkGridDecodedRef::Array(grid) if grid.array_shape().contains(&0))
-        {
-            return Ok(ChunkGridDecoded::None);
-        }
-
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         let mut chunk_grids = Vec::with_capacity(self.array_to_array.len() + 1);
         let mut mapped_chunk_grid: ChunkGridDecoded = decoded_chunk_grid.into();
-        if let ChunkGridDecoded::Array(chunk_grid) = &mapped_chunk_grid {
-            chunk_grids.push(chunk_grid.clone());
-        }
+        chunk_grids.push(mapped_chunk_grid.clone());
         for codec in &self.array_to_array {
-            if matches!(mapped_chunk_grid, ChunkGridDecoded::None) {
-                return Ok(ChunkGridDecoded::None);
-            }
             let decoded_grid_is_global = matches!(mapped_chunk_grid, ChunkGridDecoded::Array(_));
             let encoded_chunk_grid = codec.encoded_chunk_grid((&mapped_chunk_grid).into())?;
-            match &encoded_chunk_grid {
-                ChunkGridEncoded::None => return Ok(ChunkGridDecoded::None),
-                ChunkGridEncoded::Array(encoded_chunk_grid) => {
-                    if !decoded_grid_is_global {
-                        return Err(ChunkGridCreateError::new(
-                            "a codec mapped a chunk-local grid to a global chunk grid",
-                        ));
-                    }
-                    chunk_grids.push(encoded_chunk_grid.clone());
-                }
-                ChunkGridEncoded::ChunkLocal => {}
+            if matches!(encoded_chunk_grid, ChunkGridEncoded::Array(_)) && !decoded_grid_is_global {
+                return Err(ChunkGridCreateError::new(
+                    "a codec mapped a chunk-local grid to a global chunk grid",
+                ));
             }
             mapped_chunk_grid = encoded_chunk_grid;
+            chunk_grids.push(mapped_chunk_grid.clone());
         }
 
-        let mut subchunk_grid = match self
+        let encoded_subchunk_grids = self
             .array_to_bytes
-            .decoded_subchunk_grid((&mapped_chunk_grid).into())?
-        {
-            ChunkGridDecoded::None => return Ok(ChunkGridDecoded::None),
-            ChunkGridDecoded::Array(subchunk_grid) => subchunk_grid,
-            local @ ChunkGridDecoded::ChunkLocal => return Ok(local),
-        };
+            .decoded_subchunk_grids((&mapped_chunk_grid).into())?;
+        let mut decoded_subchunk_grids = Vec::with_capacity(encoded_subchunk_grids.len());
 
-        if chunk_grids.len() != self.array_to_array.len() + 1 {
-            return Err(ChunkGridCreateError::new(
-                "a codec returned a global subchunk grid for a chunk-local chunk grid",
-            ));
+        for mut subchunk_grid in encoded_subchunk_grids {
+            if matches!(subchunk_grid, ChunkGridDecoded::Array(_))
+                && !matches!(mapped_chunk_grid, ChunkGridDecoded::Array(_))
+            {
+                return Err(ChunkGridCreateError::new(
+                    "a codec returned a global subchunk grid for a non-global chunk grid",
+                ));
+            }
+
+            for (codec, decoded_chunk_grid) in self
+                .array_to_array
+                .iter()
+                .rev()
+                .zip(chunk_grids.iter().rev().skip(1))
+            {
+                subchunk_grid = codec
+                    .decoded_subchunk_grid(decoded_chunk_grid.into(), (&subchunk_grid).into())?;
+            }
+            decoded_subchunk_grids.push(subchunk_grid);
         }
 
-        for (codec, decoded_chunk_grid) in self
-            .array_to_array
-            .iter()
-            .rev()
-            .zip(chunk_grids.iter().rev().skip(1))
-        {
-            subchunk_grid = match codec.decoded_subchunk_grid(
-                decoded_chunk_grid.into(),
-                ChunkGridEncodedRef::Array(&subchunk_grid),
-            )? {
-                ChunkGridDecoded::None => return Ok(ChunkGridDecoded::None),
-                ChunkGridDecoded::Array(decoded_subchunk_grid) => decoded_subchunk_grid,
-                local @ ChunkGridDecoded::ChunkLocal => return Ok(local),
-            };
+        if let ChunkGridDecodedRef::Array(decoded_chunk_grid) = decoded_chunk_grid {
+            let mut parent_grid = decoded_chunk_grid;
+            for subchunk_grid in &decoded_subchunk_grids {
+                if let ChunkGridDecoded::Array(subchunk_grid) = subchunk_grid {
+                    validate_subchunk_grid_refines_chunk_grid(parent_grid, subchunk_grid)?;
+                    parent_grid = subchunk_grid;
+                }
+            }
         }
 
-        validate_subchunk_grid_refines_chunk_grid(&chunk_grids[0], &subchunk_grid)?;
-        Ok(ChunkGridDecoded::Array(subchunk_grid))
+        Ok(decoded_subchunk_grids)
     }
 }
 

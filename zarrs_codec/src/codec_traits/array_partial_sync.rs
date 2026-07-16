@@ -26,15 +26,32 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
 
-    /// Return the chunk-local subchunk grid for this decoder, if available.
+    /// Return the chunk-local subchunk grid hierarchy for this decoder.
     ///
-    /// The returned grid is relative to the decoded chunk handled by this partial decoder,
-    /// not to the full array.
+    /// Grids are ordered from outermost to innermost and are relative to the decoded
+    /// chunk handled by this partial decoder, not to the full array. A `None` entry
+    /// preserves a level that cannot be resolved in this decoder's local context.
     ///
     /// # Errors
     /// Returns [`CodecError`] if the local grid cannot be resolved.
-    fn local_subchunk_grid(&self, _options: &CodecOptions)
-    -> Result<Option<ChunkGrid>, CodecError>;
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError>;
+
+    /// Return the outermost chunk-local subchunk grid for this decoder, if available.
+    ///
+    /// This is a compatibility wrapper around [`local_subchunk_grids`](Self::local_subchunk_grids).
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
+    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+        Ok(self
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .next()
+            .flatten())
+    }
 
     /// Partially decode a chunk.
     ///

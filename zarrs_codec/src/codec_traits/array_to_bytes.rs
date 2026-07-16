@@ -15,17 +15,37 @@ use crate::{
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
 pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
-    /// Return the decoded subchunk grid created by this codec.
+    /// Return the decoded subchunk grids created by this codec.
     ///
-    /// A chunk-local input permits [`ChunkGridDecoded::ChunkLocal`] when the codec
-    /// can expose a concrete subchunk grid for each chunk at runtime.
+    /// Grids are ordered from outermost to innermost. An empty vector indicates
+    /// that the codec does not expose subchunks. A [`ChunkGridDecoded::None`] or
+    /// [`ChunkGridDecoded::ChunkLocal`] entry preserves the level in the hierarchy
+    /// when it cannot be resolved globally.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grids(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
+
+    /// Return the outermost decoded subchunk grid created by this codec.
+    ///
+    /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
+    /// An empty hierarchy is returned as [`ChunkGridDecoded::None`].
     ///
     /// # Errors
     /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
     fn decoded_subchunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(self
+            .decoded_subchunk_grids(decoded_chunk_grid)?
+            .into_iter()
+            .next()
+            .unwrap_or(ChunkGridDecoded::None))
+    }
 }
 
 /// Marker trait for array-to-bytes codecs that do not expose subchunk grids.
@@ -35,11 +55,11 @@ impl<T> ArrayToBytesCodecSubchunkingTraits for T
 where
     T: ArrayCodecTraits + ArrayToBytesCodecNoSubchunkingTraits + ?Sized,
 {
-    fn decoded_subchunk_grid(
+    fn decoded_subchunk_grids(
         &self,
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        Ok(ChunkGridDecoded::None)
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
+        Ok(Vec::new())
     }
 }
 #[cfg(feature = "async")]

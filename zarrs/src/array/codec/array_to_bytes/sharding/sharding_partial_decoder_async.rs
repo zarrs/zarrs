@@ -7,7 +7,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
-use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
+use super::{
+    ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
+    nested_local_subchunk_grids,
+};
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
@@ -218,15 +221,16 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         .await
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
-        Ok(Some(ChunkGrid::new(
+        let subchunk_grid = ChunkGrid::new(
             RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
                 .map_err(|err| CodecError::Other(err.to_string()))?,
-        )))
+        );
+        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
     fn supports_partial_decode(&self) -> bool {

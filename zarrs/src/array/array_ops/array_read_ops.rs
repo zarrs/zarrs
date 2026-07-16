@@ -269,8 +269,25 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        self.retrieve_subchunk_at_level_opt(0, subchunk_indices, options)
+    }
+
+    /// Read and decode the subchunk at `subchunk_indices` from `level` with explicit codec options.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// the subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
         let subchunk_grid = self
-            .subchunk_grid()
+            .subchunk_grid_at_level(level)
+            .as_chunk_grid()
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let array_subset = subchunk_grid
             .subset(subchunk_indices)?
@@ -288,8 +305,25 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        self.retrieve_subchunks_at_level_opt(0, subchunks, options)
+    }
+
+    /// Read and decode subchunks from `level` with explicit codec options.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// any subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
         let subchunk_grid = self
-            .subchunk_grid()
+            .subchunk_grid_at_level(level)
+            .as_chunk_grid()
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
             ArrayError::InvalidArraySubset(
@@ -362,8 +396,28 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
-        self.partial_decoder_opt(chunk_indices, options)?
-            .local_subchunk_grid(options)
-            .map_err(ArrayError::CodecError)
+        self.local_subchunk_grid_at_level(0, chunk_indices, options)
+    }
+
+    /// Return the chunk-local subchunk grid at `level` for a chunk, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk at `chunk_indices`.
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid hierarchy cannot be resolved.
+    fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        Ok(self
+            .partial_decoder_opt(chunk_indices, options)?
+            .local_subchunk_grids(options)
+            .map_err(ArrayError::CodecError)?
+            .into_iter()
+            .nth(level)
+            .flatten())
     }
 }
