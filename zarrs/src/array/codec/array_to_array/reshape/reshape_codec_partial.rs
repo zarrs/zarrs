@@ -118,11 +118,15 @@ where
         self.input_handle.size_held()
     }
 
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
-        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options)? else {
-            return Ok(None);
-        };
-        self.map_local_subchunk_grid(&encoded_subchunk_grid)
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
+            .collect()
     }
 
     fn partial_decode(
@@ -155,15 +159,16 @@ where
         self.input_handle.exists().await
     }
 
-    async fn local_subchunk_grid(
+    async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        let Some(encoded_subchunk_grid) = self.input_handle.local_subchunk_grid(options).await?
-        else {
-            return Ok(None);
-        };
-        self.map_local_subchunk_grid(&encoded_subchunk_grid)
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_handle
+            .local_subchunk_grids(options)
+            .await?
+            .into_iter()
+            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
+            .collect()
     }
 
     fn size_held(&self) -> usize {

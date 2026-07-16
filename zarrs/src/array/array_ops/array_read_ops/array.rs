@@ -298,8 +298,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
+        subchunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
@@ -561,7 +577,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::{ArrayBuilder, ArraySubset, data_type};
+    use crate::array::{ArrayBuilder, ArraySubset, ChunkGridDecodedRef, data_type};
     use zarrs_storage::store::MemoryStore;
 
     fn array_read_ops_subchunks_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -578,7 +594,7 @@ mod tests {
         array.store_array_subset(&array.subset_all(), &data)?;
 
         if sharded {
-            let subchunk_grid = array.subchunk_grid().unwrap();
+            let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
             assert_eq!(
                 subchunk_grid.chunk_shape(&vec![0; array.dimensionality()])?,
                 Some(vec![NonZeroU64::new(2).unwrap(); 2])
@@ -624,7 +640,7 @@ mod tests {
                 assert_eq!(compare, test);
             }
         } else {
-            assert!(array.subchunk_grid().is_none());
+            assert!(matches!(array.subchunk_grid(), ChunkGridDecodedRef::None));
             assert!(
                 array
                     .local_subchunk_grid(&[0, 0], &CodecOptions::default())?

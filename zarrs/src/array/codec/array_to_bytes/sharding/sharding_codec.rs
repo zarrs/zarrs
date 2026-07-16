@@ -312,17 +312,28 @@ impl ArrayCodecTraits for ShardingCodecBound {
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
-    fn decoded_subchunk_grid(
+    fn decoded_subchunk_grids(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
-        match decoded_chunk_grid {
-            ChunkGridDecodedRef::None => Ok(ChunkGridDecoded::None),
-            ChunkGridDecodedRef::Array(decoded_chunk_grid) => Ok(ChunkGridDecoded::Array(
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
+        let subchunk_grid = match decoded_chunk_grid {
+            ChunkGridDecodedRef::None => ChunkGridDecoded::None,
+            ChunkGridDecodedRef::Array(decoded_chunk_grid)
+                if decoded_chunk_grid.array_shape().contains(&0) =>
+            {
+                ChunkGridDecoded::None
+            }
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => ChunkGridDecoded::Array(
                 regular_subchunk_grid(decoded_chunk_grid, &self.subchunk_shape)?,
-            )),
-            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridDecoded::ChunkLocal),
-        }
+            ),
+            ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
+        };
+        let mut subchunk_grids = vec![subchunk_grid.clone()];
+        subchunk_grids.extend(
+            self.inner_codecs
+                .decoded_subchunk_grids((&subchunk_grid).into())?,
+        );
+        Ok(subchunk_grids)
     }
 }
 

@@ -23,8 +23,12 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         let codecs_bound = codecs
             .clone()
             .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        let subchunk_grids = codecs_bound
+            .decoded_subchunk_grids((&self.chunk_grid).into())
+            .map_err(|err| CodecCreateError::from(err.to_string()))?;
         self.codecs = codecs;
         self.codecs_bound = codecs_bound;
+        self.subchunk_grids = subchunk_grids;
         Ok(self)
     }
 
@@ -36,9 +40,9 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid = self
+        self.subchunk_grids = self
             .codecs_bound
-            .decoded_subchunk_grid((&self.chunk_grid).into())?;
+            .decoded_subchunk_grids((&self.chunk_grid).into())?;
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;

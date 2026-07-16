@@ -12,11 +12,11 @@ use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::{
     ShardingCodecBound, ShardingCodecBuilder, ShardingPartialDecoder,
 };
-use zarrs::array::codec::{ReshapeCodec, SqueezeCodec};
+use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
     ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    CodecOptions, data_type,
+    ChunkGridDecodedRef, CodecOptions, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -79,7 +79,9 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         array.subchunk_shape(),
         Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
-    let subchunk_grid = array.subchunk_grid().unwrap();
+    assert_eq!(array.subchunk_grids().len(), 1);
+    assert_eq!(array.subchunk_shape_at_level(0), array.subchunk_shape());
+    let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
     assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
     assert_eq!(
@@ -350,7 +352,10 @@ fn array_ops_subchunks_with_reshape_codec() -> TestResult {
     array.store_array_subset(&array.subset_all(), &data)?;
 
     assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(3)]));
-    assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[4, 2]);
+    assert_eq!(
+        array.subchunk_grid().as_chunk_grid().unwrap().grid_shape(),
+        &[4, 2]
+    );
 
     let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 1], &CodecOptions::default())?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[2..3, 3..6])?;
@@ -384,7 +389,10 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
     array.store_array_subset(&array.subset_all(), &data)?;
 
     assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(2)]));
-    assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[2, 2]);
+    assert_eq!(
+        array.subchunk_grid().as_chunk_grid().unwrap().grid_shape(),
+        &[2, 2]
+    );
 
     let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..2, 2..4])?;
@@ -396,6 +404,213 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
         array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[0..2, 2..4])?;
     assert_eq!(subchunk_range, compare);
+
+    Ok(())
+}
+
+#[test]
+fn array_ops_nested_subchunk_grid_levels() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..64).collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    assert_eq!(array.subchunk_grids().len(), 2);
+    assert_eq!(array.subchunk_shape(), Some(vec![nz(4), nz(4)]));
+    assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
+    assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
+    assert_eq!(
+        array
+            .subchunk_grid_at_level(0)
+            .as_chunk_grid()
+            .unwrap()
+            .grid_shape(),
+        &[2, 2]
+    );
+    assert_eq!(
+        array
+            .subchunk_grid_at_level(1)
+            .as_chunk_grid()
+            .unwrap()
+            .grid_shape(),
+        &[4, 4]
+    );
+    assert!(matches!(
+        array.subchunk_grid_at_level(2),
+        ChunkGridDecodedRef::None
+    ));
+
+    let options = CodecOptions::default();
+    assert_eq!(
+        array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 0], &options)?,
+        array.retrieve_subchunk_at_level_opt::<Vec<u16>>(0, &[1, 0], &options)?
+    );
+    assert_eq!(
+        array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)?,
+        [38, 39, 46, 47]
+    );
+    assert_eq!(
+        array.retrieve_subchunks_at_level_opt::<Vec<u16>>(
+            1,
+            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            &options,
+        )?,
+        [
+            18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45
+        ]
+    );
+    assert!(
+        array
+            .retrieve_subchunk_at_level_opt::<Vec<u16>>(2, &[0, 0], &options)
+            .is_err()
+    );
+
+    assert_eq!(
+        array
+            .local_subchunk_grid_at_level(0, &[0, 0], &options)?
+            .unwrap()
+            .grid_shape(),
+        &[2, 2]
+    );
+    assert_eq!(
+        array
+            .local_subchunk_grid_at_level(1, &[0, 0], &options)?
+            .unwrap()
+            .grid_shape(),
+        &[4, 4]
+    );
+
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(2));
+    assert_eq!(cached.subchunk_grids().len(), 2);
+    assert_eq!(
+        cached.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)?,
+        [38, 39, 46, 47]
+    );
+
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    let mut resized = builder.build(Arc::new(MemoryStore::default()), "/resized")?;
+    resized.set_shape(vec![16, 8])?;
+    assert_eq!(resized.subchunk_grids().len(), 2);
+    assert_eq!(
+        resized
+            .subchunk_grid_at_level(0)
+            .as_chunk_grid()
+            .unwrap()
+            .grid_shape(),
+        &[4, 2]
+    );
+    assert_eq!(
+        resized
+            .subchunk_grid_at_level(1)
+            .as_chunk_grid()
+            .unwrap()
+            .grid_shape(),
+        &[8, 4]
+    );
+
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+    let mut builder = ArrayBuilder::new(vec![10, 10], vec![8, 8], data_type, 0u16);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    let edge = builder.build(Arc::new(MemoryStore::default()), "/edge")?;
+    edge.store_array_subset(&edge.subset_all(), (0..100).collect::<Vec<u16>>())?;
+    assert_eq!(edge.subchunk_grids().len(), 2);
+    assert_eq!(
+        edge.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[4, 4], &options)?,
+        [88, 89, 98, 99]
+    );
+
+    let plain = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type::uint16(), 0u16)
+        .build(Arc::new(MemoryStore::default()), "/plain")?;
+    assert_eq!(plain.subchunk_grids().len(), 0);
+    assert!(matches!(plain.subchunk_grid(), ChunkGridDecodedRef::None));
+    assert!(matches!(
+        plain.subchunk_grid_at_level(0),
+        ChunkGridDecodedRef::None
+    ));
+
+    Ok(())
+}
+
+#[test]
+fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
+    let options = CodecOptions::default();
+
+    {
+        let data_type = data_type::uint16();
+        let inner = ShardingCodecBuilder::new(vec![nz(4)], &data_type).build_arc();
+        let mut outer = ShardingCodecBuilder::new(vec![nz(8)], &data_type);
+        outer.array_to_bytes_codec(inner);
+        let mut builder = ArrayBuilder::new(vec![4, 8], vec![4, 8], data_type, 0u16);
+        builder
+            .array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(ReshapeShape::new([nz(
+                32,
+            )
+            .into()])?))])
+            .array_to_bytes_codec(outer.build_arc());
+        let array = builder.build(Arc::new(MemoryStore::default()), "/reshape")?;
+        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(8)]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(4)]));
+        assert_eq!(
+            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 1], &options)?,
+            [20, 21, 22, 23]
+        );
+    }
+
+    {
+        let data_type = data_type::uint16();
+        let inner = ShardingCodecBuilder::new(vec![nz(2)], &data_type).build_arc();
+        let mut outer = ShardingCodecBuilder::new(vec![nz(4)], &data_type);
+        outer.array_to_bytes_codec(inner);
+        let mut builder = ArrayBuilder::new(vec![1, 8], vec![1, 8], data_type, 0u16);
+        builder
+            .array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())])
+            .array_to_bytes_codec(outer.build_arc());
+        let array = builder.build(Arc::new(MemoryStore::default()), "/squeeze")?;
+        array.store_array_subset(&array.subset_all(), (0..8).collect::<Vec<u16>>())?;
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(4)]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(2)]));
+        assert_eq!(
+            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[0, 2], &options)?,
+            [4, 5]
+        );
+    }
+
+    {
+        let data_type = data_type::uint16();
+        let inner = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
+        let mut outer = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
+        outer.array_to_bytes_codec(inner);
+        let mut builder = ArrayBuilder::new(vec![4, 8], vec![4, 8], data_type, 0u16);
+        builder
+            .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
+                &[1, 0],
+            )?))])
+            .array_to_bytes_codec(outer.build_arc());
+        let array = builder.build(Arc::new(MemoryStore::default()), "/transpose")?;
+        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
+        assert_eq!(
+            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[1, 3], &options)?,
+            [22, 23, 30, 31]
+        );
+    }
 
     Ok(())
 }

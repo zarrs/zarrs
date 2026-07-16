@@ -7,7 +7,9 @@ use std::sync::Arc;
 use object_store::memory::InMemory;
 use zarrs::array::codec::TransposeCodec;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArrayError, ArraySubset, data_type};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayBytes, ArrayError, ArraySubset, ChunkGridDecodedRef, data_type,
+};
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
@@ -418,7 +420,10 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
         .await?;
 
     if sharded {
-        assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[4, 4]);
+        assert_eq!(
+            array.subchunk_grid().as_chunk_grid().unwrap().grid_shape(),
+            &[4, 4]
+        );
 
         let compare = array
             .async_retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])
@@ -438,7 +443,7 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
             .await?;
         assert_eq!(compare, test);
     } else {
-        assert!(array.subchunk_grid().is_none());
+        assert!(matches!(array.subchunk_grid(), ChunkGridDecodedRef::None));
         let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
         assert!(matches!(
             array

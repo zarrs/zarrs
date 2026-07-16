@@ -70,18 +70,41 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Return the subchunk shape if the subchunk grid has a regular chunk shape.
+    /// Return the level-zero subchunk shape if its grid has a regular chunk shape.
     ///
     /// Returns [`None`] if the array does not expose subchunks, or if the
     /// resolved subchunk grid has varying edge lengths.
     #[must_use]
     fn subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// Retrieve the subchunk grid.
+    /// Return the subchunk shape at `level` if its grid has a regular chunk shape.
     ///
-    /// Returns [`None`] if the subchunk grid cannot be globally resolved (i.e. it is non-existent or chunk-local).
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
     #[must_use]
-    fn subchunk_grid(&self) -> Option<&ChunkGrid>;
+    fn subchunk_shape_at_level(&self, level: usize) -> Option<ChunkShape>;
+
+    /// Retrieve the level-zero subchunk grid.
+    ///
+    /// Returns [`ChunkGridDecodedRef::None`] if the array does not expose subchunks, or
+    /// [`ChunkGridDecodedRef::ChunkLocal`] if a grid is only resolvable per chunk via
+    /// [`local_subchunk_grid`](crate::array::ArrayReadOps::local_subchunk_grid).
+    /// Use [`as_chunk_grid`](ChunkGridDecodedRef::as_chunk_grid) to get the grid if it is
+    /// resolvable for the whole array.
+    #[must_use]
+    fn subchunk_grid(&self) -> ChunkGridDecodedRef<'_>;
+
+    /// Return the subchunk grid levels exposed by the codec hierarchy, outermost first.
+    ///
+    /// This includes levels that cannot be resolved globally.
+    #[must_use]
+    fn subchunk_grids(&self) -> &[ChunkGridDecoded];
+
+    /// Return the subchunk grid at `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// Returns [`ChunkGridDecodedRef::None`] if `level` is beyond the subchunk grid hierarchy.
+    #[must_use]
+    fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;
