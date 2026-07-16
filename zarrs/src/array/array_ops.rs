@@ -3,10 +3,11 @@ use std::sync::Arc;
 use super::chunk_cache::ChunkCache;
 use super::{
     Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
-    ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkKeyEncoding,
-    ChunkShape, CodecChain, CodecChainBound, CodecCreateError, CodecOptions, CodecSpecificOptions,
-    DataType, DimensionName, FillValue, FromArrayBytes, IncompatibleDimensionalityError,
-    IntoArrayBytes, NodePath, StorageTransformerChain,
+    ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded,
+    ChunkGridDecodedRef, ChunkKeyEncoding, ChunkShape, CodecChain, CodecChainBound,
+    CodecCreateError, CodecOptions, CodecSpecificOptions, DataType, DimensionName, FillValue,
+    FromArrayBytes, IncompatibleDimensionalityError, IntoArrayBytes, NodePath,
+    StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
 #[cfg(feature = "async")]

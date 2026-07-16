@@ -462,7 +462,7 @@ async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
         .async_store_array_subset(&array.subset_all(), &(0..64).collect::<Vec<u16>>())
         .await?;
 
-    assert_eq!(array.subchunk_grid_count(), 2);
+    assert_eq!(array.subchunk_grids().len(), 2);
     assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
     let options = CodecOptions::default();
     assert_eq!(

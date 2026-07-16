@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
-- Add `ArrayReadOps::local_subchunk_grid` for chunk-local subchunk grids
+- Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
+- Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
+- Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 
 ### Changed
@@ -49,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
 - Bump `zarrs_metadata_ext` to 0.4.5
-- **Breaking**: Change `ArrayOps::subchunk_grid()` to return `Option<&ChunkGrid>` and return `None` when an array does not have a subchunk grid
+- **Breaking**: Change `ArrayOps::subchunk_grid()` to return `ChunkGridDecodedRef<'_>`, which distinguishes an absent subchunk grid from one that is only resolvable per chunk
+  - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
 

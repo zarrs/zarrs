@@ -4,7 +4,9 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayBytes, ArraySubset, ChunkGridDecodedRef, FillValue, data_type,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
 
@@ -116,7 +118,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, array_path)
     .unwrap();
 
-    assert!(array.subchunk_grid().is_none());
+    assert!(array.subchunk_grid().as_chunk_grid().is_none());
 
     array_sync_read(&array)?;
 
@@ -150,6 +152,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         array
             .subchunk_grid()
+            .as_chunk_grid()
             .unwrap()
             .chunk_shape(&vec![0; array.dimensionality()])
             .unwrap(),

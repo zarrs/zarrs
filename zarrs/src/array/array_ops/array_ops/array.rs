@@ -226,22 +226,22 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
 
     pub fn subchunk_shape_at_level(&self, level: usize) -> Option<ChunkShape> {
         self.subchunk_grid_at_level(level)
+            .as_chunk_grid()
             .and_then(maybe_regular_chunk_grid_shape)
     }
 
-    pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
+    pub fn subchunk_grid(&self) -> ChunkGridDecodedRef<'_> {
         self.subchunk_grid_at_level(0)
     }
 
-    pub fn subchunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
-        match self.subchunk_grids.get(level)? {
-            ChunkGridDecoded::Array(subchunk_grid) => Some(subchunk_grid),
-            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
-        }
+    pub fn subchunk_grids(&self) -> &[ChunkGridDecoded] {
+        &self.subchunk_grids
     }
 
-    pub fn subchunk_grid_count(&self) -> usize {
-        self.subchunk_grids.len()
+    pub fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_> {
+        self.subchunk_grids
+            .get(level)
+            .map_or(ChunkGridDecodedRef::None, Into::into)
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

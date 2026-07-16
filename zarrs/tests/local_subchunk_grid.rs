@@ -293,9 +293,15 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
     array.store_array_subset(&array.subset_all(), &data)?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
-    assert!(reopened.subchunk_grid().is_none());
-    assert_eq!(reopened.subchunk_grid_count(), 1);
-    assert!(reopened.subchunk_grid_at_level(0).is_none());
+    assert!(matches!(
+        reopened.subchunk_grid(),
+        ChunkGridDecodedRef::ChunkLocal
+    ));
+    assert_eq!(reopened.subchunk_grids().len(), 1);
+    assert!(matches!(
+        reopened.subchunk_grid_at_level(0),
+        ChunkGridDecodedRef::ChunkLocal
+    ));
 
     let first = reopened
         .local_subchunk_grid_at_level(0, &[0, 0], &CodecOptions::default())?

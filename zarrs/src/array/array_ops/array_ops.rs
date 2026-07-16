@@ -85,22 +85,26 @@ pub trait ArrayOps {
 
     /// Retrieve the level-zero subchunk grid.
     ///
-    /// Returns [`None`] if the subchunk grid cannot be globally resolved (i.e. it is non-existent or chunk-local).
+    /// Returns [`ChunkGridDecodedRef::None`] if the array does not expose subchunks, or
+    /// [`ChunkGridDecodedRef::ChunkLocal`] if a grid is only resolvable per chunk via
+    /// [`local_subchunk_grid`](crate::array::ArrayReadOps::local_subchunk_grid).
+    /// Use [`as_chunk_grid`](ChunkGridDecodedRef::as_chunk_grid) to get the grid if it is
+    /// resolvable for the whole array.
     #[must_use]
-    fn subchunk_grid(&self) -> Option<&ChunkGrid>;
+    fn subchunk_grid(&self) -> ChunkGridDecodedRef<'_>;
 
-    /// Return the globally resolved subchunk grid at `level`.
-    ///
-    /// Level zero is the outermost subchunk grid and increasing levels move inward.
-    /// Returns [`None`] when the level is absent or cannot be resolved globally.
-    #[must_use]
-    fn subchunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid>;
-
-    /// Return the number of subchunk grid levels exposed by the codec hierarchy.
+    /// Return the subchunk grid levels exposed by the codec hierarchy, outermost first.
     ///
     /// This includes levels that cannot be resolved globally.
     #[must_use]
-    fn subchunk_grid_count(&self) -> usize;
+    fn subchunk_grids(&self) -> &[ChunkGridDecoded];
+
+    /// Return the subchunk grid at `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// Returns [`ChunkGridDecodedRef::None`] if `level` is beyond the subchunk grid hierarchy.
+    #[must_use]
+    fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
 
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;

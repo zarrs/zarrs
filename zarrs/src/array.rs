@@ -69,10 +69,10 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    copy_fill_value_into, update_array_bytes,
+    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -226,11 +226,18 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`chunks_in_array_subset`](Array::chunks_in_array_subset)
 ///
 /// Codec-defined subchunk grids are ordered from outermost to innermost. Query them with
-/// [`subchunk_grid_count`](Array::subchunk_grid_count),
+/// [`subchunk_grids`](Array::subchunk_grids),
 /// [`subchunk_grid_at_level`](Array::subchunk_grid_at_level), and
-/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level). Existing
-/// [`subchunk_grid`](Array::subchunk_grid) and [`subchunk_shape`](Array::subchunk_shape)
-/// methods select level zero.
+/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level).
+/// The [`subchunk_grid`](Array::subchunk_grid) and [`subchunk_shape`](Array::subchunk_shape) methods select level zero.
+///
+/// A level is a [`ChunkGridDecoded`], which distinguishes a grid resolvable for the whole array
+/// ([`Array`](ChunkGridDecoded::Array)) from one that is only resolvable per chunk
+/// ([`ChunkLocal`](ChunkGridDecoded::ChunkLocal), see
+/// [`local_subchunk_grid`](ArrayReadOps::local_subchunk_grid)) and from an absent grid
+/// ([`None`](ChunkGridDecoded::None)).
+/// Use [`as_chunk_grid`](ChunkGridDecoded::as_chunk_grid) when only the globally resolvable case
+/// is of interest.
 ///
 /// Note that the chunk grid is not considered a subchunk grid.
 /// For a typical `sharding_indexed` encoded array, the level zero subchunk grid will be aligned to the subchunks within each shard.
