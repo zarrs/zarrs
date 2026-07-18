@@ -1,5 +1,7 @@
 use std::sync::{Arc, atomic};
 
+#[cfg(feature = "async")]
+use super::ChunkCacheTypeAsyncPartialDecoder;
 use super::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
@@ -10,6 +12,8 @@ type ChunkIndices = ArrayIndices;
 
 trait CacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> usize;
+
+    fn get_cached(&self, chunk_indices: &[u64]) -> Option<CT>;
 
     fn remove(&self, chunk_indices: &[u64]) -> bool;
 
@@ -100,6 +104,10 @@ macro_rules! impl_ChunkCacheLruCommon {
     () => {
         type Value = CT;
 
+        fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value> {
+            self.cache.get_cached(chunk_indices)
+        }
+
         fn try_get_or_insert_with<F>(
             &self,
             chunk_indices: Vec<u64>,
@@ -184,3 +192,23 @@ pub type ChunkCachePartialDecoderLruSizeLimit =
 /// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
 pub type ChunkCachePartialDecoderLruSizeLimitThreadLocal =
     ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypePartialDecoder>;
+
+/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed chunk capacity.
+#[cfg(feature = "async")]
+pub type ChunkCacheAsyncPartialDecoderLruChunkLimit =
+    ChunkCacheLruChunkLimit<ChunkCacheTypeAsyncPartialDecoder>;
+
+/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed chunk capacity.
+#[cfg(feature = "async")]
+pub type ChunkCacheAsyncPartialDecoderLruChunkLimitThreadLocal =
+    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeAsyncPartialDecoder>;
+
+/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed size capacity.
+#[cfg(feature = "async")]
+pub type ChunkCacheAsyncPartialDecoderLruSizeLimit =
+    ChunkCacheLruSizeLimit<ChunkCacheTypeAsyncPartialDecoder>;
+
+/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed size capacity.
+#[cfg(feature = "async")]
+pub type ChunkCacheAsyncPartialDecoderLruSizeLimitThreadLocal =
+    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeAsyncPartialDecoder>;
