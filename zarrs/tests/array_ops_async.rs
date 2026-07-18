@@ -92,6 +92,31 @@ async fn retrieve_into<A: AsyncArrayReadOps>(
     Ok(output)
 }
 
+async fn retrieve_chunk_into<A: AsyncArrayReadOps>(
+    array: &A,
+    chunk_indices: &[u64],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let shape = array.chunk_shape(chunk_indices)?;
+    let shape = shape.iter().map(|size| size.get()).collect::<Vec<_>>();
+    let mut output = vec![0; shape.iter().product::<u64>() as usize];
+    {
+        let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
+        let full_subset = ArraySubset::new_with_shape(shape.clone());
+        let mut view = unsafe {
+            // SAFETY: this is the only view over output and covers it exactly.
+            ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
+        };
+        array
+            .async_retrieve_chunk_into(
+                chunk_indices,
+                ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                &CodecOptions::default(),
+            )
+            .await?;
+    }
+    Ok(output)
+}
+
 async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     populate(array).await?;
     let options = CodecOptions::default();
@@ -110,12 +135,20 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
         [4, 5, 0, 9, 10, 0, 14, 15, 0]
     );
     assert_eq!(
+        retrieve_chunk_into(array, &[0, 0]).await?,
+        [1, 2, 3, 6, 7, 8, 11, 12, 13]
+    );
+    assert_eq!(
         array
             .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0])
             .await?,
         Some(vec![16, 17, 18, 21, 22, 23, 0, 0, 0])
     );
     array.async_erase_chunk(&[1, 1]).await?;
+    assert_eq!(
+        retrieve_chunk_into(array, &[1, 1]).await?,
+        [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    );
     assert_eq!(
         array
             .async_retrieve_chunk_if_exists_opt::<Vec<u8>>(&[1, 1], &options)

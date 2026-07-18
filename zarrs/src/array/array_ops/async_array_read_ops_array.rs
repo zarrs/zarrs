@@ -59,6 +59,42 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
     }
 
+    pub async fn async_retrieve_chunk_into(
+        &self,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        if chunk_indices.len() != self.dimensionality() {
+            return Err(ArrayError::InvalidChunkGridIndicesError(
+                chunk_indices.to_vec(),
+            ));
+        }
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_async_readable_transformer(storage_handle)
+            .await?;
+        let chunk_encoded = storage_transformer
+            .get(&self.chunk_key(chunk_indices))
+            .await
+            .map_err(ArrayError::StorageError)?;
+        if let Some(chunk_encoded) = chunk_encoded {
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
+            self.codecs_bound()
+                .decode_into(
+                    Cow::Owned(chunk_encoded.into()),
+                    &chunk_shape,
+                    output_target,
+                    options,
+                )
+                .map_err(ArrayError::CodecError)
+        } else {
+            copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
+                .map_err(ArrayError::CodecError)
+        }
+    }
+
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -498,42 +534,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
 }
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
-    async fn async_retrieve_chunk_into(
-        &self,
-        chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        if chunk_indices.len() != self.dimensionality() {
-            return Err(ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
-            ));
-        }
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
-        let chunk_encoded = storage_transformer
-            .get(&self.chunk_key(chunk_indices))
-            .await
-            .map_err(ArrayError::StorageError)?;
-        if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_shape = self.chunk_shape(chunk_indices)?;
-            self.codecs_bound()
-                .decode_into(
-                    Cow::Owned(chunk_encoded.into()),
-                    &chunk_shape,
-                    output_target,
-                    options,
-                )
-                .map_err(ArrayError::CodecError)
-        } else {
-            copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
-                .map_err(ArrayError::CodecError)
-        }
-    }
-
     /// Helper method to retrieve multiple chunks with variable-length data types (async).
     /// Also handles optional data types with variable-length inner types (including nested optionals).
     pub(crate) async fn async_retrieve_multi_chunk_variable(
