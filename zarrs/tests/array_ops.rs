@@ -809,6 +809,7 @@ fn array_and_cached_support_optional_operation_suite() -> TestResult {
 fn assert_cache_hits_and_invalidation<C>(cache: C, caches_full_chunk_reads: bool) -> TestResult
 where
     C: ChunkCache + 'static,
+    C::Value: zarrs::array::chunk_cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
     array.store_chunk(&[0, 0], &[1u8; 9])?;
@@ -851,6 +852,7 @@ fn array_cached_cache_hits_and_invalidation_cover_all_value_types() -> TestResul
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
 where
     C: ChunkCache + 'static,
+    C::Value: zarrs::array::chunk_cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
     populate(array.as_ref())?;

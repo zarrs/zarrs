@@ -44,6 +44,20 @@ use super::Array;
 ///
 /// For thread-local caches, invalidation only affects the thread performing the
 /// mutation.
+///
+/// ## Asynchronous Operations
+///
+/// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
+/// operations for caches holding encoded chunks, decoded chunks, or asynchronous
+/// partial decoders.
+/// Caches of synchronous partial decoders only support synchronous operations, and
+/// caches of asynchronous partial decoders only support asynchronous operations
+/// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
+/// [`chunk_cache`](super::chunk_cache)).
+///
+/// Unlike synchronous operations, concurrent asynchronous retrievals of an uncached
+/// chunk may each fetch the chunk; only one of the retrieved values is retained by the
+/// cache.
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,

@@ -2,6 +2,7 @@ use inherent::inherent;
 use std::sync::Arc;
 
 use super::{ArrayUpdateOps, *};
+use crate::array::chunk_cache::SyncChunkCacheType;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
@@ -91,6 +92,7 @@ impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
     C: ChunkCache + 'static,
+    C::Value: SyncChunkCacheType,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
@@ -188,6 +190,7 @@ mod tests {
     fn test_partial_encoder_invalidates<C>(cache: C)
     where
         C: ChunkCache + 'static,
+        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -221,6 +224,7 @@ mod tests {
     fn test_failed_partial_encode_invalidates<C>(cache: C)
     where
         C: ChunkCache + 'static,
+        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)

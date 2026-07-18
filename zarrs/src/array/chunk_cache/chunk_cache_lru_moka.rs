@@ -19,6 +19,10 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
         usize::try_from(self.entry_count()).unwrap()
     }
 
+    fn get_cached(&self, chunk_indices: &[u64]) -> Option<CT> {
+        self.get(chunk_indices)
+    }
+
     fn remove(&self, chunk_indices: &[u64]) -> bool {
         let removed = self.remove(chunk_indices).is_some();
         self.run_pending_tasks();
@@ -90,6 +94,10 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheChunkLimit<CT> {
         self.get().len()
     }
 
+    fn get_cached(&self, chunk_indices: &[u64]) -> Option<CT> {
+        self.get().get(chunk_indices).cloned()
+    }
+
     fn remove(&self, chunk_indices: &[u64]) -> bool {
         self.get().pop(chunk_indices).is_some()
     }
@@ -150,6 +158,10 @@ impl<CT: ChunkCacheType> ThreadLocalCacheSizeLimit<CT> {
 impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheSizeLimit<CT> {
     fn len(&self) -> usize {
         self.get().len()
+    }
+
+    fn get_cached(&self, chunk_indices: &[u64]) -> Option<CT> {
+        self.get().get(chunk_indices).cloned()
     }
 
     fn remove(&self, chunk_indices: &[u64]) -> bool {

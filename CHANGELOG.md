@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
   - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+- Add `SyncChunkCacheType` and `AsyncChunkCacheType` for chunk cache types supporting synchronous and asynchronous retrieval
+  - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` implement both
+  - `ChunkCacheTypePartialDecoder` only supports synchronous retrieval
+- Add `ChunkCacheTypeAsyncPartialDecoder` and the `ChunkCacheAsyncPartialDecoderLru*` caches for cached asynchronous partial decoding
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
@@ -46,7 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
   - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
+  - **Breaking**: Add a required `get` method for cache retrieval without insertion
   - Add `invalidate` methods
+- **Breaking**: Move the `ChunkCacheType` retrieval methods to the new `SyncChunkCacheType` subtrait; `ChunkCacheType` now only exposes `size()`
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible

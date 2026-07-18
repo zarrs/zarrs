@@ -9,7 +9,7 @@ use super::{ArrayReadOps, *};
 use crate::array::array_bytes_internal::{
     merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
-use crate::array::chunk_cache::{ChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
+use crate::array::chunk_cache::{SyncChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use crate::iter_concurrent_limit;
@@ -28,6 +28,7 @@ fn retrieve_array_subset_bytes<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
+    C::Value: SyncChunkCacheType,
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
@@ -101,6 +102,7 @@ fn retrieve_multi_chunk_variable<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
+    C::Value: SyncChunkCacheType,
 {
     let indices = chunks.indices();
     let chunk_bytes_and_subsets =
@@ -167,6 +169,7 @@ fn retrieve_multi_chunk_fixed<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
+    C::Value: SyncChunkCacheType,
 {
     let data_type_size = array.data_type().fixed_size().expect("fixed data type");
     let num_elements = array_subset.num_elements_usize();
@@ -260,6 +263,7 @@ impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache,
+    C::Value: SyncChunkCacheType,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64])
@@ -517,6 +521,7 @@ mod tests {
     fn test_cache<C>(cache: C)
     where
         C: ChunkCache,
+        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -584,6 +589,7 @@ mod tests {
     fn test_cache_sharded<C>(cache: C)
     where
         C: ChunkCache,
+        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
@@ -666,6 +672,10 @@ mod tests {
 
     impl ChunkCache for CustomDecodedCache {
         type Value = ChunkCacheTypeDecoded;
+
+        fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value> {
+            self.values.lock().unwrap().get(chunk_indices).cloned()
+        }
 
         fn try_get_or_insert_with<F>(
             &self,
