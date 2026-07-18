@@ -57,3 +57,8 @@ impl zarrs_data_type::DataTypeTraits for UInt2DataType {
 
 zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(UInt2DataType, 2, unsigned, 1);
 zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(UInt2DataType, 1);
+zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_unsigned_integer!(
+    UInt2DataType,
+    u8,
+    2
+);

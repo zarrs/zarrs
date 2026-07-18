@@ -1,10 +1,11 @@
 #![allow(missing_docs)]
 
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArraySubset};
+use serde::Deserialize;
+use zarrs::array::{Array, ArrayBytes, ArraySubset};
 use zarrs_filesystem::FilesystemStore;
 
 #[cfg(feature = "fletcher32")]
@@ -133,6 +134,75 @@ fn zarr_python_v3_consolidated_metadata_null() -> Result<(), Box<dyn Error>> {
     // Should be able to open the meta subgroup
     let meta_group = Group::open(store.clone(), "/meta")?;
     assert_eq!(meta_group.path().as_str(), "/meta");
+
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct CastValueMatrixManifest {
+    cases: Vec<CastValueMatrixCase>,
+}
+
+#[derive(Deserialize)]
+struct CastValueMatrixCase {
+    source_dtype: String,
+    target_dtype: String,
+    rounding: String,
+    out_of_range: Option<String>,
+    path: String,
+    expected_decoded_bytes: Vec<u8>,
+}
+
+fn zarr_python_uses_nearest_even_for_directed_uint64_to_float(case: &CastValueMatrixCase) -> bool {
+    // zarr-python 3.2.1 rounds the decoded `u64::MAX` to the nearest float
+    // even when the codec requests a directed mode. The cast_value spec
+    // requires the configured rounding mode for this integer-to-float cast.
+    case.source_dtype.starts_with("float")
+        && case.target_dtype == "uint64"
+        && case.out_of_range.as_deref() == Some("wrap")
+        && matches!(case.rounding.as_str(), "towards-zero" | "towards-negative")
+}
+
+#[ignore = "requires generated data from tests/data/zarr_python_cast_value_matrix.py"]
+#[test]
+fn zarr_python_v3_cast_value_matrix_read() -> Result<(), Box<dyn Error>> {
+    let root = Path::new("tests/data/zarr_python_compat/cast_value_matrix");
+    let manifest_path = root.join("manifest.json");
+    if !manifest_path.exists() {
+        return Err(format!(
+            "missing {}; run `uv run zarrs/tests/data/zarr_python_cast_value_matrix.py` first",
+            manifest_path.display()
+        )
+        .into());
+    }
+
+    let manifest: CastValueMatrixManifest =
+        serde_json::from_slice(&std::fs::read(&manifest_path)?)?;
+
+    let mut read = 0usize;
+    for case in &manifest.cases {
+        let path = root.join(&case.path);
+        let store = Arc::new(FilesystemStore::new(&path)?);
+        let array = Array::open(store, "/")
+            .map_err(|err| format!("failed to open {}: {err}", case.path))?;
+        let subset_all = array.subset_all();
+        let bytes = array
+            .retrieve_array_subset::<ArrayBytes<'static>>(&subset_all)
+            .map_err(|err| format!("failed to decode {}: {err}", case.path))?;
+        let bytes = bytes.into_fixed()?.into_owned();
+        if zarr_python_uses_nearest_even_for_directed_uint64_to_float(case) {
+            continue;
+        }
+        assert_eq!(
+            bytes,
+            case.expected_decoded_bytes.as_slice(),
+            "decoded bytes differ for {}",
+            case.path
+        );
+        read += 1;
+    }
+
+    assert!(read > 0, "no readable cast_value matrix cases were checked");
 
     Ok(())
 }
