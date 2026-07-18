@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Copy` for `GroupMetadataOptions`
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
-  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
+  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_subset_into`
   - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations

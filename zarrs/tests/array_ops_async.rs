@@ -54,9 +54,10 @@ async fn populate<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-async fn retrieve_array_subset_into<A: AsyncArrayReadOps>(
+async fn retrieve_into<A: AsyncArrayReadOps>(
     array: &A,
     subset: &ArraySubset,
+    chunk_indices: Option<&[u64]>,
     explicit_options: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let shape = subset.shape().to_vec();
@@ -69,7 +70,16 @@ async fn retrieve_array_subset_into<A: AsyncArrayReadOps>(
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
-        if explicit_options {
+        if let Some(chunk_indices) = chunk_indices {
+            array
+                .async_retrieve_chunk_subset_into(
+                    chunk_indices,
+                    subset,
+                    target,
+                    &CodecOptions::default(),
+                )
+                .await?;
+        } else if explicit_options {
             array
                 .async_retrieve_array_subset_into_opt(subset, target, &CodecOptions::default())
                 .await?;
@@ -125,6 +135,10 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
         [7, 8, 12, 13]
     );
     assert_eq!(
+        retrieve_into(array, &chunk_subset, Some(&[0, 0]), true).await?,
+        [7, 8, 12, 13]
+    );
+    assert_eq!(
         array.async_retrieve_chunks::<Vec<u8>>(&chunks).await?,
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
@@ -147,11 +161,11 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        retrieve_array_subset_into(array, &array_subset, false).await?,
+        retrieve_into(array, &array_subset, None, false).await?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        retrieve_array_subset_into(array, &array_subset, true).await?,
+        retrieve_into(array, &array_subset, None, true).await?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
