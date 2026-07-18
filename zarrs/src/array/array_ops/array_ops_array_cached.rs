@@ -1,7 +1,6 @@
 use inherent::inherent;
 
-use super::super::*;
-use super::ArrayOps;
+use super::{ArrayOps, *};
 
 #[inherent]
 impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {

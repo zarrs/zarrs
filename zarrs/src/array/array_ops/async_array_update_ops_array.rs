@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 
-use super::super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::*;
-use super::AsyncArrayUpdateOps;
+use super::super::concurrency::concurrency_chunks_and_codec;
+use super::{AsyncArrayUpdateOps, *};
 use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
 use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
 use zarrs_storage::StorageHandle;

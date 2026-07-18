@@ -1,7 +1,6 @@
 use inherent::inherent;
 
-use super::super::*;
-use super::ArrayWriteOps;
+use super::{ArrayWriteOps, *};
 
 #[inherent]
 impl<TStorage, C> ArrayWriteOps for ArrayCached<TStorage, C>
