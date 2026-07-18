@@ -60,6 +60,16 @@ pub trait AsyncArrayReadOps: ArrayOps {
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
+    /// Async variant of [`ArrayReadOps::retrieve_chunk_subset_into`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunk_subset_into(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError>;
+
     /// Async variant of [`ArrayReadOps::retrieve_array_subset`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_array_subset<T: FromArrayBytes>(

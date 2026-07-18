@@ -122,6 +122,43 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
     }
 
+    pub async fn async_retrieve_chunk_subset_into(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
+            return Err(ArrayError::InvalidArraySubset(
+                chunk_subset.to_array_subset(),
+                self.shape().to_vec(),
+            ));
+        }
+
+        if chunk_subset.start().iter().all(|&o| o == 0)
+            && chunk_subset.shape().as_ref() == chunk_shape_u64
+        {
+            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+                .await
+        } else {
+            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+            let storage_transformer = self
+                .storage_transformers()
+                .create_async_readable_transformer(storage_handle)
+                .await?;
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+            self.codecs_bound()
+                .async_partial_decoder(input_handle, &chunk_shape, options)
+                .await?
+                .partial_decode_into(chunk_subset, output_target, options)
+                .await?;
+            Ok(())
+        }
+    }
+
     pub async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
@@ -734,42 +771,5 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await?;
 
         Ok(())
-    }
-
-    async fn async_retrieve_chunk_subset_into(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        let chunk_shape = self.chunk_shape(chunk_indices)?;
-        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
-            return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.to_array_subset(),
-                self.shape().to_vec(),
-            ));
-        }
-
-        if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape().as_ref() == chunk_shape_u64
-        {
-            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
-                .await
-        } else {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            let storage_transformer = self
-                .storage_transformers()
-                .create_async_readable_transformer(storage_handle)
-                .await?;
-            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
-            self.codecs_bound()
-                .async_partial_decoder(input_handle, &chunk_shape, options)
-                .await?
-                .partial_decode_into(chunk_subset, output_target, options)
-                .await?;
-            Ok(())
-        }
     }
 }
