@@ -28,13 +28,10 @@ pub(super) type ScalarMap = HashMap<Vec<u8>, Vec<u8>>;
 
 /// A `cast_value` codec implementation.
 #[derive(Clone, Debug)]
-pub struct CastValueUnbound {
+pub struct CastValueCodec {
     target_data_type: DataType,
     configuration: CastValueCodecConfigurationV1,
 }
-
-/// A `cast_value` codec implementation.
-pub type CastValueCodec = CastValueUnbound;
 
 /// A `cast_value` codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
@@ -51,7 +48,7 @@ struct CastValueCodecBound {
     decode_kernel: Option<CastValueKernel>,
 }
 
-impl CastValueUnbound {
+impl CastValueCodec {
     /// Create a new `cast_value` codec from configuration.
     ///
     /// # Errors
@@ -79,7 +76,7 @@ impl CastValueUnbound {
     }
 }
 
-impl CodecTraits for CastValueUnbound {
+impl CodecTraits for CastValueCodec {
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -107,7 +104,7 @@ impl CodecTraits for CastValueUnbound {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl UnboundArrayToArrayCodecTraits for CastValueUnbound {
+impl UnboundArrayToArrayCodecTraits for CastValueCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
     }

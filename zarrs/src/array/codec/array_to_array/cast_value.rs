@@ -13,7 +13,7 @@ mod cast_value_codec_partial;
 
 use std::sync::Arc;
 
-pub use cast_value_codec::{CastValueCodec, CastValueUnbound};
+pub use cast_value_codec::CastValueCodec;
 use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::cast_value::{
@@ -21,16 +21,16 @@ pub use zarrs_metadata_ext::codec::cast_value::{
     CastValueRoundingMode, CastValueScalarMap,
 };
 
-zarrs_plugin::impl_extension_aliases!(CastValueUnbound, v3: "cast_value");
+zarrs_plugin::impl_extension_aliases!(CastValueCodec, v3: "cast_value");
 
 inventory::submit! {
-    CodecPluginV3::new::<CastValueUnbound>()
+    CodecPluginV3::new::<CastValueCodec>()
 }
 
-impl CodecTraitsV3 for CastValueUnbound {
+impl CodecTraitsV3 for CastValueCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: CastValueCodecConfiguration = metadata.to_typed_configuration()?;
-        let codec = Arc::new(CastValueUnbound::new_with_configuration(&configuration)?);
+        let codec = Arc::new(CastValueCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
     }
 }
