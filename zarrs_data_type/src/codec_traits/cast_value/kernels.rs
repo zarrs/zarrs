@@ -10,8 +10,8 @@ use half::{bf16, f16};
 
 use super::{
     CastValueError, CastValueOutOfRangeMode, CastValueRoundingMode, float_quantity_from_f64,
-    integer_magnitude_to_f64, round_f64_to_bf16, round_f64_to_f16, round_f64_to_f32,
-    round_f64_to_f64, round_float_to_integer, wrap_float,
+    round_f64_to_bf16, round_f64_to_f16, round_f64_to_f32, round_f64_to_f64,
+    round_float_to_integer, wrap_float,
 };
 
 /// The stored integer primitive of a data type supporting cast kernels.
@@ -132,6 +132,15 @@ enum IntWide {
     U(u64),
 }
 
+impl IntWide {
+    fn magnitude_and_sign(self) -> (u64, bool) {
+        match self {
+            Self::I(value) => (value.unsigned_abs(), value < 0),
+            Self::U(value) => (value, false),
+        }
+    }
+}
+
 /// Integer primitives usable as kernel sources and targets.
 trait KernelInt: Copy {
     const SIGNED: bool;
@@ -185,42 +194,10 @@ impl_kernel_int!(u16, false, |v| IntWide::I(i64::from(v)));
 impl_kernel_int!(u32, false, |v| IntWide::I(i64::from(v)));
 impl_kernel_int!(u64, false, |v| IntWide::U(v));
 
-/// Sources readable as an exactly-rounded `f64` (integers and floats).
+/// Float sources readable as an exact `f64`.
 trait KernelToF64: Copy {
     const SIZE: usize;
     fn read_to_f64(bytes: &[u8], rounding: CastValueRoundingMode) -> f64;
-}
-
-macro_rules! impl_kernel_to_f64_int_small {
-    ($($t:ty),*) => {
-        $(impl KernelToF64 for $t {
-            const SIZE: usize = size_of::<$t>();
-            #[inline]
-            fn read_to_f64(bytes: &[u8], _rounding: CastValueRoundingMode) -> f64 {
-                // all values are exactly representable in `f64`
-                f64::from(<$t as KernelInt>::read(bytes))
-            }
-        })*
-    };
-}
-impl_kernel_to_f64_int_small!(i8, i16, i32, u8, u16, u32);
-
-impl KernelToF64 for i64 {
-    const SIZE: usize = size_of::<i64>();
-    #[inline]
-    fn read_to_f64(bytes: &[u8], rounding: CastValueRoundingMode) -> f64 {
-        let value = <i64 as KernelInt>::read(bytes);
-        integer_magnitude_to_f64(u128::from(value.unsigned_abs()), value < 0, rounding)
-    }
-}
-
-impl KernelToF64 for u64 {
-    const SIZE: usize = size_of::<u64>();
-    #[inline]
-    fn read_to_f64(bytes: &[u8], rounding: CastValueRoundingMode) -> f64 {
-        let value = <u64 as KernelInt>::read(bytes);
-        integer_magnitude_to_f64(u128::from(value), false, rounding)
-    }
 }
 
 /// Float sources readable as an exact `f64`.
@@ -256,15 +233,17 @@ impl_kernel_float_source!(f64, 8, |v| v);
 /// Float targets writable from an `f64` quantity.
 trait KernelFloatTarget {
     const SIZE: usize;
+    const MANTISSA_DIGITS: u32;
     fn min_f64() -> f64;
     fn max_f64() -> f64;
     fn round_write(value: f64, rounding: CastValueRoundingMode, output: &mut Vec<u8>);
 }
 
 macro_rules! impl_kernel_float_target {
-    ($t:ty, $bytes:literal, $min:expr, $max:expr, $round:ident) => {
+    ($t:ty, $bytes:literal, $mantissa_digits:expr, $min:expr, $max:expr, $round:ident) => {
         impl KernelFloatTarget for $t {
             const SIZE: usize = $bytes;
+            const MANTISSA_DIGITS: u32 = $mantissa_digits;
             #[inline]
             fn min_f64() -> f64 {
                 $min
@@ -283,6 +262,7 @@ macro_rules! impl_kernel_float_target {
 impl_kernel_float_target!(
     f16,
     2,
+    f16::MANTISSA_DIGITS,
     f16::MIN.to_f64(),
     f16::MAX.to_f64(),
     round_f64_to_f16
@@ -290,6 +270,7 @@ impl_kernel_float_target!(
 impl_kernel_float_target!(
     bf16,
     2,
+    bf16::MANTISSA_DIGITS,
     bf16::MIN.to_f64(),
     bf16::MAX.to_f64(),
     round_f64_to_bf16
@@ -297,11 +278,19 @@ impl_kernel_float_target!(
 impl_kernel_float_target!(
     f32,
     4,
+    f32::MANTISSA_DIGITS,
     f64::from(f32::MIN),
     f64::from(f32::MAX),
     round_f64_to_f32
 );
-impl_kernel_float_target!(f64, 8, f64::MIN, f64::MAX, round_f64_to_f64);
+impl_kernel_float_target!(
+    f64,
+    8,
+    f64::MANTISSA_DIGITS,
+    f64::MIN,
+    f64::MAX,
+    round_f64_to_f64
+);
 
 /// The logical bounds of an integer target, hoisted out of the element loop.
 ///
@@ -463,6 +452,81 @@ fn kernel_int_to_int<S: KernelInt, T: KernelInt>(
     Ok(())
 }
 
+/// Round an integer directly to a binary float precision, returning the exact
+/// target value represented as `f64`.
+///
+/// The rounded magnitude has at most `mantissa_digits` significant bits, so
+/// the final conversion to `f64` is exact. Keeping the discarded integer bits
+/// here avoids double rounding through an intermediate `f64`.
+fn round_int_to_f64(value: IntWide, mantissa_digits: u32, rounding: CastValueRoundingMode) -> f64 {
+    debug_assert!((1..=53).contains(&mantissa_digits));
+    let (magnitude, negative) = value.magnitude_and_sign();
+    let signed = |value: f64| if negative { -value } else { value };
+    let significant_bits = u64::BITS - magnitude.leading_zeros();
+    if significant_bits <= mantissa_digits {
+        #[expect(clippy::cast_precision_loss)]
+        return signed(magnitude as f64);
+    }
+
+    let shift = significant_bits - mantissa_digits;
+    let unit = 1_u64 << shift;
+    let remainder = magnitude & (unit - 1);
+    let truncated = magnitude - remainder;
+    let increment = match rounding {
+        CastValueRoundingMode::NearestEven => {
+            let halfway = unit >> 1;
+            remainder > halfway || (remainder == halfway && ((magnitude >> shift) & 1) != 0)
+        }
+        CastValueRoundingMode::TowardsZero => false,
+        CastValueRoundingMode::TowardsPositive => !negative && remainder != 0,
+        CastValueRoundingMode::TowardsNegative => negative && remainder != 0,
+        CastValueRoundingMode::NearestAway => remainder >= (unit >> 1),
+    };
+    let rounded = if increment {
+        let Some(rounded) = truncated.checked_add(unit) else {
+            return signed(TWO_POW_64);
+        };
+        rounded
+    } else {
+        truncated
+    };
+    #[expect(clippy::cast_precision_loss)]
+    signed(rounded as f64)
+}
+
+fn kernel_int_to_float<S: KernelInt, F: KernelFloatTarget>(
+    source: &[u8],
+    output: &mut Vec<u8>,
+    params: CastKernelParams,
+) -> Result<(), CastValueError> {
+    let num_elements = check_alignment(source, S::SIZE)?;
+    output.reserve(num_elements * F::SIZE);
+    let min = F::min_f64();
+    let max = F::max_f64();
+    for element in source.chunks_exact(S::SIZE) {
+        let value = S::read(element).widen();
+        // This conversion is used only for target-range handling. It is exact
+        // whenever an integer can be near the bounds of a supported target.
+        let range_value = round_int_to_f64(value, f64::MANTISSA_DIGITS, params.rounding);
+        if (min..=max).contains(&range_value) {
+            let rounded = round_int_to_f64(value, F::MANTISSA_DIGITS, params.rounding);
+            F::round_write(rounded, params.rounding, output);
+        } else {
+            let quantity = float_quantity_from_f64(
+                range_value,
+                params.rounding,
+                params.out_of_range,
+                min,
+                max,
+                true,
+                true,
+            )?;
+            F::round_write(quantity, params.rounding, output);
+        }
+    }
+    Ok(())
+}
+
 fn kernel_to_float<S: KernelToF64, F: KernelFloatTarget>(
     source: &[u8],
     output: &mut Vec<u8>,
@@ -563,7 +627,7 @@ macro_rules! match_int_stored {
     };
 }
 
-fn select_from_int<S: KernelInt + KernelToF64>(target: CastValueRepr) -> Option<CastKernelFn> {
+fn select_from_int<S: KernelInt>(target: CastValueRepr) -> Option<CastKernelFn> {
     Some(match target {
         CastValueRepr::Int { bits, stored } => {
             if !valid_int_bits(bits, stored) {
@@ -571,10 +635,10 @@ fn select_from_int<S: KernelInt + KernelToF64>(target: CastValueRepr) -> Option<
             }
             match_int_stored!(stored, kernel_int_to_int, S)
         }
-        CastValueRepr::F16 => kernel_to_float::<S, f16> as CastKernelFn,
-        CastValueRepr::BF16 => kernel_to_float::<S, bf16> as CastKernelFn,
-        CastValueRepr::F32 => kernel_to_float::<S, f32> as CastKernelFn,
-        CastValueRepr::F64 => kernel_to_float::<S, f64> as CastKernelFn,
+        CastValueRepr::F16 => kernel_int_to_float::<S, f16> as CastKernelFn,
+        CastValueRepr::BF16 => kernel_int_to_float::<S, bf16> as CastKernelFn,
+        CastValueRepr::F32 => kernel_int_to_float::<S, f32> as CastKernelFn,
+        CastValueRepr::F64 => kernel_int_to_float::<S, f64> as CastKernelFn,
     })
 }
 
@@ -646,6 +710,14 @@ pub fn select_cast_kernel(
 mod tests {
     use super::*;
 
+    const INT64: CastValueRepr = CastValueRepr::Int {
+        bits: 64,
+        stored: CastValueIntStored::I64,
+    };
+    const UINT64: CastValueRepr = CastValueRepr::Int {
+        bits: 64,
+        stored: CastValueIntStored::U64,
+    };
     const UINT8: CastValueRepr = CastValueRepr::Int {
         bits: 8,
         stored: CastValueIntStored::U8,
@@ -713,5 +785,122 @@ mod tests {
             .flat_map(|v| v.to_ne_bytes())
             .collect();
         assert_eq!(output, expected);
+    }
+
+    fn cast_u64_to_f32(value: u64, rounding: CastValueRoundingMode) -> u32 {
+        let kernel = select_cast_kernel(UINT64, CastValueRepr::F32, rounding, None).unwrap();
+        let mut output = Vec::new();
+        kernel.cast(&value.to_ne_bytes(), &mut output).unwrap();
+        f32::from_ne_bytes(output.try_into().unwrap()).to_bits()
+    }
+
+    fn scalar_u64_to_f32(value: u64, rounding: CastValueRoundingMode) -> u32 {
+        let quantity = super::super::cast_scalar_to_float_quantity_with_precision(
+            super::super::CastValueScalar::Unsigned(u128::from(value)),
+            f32::MANTISSA_DIGITS,
+            rounding,
+            None,
+            f64::from(f32::MIN),
+            f64::from(f32::MAX),
+            true,
+            true,
+        )
+        .unwrap();
+        round_f64_to_f32(quantity, rounding).to_bits()
+    }
+
+    fn cast_i64_to_f32(value: i64, rounding: CastValueRoundingMode) -> u32 {
+        let kernel = select_cast_kernel(INT64, CastValueRepr::F32, rounding, None).unwrap();
+        let mut output = Vec::new();
+        kernel.cast(&value.to_ne_bytes(), &mut output).unwrap();
+        f32::from_ne_bytes(output.try_into().unwrap()).to_bits()
+    }
+
+    #[test]
+    fn kernel_int_to_f32_rounds_once() {
+        const LOWER: u64 = 1_u64 << 63;
+        const HALFWAY: u64 = LOWER + (1_u64 << 39);
+        const LOWER_BITS: u32 = 0x5f00_0000;
+        const UPPER_BITS: u32 = 0x5f00_0001;
+
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::NearestEven),
+            UPPER_BITS
+        );
+        assert_eq!(
+            scalar_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::NearestEven),
+            UPPER_BITS
+        );
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY - 1, CastValueRoundingMode::NearestAway),
+            LOWER_BITS
+        );
+        assert_eq!(
+            scalar_u64_to_f32(HALFWAY - 1, CastValueRoundingMode::NearestAway),
+            LOWER_BITS
+        );
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY, CastValueRoundingMode::NearestEven),
+            LOWER_BITS
+        );
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY, CastValueRoundingMode::NearestAway),
+            UPPER_BITS
+        );
+
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::TowardsZero),
+            LOWER_BITS
+        );
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::TowardsPositive),
+            UPPER_BITS
+        );
+        assert_eq!(
+            cast_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::TowardsNegative),
+            LOWER_BITS
+        );
+
+        const NEGATIVE_HALFWAY: i64 = -((1_i64 << 62) + (1_i64 << 38));
+        const NEGATIVE_LOWER_BITS: u32 = 0xde80_0000;
+        const NEGATIVE_UPPER_BITS: u32 = 0xde80_0001;
+        assert_eq!(
+            cast_i64_to_f32(NEGATIVE_HALFWAY - 1, CastValueRoundingMode::NearestEven),
+            NEGATIVE_UPPER_BITS
+        );
+        assert_eq!(
+            cast_i64_to_f32(NEGATIVE_HALFWAY + 1, CastValueRoundingMode::NearestAway),
+            NEGATIVE_LOWER_BITS
+        );
+        assert_eq!(
+            cast_i64_to_f32(NEGATIVE_HALFWAY - 1, CastValueRoundingMode::TowardsPositive),
+            NEGATIVE_LOWER_BITS
+        );
+        assert_eq!(
+            cast_i64_to_f32(NEGATIVE_HALFWAY - 1, CastValueRoundingMode::TowardsNegative),
+            NEGATIVE_UPPER_BITS
+        );
+    }
+
+    #[test]
+    fn kernel_int_to_bf16_rounds_once() {
+        const LOWER: u64 = 1_u64 << 63;
+        const HALFWAY: u64 = LOWER + (1_u64 << 55);
+
+        let cast = |value, rounding| {
+            let kernel = select_cast_kernel(UINT64, CastValueRepr::BF16, rounding, None).unwrap();
+            let mut output = Vec::new();
+            kernel.cast(&u64::to_ne_bytes(value), &mut output).unwrap();
+            bf16::from_ne_bytes(output.try_into().unwrap()).to_bits()
+        };
+
+        assert_eq!(
+            cast(HALFWAY + 1, CastValueRoundingMode::NearestEven),
+            0x5f01
+        );
+        assert_eq!(
+            cast(HALFWAY - 1, CastValueRoundingMode::NearestAway),
+            0x5f00
+        );
     }
 }

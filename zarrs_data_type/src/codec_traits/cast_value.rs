@@ -322,62 +322,55 @@ fn scalar_to_f64(value: CastValueScalar, rounding: CastValueRoundingMode) -> f64
     }
 }
 
+/// Round an integer magnitude directly to a binary float precision, returning
+/// the exact target value represented as `f64`.
+fn integer_magnitude_to_float_precision(
+    magnitude: u128,
+    negative: bool,
+    mantissa_digits: u32,
+    rounding: CastValueRoundingMode,
+) -> f64 {
+    debug_assert!((1..=53).contains(&mantissa_digits));
+    let signed = |value: f64| if negative { -value } else { value };
+    let significant_bits = u128::BITS - magnitude.leading_zeros();
+    if significant_bits <= mantissa_digits {
+        #[expect(clippy::cast_precision_loss)]
+        return signed(magnitude as f64);
+    }
+
+    let shift = significant_bits - mantissa_digits;
+    let unit = 1_u128 << shift;
+    let remainder = magnitude & (unit - 1);
+    let truncated = magnitude - remainder;
+    let increment = match rounding {
+        CastValueRoundingMode::NearestEven => {
+            let halfway = unit >> 1;
+            remainder > halfway || (remainder == halfway && ((magnitude >> shift) & 1) != 0)
+        }
+        CastValueRoundingMode::TowardsZero => false,
+        CastValueRoundingMode::TowardsPositive => !negative && remainder != 0,
+        CastValueRoundingMode::TowardsNegative => negative && remainder != 0,
+        CastValueRoundingMode::NearestAway => remainder >= (unit >> 1),
+    };
+    let rounded = if increment {
+        let Some(rounded) = truncated.checked_add(unit) else {
+            return signed(TWO_POW_128);
+        };
+        rounded
+    } else {
+        truncated
+    };
+    #[expect(clippy::cast_precision_loss)]
+    signed(rounded as f64)
+}
+
 /// Convert an integer magnitude to `f64`, exactly rounded per `rounding`.
-///
-/// A plain `as f64` cast always rounds ties-to-even; magnitudes above 2^53
-/// need correction for the other rounding modes.
 fn integer_magnitude_to_f64(
     magnitude: u128,
     negative: bool,
     rounding: CastValueRoundingMode,
 ) -> f64 {
-    let signed = |value: f64| if negative { -value } else { value };
-    // magnitudes below 2^53 convert exactly; skip the correction logic and its
-    // expensive `f64`/`u128` round-trip conversions
-    if magnitude < (1_u128 << 53) {
-        #[expect(clippy::cast_precision_loss)]
-        return signed(magnitude as f64);
-    }
-    #[expect(clippy::cast_precision_loss)]
-    let approx = magnitude as f64;
-    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let approx_int = (approx < TWO_POW_128).then_some(approx as u128);
-    if approx_int == Some(magnitude) {
-        return signed(approx);
-    }
-    let rounded_up = approx_int.is_none_or(|approx_int| approx_int > magnitude);
-    // Whether the magnitude must round away from zero for the requested mode
-    let round_up_magnitude = match rounding {
-        // `as` rounds ties-to-even and is symmetric in sign
-        CastValueRoundingMode::NearestEven => return signed(approx),
-        CastValueRoundingMode::TowardsZero => false,
-        CastValueRoundingMode::TowardsPositive => !negative,
-        CastValueRoundingMode::TowardsNegative => negative,
-        CastValueRoundingMode::NearestAway => {
-            if rounded_up {
-                // the nearest value, and also away from zero on a tie
-                return signed(approx);
-            }
-            // on an exact tie, ties-to-even may round down where away-from-zero must round up
-            let Some(approx_int) = approx_int else {
-                unreachable!("`approx_int` is `None` only when rounded up");
-            };
-            let upper = approx.next_up();
-            #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let ulp = (upper - approx) as u128; // adjacent float difference is exact
-            let below = magnitude - approx_int;
-            return if 2 * below == ulp {
-                signed(upper)
-            } else {
-                signed(approx)
-            };
-        }
-    };
-    match (round_up_magnitude, rounded_up) {
-        (true, true) | (false, false) => signed(approx),
-        (true, false) => signed(approx.next_up()),
-        (false, true) => signed(approx.next_down()),
-    }
+    integer_magnitude_to_float_precision(magnitude, negative, f64::MANTISSA_DIGITS, rounding)
 }
 
 fn next_up_f16(value: f16) -> f16 {
@@ -719,6 +712,50 @@ pub fn cast_scalar_to_float_quantity(
     )
 }
 
+/// Cast a scalar to a floating-point quantity, rounding integer inputs
+/// directly to the target precision.
+///
+/// This is used by the built-in binary float implementations to avoid
+/// double-rounding large integers through `f64`.
+#[doc(hidden)]
+#[expect(clippy::too_many_arguments)]
+pub fn cast_scalar_to_float_quantity_with_precision(
+    value: CastValueScalar,
+    mantissa_digits: u32,
+    rounding: CastValueRoundingMode,
+    out_of_range: Option<CastValueOutOfRangeMode>,
+    min: f64,
+    max: f64,
+    has_nan: bool,
+    has_infinity: bool,
+) -> Result<f64, CastValueError> {
+    let range_value = scalar_to_f64(value, rounding);
+    let quantity = float_quantity_from_f64(
+        range_value,
+        rounding,
+        out_of_range,
+        min,
+        max,
+        has_nan,
+        has_infinity,
+    )?;
+    if !(min..=max).contains(&range_value) {
+        return Ok(quantity);
+    }
+    Ok(match value {
+        CastValueScalar::Signed(value) => integer_magnitude_to_float_precision(
+            value.unsigned_abs(),
+            value < 0,
+            mantissa_digits,
+            rounding,
+        ),
+        CastValueScalar::Unsigned(value) => {
+            integer_magnitude_to_float_precision(value, false, mantissa_digits, rounding)
+        }
+        CastValueScalar::Float(_) => quantity,
+    })
+}
+
 /// The target-range handling of [`cast_scalar_to_float_quantity`] for a value
 /// already exactly rounded to `f64`.
 fn float_quantity_from_f64(
@@ -954,15 +991,17 @@ macro_rules! _impl_cast_value_data_type_traits_float {
                 out_of_range: Option<$crate::codec_traits::cast_value::CastValueOutOfRangeMode>,
                 output: &mut Vec<u8>,
             ) -> Result<(), $crate::codec_traits::cast_value::CastValueError> {
-                let value = $crate::codec_traits::cast_value::cast_scalar_to_float_quantity(
-                    value,
-                    rounding,
-                    out_of_range,
-                    half::f16::MIN.to_f64(),
-                    half::f16::MAX.to_f64(),
-                    true,
-                    true,
-                )?;
+                let value =
+                    $crate::codec_traits::cast_value::cast_scalar_to_float_quantity_with_precision(
+                        value,
+                        half::f16::MANTISSA_DIGITS,
+                        rounding,
+                        out_of_range,
+                        half::f16::MIN.to_f64(),
+                        half::f16::MAX.to_f64(),
+                        true,
+                        true,
+                    )?;
                 output.extend_from_slice(
                     &$crate::codec_traits::cast_value::round_f64_to_f16(value, rounding)
                         .to_ne_bytes(),
@@ -1007,15 +1046,17 @@ macro_rules! _impl_cast_value_data_type_traits_float {
                 out_of_range: Option<$crate::codec_traits::cast_value::CastValueOutOfRangeMode>,
                 output: &mut Vec<u8>,
             ) -> Result<(), $crate::codec_traits::cast_value::CastValueError> {
-                let value = $crate::codec_traits::cast_value::cast_scalar_to_float_quantity(
-                    value,
-                    rounding,
-                    out_of_range,
-                    half::bf16::MIN.to_f64(),
-                    half::bf16::MAX.to_f64(),
-                    true,
-                    true,
-                )?;
+                let value =
+                    $crate::codec_traits::cast_value::cast_scalar_to_float_quantity_with_precision(
+                        value,
+                        half::bf16::MANTISSA_DIGITS,
+                        rounding,
+                        out_of_range,
+                        half::bf16::MIN.to_f64(),
+                        half::bf16::MAX.to_f64(),
+                        true,
+                        true,
+                    )?;
                 output.extend_from_slice(
                     &$crate::codec_traits::cast_value::round_f64_to_bf16(value, rounding)
                         .to_ne_bytes(),
@@ -1060,15 +1101,17 @@ macro_rules! _impl_cast_value_data_type_traits_float {
                 out_of_range: Option<$crate::codec_traits::cast_value::CastValueOutOfRangeMode>,
                 output: &mut Vec<u8>,
             ) -> Result<(), $crate::codec_traits::cast_value::CastValueError> {
-                let value = $crate::codec_traits::cast_value::cast_scalar_to_float_quantity(
-                    value,
-                    rounding,
-                    out_of_range,
-                    f64::from(f32::MIN),
-                    f64::from(f32::MAX),
-                    true,
-                    true,
-                )?;
+                let value =
+                    $crate::codec_traits::cast_value::cast_scalar_to_float_quantity_with_precision(
+                        value,
+                        f32::MANTISSA_DIGITS,
+                        rounding,
+                        out_of_range,
+                        f64::from(f32::MIN),
+                        f64::from(f32::MAX),
+                        true,
+                        true,
+                    )?;
                 output.extend_from_slice(
                     &$crate::codec_traits::cast_value::round_f64_to_f32(value, rounding)
                         .to_ne_bytes(),
@@ -1113,15 +1156,17 @@ macro_rules! _impl_cast_value_data_type_traits_float {
                 out_of_range: Option<$crate::codec_traits::cast_value::CastValueOutOfRangeMode>,
                 output: &mut Vec<u8>,
             ) -> Result<(), $crate::codec_traits::cast_value::CastValueError> {
-                let value = $crate::codec_traits::cast_value::cast_scalar_to_float_quantity(
-                    value,
-                    rounding,
-                    out_of_range,
-                    f64::MIN,
-                    f64::MAX,
-                    true,
-                    true,
-                )?;
+                let value =
+                    $crate::codec_traits::cast_value::cast_scalar_to_float_quantity_with_precision(
+                        value,
+                        f64::MANTISSA_DIGITS,
+                        rounding,
+                        out_of_range,
+                        f64::MIN,
+                        f64::MAX,
+                        true,
+                        true,
+                    )?;
                 output.extend_from_slice(
                     &$crate::codec_traits::cast_value::round_f64_to_f64(value, rounding)
                         .to_ne_bytes(),
