@@ -49,6 +49,7 @@ crate-type = ["lib"]
 bench = false
 
 [dependencies]
+ambisync.workspace = true
 async-trait = { version = "0.1.74", optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
 bytes = "1.7.0"

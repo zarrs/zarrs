@@ -12,8 +12,6 @@ use zarrs_storage::{ReadableStorageTraits, StorageError};
 mod decoded;
 mod encoded;
 mod partial_decoder;
-#[cfg(feature = "async")]
-mod partial_decoder_async;
 
 pub(super) fn cache_error(error: Arc<ArrayError>) -> ArrayError {
     Arc::try_unwrap(error)
@@ -49,28 +47,16 @@ pub(crate) fn fill_value_bytes(
     )
 }
 
-pub(crate) fn retrieve_chunk_bytes<TStorage, C>(
-    cache: &C,
-    array: &Array<TStorage>,
-    chunk_indices: &[u64],
-    options: &CodecOptions,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-    C::Value: SyncChunkCacheType,
-{
-    if let Some(bytes) =
-        C::Value::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?
-    {
-        Ok(bytes)
-    } else {
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64())
-    }
-}
-
-#[cfg(feature = "async")]
+#[ambisync::ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncChunkCacheType => SyncChunkCacheType,
+        ),
+    ),
+    async(feature = "async"),
+)]
 pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
@@ -90,6 +76,23 @@ where
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         fill_value_bytes(array, chunk_shape.num_elements_u64())
     }
+}
+
+/// Return a cached value or insert the value returned by `f`.
+///
+/// A free-function counterpart of [`ChunkCache::try_get_or_insert_with`] with the same call
+/// shape as `async_try_get_or_insert_with`, so cached retrieval can be written once in async
+/// form and derived synchronously.
+pub(super) fn try_get_or_insert_with<C, F>(
+    cache: &C,
+    chunk_indices: Vec<u64>,
+    f: F,
+) -> Result<C::Value, Arc<ArrayError>>
+where
+    C: ChunkCache + ?Sized,
+    F: FnOnce() -> Result<C::Value, ArrayError>,
+{
+    cache.try_get_or_insert_with(chunk_indices, f)
 }
 
 /// Return a cached value or insert the value returned by the asynchronous `f`.

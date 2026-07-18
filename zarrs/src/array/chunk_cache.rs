@@ -82,55 +82,31 @@ pub trait ChunkCacheType:
     fn size(&self) -> usize;
 }
 
-/// A chunk cache type supporting synchronous retrieval.
-///
-/// This is implemented for [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], and
-/// [`ChunkCacheTypePartialDecoder`].
-/// It is not implemented for `ChunkCacheTypeAsyncPartialDecoder`, which caches asynchronous
-/// partial decoders that cannot operate over synchronous storage.
-pub trait SyncChunkCacheType: ChunkCacheType {
-    #[doc(hidden)]
-    fn partial_decoder<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
-
-    #[doc(hidden)]
-    fn retrieve_chunk_bytes_if_exists<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
-
-    #[doc(hidden)]
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
-}
-
 /// A chunk cache type supporting asynchronous retrieval.
 ///
 /// This is implemented for [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], and
 /// [`ChunkCacheTypeAsyncPartialDecoder`].
 /// It is not implemented for [`ChunkCacheTypePartialDecoder`], which caches synchronous
 /// partial decoders that cannot be created from asynchronous storage.
-#[cfg(feature = "async")]
+#[ambisync::ambisync(
+    sync(
+        declaration {
+            /// A chunk cache type supporting synchronous retrieval.
+            ///
+            /// This is implemented for [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], and
+            /// [`ChunkCacheTypePartialDecoder`].
+            /// It is not implemented for `ChunkCacheTypeAsyncPartialDecoder`, which caches asynchronous
+            /// partial decoders that cannot operate over synchronous storage.
+            pub trait SyncChunkCacheType: ChunkCacheType {}
+        },
+        fns("async_{}"),
+        types(
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 #[allow(async_fn_in_trait)]
 pub trait AsyncChunkCacheType: ChunkCacheType {
     #[doc(hidden)]

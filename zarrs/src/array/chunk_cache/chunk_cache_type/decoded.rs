@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 #[cfg(feature = "async")]
 use super::{SyncPartialDecoderAsAsync, async_try_get_or_insert_with};
-use super::{cache_error, fill_value_bytes, validate_chunk_indices};
+use super::{cache_error, fill_value_bytes, try_get_or_insert_with, validate_chunk_indices};
 #[cfg(feature = "async")]
 use crate::array::chunk_cache::AsyncChunkCacheType;
 use crate::array::chunk_cache::{
@@ -77,76 +79,17 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
     }
 }
 
-impl SyncChunkCacheType for ChunkCacheTypeDecoded {
-    fn partial_decoder<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
-    {
-        let bytes = Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?;
-        Ok(Arc::new(CachedArrayBytesPartialDecoder {
-            bytes,
-            shape: validate_chunk_indices(array, chunk_indices)?,
-            data_type: array.data_type().clone(),
-            fill_value: array.fill_value().clone(),
-        }))
-    }
-
-    fn retrieve_chunk_bytes_if_exists<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
-    {
-        validate_chunk_indices(array, chunk_indices)?;
-        cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array
-                    .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)?
-                    .map(Arc::new))
-            })
-            .map_err(cache_error)
-    }
-
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
-    {
-        if let Some(chunk) =
-            Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?
-        {
-            let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-            Ok(chunk
-                .extract_array_subset(
-                    chunk_subset,
-                    bytemuck::must_cast_slice(&chunk_shape),
-                    array.data_type(),
-                )?
-                .into_owned()
-                .into())
-        } else {
-            fill_value_bytes(array, chunk_subset.num_elements())
-        }
-    }
-}
-
-#[cfg(feature = "async")]
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            AsyncChunkCacheType => SyncChunkCacheType,
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 impl AsyncChunkCacheType for ChunkCacheTypeDecoded {
     async fn async_partial_decoder<TStorage, C>(
         cache: &C,
@@ -161,13 +104,17 @@ impl AsyncChunkCacheType for ChunkCacheTypeDecoded {
         let bytes =
             Self::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)
                 .await?;
-        let decoder = SyncPartialDecoderAsAsync(Arc::new(CachedArrayBytesPartialDecoder {
+        let decoder = CachedArrayBytesPartialDecoder {
             bytes,
             shape: validate_chunk_indices(array, chunk_indices)?,
             data_type: array.data_type().clone(),
             fill_value: array.fill_value().clone(),
-        }));
-        Ok(Arc::new(decoder) as Arc<dyn AsyncArrayPartialDecoderTraits>)
+        };
+        Ok(ambisync::alt!(
+            sync => Arc::new(decoder),
+            async => Arc::new(SyncPartialDecoderAsAsync(Arc::new(decoder)))
+                as Arc<dyn AsyncArrayPartialDecoderTraits>,
+        ))
     }
 
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(

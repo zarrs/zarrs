@@ -71,6 +71,10 @@ path = "zarrs_filesystem"
 version = "0.6.2"
 path = "zarrs_object_store"
 
+[workspace.dependencies.ambisync]
+version = "0.1.0"
+path = "../ambisync/ambisync"
+
 [workspace.dependencies.object_store]
 version = "0.13"
 

@@ -41,19 +41,13 @@ mod async_array_read_ops;
 #[cfg(feature = "async")]
 mod async_array_read_ops_array;
 #[cfg(feature = "async")]
-mod async_array_read_ops_array_cached;
-#[cfg(feature = "async")]
 mod async_array_update_ops;
 #[cfg(feature = "async")]
 mod async_array_update_ops_array;
 #[cfg(feature = "async")]
-mod async_array_update_ops_array_cached;
-#[cfg(feature = "async")]
 mod async_array_write_ops;
 #[cfg(feature = "async")]
 mod async_array_write_ops_array;
-#[cfg(feature = "async")]
-mod async_array_write_ops_array_cached;
 
 pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;

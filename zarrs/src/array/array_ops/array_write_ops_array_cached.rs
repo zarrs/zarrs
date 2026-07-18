@@ -1,35 +1,76 @@
+use ambisync::ambisync;
 use inherent::inherent;
 
+#[cfg(feature = "async")]
+use super::AsyncArrayWriteOps;
 use super::{ArrayWriteOps, *};
 
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            AsyncArrayWriteOps => ArrayWriteOps,
+            AsyncWritableStorageTraits => WritableStorageTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 #[inherent]
-impl<TStorage, C> ArrayWriteOps for ArrayCached<TStorage, C>
+impl<TStorage, C> AsyncArrayWriteOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + WritableStorageTraits + 'static,
+    TStorage: ?Sized + AsyncWritableStorageTraits + 'static,
     C: ChunkCache,
 {
-    pub fn store_metadata(&self) -> Result<(), StorageError>;
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
+        self.async_store_metadata_opt(self.metadata_options()).await
+    }
 
-    pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
-        self.array().store_metadata_opt(options)?;
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_metadata_opt(
+        &self,
+        options: &ArrayMetadataOptions,
+    ) -> Result<(), StorageError> {
+        self.array().async_store_metadata_opt(options).await?;
         self.cache().invalidate();
         Ok(())
     }
 
-    pub fn erase_metadata(&self) -> Result<(), StorageError>;
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
+        self.async_erase_metadata_opt(self.metadata_erase_version())
+            .await
+    }
 
-    pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
-        self.array().erase_metadata_opt(options)?;
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_metadata_opt(
+        &self,
+        options: MetadataEraseVersion,
+    ) -> Result<(), StorageError> {
+        self.array().async_erase_metadata_opt(options).await?;
         self.cache().invalidate();
         Ok(())
     }
 
+    #[sync_only]
     pub fn store_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
     ) -> Result<(), ArrayError>;
 
+    #[async_only]
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_data: T,
+    ) -> Result<(), ArrayError> {
+        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
+            .await
+    }
+
+    #[sync_only]
     pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -42,12 +83,40 @@ where
         Ok(())
     }
 
+    #[async_only]
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_chunk_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_data: T,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        self.array()
+            .async_store_chunk_opt(chunk_indices, chunk_data, options)
+            .await?;
+        self.cache().invalidate_chunk(chunk_indices);
+        Ok(())
+    }
+
+    #[sync_only]
     pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
     ) -> Result<(), ArrayError>;
 
+    #[async_only]
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_chunks<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+        chunks_data: T,
+    ) -> Result<(), ArrayError> {
+        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
+            .await
+    }
+
+    #[sync_only]
     pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -60,27 +129,48 @@ where
         Ok(())
     }
 
-    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
-        self.array().erase_chunk(chunk_indices)?;
+    #[async_only]
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_store_chunks_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+        chunks_data: T,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        self.array()
+            .async_store_chunks_opt(chunks, chunks_data, options)
+            .await?;
+        self.cache().invalidate_chunks(chunks);
+        Ok(())
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+        self.array().async_erase_chunk(chunk_indices).await?;
         let _ = self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
-        self.array().erase_chunks(chunks)?;
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_chunks(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<(), StorageError> {
+        self.array().async_erase_chunks(chunks).await?;
         let _ = self.cache().invalidate_chunks(chunks);
         Ok(())
     }
 
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn store_encoded_chunk(
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
         encoded_chunk_bytes: bytes::Bytes,
     ) -> Result<(), ArrayError> {
         unsafe {
             self.array()
-                .store_encoded_chunk(chunk_indices, encoded_chunk_bytes)?;
+                .async_store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
+                .await?;
         }
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
