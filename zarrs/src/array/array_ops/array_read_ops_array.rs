@@ -2,14 +2,13 @@ use inherent::inherent;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::super::super::array_bytes_internal::{
+use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
     optional_nesting_depth,
 };
-use super::super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
-use super::super::*;
-use super::ArrayReadOps;
+use super::super::concurrency::concurrency_chunks_and_codec;
+use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use super::{ArrayReadOps, *};
 use crate::array::ArrayBytes;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -378,7 +377,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        super::common::retrieve_array_subset_into(
+        super::array_read_ops_common::retrieve_array_subset_into(
             self,
             array_subset,
             output_target,

@@ -2,8 +2,6 @@ use super::*;
 use std::sync::Arc;
 use zarrs_codec::AsyncArrayPartialEncoderTraits;
 
-mod array;
-
 /// Asynchronous array read/write update operations.
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]

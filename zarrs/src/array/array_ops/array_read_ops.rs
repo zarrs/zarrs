@@ -6,10 +6,6 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError};
 use zarrs_storage::MaybeSync;
 
-mod array;
-mod array_cached;
-mod common;
-
 /// Synchronous array read operations.
 pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist with default codec options.

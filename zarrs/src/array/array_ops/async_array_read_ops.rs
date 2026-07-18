@@ -3,8 +3,6 @@ use std::sync::Arc;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
-mod array;
-
 /// Asynchronous array read operations.
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]

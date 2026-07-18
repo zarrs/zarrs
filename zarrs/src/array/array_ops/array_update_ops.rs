@@ -1,9 +1,6 @@
 use super::*;
 use zarrs_codec::ArrayPartialEncoderTraits;
 
-mod array;
-mod array_cached;
-
 /// Synchronous array read/write update operations.
 pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Encode `chunk_subset_data` and store in `chunk_subset` of the chunk at `chunk_indices` with default codec options.

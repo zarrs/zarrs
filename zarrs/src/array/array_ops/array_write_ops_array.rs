@@ -4,9 +4,8 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::*;
-use super::ArrayWriteOps;
+use super::super::concurrency::concurrency_chunks_and_codec;
+use super::{ArrayWriteOps, *};
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};

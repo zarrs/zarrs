@@ -1,11 +1,11 @@
 use inherent::inherent;
 
-use super::super::super::{
+use super::super::{
     chunk_grid_default_name, chunk_key_encoding_default_name, codec_default_name, data_type,
     storage_transformer_default_name,
 };
-use super::super::*;
-use super::{ArrayOps, maybe_regular_chunk_grid_shape};
+use super::array_ops::maybe_regular_chunk_grid_shape;
+use super::{ArrayOps, *};
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;

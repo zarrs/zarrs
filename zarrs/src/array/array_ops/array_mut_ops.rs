@@ -1,7 +1,5 @@
 use super::*;
 
-mod array;
-
 /// Mutable array metadata/configuration operations.
 pub trait ArrayMutOps: ArrayOps {
     /// Set the codec options.

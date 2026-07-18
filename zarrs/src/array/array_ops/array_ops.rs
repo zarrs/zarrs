@@ -1,8 +1,5 @@
 use super::*;
 
-mod array;
-mod array_cached;
-
 /// Core array operations.
 pub trait ArrayOps {
     /// The backing storage type.
