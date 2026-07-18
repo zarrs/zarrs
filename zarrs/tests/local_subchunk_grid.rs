@@ -82,9 +82,11 @@ fn decode_shape_header(bytes: &[u8], dimensionality: usize) -> Result<ChunkShape
         ));
     }
     bytes
-        .chunks_exact(size_of::<u64>())
+        .as_chunks::<{ size_of::<u64>() }>()
+        .0
+        .iter()
         .map(|chunk| {
-            let value = u64::from_le_bytes(chunk.try_into().unwrap());
+            let value = u64::from_le_bytes(*chunk);
             NonZeroU64::new(value).ok_or_else(|| {
                 CodecError::Other("dynamic local subchunk shape contains zero".to_string())
             })
