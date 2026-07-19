@@ -1,10 +1,15 @@
+use ambisync::ambisync;
 use inherent::inherent;
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+use futures::{StreamExt, TryStreamExt};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::super::concurrency::concurrency_chunks_and_codec;
+#[cfg(feature = "async")]
+use super::AsyncArrayWriteOps;
 use super::{ArrayWriteOps, *};
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::iter_concurrent_limit;
@@ -12,15 +17,36 @@ use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_storage::{Bytes, StorageHandle};
 
+#[ambisync(
+    sync(
+        fns(
+            "async_{}",
+            create_async_writable_transformer => create_writable_transformer,
+        ),
+        types(
+            AsyncArrayWriteOps => ArrayWriteOps,
+            AsyncWritableStorageTraits => WritableStorageTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 #[inherent]
-impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
-    pub fn store_metadata(&self) -> Result<(), StorageError>;
+impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
+    for Array<TStorage>
+{
+    pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
+        self.async_store_metadata_opt(self.metadata_options()).await
+    }
 
-    pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
+    pub async fn async_store_metadata_opt(
+        &self,
+        options: &ArrayMetadataOptions,
+    ) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
+            .create_async_writable_transformer(storage_handle)
+            .await?;
 
         // Get the metadata with options applied and store
         let metadata = self.metadata_opt(options);
@@ -32,7 +58,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 let key = meta_key_v3(path);
                 let json = serde_json::to_vec_pretty(&metadata)
                     .map_err(|err| StorageError::InvalidMetadata(key.clone(), err.to_string()))?;
-                storage_transformer.set(&key, json.into())
+                storage_transformer.set(&key, json.into()).await
             }
             ArrayMetadata::V2(metadata) => {
                 let mut metadata = metadata.clone();
@@ -43,7 +69,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                     let json = serde_json::to_vec_pretty(&metadata.attributes).map_err(|err| {
                         StorageError::InvalidMetadata(key.clone(), err.to_string())
                     })?;
-                    storage_transformer.set(&meta_key_v2_attributes(path), json.into())?;
+                    storage_transformer
+                        .set(&meta_key_v2_attributes(path), json.into())
+                        .await?;
 
                     metadata.attributes = serde_json::Map::default();
                 }
@@ -52,43 +80,70 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 let key = meta_key_v2_array(path);
                 let json = serde_json::to_vec_pretty(&metadata)
                     .map_err(|err| StorageError::InvalidMetadata(key.clone(), err.to_string()))?;
-                storage_transformer.set(&key, json.into())
+                storage_transformer.set(&key, json.into()).await
             }
         }
     }
 
-    pub fn erase_metadata(&self) -> Result<(), StorageError>;
+    pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
+        self.async_erase_metadata_opt(self.metadata_erase_version())
+            .await
+    }
 
-    pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
+    pub async fn async_erase_metadata_opt(
+        &self,
+        options: MetadataEraseVersion,
+    ) -> Result<(), StorageError> {
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
             MetadataEraseVersion::Default => match self.metadata {
-                ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
+                ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
                 ArrayMetadata::V2(_) => {
-                    storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                    storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                    storage_handle
+                        .erase(&meta_key_v2_array(self.path()))
+                        .await?;
+                    storage_handle
+                        .erase(&meta_key_v2_attributes(self.path()))
+                        .await
                 }
             },
             MetadataEraseVersion::All => {
-                storage_handle.erase(&meta_key_v3(self.path()))?;
-                storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                storage_handle.erase(&meta_key_v3(self.path())).await?;
+                storage_handle
+                    .erase(&meta_key_v2_array(self.path()))
+                    .await?;
+                storage_handle
+                    .erase(&meta_key_v2_attributes(self.path()))
+                    .await
             }
-            MetadataEraseVersion::V3 => storage_handle.erase(&meta_key_v3(self.path())),
+            MetadataEraseVersion::V3 => storage_handle.erase(&meta_key_v3(self.path())).await,
             MetadataEraseVersion::V2 => {
-                storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                storage_handle
+                    .erase(&meta_key_v2_array(self.path()))
+                    .await?;
+                storage_handle
+                    .erase(&meta_key_v2_attributes(self.path()))
+                    .await
             }
         }
     }
 
-    pub fn store_chunk<'a, T: IntoArrayBytes<'a>>(
+    pub async fn async_store_chunk<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
+            .await
+    }
 
-    pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
+    pub async fn async_store_chunk_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
@@ -103,25 +158,34 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let is_fill_value =
             !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());
         if is_fill_value {
-            self.erase_chunk(chunk_indices)?;
+            self.async_erase_chunk(chunk_indices).await?;
         } else {
             let chunk_encoded = self
                 .codecs_bound()
                 .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
-            unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
+            unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }
         Ok(())
     }
 
-    pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
+    pub async fn async_store_chunks<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
+            .await
+    }
 
-    pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
+    pub async fn async_store_chunks_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
@@ -135,7 +199,8 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_opt(&chunk_indices, chunks_data, options)?;
+                self.async_store_chunk_opt(&chunk_indices, chunks_data, options)
+                    .await?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -152,61 +217,96 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                     &codec_concurrency,
                 );
 
-                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
+                let store_chunk = async |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
                         &chunk_subset.relative_to(array_subset.start())?,
                         array_subset.shape(),
                         self.data_type(),
                     )?;
-                    self.store_chunk_opt(&chunk_indices, chunk_bytes, &options)
+                    self.async_store_chunk_opt(&chunk_indices, chunk_bytes, &options)
+                        .await
                 };
-
-                let indices = chunks.indices();
-                iter_concurrent_limit!(chunk_concurrent_limit, indices, try_for_each, store_chunk)?;
+                ambisync::alt!(
+                    sync => iter_concurrent_limit!(
+                        chunk_concurrent_limit,
+                        chunks.indices(),
+                        try_for_each,
+                        store_chunk
+                    )?,
+                    async => futures::stream::iter(chunks.indices())
+                        .map(store_chunk)
+                        .buffer_unordered(chunk_concurrent_limit)
+                        .try_collect::<Vec<_>>()
+                        .await
+                        .map(|_| ())?,
+                );
             }
         }
 
         Ok(())
     }
 
-    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        storage_transformer.erase(&self.chunk_key(chunk_indices))
+            .create_async_writable_transformer(storage_handle)
+            .await?;
+        storage_transformer
+            .erase(&self.chunk_key(chunk_indices))
+            .await
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
+    pub async fn async_erase_chunks(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            storage_transformer.erase(&self.chunk_key(&chunk_indices))
+            .create_async_writable_transformer(storage_handle)
+            .await?;
+        let erase_chunk = async |chunk_indices: ArrayIndicesTinyVec| {
+            let storage_transformer = storage_transformer.clone();
+            storage_transformer
+                .erase(&self.chunk_key(&chunk_indices))
+                .await
         };
-
-        #[cfg(not(target_arch = "wasm32"))]
-        chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
-        #[cfg(target_arch = "wasm32")]
-        chunks.indices().into_iter().try_for_each(erase_chunk)?;
-
-        Ok(())
+        ambisync::alt!(
+            sync => {
+                #[cfg(not(target_arch = "wasm32"))]
+                chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+                #[cfg(target_arch = "wasm32")]
+                chunks.indices().into_iter().try_for_each(erase_chunk)?;
+                Ok(())
+            },
+            async => futures::stream::iter(chunks.indices())
+                .map(erase_chunk)
+                .buffer_unordered(usize::MAX)
+                .try_collect::<Vec<_>>()
+                .await
+                .map(|_| ()),
+        )
     }
+    /////////////////////////////////////////////////////////////////////////////
+    // Advanced methods
+    /////////////////////////////////////////////////////////////////////////////
 
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn store_encoded_chunk(
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
+        encoded_chunk_bytes: Bytes,
     ) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
-
+            .create_async_writable_transformer(storage_handle)
+            .await?;
+        storage_transformer
+            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)
+            .await?;
         Ok(())
     }
 }

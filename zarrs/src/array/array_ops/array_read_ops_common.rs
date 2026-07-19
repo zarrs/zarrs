@@ -9,12 +9,65 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
 };
+#[cfg(feature = "async")]
+use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
 
-pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveChunkSubsetInto>(
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(AsyncReadableStorageTraits => ReadableStorageTraits),
+        declaration {
+            pub(super) fn retrieve_array_subset_into<
+                TStorage,
+                RetrieveChunkInto,
+                RetrieveChunkSubsetInto,
+            >(
+                array: &Array<TStorage>,
+                array_subset: &dyn ArraySubsetTraits,
+                output_target: ArrayBytesDecodeIntoTarget<'_>,
+                options: &CodecOptions,
+                retrieve_chunk_into: RetrieveChunkInto,
+                retrieve_chunk_subset_into: RetrieveChunkSubsetInto,
+            ) -> Result<(), ArrayError>
+            where
+                TStorage: ?Sized + ReadableStorageTraits + 'static,
+                RetrieveChunkInto: for<'a> Fn(
+                    &[u64],
+                    ArrayBytesDecodeIntoTarget<'a>,
+                    &CodecOptions,
+                ) -> Result<(), ArrayError>,
+                RetrieveChunkSubsetInto: for<'a> Fn(
+                        &[u64],
+                        &dyn ArraySubsetTraits,
+                        ArrayBytesDecodeIntoTarget<'a>,
+                        &CodecOptions,
+                    ) -> Result<(), ArrayError>
+                    + MaybeSend
+                    + MaybeSync;
+        },
+    ),
+    async(feature = "async"),
+)]
+pub(super) async fn async_retrieve_array_subset_into<
+    TStorage,
+    RetrieveChunkInto: for<'a> AsyncFn(
+        &[u64],
+        ArrayBytesDecodeIntoTarget<'a>,
+        &CodecOptions,
+    ) -> Result<(), ArrayError>,
+    RetrieveChunkSubsetInto: for<'a> AsyncFn(
+            &[u64],
+            &dyn ArraySubsetTraits,
+            ArrayBytesDecodeIntoTarget<'a>,
+            &CodecOptions,
+        ) -> Result<(), ArrayError>
+        + MaybeSend
+        + MaybeSync,
+>(
     array: &Array<TStorage>,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
@@ -23,17 +76,7 @@ pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveCh
     retrieve_chunk_subset_into: RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    RetrieveChunkInto:
-        for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
-    RetrieveChunkSubsetInto: for<'a> Fn(
-            &[u64],
-            &dyn ArraySubsetTraits,
-            ArrayBytesDecodeIntoTarget<'a>,
-            &CodecOptions,
-        ) -> Result<(), ArrayError>
-        + MaybeSend
-        + MaybeSync,
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
@@ -73,7 +116,7 @@ where
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
             if chunk_subset == array_subset {
-                retrieve_chunk_into(chunk_indices, output_target, options)
+                retrieve_chunk_into(chunk_indices, output_target, options).await
             } else {
                 retrieve_chunk_subset_into(
                     chunk_indices,
@@ -81,6 +124,7 @@ where
                     output_target,
                     options,
                 )
+                .await
             }
         }
         _ => {
@@ -92,7 +136,7 @@ where
                 options,
                 &codec_concurrency,
             );
-            retrieve_multi_chunk_fixed_into(
+            async_retrieve_multi_chunk_fixed_into(
                 array,
                 array_subset,
                 &chunks,
@@ -101,11 +145,50 @@ where
                 &options,
                 &retrieve_chunk_subset_into,
             )
+            .await
         }
     }
 }
 
-fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(AsyncReadableStorageTraits => ReadableStorageTraits),
+        declaration {
+            fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
+                array: &Array<TStorage>,
+                array_subset: &dyn ArraySubsetTraits,
+                chunks: &dyn ArraySubsetTraits,
+                chunk_concurrent_limit: usize,
+                output_target: &ArrayBytesDecodeIntoTarget<'_>,
+                options: &CodecOptions,
+                retrieve_chunk_subset_into: &RetrieveChunkSubsetInto,
+            ) -> Result<(), ArrayError>
+            where
+                TStorage: ?Sized + ReadableStorageTraits + 'static,
+                RetrieveChunkSubsetInto: for<'a> Fn(
+                        &[u64],
+                        &dyn ArraySubsetTraits,
+                        ArrayBytesDecodeIntoTarget<'a>,
+                        &CodecOptions,
+                    ) -> Result<(), ArrayError>
+                    + MaybeSend
+                    + MaybeSync;
+        },
+    ),
+    async(feature = "async"),
+)]
+async fn async_retrieve_multi_chunk_fixed_into<
+    TStorage,
+    RetrieveChunkSubsetInto: for<'a> AsyncFn(
+            &[u64],
+            &dyn ArraySubsetTraits,
+            ArrayBytesDecodeIntoTarget<'a>,
+            &CodecOptions,
+        ) -> Result<(), ArrayError>
+        + MaybeSend
+        + MaybeSync,
+>(
     array: &Array<TStorage>,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
@@ -115,20 +198,12 @@ fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
     retrieve_chunk_subset_into: &RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    RetrieveChunkSubsetInto: for<'a> Fn(
-            &[u64],
-            &dyn ArraySubsetTraits,
-            ArrayBytesDecodeIntoTarget<'a>,
-            &CodecOptions,
-        ) -> Result<(), ArrayError>
-        + MaybeSend
-        + MaybeSync,
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
 {
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
     let parent_start = data_view_ref.subset().start().to_vec();
 
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+    let retrieve_chunk = async |chunk_indices: ArrayIndicesTinyVec| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
         let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset.start())?;
@@ -163,16 +238,28 @@ where
             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
             target,
             options,
-        )?;
+        )
+        .await?;
         Ok::<_, ArrayError>(())
     };
 
-    iter_concurrent_limit!(
-        chunk_concurrent_limit,
-        chunks.indices(),
-        try_for_each,
-        retrieve_chunk
-    )?;
+    ambisync::alt!(
+        sync => iter_concurrent_limit!(
+            chunk_concurrent_limit,
+            chunks.indices(),
+            try_for_each,
+            retrieve_chunk
+        )?,
+        async => futures::stream::iter(chunks.indices())
+            .map(retrieve_chunk)
+            .buffer_unordered(chunk_concurrent_limit)
+            .try_collect::<Vec<_>>()
+            .await
+            .map(|_| ())?,
+    );
 
     Ok(())
 }
+use ambisync::ambisync;
+#[cfg(feature = "async")]
+use futures::{StreamExt, TryStreamExt};
