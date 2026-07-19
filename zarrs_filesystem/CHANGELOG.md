@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.10...HEAD)
 
+### Added
+- Implement `AtomicRenameStorageTraits` for `FilesystemStore`
+
 ## [0.3.10](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.10) - 2026-07-05
 
 ### Changed

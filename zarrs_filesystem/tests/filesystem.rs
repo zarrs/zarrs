@@ -1,8 +1,11 @@
 #![allow(missing_docs)]
 
 use std::error::Error;
+use std::sync::Arc;
 
 use zarrs_filesystem::FilesystemStore;
+use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
+use zarrs_storage::{Bytes, ListableStorageTraits, ReadableStorageTraits, WritableStorageTraits};
 
 #[cfg(target_os = "linux")]
 fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
@@ -42,6 +45,62 @@ fn filesystem() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
     zarrs_storage::store_test::store_list_size(&store)?;
+    Ok(())
+}
+
+#[test]
+fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
+    let store = AtomicWriteStorageAdapter::new(store);
+    let key = "a/b".try_into()?;
+    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key);
+
+    store.set(&key, Bytes::from_static(b"first"))?;
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
+    assert!(!store.list()?.contains(&temporary_key));
+
+    store.set(&key, Bytes::from_static(b"second"))?;
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"second")));
+    assert!(!store.list()?.contains(&temporary_key));
+
+    store.set_partial(&key, 1, Bytes::from_static(b"X"))?;
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond")));
+    assert!(!store.list()?.contains(&temporary_key));
+
+    store.set(&temporary_key, Bytes::from_static(b"incomplete"))?;
+    let error = store.set(&key, Bytes::from_static(b"third")).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        format!("temporary key {temporary_key} already exists")
+    );
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond")));
+    assert_eq!(
+        store.get(&temporary_key)?,
+        Some(Bytes::from_static(b"incomplete"))
+    );
+    Ok(())
+}
+
+#[test]
+fn atomic_write_adapter_leaves_temporary_key_on_rename_failure() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
+    let adapter = AtomicWriteStorageAdapter::new(store.clone());
+    let key = "a/b".try_into()?;
+    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key);
+
+    std::fs::create_dir_all(store.key_to_fspath(&key))?;
+
+    assert!(adapter
+        .set(&key, Bytes::from_static(b"replacement"))
+        .is_err());
+    assert!(store.key_to_fspath(&key).is_dir());
+    assert_eq!(
+        store.get(&temporary_key)?,
+        Some(Bytes::from_static(b"replacement"))
+    );
+    assert!(store.list()?.contains(&temporary_key));
     Ok(())
 }
 

@@ -12,6 +12,7 @@ use std::sync::RwLock;
 use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use zarrs_storage::storage_adapter::atomic_write::AtomicRenameStorageTraits;
 use zarrs_storage::{
     store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
@@ -453,6 +454,52 @@ impl WritableStorageTraits for FilesystemStore {
 
     fn supports_set_partial(&self) -> bool {
         true
+    }
+}
+
+impl AtomicRenameStorageTraits for FilesystemStore {
+    fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
+        let source_file = self.get_file_mutex(source);
+        let destination_file = self.get_file_mutex(destination);
+        let (_first_lock, _second_lock) = if source < destination {
+            (source_file.write(), destination_file.write())
+        } else {
+            (destination_file.write(), source_file.write())
+        };
+
+        let source_path = self.key_to_fspath(source);
+        let destination_path = self.key_to_fspath(destination);
+        #[cfg(not(windows))]
+        std::fs::rename(source_path, destination_path)?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
+
+            let source_path: Vec<u16> = source_path
+                .as_os_str()
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            let destination_path: Vec<u16> = destination_path
+                .as_os_str()
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            // SAFETY: Both paths are valid, null-terminated UTF-16 strings that remain alive for
+            // the duration of the call.
+            if unsafe {
+                MoveFileExW(
+                    source_path.as_ptr(),
+                    destination_path.as_ptr(),
+                    MOVEFILE_REPLACE_EXISTING,
+                )
+            } == 0
+            {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+        Ok(())
     }
 }
 
