@@ -93,126 +93,17 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
-    for PerformanceMetricsStorageAdapter<TStorage>
-{
-    fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        let value = self.storage.get(key);
-        let bytes_read = value
-            .as_ref()
-            .map_or(0, |v| v.as_ref().map_or(0, Bytes::len));
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(1, Ordering::Relaxed);
-        value
-    }
+ambisync::scoped! {
+#![defaults(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 
-    fn get_partial_many<'a>(
-        &'a self,
-        key: &StoreKey,
-        byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_partial_many(key, byte_ranges)?;
-        if let Some(values) = values {
-            let values = values.collect::<Vec<_>>();
-            let bytes_read = values
-                .iter()
-                .map(|b| b.as_ref().map_or(0, Bytes::len))
-                .sum();
-            self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(values.len(), Ordering::Relaxed);
-            Ok(Some(Box::new(values.into_iter())))
-        } else {
-            if size_hint_lower_bound > 0 {
-                // If the key is found to be empty, consider that as a read
-                self.reads.fetch_add(1, Ordering::Relaxed);
-            }
-            Ok(None)
-        }
-    }
-
-    fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        self.storage.size_key(key)
-    }
-
-    fn supports_get_partial(&self) -> bool {
-        self.storage.supports_get_partial()
-    }
-}
-
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
-    for PerformanceMetricsStorageAdapter<TStorage>
-{
-    fn list(&self) -> Result<StoreKeys, StorageError> {
-        self.storage.list()
-    }
-
-    fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        self.storage.list_prefix(prefix)
-    }
-
-    fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
-        self.storage.list_dir(prefix)
-    }
-
-    fn size(&self) -> Result<u64, StorageError> {
-        self.storage.size()
-    }
-
-    fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        self.storage.size_prefix(prefix)
-    }
-}
-
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
-    for PerformanceMetricsStorageAdapter<TStorage>
-{
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
-        self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
-        self.writes.fetch_add(1, Ordering::Relaxed);
-        self.storage.set(key, value)
-    }
-
-    fn set_partial_many(
-        &self,
-        key: &StoreKey,
-        offset_values: OffsetBytesIterator,
-    ) -> Result<(), StorageError> {
-        let offset_values: Vec<_> = offset_values.collect();
-        let bytes_written = offset_values
-            .iter()
-            .map(|(_, bytes)| bytes.len())
-            .sum::<usize>();
-        self.bytes_written
-            .fetch_add(bytes_written, Ordering::Relaxed);
-        self.writes
-            .fetch_add(offset_values.len(), Ordering::Relaxed);
-        self.storage
-            .set_partial_many(key, Box::new(offset_values.into_iter()))
-    }
-
-    fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        self.keys_erased.fetch_add(1, Ordering::Relaxed);
-        self.storage.erase(key)
-    }
-
-    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        self.keys_erased.fetch_add(keys.len(), Ordering::Relaxed);
-        self.storage.erase_many(keys)
-    }
-
-    fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        self.storage.erase_prefix(prefix)
-    }
-
-    fn supports_set_partial(&self) -> bool {
-        self.storage.supports_set_partial()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
@@ -234,15 +125,26 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self.storage.get_partial_many(key, byte_ranges).await?;
         if let Some(values) = values {
-            use futures::{stream, StreamExt};
-            let values = values.collect::<Vec<_>>().await;
+            let values = ambisync::alt!(
+                sync => values.collect::<Vec<_>>(),
+                async => {
+                    use futures::StreamExt;
+                    values.collect::<Vec<_>>().await
+                },
+            );
             let bytes_read = values
                 .iter()
                 .map(|b| b.as_ref().map_or(0, Bytes::len))
                 .sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
-            Ok(Some(stream::iter(values).boxed()))
+            Ok(Some(ambisync::alt!(
+                sync => Box::new(values.into_iter()),
+                async => {
+                    use futures::{stream, StreamExt};
+                    stream::iter(values).boxed()
+                },
+            )))
         } else {
             if size_hint_lower_bound > 0 {
                 // If the key is found to be empty, consider that as a read
@@ -261,9 +163,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
@@ -288,9 +188,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
@@ -320,10 +218,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
+        self.keys_erased.fetch_add(1, Ordering::Relaxed);
         self.storage.erase(key).await
     }
 
     async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        self.keys_erased.fetch_add(keys.len(), Ordering::Relaxed);
         self.storage.erase_many(keys).await
     }
 
@@ -334,6 +234,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+}
+
 }
 
 #[cfg(test)]

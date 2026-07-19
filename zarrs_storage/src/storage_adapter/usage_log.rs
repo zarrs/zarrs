@@ -82,212 +82,17 @@ impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
-    for UsageLogStorageAdapter<TStorage>
-{
-    fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        let result = self.storage.get(key);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get({key}) -> len={:?}",
-            (self.prefix_func)(),
-            result.as_ref().map(|v| v.as_ref().map_or(0, Bytes::len))
-        )?;
-        result
-    }
+ambisync::scoped! {
+#![defaults(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 
-    fn get_partial_many<'a>(
-        &'a self,
-        key: &StoreKey,
-        byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
-        let result = self
-            .storage
-            .get_partial_many(key, Box::new(byte_ranges.iter().copied()))?;
-        let result = if let Some(result) = result {
-            Some(result.collect::<Result<Vec<_>, _>>()?)
-        } else {
-            None
-        };
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get_partial_many({key}, [{}]) -> len={:?}",
-            (self.prefix_func)(),
-            byte_ranges.iter().format(", "),
-            result
-                .as_ref()
-                .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
-        )?;
-        if let Some(result) = result {
-            Ok(Some(Box::new(result.into_iter().map(Ok))))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        let result = self.storage.size_key(key);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}size_key({key}) -> {result:?}",
-            (self.prefix_func)()
-        )?;
-        result
-    }
-
-    fn supports_get_partial(&self) -> bool {
-        self.storage.supports_get_partial()
-    }
-}
-
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
-    for UsageLogStorageAdapter<TStorage>
-{
-    fn list(&self) -> Result<StoreKeys, StorageError> {
-        let result = self.storage.list();
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}list() -> [{}]",
-            (self.prefix_func)(),
-            result.as_ref().unwrap_or(&vec![]).iter().format(", ")
-        )?;
-        result
-    }
-
-    fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        let result = self.storage.list_prefix(prefix);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}list_prefix({prefix}) -> [{}]",
-            (self.prefix_func)(),
-            result.as_ref().unwrap_or(&vec![]).iter().format(", ")
-        )?;
-        result
-    }
-
-    fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
-        let result = self.storage.list_dir(prefix);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}list_dir({prefix}) -> (keys:[{}], prefixes:[{}])",
-            (self.prefix_func)(),
-            result.as_ref().map_or(String::new(), |skp| skp
-                .keys()
-                .iter()
-                .format(", ")
-                .to_string()),
-            result.as_ref().map_or(String::new(), |skp| skp
-                .prefixes()
-                .iter()
-                .format(", ")
-                .to_string()),
-        )?;
-        result
-    }
-
-    fn size(&self) -> Result<u64, StorageError> {
-        let result = self.storage.size();
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}size() -> {result:?}",
-            (self.prefix_func)()
-        )?;
-        result
-    }
-
-    fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        let result: Result<u64, StorageError> = self.storage.size_prefix(prefix);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}size_prefix({prefix}) -> {result:?}",
-            (self.prefix_func)()
-        )?;
-        result
-    }
-}
-
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
-    for UsageLogStorageAdapter<TStorage>
-{
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
-        let len = value.len();
-        let result = self.storage.set(key, value);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}set({key}, len={}) -> {result:?}",
-            (self.prefix_func)(),
-            len
-        )?;
-        result
-    }
-
-    fn set_partial_many(
-        &self,
-        key: &StoreKey,
-        offset_values: OffsetBytesIterator,
-    ) -> Result<(), StorageError> {
-        struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
-        impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
-            }
-        }
-        let offset_values: Vec<_> = offset_values.collect();
-        let result = self
-            .storage
-            .set_partial_many(key, Box::new(offset_values.iter().cloned()));
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}set_partial_many({:?}) -> {result:?}",
-            (self.prefix_func)(),
-            offset_values
-                .into_iter()
-                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
-                .collect_vec()
-        )?;
-        result
-    }
-
-    fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        let result = self.storage.erase(key);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}erase({key}) -> {result:?}",
-            (self.prefix_func)()
-        )?;
-        result
-    }
-
-    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let result = self.storage.erase_many(keys);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}erase_many([{}]) -> {result:?}",
-            keys.iter().format(", "),
-            (self.prefix_func)()
-        )?;
-        result
-    }
-
-    fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let result = self.storage.erase_prefix(prefix);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}erase_prefix({prefix}) -> {result:?}",
-            (self.prefix_func)()
-        )?;
-        result
-    }
-
-    fn supports_set_partial(&self) -> bool {
-        self.storage.supports_set_partial()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
@@ -307,15 +112,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
-        use futures::{stream, StreamExt, TryStreamExt};
-
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
             .get_partial_many(key, Box::new(byte_ranges.iter().copied()))
             .await?;
         let result = if let Some(result) = result {
-            Some(result.try_collect::<Vec<_>>().await?)
+            Some(ambisync::alt!(
+                sync => result.collect::<Result<Vec<_>, _>>()?,
+                async => {
+                    use futures::TryStreamExt;
+                    result.try_collect::<Vec<_>>().await?
+                },
+            ))
         } else {
             None
         };
@@ -329,7 +138,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
                 .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
         )?;
         if let Some(result) = result {
-            Ok(Some(stream::iter(result.into_iter().map(Ok)).boxed()))
+            Ok(Some(ambisync::alt!(
+                sync => Box::new(result.into_iter().map(Ok)),
+                async => {
+                    use futures::{stream, StreamExt};
+                    stream::iter(result.into_iter().map(Ok)).boxed()
+                },
+            )))
         } else {
             Ok(None)
         }
@@ -350,21 +165,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
-        let keys = self.storage.list().await;
+        let result = self.storage.list().await;
         writeln!(
             self.handle.lock().unwrap(),
             "{}list() -> [{}]",
             (self.prefix_func)(),
-            keys.as_ref().unwrap_or(&vec![]).iter().format(", "),
+            result.as_ref().unwrap_or(&vec![]).iter().format(", "),
         )?;
-        keys
+        result
     }
 
     async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
@@ -419,9 +232,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
@@ -430,8 +241,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         let result = self.storage.set(key, value).await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set({key}, len={len}) -> {result:?}",
-            (self.prefix_func)()
+            "{}set({key}, len={}) -> {result:?}",
+            (self.prefix_func)(),
+            len
         )?;
         result
     }
@@ -441,6 +253,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
+        struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
+        impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
+            }
+        }
         let offset_values: Vec<_> = offset_values.collect();
         let result = self
             .storage
@@ -448,8 +266,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             .await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_many({key}, {offset_values:?}) -> {result:?}",
-            (self.prefix_func)()
+            "{}set_partial_many({:?}) -> {result:?}",
+            (self.prefix_func)(),
+            offset_values
+                .into_iter()
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
+                .collect_vec()
         )?;
         result
     }
@@ -488,6 +310,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+}
+
 }
 
 #[cfg(test)]

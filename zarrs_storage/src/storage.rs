@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use auto_impl::auto_impl;
 use bytes::BytesMut;
+#[cfg(feature = "async")]
 use futures::StreamExt;
 
 use super::byte_range::ByteRangeIterator;
@@ -10,15 +11,25 @@ use super::{
     StorePrefixes,
 };
 use crate::byte_range::ByteRange;
-use crate::{AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator};
+#[cfg(feature = "async")]
+use crate::AsyncMaybeBytesIterator;
+use crate::{Bytes, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator};
+
+ambisync::scoped! {
+#![defaults(
+    sync(fns("async_{}", "{}"), types("Async{}")),
+    async(feature = "async"),
+)]
 
 /// Async readable storage traits.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync(
+    sync(attr = #[auto_impl(Arc)]),
+    async(
+        attr = #[auto_impl(Arc)],
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-#[auto_impl(Arc)]
 pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve the value (bytes) associated with a given [`StoreKey`].
     ///
@@ -51,8 +62,8 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial<'a>(
-        &'a self,
+    async fn get_partial(
+        &self,
         key: &StoreKey,
         byte_range: ByteRange,
     ) -> Result<MaybeBytes, StorageError> {
@@ -85,12 +96,14 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
 }
 
 /// Async listable storage traits.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync(
+    sync(attr = #[auto_impl(Arc)]),
+    async(
+        attr = #[auto_impl(Arc)],
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-#[auto_impl(Arc)]
 pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve all [`StoreKeys`] in the store.
     ///
@@ -141,6 +154,7 @@ pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
 ///
 /// # Panics
 /// Panics if a key ends beyond `usize::MAX`.
+#[ambisync]
 pub async fn async_store_set_partial_many<T: AsyncReadableWritableStorageTraits>(
     store: &T,
     key: &StoreKey,
@@ -164,12 +178,14 @@ pub async fn async_store_set_partial_many<T: AsyncReadableWritableStorageTraits>
 }
 
 /// Async writable storage traits.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync(
+    sync(attr = #[auto_impl(Arc)]),
+    async(
+        attr = #[auto_impl(Arc)],
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-#[auto_impl(Arc)]
 pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// Store bytes at a [`StoreKey`].
     ///
@@ -214,11 +230,17 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let futures_erase = keys.iter().map(|key| self.erase(key));
-        futures::future::join_all(futures_erase)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+        ambisync::alt!(
+            // FIXME: Parallel iter
+            sync => keys.iter().try_for_each(|key| self.erase(key))?,
+            async => {
+                let futures_erase = keys.iter().map(|key| self.erase(key));
+                futures::future::join_all(futures_erase)
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()?;
+            },
+        );
         Ok(())
     }
 
@@ -236,11 +258,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+#[ambisync]
 pub trait AsyncReadableWritableStorageTraits:
     AsyncReadableStorageTraits + AsyncWritableStorageTraits
 {
@@ -251,6 +269,7 @@ pub trait AsyncReadableWritableStorageTraits:
     fn writable(self: Arc<Self>) -> Arc<dyn AsyncWritableStorageTraits>;
 }
 
+#[ambisync]
 impl<T> AsyncReadableWritableStorageTraits for T
 where
     T: AsyncReadableStorageTraits + AsyncWritableStorageTraits + 'static,
@@ -265,6 +284,7 @@ where
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncListableStorageTraits`].
+#[ambisync]
 pub trait AsyncReadableListableStorageTraits:
     AsyncReadableStorageTraits + AsyncListableStorageTraits
 {
@@ -275,6 +295,7 @@ pub trait AsyncReadableListableStorageTraits:
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits>;
 }
 
+#[ambisync]
 impl<T> AsyncReadableListableStorageTraits for T
 where
     T: AsyncReadableStorageTraits + AsyncListableStorageTraits + 'static,
@@ -289,6 +310,7 @@ where
 }
 
 /// A supertrait of [`AsyncReadableWritableStorageTraits`] and [`AsyncListableStorageTraits`].
+#[ambisync]
 pub trait AsyncReadableWritableListableStorageTraits:
     AsyncReadableWritableStorageTraits + AsyncListableStorageTraits
 {
@@ -302,6 +324,7 @@ pub trait AsyncReadableWritableListableStorageTraits:
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits>;
 }
 
+#[ambisync]
 impl<T> AsyncReadableWritableListableStorageTraits for T
 where
     T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits + 'static,
@@ -323,6 +346,7 @@ where
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
+#[ambisync]
 pub async fn async_discover_children<
     TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
 >(
@@ -338,4 +362,6 @@ pub async fn async_discover_children<
         .map(|v| StorePrefix::new(v.as_str()))
         .collect();
     Ok(children?)
+}
+
 }

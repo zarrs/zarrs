@@ -13,9 +13,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod maybe;
+mod storage;
 pub mod storage_adapter;
 mod storage_handle;
-mod storage_sync;
 mod storage_value_io;
 pub mod store;
 mod store_key;
@@ -24,9 +24,6 @@ mod store_prefix;
 pub mod byte_range;
 use byte_range::{ByteOffset, InvalidByteRangeError};
 pub use maybe::{MaybeSend, MaybeSync};
-
-#[cfg(feature = "async")]
-mod storage_async;
 
 #[cfg(feature = "tests")]
 /// Store test utilities (for external store development).
@@ -40,18 +37,18 @@ pub use store_prefix::{StorePrefix, StorePrefixError, StorePrefixes};
 use thiserror::Error;
 
 #[cfg(feature = "async")]
-pub use self::storage_async::{
+pub use self::storage::{
     async_discover_children, async_store_set_partial_many, AsyncListableStorageTraits,
     AsyncReadableListableStorageTraits, AsyncReadableStorageTraits,
     AsyncReadableWritableListableStorageTraits, AsyncReadableWritableStorageTraits,
     AsyncWritableStorageTraits,
 };
-pub use self::storage_handle::StorageHandle;
-pub use self::storage_sync::{
+pub use self::storage::{
     discover_children, store_set_partial_many, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
+pub use self::storage_handle::StorageHandle;
 
 /// [`Arc`] wrapped readable storage.
 pub type ReadableStorage = Arc<dyn ReadableStorageTraits>;

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.4...HEAD)
 
+### Changed
+- Use `ambisync` to share the sync and async storage traits, forwarding implementations, adapters, and store test utilities
+
+### Fixed
+- Count async erase operations in `PerformanceMetricsStorageAdapter`
+- Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
+
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.4) - 2026-07-05
 
 ### Added

@@ -8,7 +8,7 @@ use super::{
 };
 use super::{
     Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StorePrefix, WritableStorageTraits,
+    StorageError, StoreKey, WritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -25,89 +25,17 @@ impl<TStorage: ?Sized> StorageHandle<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for StorageHandle<TStorage> {
-    fn get(&self, key: &super::StoreKey) -> Result<MaybeBytes, super::StorageError> {
-        self.0.get(key)
-    }
+ambisync::scoped! {
+#![defaults(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 
-    fn get_partial_many<'a>(
-        &'a self,
-        key: &StoreKey,
-        byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        self.0.get_partial_many(key, byte_ranges)
-    }
-
-    fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
-        self.0.size_key(key)
-    }
-
-    fn supports_get_partial(&self) -> bool {
-        self.0.supports_get_partial()
-    }
-}
-
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for StorageHandle<TStorage> {
-    fn list(&self) -> Result<super::StoreKeys, super::StorageError> {
-        self.0.list()
-    }
-
-    fn list_prefix(
-        &self,
-        prefix: &super::StorePrefix,
-    ) -> Result<super::StoreKeys, super::StorageError> {
-        self.0.list_prefix(prefix)
-    }
-
-    fn list_dir(
-        &self,
-        prefix: &super::StorePrefix,
-    ) -> Result<super::StoreKeysPrefixes, super::StorageError> {
-        self.0.list_dir(prefix)
-    }
-
-    fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        self.0.size_prefix(prefix)
-    }
-
-    fn size(&self) -> Result<u64, super::StorageError> {
-        self.0.size()
-    }
-}
-
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for StorageHandle<TStorage> {
-    fn set(&self, key: &super::StoreKey, value: Bytes) -> Result<(), super::StorageError> {
-        self.0.set(key, value)
-    }
-
-    fn set_partial_many(
-        &self,
-        key: &StoreKey,
-        offset_values: OffsetBytesIterator,
-    ) -> Result<(), super::StorageError> {
-        self.0.set_partial_many(key, offset_values)
-    }
-
-    fn erase(&self, key: &super::StoreKey) -> Result<(), super::StorageError> {
-        self.0.erase(key)
-    }
-
-    fn erase_many(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
-        self.0.erase_many(keys)
-    }
-
-    fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
-        self.0.erase_prefix(prefix)
-    }
-
-    fn supports_set_partial(&self) -> bool {
-        self.0.supports_set_partial()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for StorageHandle<TStorage>
 {
@@ -132,9 +60,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     for StorageHandle<TStorage>
 {
@@ -165,9 +91,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for StorageHandle<TStorage>
 {
@@ -198,6 +122,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.0.supports_set_partial()
     }
+}
+
 }
 
 #[cfg(test)]
