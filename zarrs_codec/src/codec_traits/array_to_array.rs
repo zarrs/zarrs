@@ -68,11 +68,6 @@ where
 }
 
 /// Traits for array to array codecs.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits>;
@@ -106,11 +101,14 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
 }
 
 /// Runtime traits for an array-to-array codec bound to a data type and fill value.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
@@ -172,47 +170,6 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
-            input_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
-    }
-
-    /// Initialise a partial encoder.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
-            input_output_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
-    }
-
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial decoder.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
@@ -229,8 +186,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         )))
     }
 
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial encoder.
+    /// Initialise a partial encoder.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.

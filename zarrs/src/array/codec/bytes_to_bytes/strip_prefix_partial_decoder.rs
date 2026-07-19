@@ -91,7 +91,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
 
     async fn partial_decode_many<'a>(
         &'a self,
-        decoded_regions: ByteRangeIterator<'a>,
+        decoded_regions: ByteRangeIterator<'_>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {

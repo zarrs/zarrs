@@ -121,359 +121,17 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
-where
-    T: ArrayPartialDecoderTraits,
-{
-    fn data_type(&self) -> &super::DataType {
-        self.decoded_representation.data_type()
-    }
+ambisync::scoped! {
+#![defaults(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn Indexer,
-        options: &super::CodecOptions,
-    ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
-            .output_shape()
-            .iter()
-            .map(|f| NonZeroU64::try_from(*f))
-            .collect();
-
-        // Read the subsets
-        let chunk_bytes = self.input_output_handle.partial_decode(indexer, options)?;
-
-        // Decode the subsets
-        if let Ok(shape) = output_shape {
-            let shape = ChunkShape::from(shape);
-            self.codec
-                .decode(chunk_bytes, &shape, options)
-                .map(ArrayBytes::into_owned)
-        } else {
-            Ok(match self.decoded_representation.data_type().size() {
-                DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
-                }
-            })
-        }
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
-where
-    T: ArrayPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &super::CodecOptions,
-    ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
-        let chunk_shape = self.decoded_representation.shape_u64();
-        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.to_vec());
-        let encoded_value = self
-            .input_output_handle
-            .partial_decode(&array_subset_all, options)?;
-        let mut decoded_value =
-            self.codec
-                .decode(encoded_value, self.decoded_representation.shape(), options)?;
-
-        // Validate the bytes
-        decoded_value.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
-        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
-
-        decoded_value = update_array_bytes(
-            decoded_value,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
-
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
-        let is_fill_value = !options.store_empty_chunks()
-            && decoded_value.is_fill_value(self.decoded_representation.fill_value());
-        if is_fill_value {
-            Ok(())
-        } else {
-            // Store the updated chunk
-            let encoded_value =
-                self.codec
-                    .encode(decoded_value, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(&array_subset_all, &encoded_value, options)
-        }
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        false
-    }
-}
-
-impl<T: ?Sized> ArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
-where
-    T: BytesPartialDecoderTraits,
-{
-    fn data_type(&self) -> &super::DataType {
-        self.decoded_representation.data_type()
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn Indexer,
-        options: &super::CodecOptions,
-    ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        // Read the entire chunk
-        let bytes_enc = self.input_output_handle.decode(options)?;
-
-        if let Some(bytes_enc) = bytes_enc {
-            // Decode the entire chunk
-            let bytes_dec =
-                self.codec
-                    .decode(bytes_enc, self.decoded_representation.shape(), options)?;
-
-            // Extract the subsets
-            let chunk_shape = self.decoded_representation.shape_u64();
-            bytes_dec
-                .extract_array_subset(
-                    indexer,
-                    chunk_shape,
-                    self.decoded_representation.data_type(),
-                )
-                .map(ArrayBytes::into_owned)
-        } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                indexer.len(),
-                self.decoded_representation.fill_value(),
-            )
-            .map_err(CodecError::from)
-        }
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        false
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
-where
-    T: BytesPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &super::CodecOptions,
-    ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
-        let chunk_shape = self.decoded_representation.shape_u64();
-        let chunk_bytes = self.input_output_handle.decode(options)?;
-
-        // Handle a missing chunk
-        let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec
-                .decode(chunk_bytes, self.decoded_representation.shape(), options)?
-        } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value(),
-            )?
-        };
-
-        // Validate the bytes
-        chunk_bytes.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
-        // Update the chunk
-        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
-
-        chunk_bytes = update_array_bytes(
-            chunk_bytes,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
-
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
-        let is_fill_value = !options.store_empty_chunks()
-            && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
-        if is_fill_value {
-            Ok(())
-        } else {
-            // Store the updated chunk
-            let chunk_bytes =
-                self.codec
-                    .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
-        }
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        false
-    }
-}
-
-impl<T: ?Sized> BytesPartialDecoderTraits
-    for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
-where
-    T: BytesPartialDecoderTraits,
-{
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn partial_decode_many(
-        &self,
-        decoded_regions: ByteRangeIterator,
-        options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
-        let encoded_value = self.input_output_handle.decode(options)?;
-
-        let Some(encoded_value) = encoded_value else {
-            return Ok(None);
-        };
-
-        let decoded_value = self
-            .codec
-            .decode(encoded_value, &self.decoded_representation, options)?
-            .into_owned();
-
-        Ok(Some(
-            extract_byte_ranges(&decoded_value, decoded_regions)
-                .map_err(CodecError::InvalidByteRangeError)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        false
-    }
-}
-
-impl<T: ?Sized> BytesPartialEncoderTraits
-    for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
-where
-    T: BytesPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode_many(
-        &self,
-        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
-        options: &super::CodecOptions,
-    ) -> Result<(), super::CodecError> {
-        let encoded_value = self
-            .input_output_handle
-            .decode(options)?
-            .map(Cow::into_owned);
-
-        let mut decoded_value = if let Some(encoded_value) = encoded_value {
-            self.codec
-                .decode(
-                    Cow::Owned(encoded_value),
-                    &self.decoded_representation,
-                    options,
-                )?
-                .into_owned()
-        } else {
-            vec![]
-        };
-
-        for (offset, value) in offset_values {
-            let offset = usize::try_from(offset).unwrap();
-            if decoded_value.len() < offset + value.len() {
-                decoded_value.resize(offset + value.len(), 0);
-            }
-            decoded_value[offset..offset + value.len()].copy_from_slice(&value);
-        }
-
-        let bytes_encoded = self
-            .codec
-            .encode(Cow::Owned(decoded_value), options)?
-            .into_owned();
-
-        self.input_output_handle
-            .partial_encode(0, Cow::Owned(bytes_encoded), options)
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        false
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
@@ -536,9 +194,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
@@ -604,9 +260,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
@@ -669,9 +323,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
@@ -743,9 +395,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncBytesPartialDecoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
@@ -761,7 +411,7 @@ where
 
     async fn partial_decode_many<'a>(
         &'a self,
-        decoded_regions: ByteRangeIterator<'a>,
+        decoded_regions: ByteRangeIterator<'_>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let encoded_value = self.input_output_handle.decode(options).await?;
@@ -789,9 +439,7 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync]
 impl<T: ?Sized> AsyncBytesPartialEncoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
@@ -801,9 +449,9 @@ where
         self.input_output_handle.erase().await
     }
 
-    async fn partial_encode_many<'a>(
-        &'a self,
-        offset_values: OffsetBytesIterator<'a, ArrayBytesRaw<'_>>,
+    async fn partial_encode_many(
+        &self,
+        offset_values: OffsetBytesIterator<'_, ArrayBytesRaw<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let encoded_value = self
@@ -845,4 +493,5 @@ where
     fn supports_partial_encode(&self) -> bool {
         false
     }
+}
 }

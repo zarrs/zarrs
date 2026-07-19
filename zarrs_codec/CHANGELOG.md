@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
+- Use `ambisync` to share sync and async partial codec traits, default partial codecs, byte interval decoders, and codec partial factory methods
+- **Breaking**: Decouple partial codec iterator lifetimes from decoder and encoder lifetimes
+  - `AsyncBytesPartialDecoderTraits::partial_decode_many` no longer requires its `ByteRangeIterator` to live as long as the decoder borrow; returned bytes remain tied only to the decoder
+  - `AsyncBytesPartialEncoderTraits::partial_encode_many` likewise accepts an independently lived `OffsetBytesIterator`
+  - Downstream async trait implementations must change iterator arguments from `ByteRangeIterator<'a>` / `OffsetBytesIterator<'a, _>` to `ByteRangeIterator<'_>` / `OffsetBytesIterator<'_, _>` respectively
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
   - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods

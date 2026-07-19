@@ -9,11 +9,14 @@ use crate::{
 use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 
 /// Traits for bytes to bytes codecs.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits>;
@@ -73,47 +76,6 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
     #[allow(unused_variables)]
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
-    }
-
-    /// Initialise a partial encoder.
-    ///
-    /// The default implementation reencodes the entire chunk.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_output_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
-    }
-
-    #[cfg(feature = "async")]
-    /// Initialises an asynchronous partial decoder.
-    ///
-    /// The default implementation decodes the entire chunk.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
@@ -127,8 +89,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         )))
     }
 
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial encoder.
+    /// Initialise a partial encoder.
     ///
     /// The default implementation reencodes the entire chunk.
     ///

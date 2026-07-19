@@ -10,8 +10,19 @@ use crate::{
     decode_into_array_bytes_target,
 };
 
-/// Partial array decoder traits.
-pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+ambisync::scoped! {
+#![defaults(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
+
+/// Asynchronous partial array decoder traits.
+#[ambisync]
+pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
 
@@ -19,7 +30,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`StorageError`] if a storage operation fails.
-    fn exists(&self) -> Result<bool, StorageError>;
+    async fn exists(&self) -> Result<bool, StorageError>;
 
     /// Returns the size of chunk bytes held by the partial decoder.
     ///
@@ -34,7 +45,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the local grid cannot be resolved.
-    fn local_subchunk_grids(
+    async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError>;
@@ -45,9 +56,13 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+    async fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
         Ok(self
-            .local_subchunk_grids(options)?
+            .local_subchunk_grids(options)
+            .await?
             .into_iter()
             .next()
             .flatten())
@@ -55,15 +70,13 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 
     /// Partially decode a chunk.
     ///
-    /// If the inner `input_handle` is a bytes decoder and partial decoding returns [`None`], then the array subsets have the fill value.
-    ///
     /// # Errors
-    /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
-    fn partial_decode(
-        &self,
+    /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError>;
+    ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Partially decode into a preallocated output.
     ///
@@ -76,7 +89,8 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_view`,
-    fn partial_decode_into(
+    #[allow(clippy::missing_safety_doc)]
+    async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
@@ -90,7 +104,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
             .into());
         }
 
-        let decoded_value = self.partial_decode(indexer, options)?;
+        let decoded_value = self.partial_decode(indexer, options).await?;
         decode_into_array_bytes_target(&decoded_value, output_target)
     }
 
@@ -101,21 +115,22 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn supports_partial_decode(&self) -> bool;
 }
 
-/// Partial array encoder traits.
-pub trait ArrayPartialEncoderTraits:
-    ArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
+/// Asynchronous partial array encoder traits.
+#[ambisync]
+pub trait AsyncArrayPartialEncoderTraits:
+    AsyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
     ///
     /// # Errors
     /// Returns an error if there is an underlying store error.
-    fn erase(&self) -> Result<(), CodecError>;
+    async fn erase(&self) -> Result<(), CodecError>;
 
     /// Partially encode a chunk.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
-    fn partial_encode(
+    async fn partial_encode(
         &self,
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
@@ -127,4 +142,6 @@ pub trait ArrayPartialEncoderTraits:
     /// If this returns `true`, the encoder can efficiently handle partial encoding operations.
     /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
     fn supports_partial_encode(&self) -> bool;
+}
+
 }

@@ -81,9 +81,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
 
     async fn partial_decode_many<'a>(
         &'a self,
-        decoded_regions: ByteRangeIterator<'a>,
+        decoded_regions: ByteRangeIterator<'_>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);

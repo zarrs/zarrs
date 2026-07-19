@@ -104,7 +104,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
 
     async fn partial_decode_many<'a>(
         &'a self,
-        decoded_regions: ByteRangeIterator<'a>,
+        decoded_regions: ByteRangeIterator<'_>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};

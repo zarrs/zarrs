@@ -91,7 +91,7 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
 
     async fn partial_decode_many<'a>(
         &'a self,
-        decoded_regions: ByteRangeIterator<'a>,
+        decoded_regions: ByteRangeIterator<'_>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)

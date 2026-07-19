@@ -9,14 +9,10 @@ use crate::{
 };
 
 pub(crate) mod array;
-#[cfg(feature = "async")]
-pub(crate) mod array_partial_async;
-pub(crate) mod array_partial_sync;
+pub(crate) mod array_partial;
 pub(crate) mod array_to_array;
 pub(crate) mod array_to_bytes;
-#[cfg(feature = "async")]
-pub(crate) mod bytes_partial_async;
-pub(crate) mod bytes_partial_sync;
+pub(crate) mod bytes_partial;
 pub(crate) mod bytes_to_bytes;
 
 /// Trait for creating a codec from Zarr V2 metadata.
