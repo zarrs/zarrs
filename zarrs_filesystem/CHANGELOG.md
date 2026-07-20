@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.10...HEAD)
 
+### Added
+- Add `FilesystemStoreOptions::file_handle_cache_size`: an opt-in least-recently-used cache of open file handles that are reused across partial reads, greatly reducing `open`/`stat`/`close` metadata operations (e.g. on Lustre/NFS) when reading many byte ranges from the same files
+
 ## [0.3.10](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.10) - 2026-07-05
 
 ### Changed
