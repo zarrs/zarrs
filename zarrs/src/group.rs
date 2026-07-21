@@ -1170,9 +1170,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn group_metadata_write_read_async() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let group_path = "/group";
         let group = GroupBuilder::new()
             .build(store.clone(), group_path)
@@ -1244,9 +1242,8 @@ mod tests {
     async fn group_async_traverse() {
         use zarrs_storage::AsyncReadableWritableListableStorage;
 
-        let store: AsyncReadableWritableListableStorage = std::sync::Arc::new(
-            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
-        );
+        let store: AsyncReadableWritableListableStorage =
+            std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let builder = GroupBuilder::default();
         let root = builder
