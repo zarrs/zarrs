@@ -10,7 +10,25 @@ use zarrs::group::Group;
 use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs::node::Node;
 #[cfg(feature = "async")]
+use zarrs::storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+};
+#[cfg(feature = "async")]
 use zarrs::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
+
+#[cfg(feature = "async")]
+struct TokioSpawnBlocking;
+
+#[cfg(feature = "async")]
+impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        tokio::task::spawn_blocking(f).await.unwrap()
+    }
+}
 
 /// Reset global config to defaults. Used by tests that read global config.
 fn reset_config() {
@@ -27,10 +45,9 @@ fn sync_store() -> Arc<FilesystemStore> {
 
 #[cfg(feature = "async")]
 async fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableStorageTraits> {
-    use object_store::local::LocalFileSystem;
-
-    Arc::new(zarrs_object_store::AsyncObjectStore::new(
-        LocalFileSystem::new_with_prefix("./tests/data/hierarchy.zarr").unwrap(),
+    Arc::new(SyncToAsyncStorageAdapter::new(
+        sync_store(),
+        TokioSpawnBlocking,
     ))
 }
 
@@ -555,13 +572,11 @@ mod consolidated_open {
     #[tokio::test]
     #[serial]
     async fn async_auto_uses_consolidated() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
         use zarrs_storage::AsyncWritableStorageTraits;
 
         reset_config();
 
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         // Manually serialize a root v3 group with a phantom child via consolidated metadata.
         let phantom_md: NodeMetadata = serde_json::from_str(
@@ -878,13 +893,11 @@ mod consolidated_open {
     #[tokio::test]
     #[serial]
     async fn async_node_open_falls_back_when_no_consolidated() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
         use zarrs_storage::AsyncWritableStorageTraits;
 
         reset_config();
 
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let root_md = serde_json::json!({"zarr_format": 3, "node_type": "group"});
         store
             .set(
@@ -979,8 +992,6 @@ mod consolidated_open {
     #[tokio::test]
     #[serial]
     async fn async_malformed_consolidated_key_propagates_error() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
         use zarrs_storage::AsyncWritableStorageTraits;
 
         reset_config();
@@ -1014,7 +1025,7 @@ mod consolidated_open {
             "consolidated_metadata": consolidated_value,
         });
 
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         store
             .set(
                 &StoreKey::new("zarr.json").unwrap(),
@@ -1097,8 +1108,6 @@ mod consolidated_open {
     #[tokio::test]
     #[serial]
     async fn async_group_consolidated_methods() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
         use zarrs_storage::AsyncWritableStorageTraits;
 
         reset_config();
@@ -1139,7 +1148,7 @@ mod consolidated_open {
             "consolidated_metadata": consolidated_value,
         });
 
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         store
             .set(
                 &StoreKey::new("zarr.json").unwrap(),
@@ -1192,8 +1201,6 @@ mod consolidated_open {
     #[tokio::test]
     #[serial]
     async fn async_group_must_errors_when_absent() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
         use zarrs_storage::AsyncWritableStorageTraits;
 
         reset_config();
@@ -1203,7 +1210,7 @@ mod consolidated_open {
             "zarr_format": 3,
             "node_type": "group",
         });
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         store
             .set(
                 &StoreKey::new("zarr.json").unwrap(),

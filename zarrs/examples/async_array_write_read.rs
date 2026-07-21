@@ -13,9 +13,8 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::node::Node;
 
     // Create a store
-    let mut store: AsyncReadableWritableListableStorage = Arc::new(
-        zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
-    );
+    let mut store: AsyncReadableWritableListableStorage =
+        Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {

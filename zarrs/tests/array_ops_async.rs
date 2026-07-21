@@ -5,7 +5,6 @@ use std::error::Error;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use object_store::memory::InMemory;
 use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
@@ -16,9 +15,8 @@ use zarrs::array::{
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
-use zarrs_object_store::AsyncObjectStore;
 
-type AsyncStore = AsyncObjectStore<InMemory>;
+type AsyncStore = zarrs_storage::store::AsyncMemoryStore;
 type TestResult = Result<(), Box<dyn Error>>;
 
 const fn nz(value: u64) -> NonZeroU64 {
@@ -26,7 +24,7 @@ const fn nz(value: u64) -> NonZeroU64 {
 }
 
 fn fixed_fixture() -> Array<AsyncStore> {
-    let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let mut builder = ArrayBuilder::new(vec![5, 5], vec![3, 3], data_type::uint8(), 0u8);
     builder.subchunk_shape(vec![1, 1]);
     builder.build(store, "/array").unwrap()
@@ -429,7 +427,7 @@ async fn array_implements_complete_async_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_variable_length_operation_suite() -> TestResult {
-    let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
         .build(store, "/array")?;
     exercise_variable_length_ops(&array).await
@@ -437,7 +435,7 @@ async fn array_supports_async_variable_length_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_optional_operation_suite() -> TestResult {
-    let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let array = ArrayBuilder::new(
         vec![4, 4],
         vec![2, 2],
@@ -450,7 +448,7 @@ async fn array_supports_async_optional_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
-    let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let data_type = data_type::uint16();
     let inner = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
     let mut outer = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
