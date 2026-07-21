@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `AtomicRenameStorageTraits` for `FilesystemStore`
+- Add `FilesystemStoreOptions::file_handle_cache_size`: an opt-in least-recently-used cache of open file handles that are reused across partial reads, greatly reducing `open`/`stat`/`close` metadata operations (e.g. on Lustre/NFS) when reading many byte ranges from the same files
 
 ### Changed
 - Increase the minimum supported Rust version to 1.87

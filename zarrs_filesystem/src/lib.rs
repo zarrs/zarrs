@@ -20,10 +20,12 @@ use zarrs_storage::{
 
 #[cfg(target_os = "linux")]
 mod direct_io;
+use lru::LruCache;
 use positioned_io::{RandomAccessFile, ReadAt, WriteAt};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -65,6 +67,7 @@ fn bytes_aligned(size: usize) -> BytesMut {
 #[derive(Debug, Clone, Default)]
 pub struct FilesystemStoreOptions {
     direct_io: bool,
+    file_handle_cache_size: usize,
 }
 
 impl FilesystemStoreOptions {
@@ -74,6 +77,34 @@ impl FilesystemStoreOptions {
         self.direct_io = direct_io;
         self
     }
+
+    /// Set the capacity of the file handle cache (default: 0, disabled).
+    ///
+    /// If nonzero, up to `file_handle_cache_size` files are kept open in a least-recently-used
+    /// cache and reused across [partial read](ReadableStorageTraits::get_partial_many) calls,
+    /// rather than each call opening and closing the file it reads from.
+    /// This substantially reduces filesystem metadata operations (`open`/`stat`/`close`) when many
+    /// byte ranges are read from the same files, such as partial reads of sharded arrays.
+    /// It is particularly beneficial on network filesystems (e.g. Lustre, NFS), where each
+    /// metadata operation is a server round trip.
+    ///
+    /// Cached file handles count towards the process open-file limit (e.g. `ulimit -n` on POSIX
+    /// systems); choose a capacity comfortably below that limit.
+    ///
+    /// Cached handles are invalidated on writes and erases through this store, but not on external
+    /// modification of the underlying files.
+    /// This option has no effect on reads with [`direct_io`](Self::direct_io) enabled.
+    pub fn file_handle_cache_size(&mut self, file_handle_cache_size: usize) -> &mut Self {
+        self.file_handle_cache_size = file_handle_cache_size;
+        self
+    }
+}
+
+/// A cached open file handle and its size at open time.
+#[derive(Debug)]
+struct CachedFile {
+    file: RandomAccessFile,
+    size: u64,
 }
 
 /// A synchronous file system store.
@@ -85,6 +116,7 @@ pub struct FilesystemStore {
     sort: bool,
     options: FilesystemStoreOptions,
     files: Mutex<HashMap<StoreKey, Arc<RwLock<()>>>>,
+    handle_cache: Option<Mutex<LruCache<StoreKey, Arc<CachedFile>>>>,
 }
 
 impl FilesystemStore {
@@ -109,11 +141,15 @@ impl FilesystemStore {
             return Err(FilesystemStoreCreateError::InvalidBasePath(base_path));
         }
 
+        let handle_cache = NonZeroUsize::new(options.file_handle_cache_size)
+            .map(|capacity| Mutex::new(LruCache::new(capacity)));
+
         Ok(Self {
             base_path,
             sort: false,
             options,
             files: Mutex::default(),
+            handle_cache,
         })
     }
 
@@ -157,6 +193,53 @@ impl FilesystemStore {
         path
     }
 
+    /// Open the file for `key`, or retrieve/populate the cached handle if the file handle cache is
+    /// enabled.
+    ///
+    /// Returns [`None`] if the file does not exist.
+    /// Must be called with the file mutex of `key` held (read or write).
+    fn open_or_cached(&self, key: &StoreKey) -> Result<Option<Arc<CachedFile>>, StorageError> {
+        if let Some(cache) = &self.handle_cache {
+            if let Some(handle) = cache.lock().unwrap().get(key) {
+                return Ok(Some(handle.clone()));
+            }
+        }
+
+        let file = match RandomAccessFile::open(self.key_to_fspath(key)) {
+            Ok(file) => file,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(None);
+                }
+                return Err(err.into());
+            }
+        };
+        let size = positioned_io::Size::size(&file)?
+            .ok_or_else(|| StorageError::Other("Could not determine file size".to_string()))?;
+        let handle = Arc::new(CachedFile { file, size });
+
+        if let Some(cache) = &self.handle_cache {
+            cache.lock().unwrap().put(key.clone(), handle.clone());
+        }
+        Ok(Some(handle))
+    }
+
+    /// Invalidate the cached file handle for `key`, if any.
+    ///
+    /// Must be called with the file mutex of `key` held for writing.
+    fn invalidate_handle(&self, key: &StoreKey) {
+        if let Some(cache) = &self.handle_cache {
+            cache.lock().unwrap().pop(key);
+        }
+    }
+
+    /// Invalidate all cached file handles.
+    fn invalidate_all_handles(&self) {
+        if let Some(cache) = &self.handle_cache {
+            cache.lock().unwrap().clear();
+        }
+    }
+
     fn get_file_mutex(&self, key: &StoreKey) -> Arc<RwLock<()>> {
         let mut files = self.files.lock().unwrap();
         let file = files
@@ -176,6 +259,7 @@ impl FilesystemStore {
     ) -> Result<(), StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.write();
+        self.invalidate_handle(key);
 
         // Create directories
         let key_path = self.key_to_fspath(key);
@@ -343,20 +427,14 @@ impl ReadableStorageTraits for FilesystemStore {
             return self.get_partial_many_direct_io(key, byte_ranges);
         }
 
-        // Lock and open the file
+        // Lock and open the file (or reuse a cached handle)
         let file_mutex = self.get_file_mutex(key);
         let _lock = file_mutex.read();
-        let file = match RandomAccessFile::open(self.key_to_fspath(key)) {
-            Ok(file) => file,
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::NotFound {
-                    return Ok(None);
-                }
-                return Err(err.into());
-            }
+        let Some(handle) = self.open_or_cached(key)? else {
+            return Ok(None);
         };
-        let file_size = positioned_io::Size::size(&file)?
-            .ok_or_else(|| StorageError::Other("Could not determine file size".to_string()))?;
+        let file = &handle.file;
+        let file_size = handle.size;
 
         let out = byte_ranges
             .map(|byte_range| {
@@ -423,6 +501,7 @@ impl WritableStorageTraits for FilesystemStore {
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.write();
+        self.invalidate_handle(key);
 
         let key_path = self.key_to_fspath(key);
         let result = std::fs::remove_file(key_path);
@@ -438,6 +517,7 @@ impl WritableStorageTraits for FilesystemStore {
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
         let _lock = self.files.lock(); // lock all operations
+        self.invalidate_all_handles();
 
         let prefix_path = self.prefix_to_fs_path(prefix);
         let result = std::fs::remove_dir_all(prefix_path);
@@ -458,6 +538,24 @@ impl WritableStorageTraits for FilesystemStore {
 
 impl AtomicRenameStorageTraits for FilesystemStore {
     fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
+        if source == destination {
+            return Ok(());
+        }
+
+        // The filesystem rename supplies cross-process atomicity. These process-local locks only
+        // keep the file handle cache coherent with the path replacement.
+        let (first_key, second_key) = if source < destination {
+            (source, destination)
+        } else {
+            (destination, source)
+        };
+        let first_file = self.get_file_mutex(first_key);
+        let second_file = self.get_file_mutex(second_key);
+        let _first_lock = first_file.write();
+        let _second_lock = second_file.write();
+        self.invalidate_handle(source);
+        self.invalidate_handle(destination);
+
         let source_path = self.key_to_fspath(source);
         let destination_path = self.key_to_fspath(destination);
         std::fs::rename(source_path, destination_path)?;
