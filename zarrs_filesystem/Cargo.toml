@@ -3,7 +3,7 @@ name = "zarrs_filesystem"
 version = "0.3.10"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.87"
 description = "A filesystem store for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_filesystem"
@@ -26,9 +26,6 @@ positioned-io = "0.3.5"
 thiserror.workspace = true
 walkdir = "2.3.2"
 zarrs_storage.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

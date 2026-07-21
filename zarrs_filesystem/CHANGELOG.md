@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implement `AtomicRenameStorageTraits` for `FilesystemStore`
 
+### Changed
+- Increase the minimum supported Rust version to 1.87
+
 ## [0.3.10](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.10) - 2026-07-05
 
 ### Changed

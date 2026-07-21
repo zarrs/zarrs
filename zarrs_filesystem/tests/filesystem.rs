@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use zarrs_filesystem::FilesystemStore;
 use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
-use zarrs_storage::{Bytes, ListableStorageTraits, ReadableStorageTraits, WritableStorageTraits};
+use zarrs_storage::{
+    Bytes, ListableStorageTraits, ReadableStorageTraits, StoreKey, WritableStorageTraits,
+};
 
 #[cfg(target_os = "linux")]
 fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
@@ -54,7 +56,7 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
     let store = AtomicWriteStorageAdapter::new(store);
     let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key);
+    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
 
     store.set(&key, Bytes::from_static(b"first"))?;
     assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
@@ -79,6 +81,15 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
         store.get(&temporary_key)?,
         Some(Bytes::from_static(b"incomplete"))
     );
+
+    let error = store
+        .set(&StoreKey::root(), Bytes::from_static(b"root"))
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "atomic writes do not support the root store key"
+    );
+    assert!(!path.path().join(".tmp").exists());
     Ok(())
 }
 
@@ -88,7 +99,7 @@ fn atomic_write_adapter_leaves_temporary_key_on_rename_failure() -> Result<(), B
     let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
     let adapter = AtomicWriteStorageAdapter::new(store.clone());
     let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key);
+    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
 
     std::fs::create_dir_all(store.key_to_fspath(&key))?;
 
