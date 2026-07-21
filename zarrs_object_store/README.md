@@ -1,7 +1,7 @@
 # zarrs_object_store
 
 [![Latest Version](https://img.shields.io/crates/v/zarrs_object_store.svg)](https://crates.io/crates/zarrs_object_store)
-[![object_store 0.12](https://img.shields.io/badge/object__store-0.12-blue)](https://crates.io/crates/object_store)
+[![object_store 0.14](https://img.shields.io/badge/object__store-0.14-blue)](https://crates.io/crates/object_store)
 [![zarrs_object_store documentation](https://docs.rs/zarrs_object_store/badge.svg)](https://docs.rs/zarrs_object_store)
 ![msrv](https://img.shields.io/crates/msrv/zarrs_object_store)
 [![build](https://github.com/zarrs/zarrs/actions/workflows/ci.yml/badge.svg)](https://github.com/zarrs/zarrs/actions/workflows/ci.yml)
