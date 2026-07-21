@@ -4,7 +4,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use object_store::memory::InMemory;
 use zarrs::array::codec::TransposeCodec;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
@@ -15,7 +14,7 @@ use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, Codec
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
@@ -138,7 +137,7 @@ async fn array_async_read_shard_compress() -> Result<(), Box<dyn std::error::Err
 }
 
 async fn array_str_impl(
-    array: Array<zarrs_object_store::AsyncObjectStore<InMemory>>,
+    array: Array<zarrs_storage::store::AsyncMemoryStore>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Store a single chunk
     array
@@ -248,7 +247,7 @@ async fn array_str_impl(
 
 #[tokio::test]
 async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
-    let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
@@ -268,7 +267,7 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
     for index_location in [VlenIndexLocation::Start, VlenIndexLocation::End] {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![4, 4], // array shape
@@ -300,7 +299,7 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-type AsyncStore = zarrs_object_store::AsyncObjectStore<InMemory>;
+type AsyncStore = zarrs_storage::store::AsyncMemoryStore;
 
 /// Helper to call `async_retrieve_array_subset_into` and return the output bytes.
 async fn async_retrieve_into_vec(
@@ -378,7 +377,7 @@ async fn array_async_read_into(array: &Array<AsyncStore>) -> Result<(), Box<dyn 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn array_async_read_into_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
-    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
         .bytes_to_bytes_codecs(vec![])
         .build(store, "/array")?;
@@ -390,7 +389,7 @@ async fn array_async_read_into_uncompressed() -> Result<(), Box<dyn std::error::
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn array_async_read_into_sharded() -> Result<(), Box<dyn std::error::Error>> {
-    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     let mut builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8);
     builder
         .subchunk_shape(vec![1, 1])

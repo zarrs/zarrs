@@ -738,8 +738,7 @@ mod tests {
     use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 
     async fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let store = object_store::memory::InMemory::new();
-        let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(store));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
@@ -936,8 +935,7 @@ mod tests {
     async fn array_sharded_ext_impl_transpose(
         valid_subchunk_shape: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let store = object_store::memory::InMemory::new();
-        let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(store));
+        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
 
         let array_path = "/array";
