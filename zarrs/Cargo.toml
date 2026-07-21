@@ -121,13 +121,11 @@ features = ["bytemuck"]
 [dev-dependencies]
 chrono = "0.4.39"
 criterion = "0.8.1"
-object_store = { workspace = true, features = ["http"] }
 serial_test = "3.2.0"
 tempfile = "3"
 testing_logger = "0.1.1"
 tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 walkdir = "2.3.2"
-zarrs_object_store.workspace = true
 zarrs_filesystem.workspace = true
 
 [build-dependencies]
@@ -150,16 +148,6 @@ doc-scrape-examples = true
 
 [[example]]
 name = "async_array_write_read"
-required-features = ["ndarray", "async"]
-doc-scrape-examples = true
-
-[[example]]
-name = "async_http_array_read"
-required-features = ["ndarray", "async"]
-doc-scrape-examples = true
-
-[[example]]
-name = "sync_http_array_read"
 required-features = ["ndarray", "async"]
 doc-scrape-examples = true
 

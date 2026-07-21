@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `AtomicWriteStorageAdapter` and `AtomicRenameStorageTraits`
+- Add `AsyncMemoryStore`
 
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.4) - 2026-07-05
 

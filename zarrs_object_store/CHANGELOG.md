@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_object_store-v0.7.0...HEAD)
+
+## [0.7.0](https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.7.0) - 2026-07-21
+
+### Changed
+- **Breaking**: Bump `object_store` to 0.14
 
 ### Fixed
 - Fix link to `version_compatibility_matrix.md` in README
@@ -82,7 +87,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_object_store-v0.6.2...HEAD
 [0.6.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.6.2
 [0.6.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.6.1
 [0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.6.0

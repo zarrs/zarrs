@@ -415,9 +415,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[test]
     fn hierarchy_try_from_async_array() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let array_builder =
             ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
@@ -443,9 +441,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_group() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let group_path = "/group";
         let group_builder = GroupBuilder::new();
         let group = group_builder.build(store.clone(), group_path).unwrap();
@@ -478,9 +474,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_invalid_async_group() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let root = Group::new_with_metadata(
             store.clone(),
@@ -650,9 +644,8 @@ mod tests {
     async fn hierarchy_async_open() {
         use zarrs_storage::AsyncReadableWritableListableStorage;
 
-        let store: AsyncReadableWritableListableStorage = Arc::new(
-            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
-        );
+        let store: AsyncReadableWritableListableStorage =
+            Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let _group = async_helper_create_dataset(&store).await;
 
