@@ -28,6 +28,7 @@ mod group_metadata_options;
 
 use std::sync::Arc;
 
+use ambisync::ambisync;
 use derive_more::Display;
 pub use group_metadata_options::GroupMetadataOptions;
 use thiserror::Error;
@@ -381,7 +382,14 @@ impl<TStorage: ?Sized> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(AsyncReadableStorageTraits => ReadableStorageTraits),
+    ),
+    async(feature = "async"),
+)]
+impl<TStorage: ?Sized + AsyncReadableStorageTraits> Group<TStorage> {
     /// Open a group in `storage` at `path` with default options.
     /// The metadata is read from the store.
     ///
@@ -390,9 +398,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     ///
     /// # Errors
     /// Returns [`GroupCreateError`] if there is a storage error or any metadata is invalid.
-    pub fn open(storage: Arc<TStorage>, path: &str) -> Result<Self, GroupCreateError> {
+    pub async fn async_open(storage: Arc<TStorage>, path: &str) -> Result<Self, GroupCreateError> {
         let options = GroupOpenOptions::from_config(&global_config());
-        Self::open_opt(storage, path, &options)
+        Self::async_open_opt(storage, path, &options).await
     }
 
     /// Open a group in `storage` at `path` with non-default options.
@@ -400,221 +408,22 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     ///
     /// # Errors
     /// Returns [`GroupCreateError`] if there is a storage error or any metadata is invalid.
-    pub fn open_opt(
-        storage: Arc<TStorage>,
-        path: &str,
-        options: &GroupOpenOptions,
-    ) -> Result<Self, GroupCreateError> {
-        let version = options.version();
-        let metadata = Self::open_metadata(&storage, path, &version)?;
-        Self::validate_metadata(&metadata)?;
-        Self::new_with_metadata_opt(storage, path, metadata, options)
-    }
-
-    fn open_metadata(
-        storage: &Arc<TStorage>,
-        path: &str,
-        version: &MetadataRetrieveVersion,
-    ) -> Result<GroupMetadata, GroupCreateError> {
-        let node_path = path.try_into()?;
-        if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V3 = version {
-            // Try Zarr V3
-            let key_v3 = meta_key_v3(&node_path);
-            if let Some(metadata) = storage.get(&key_v3)? {
-                let metadata: GroupMetadataV3 = serde_json::from_slice(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(key_v3, err.to_string()))?;
-                return Ok(GroupMetadata::V3(metadata));
-            }
-        }
-
-        if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V2 = version {
-            // Try Zarr V2
-            let key_v2 = meta_key_v2_group(&node_path);
-            if let Some(metadata) = storage.get(&key_v2)? {
-                let mut metadata: GroupMetadataV2 = serde_json::from_slice(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(key_v2, err.to_string()))?;
-                let attributes_key = meta_key_v2_attributes(&node_path);
-                let attributes = storage.get(&attributes_key)?;
-                if let Some(attributes) = attributes {
-                    metadata.attributes = serde_json::from_slice(&attributes).map_err(|err| {
-                        StorageError::InvalidMetadata(attributes_key, err.to_string())
-                    })?;
-                }
-                return Ok(GroupMetadata::V2(metadata));
-            }
-        }
-
-        // No metadata has been found
-        Err(GroupCreateError::MissingMetadata)
-    }
-}
-
-impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TStorage> {
-    /// Return the children of the group
-    ///
-    /// The `recursive` argument determines whether the returned `Node`s will have their
-    /// children (and their children, etc.) populated.
-    ///
-    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`].
-    /// policy permits, children are populated from the inline map without any
-    /// per-node storage reads.
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
-    pub fn children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
-        if let Some(consolidated) = resolve_consolidated_policy(
-            &self.path,
-            self.consolidated_metadata(),
-            self.use_consolidated_metadata,
-        )? {
-            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
-            return Ok(if recursive {
-                build_node_tree(&self.path, flat)
-            } else {
-                direct_children_from_flat(&self.path, flat)
-            });
-        }
-        get_child_nodes(&self.storage, &self.path, recursive)
-    }
-
-    /// Return all the Nodes under the group, recursively
-    ///
-    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`].
-    /// policy permits, the result is populated from the inline map without any
-    /// per-node storage reads.
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
-    pub fn traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
-        if let Some(consolidated) = resolve_consolidated_policy(
-            &self.path,
-            self.consolidated_metadata(),
-            self.use_consolidated_metadata,
-        )? {
-            return expand_consolidated_metadata(&self.path, consolidated);
-        }
-        get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
-    }
-
-    /// Return the children of the group that are [`Group`]s
-    ///
-    /// # Errors
-    /// Returns [`GroupCreateError`] if there is a storage error or any metadata is invalid.
-    pub fn child_groups(&self) -> Result<Vec<Self>, GroupCreateError> {
-        self.children(false)?
-            .into_iter()
-            .filter_map(|node| {
-                let path = node.path().to_string();
-                let metadata: NodeMetadata = node.into();
-                match metadata {
-                    NodeMetadata::Group(metadata) => Some(Group::new_with_metadata(
-                        self.storage.clone(),
-                        path.as_str(),
-                        metadata,
-                    )),
-                    NodeMetadata::Array(_) => None,
-                }
-            })
-            .collect()
-    }
-
-    /// Return the children of the group that are [`Array`]s
-    ///
-    /// # Errors
-    /// Returns [`ArrayCreateError`] if there is a storage error or any metadata is invalid.
-    pub fn child_arrays(&self) -> Result<Vec<Array<TStorage>>, ArrayCreateError> {
-        self.children(false)?
-            .into_iter()
-            .filter_map(|node| {
-                let path = node.path().to_string();
-                let metadata: NodeMetadata = node.into();
-                match metadata {
-                    NodeMetadata::Array(metadata) => Some(Array::new_with_metadata(
-                        self.storage.clone(),
-                        path.as_str(),
-                        metadata,
-                    )),
-                    NodeMetadata::Group(_) => None,
-                }
-            })
-            .collect()
-    }
-
-    /// Return the paths of the groups children
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if there is an underlying error with the store.
-    pub fn child_paths(&self) -> Result<Vec<NodePath>, NodeCreateError> {
-        let paths = self.children(false)?.into_iter().map(Into::into).collect();
-        Ok(paths)
-    }
-
-    /// Return the paths of the groups children if the child is a group
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if there is an underlying error with the store.
-    pub fn child_group_paths(&self) -> Result<Vec<NodePath>, NodeCreateError> {
-        let paths = self
-            .children(false)?
-            .into_iter()
-            .filter_map(|node| match node.metadata() {
-                NodeMetadata::Group(_) => Some(node.into()),
-                NodeMetadata::Array(_) => None,
-            })
-            .collect();
-        Ok(paths)
-    }
-
-    /// Return the paths of the groups children if the child is an array
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if there is an underlying error with the store.
-    pub fn child_array_paths(&self) -> Result<Vec<NodePath>, NodeCreateError> {
-        let paths = self
-            .children(false)?
-            .into_iter()
-            .filter_map(|node| match node.metadata() {
-                NodeMetadata::Array(_) => Some(node.into()),
-                NodeMetadata::Group(_) => None,
-            })
-            .collect();
-        Ok(paths)
-    }
-}
-
-#[cfg(feature = "async")]
-impl<TStorage: ?Sized + AsyncReadableStorageTraits> Group<TStorage> {
-    /// Async variant of [`open`](Group::open).
-    ///
-    /// Options are read from the global config before any I/O.
-    /// Use [`Group::async_open_opt`] to specify options explicitly.
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_open(storage: Arc<TStorage>, path: &str) -> Result<Self, GroupCreateError> {
-        let options = GroupOpenOptions::from_config(&global_config());
-        Self::async_open_opt(storage, path, &options).await
-    }
-
-    /// Async variant of [`open_opt`](Group::open_opt).
-    #[allow(clippy::missing_errors_doc)]
     pub async fn async_open_opt(
         storage: Arc<TStorage>,
         path: &str,
         options: &GroupOpenOptions,
     ) -> Result<Self, GroupCreateError> {
-        let metadata = Self::async_open_metadata(storage.clone(), path, options.version()).await?;
+        let metadata = Self::async_open_metadata(&storage, path, &options.version()).await?;
         Self::validate_metadata(&metadata)?;
         Self::new_with_metadata_opt(storage, path, metadata, options)
     }
 
     async fn async_open_metadata(
-        storage: Arc<TStorage>,
+        storage: &Arc<TStorage>,
         path: &str,
-        version: MetadataRetrieveVersion,
+        version: &MetadataRetrieveVersion,
     ) -> Result<GroupMetadata, GroupCreateError> {
         let node_path = path.try_into()?;
-
         if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V3 = version {
             // Try Zarr V3
             let key_v3 = meta_key_v3(&node_path);
@@ -647,7 +456,20 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> Group<TStorage> {
     }
 }
 
-#[cfg(feature = "async")]
+#[ambisync(
+    sync(
+        fns(
+            "async_{}",
+            async_get_child_nodes => get_child_nodes,
+            async_get_all_nodes_of => get_all_nodes_of,
+        ),
+        types(
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncListableStorageTraits => ListableStorageTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits> Group<TStorage> {
     /// Return the children of the group
     ///
@@ -811,108 +633,26 @@ pub enum GroupCreateError {
 
 impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {}
 
-impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(AsyncWritableStorageTraits => WritableStorageTraits),
+    ),
+    async(feature = "async"),
+)]
+impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Store metadata with default [`GroupMetadataOptions`].
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&self.metadata_options)
+    pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
+        self.async_store_metadata_opt(&self.metadata_options).await
     }
 
     /// Store metadata with non-default [`GroupMetadataOptions`].
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    pub fn store_metadata_opt(&self, options: &GroupMetadataOptions) -> Result<(), StorageError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-
-        // Get the metadata with options applied and store
-        let metadata = self.metadata_opt(options);
-
-        // Write the metadata
-        let path = self.path();
-        match metadata {
-            GroupMetadata::V3(metadata) => {
-                let key = meta_key_v3(path);
-                let json = serde_json::to_vec_pretty(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(key.clone(), err.to_string()))?;
-                storage_handle.set(&key, json.into())
-            }
-            GroupMetadata::V2(metadata) => {
-                let mut metadata = metadata.clone();
-
-                if !metadata.attributes.is_empty() {
-                    // Store .zgroup
-                    let key = meta_key_v2_attributes(path);
-                    let json = serde_json::to_vec_pretty(&metadata.attributes).map_err(|err| {
-                        StorageError::InvalidMetadata(key.clone(), err.to_string())
-                    })?;
-                    storage_handle.set(&key, json.into())?;
-
-                    metadata.attributes = serde_json::Map::default();
-                }
-
-                // Store .zarray
-                let key = meta_key_v2_group(path);
-                let json = serde_json::to_vec_pretty(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(key.clone(), err.to_string()))?;
-                storage_handle.set(&key, json.into())?;
-                Ok(())
-            }
-        }
-    }
-
-    /// Erase the metadata with default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.erase_metadata_opt(self.metadata_erase_version)
-    }
-
-    /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
-        let storage_handle = StorageHandle::new(self.storage.clone());
-        match options {
-            MetadataEraseVersion::Default => match self.metadata {
-                GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
-                GroupMetadata::V2(_) => {
-                    storage_handle.erase(&meta_key_v2_group(self.path()))?;
-                    storage_handle.erase(&meta_key_v2_attributes(self.path()))
-                }
-            },
-            MetadataEraseVersion::All => {
-                storage_handle.erase(&meta_key_v3(self.path()))?;
-                storage_handle.erase(&meta_key_v2_group(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
-            }
-            MetadataEraseVersion::V3 => storage_handle.erase(&meta_key_v3(self.path())),
-            MetadataEraseVersion::V2 => {
-                storage_handle.erase(&meta_key_v2_group(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
-            }
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
-    /// Async variant of [`store_metadata`](Group::store_metadata).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&self.metadata_options).await
-    }
-
-    /// Async variant of [`store_metadata_opt`](Group::store_metadata_opt).
-    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata_opt(
         &self,
         options: &GroupMetadataOptions,
@@ -955,15 +695,23 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
         }
     }
 
-    /// Async variant of [`erase_metadata`](Group::erase_metadata).
-    #[allow(clippy::missing_errors_doc)]
+    /// Erase the metadata with default [`MetadataEraseVersion`] options.
+    ///
+    /// Succeeds if the metadata does not exist.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if there is an underlying store error.
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
         self.async_erase_metadata_opt(self.metadata_erase_version)
             .await
     }
 
-    /// Async variant of [`erase_metadata_opt`](Group::erase_metadata_opt).
-    #[allow(clippy::missing_errors_doc)]
+    /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
+    ///
+    /// Succeeds if the metadata does not exist.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if there is an underlying store error.
     pub async fn async_erase_metadata_opt(
         &self,
         options: MetadataEraseVersion,

@@ -924,10 +924,7 @@ fn storage_transformer_default_name(
     Cow::Owned(metadata.name().to_string())
 }
 
-mod array_sync_readable;
-
-#[cfg(feature = "async")]
-mod array_async_readable;
+mod array_readable;
 
 /// Transmute from `&[u8]` to `Vec<T>`.
 #[must_use]

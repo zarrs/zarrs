@@ -12,24 +12,23 @@ pub use node_name::{NodeName, NodeNameError};
 mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
-mod node_sync;
-pub(crate) use node_sync::get_all_nodes_of;
-pub use node_sync::{get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable};
+mod node_io;
+pub(crate) use node_io::get_all_nodes_of;
+pub use node_io::{get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable};
 
 mod key;
 pub use key::{
     data_key, meta_key, meta_key_v2_array, meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
 };
 
-#[cfg(feature = "async")]
-mod node_async;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
+use ambisync::ambisync;
 #[cfg(feature = "async")]
-pub(crate) use node_async::async_get_all_nodes_of;
+pub(crate) use node_io::async_get_all_nodes_of;
 #[cfg(feature = "async")]
-pub use node_async::{
+pub use node_io::{
     async_get_child_nodes, async_get_child_nodes_opt, async_node_exists, async_node_exists_listable,
 };
 use thiserror::Error;
@@ -244,67 +243,20 @@ pub(crate) fn direct_children_from_flat(
     out
 }
 
+#[ambisync(
+    sync(
+        fns(
+            "async_{}",
+            async_get_child_nodes_opt => get_child_nodes_opt,
+        ),
+        types(
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncListableStorageTraits => ListableStorageTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 impl Node {
-    pub(crate) fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        path: &NodePath,
-        version: &MetadataRetrieveVersion,
-    ) -> Result<NodeMetadata, NodeCreateError> {
-        if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V3 = version {
-            // Try a Zarr V3 group/array
-            let key_v3 = meta_key_v3(path);
-            if let Some(metadata) = storage.get(&key_v3)? {
-                let metadata: NodeMetadata = serde_json::from_slice(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(key_v3, err.to_string()))?;
-                match metadata {
-                    NodeMetadata::Array(ArrayMetadata::V3(_))
-                    | NodeMetadata::Group(GroupMetadata::V3(_)) => return Ok(metadata),
-                    NodeMetadata::Array(ArrayMetadata::V2(_))
-                    | NodeMetadata::Group(GroupMetadata::V2(_)) => {
-                        return Err(NodeCreateError::MetadataVersionMismatch);
-                    }
-                }
-            }
-        }
-
-        if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V2 = version {
-            // Try a Zarr V2 array
-            let array_key = meta_key_v2_array(path);
-            let attributes_key = meta_key_v2_attributes(path);
-            if let Some(metadata) = storage.get(&array_key)? {
-                let mut metadata: ArrayMetadataV2 = serde_json::from_slice(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(array_key, err.to_string()))?;
-                let attributes = storage.get(&attributes_key)?;
-                if let Some(attributes) = attributes {
-                    metadata.attributes = serde_json::from_slice(&attributes).map_err(|err| {
-                        StorageError::InvalidMetadata(attributes_key, err.to_string())
-                    })?;
-                }
-                return Ok(NodeMetadata::Array(ArrayMetadata::V2(metadata)));
-            }
-
-            // Try a Zarr V2 group
-            let group_key = meta_key_v2_group(path);
-            if let Some(metadata) = storage.get(&group_key)? {
-                let mut metadata: GroupMetadataV2 = serde_json::from_slice(&metadata)
-                    .map_err(|err| StorageError::InvalidMetadata(group_key, err.to_string()))?;
-                let attributes = storage.get(&attributes_key)?;
-                if let Some(attributes) = attributes {
-                    metadata.attributes = serde_json::from_slice(&attributes).map_err(|err| {
-                        StorageError::InvalidMetadata(attributes_key, err.to_string())
-                    })?;
-                }
-                return Ok(NodeMetadata::Group(GroupMetadata::V2(metadata)));
-            }
-        }
-
-        // No metadata has been found
-        Err(NodeCreateError::MissingMetadata(path.to_string()))
-    }
-
-    #[cfg(feature = "async")]
-    // Identical to get_metadata.. with awaits
-    // "maybe async" one day?
     pub(crate) async fn async_get_metadata<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
@@ -364,54 +316,17 @@ impl Node {
         Err(NodeCreateError::MissingMetadata(path.to_string()))
     }
 
-    /// Open a node at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    /// Open a node at `path` and read metadata and children from `storage` with default
+    /// [`MetadataRetrieveVersion`].
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        path: &str,
-    ) -> Result<Self, NodeCreateError> {
-        Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
-    }
-
-    /// Open a node at `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        path: &str,
-        version: &MetadataRetrieveVersion,
-    ) -> Result<Self, NodeCreateError> {
-        let path: NodePath = path.try_into()?;
-        let policy = crate::config::global_config().use_consolidated_metadata();
-        let metadata = Self::get_metadata(storage, &path, version)?;
-        let children = match &metadata {
-            NodeMetadata::Array(_) => Vec::default(),
-            NodeMetadata::Group(_) => {
-                match consolidated_metadata_for_open(&path, &metadata, policy)? {
-                    Some(consolidated) => {
-                        let flat = expand_consolidated_metadata(&path, consolidated)?;
-                        build_node_tree(&path, flat)
-                    }
-                    None => get_child_nodes_opt(storage, &path, true, version)?,
-                }
-            }
-        };
-        let node = Self {
-            path,
-            metadata,
-            children,
-        };
-        Ok(node)
-    }
-
-    #[cfg(feature = "async")]
-    /// Asynchronously open a node at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    #[sync_signature(
+        fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+            storage: &Arc<TStorage>,
+            path: &str,
+        ) -> Result<Self, NodeCreateError>
+    )]
     pub async fn async_open<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
@@ -421,11 +336,18 @@ impl Node {
         Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
     }
 
-    #[cfg(feature = "async")]
-    /// Asynchronously open a node at `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    /// Open a node at `path` and read metadata and children from `storage` with a non-default
+    /// [`MetadataRetrieveVersion`].
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    #[sync_signature(
+        fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+            storage: &Arc<TStorage>,
+            path: &str,
+            version: &MetadataRetrieveVersion,
+        ) -> Result<Self, NodeCreateError>
+    )]
     pub async fn async_open_opt<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
@@ -434,8 +356,9 @@ impl Node {
         version: &MetadataRetrieveVersion,
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
+        let storage_ref = ambisync::alt!(sync => storage, async => &storage);
         let policy = crate::config::global_config().use_consolidated_metadata();
-        let metadata = Self::async_get_metadata(&storage, &path, version).await?;
+        let metadata = Self::async_get_metadata(storage_ref, &path, version).await?;
         let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {
@@ -444,7 +367,7 @@ impl Node {
                         let flat = expand_consolidated_metadata(&path, consolidated)?;
                         build_node_tree(&path, flat)
                     }
-                    None => async_get_child_nodes_opt(&storage, &path, true, version).await?,
+                    None => async_get_child_nodes_opt(storage_ref, &path, true, version).await?,
                 }
             }
         };
@@ -455,7 +378,9 @@ impl Node {
         };
         Ok(node)
     }
+}
 
+impl Node {
     /// Create a new node at `path` with `metadata` and `children`.
     #[must_use]
     pub fn new_with_metadata(path: NodePath, metadata: NodeMetadata, children: Vec<Self>) -> Self {
