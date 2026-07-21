@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: Bump `object_store` to 0.14
+
 ### Fixed
 - Fix link to `version_compatibility_matrix.md` in README
 
