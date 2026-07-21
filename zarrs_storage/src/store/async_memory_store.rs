@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use bytes::BytesMut;
-use futures::{lock::Mutex, stream, StreamExt};
+use futures::lock::Mutex;
+use futures::{stream, StreamExt};
 
 use crate::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
@@ -83,22 +84,24 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
         };
         drop(data_map);
 
-        let result = byte_ranges.map(move |byte_range| {
-            let data_len = data.len() as u64;
-            let valid = match byte_range {
-                ByteRange::FromStart(offset, length) => length
-                    .map_or(Some(offset), |length| offset.checked_add(length))
-                    .is_some_and(|end| end <= data_len),
-                ByteRange::Suffix(length) => length <= data_len,
-            };
-            if !valid {
-                return Err(InvalidByteRangeError::new(byte_range, data_len).into());
-            }
+        let result = byte_ranges
+            .map(|byte_range| {
+                let data_len = data.len() as u64;
+                let valid = match byte_range {
+                    ByteRange::FromStart(offset, length) => length
+                        .map_or(Some(offset), |length| offset.checked_add(length))
+                        .is_some_and(|end| end <= data_len),
+                    ByteRange::Suffix(length) => length <= data_len,
+                };
+                if !valid {
+                    return Err(InvalidByteRangeError::new(byte_range, data_len).into());
+                }
 
-            let start = usize::try_from(byte_range.start(data_len)).unwrap();
-            let end = usize::try_from(byte_range.end(data_len)).unwrap();
-            Ok(data.slice(start..end))
-        });
+                let start = usize::try_from(byte_range.start(data_len)).unwrap();
+                let end = usize::try_from(byte_range.end(data_len)).unwrap();
+                Ok(data.slice(start..end))
+            })
+            .collect::<Vec<_>>();
         Ok(Some(stream::iter(result).boxed()))
     }
 
