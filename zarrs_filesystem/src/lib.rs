@@ -278,7 +278,7 @@ impl FilesystemStore {
 
         // If `value` is already page-size aligned, we don't need to copy.
         let need_copy = value.as_ptr().align_offset(page_size::get()) != 0
-            || value.len() % page_size::get() != 0;
+            || !value.len().is_multiple_of(page_size::get());
 
         #[cfg(target_os = "linux")]
         if enable_direct {
