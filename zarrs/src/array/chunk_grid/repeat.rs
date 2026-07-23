@@ -102,12 +102,18 @@ impl RepeatChunkGrid {
             .ok_or(RepeatChunkGridCreateError::ShapeOverflow)?;
 
         for dimension in 0..shape.len() {
-            let inner_edge_lengths =
-                inner_chunk_grid
-                    .chunk_edge_lengths(dimension)
-                    .map_err(|_| {
-                        RepeatChunkGridCreateError::IncompatibleDimension(dimension, shape.len())
-                    })?;
+            let inner_edge_lengths = inner_chunk_grid
+                .chunk_edge_lengths(dimension)
+                .map_err(|_| {
+                    RepeatChunkGridCreateError::IncompatibleDimension(dimension, shape.len())
+                })?
+                .ok_or(RepeatChunkGridCreateError::InnerChunkEdgeLengthsMismatch {
+                    dimension,
+                    edge_count: 0,
+                    edge_sum: 0,
+                    expected_edge_count: inner_chunk_grid.grid_shape()[dimension],
+                    expected_edge_sum: shape[dimension],
+                })?;
             let inner_edge_length_count = u64::try_from(inner_edge_lengths.len())
                 .map_err(|_| RepeatChunkGridCreateError::ShapeOverflow)?;
             let inner_edge_length_sum = inner_edge_lengths
@@ -236,7 +242,7 @@ unsafe impl ChunkGridTraits for RepeatChunkGrid {
     fn chunk_edge_lengths(
         &self,
         dimension: usize,
-    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+    ) -> Result<Option<Vec<NonZeroU64>>, IncompatibleDimensionError> {
         if dimension >= self.dimensionality() {
             return Err(IncompatibleDimensionError::new(
                 dimension,
@@ -244,14 +250,16 @@ unsafe impl ChunkGridTraits for RepeatChunkGrid {
             ));
         }
 
-        let inner_edge_lengths = self.inner_chunk_grid.chunk_edge_lengths(dimension)?;
+        let Some(inner_edge_lengths) = self.inner_chunk_grid.chunk_edge_lengths(dimension)? else {
+            return Ok(None);
+        };
         let mut edge_lengths = Vec::with_capacity(
             inner_edge_lengths.len() * usize::try_from(self.repeats[dimension]).unwrap(),
         );
         for _ in 0..self.repeats[dimension] {
             edge_lengths.extend_from_slice(&inner_edge_lengths);
         }
-        Ok(edge_lengths)
+        Ok(Some(edge_lengths))
     }
 
     fn chunk_shape(
@@ -363,11 +371,11 @@ mod tests {
         assert!(grid.configuration().is_empty());
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            vec![nz(3), nz(3), nz(3), nz(3)]
+            Some(vec![nz(3), nz(3), nz(3), nz(3)])
         );
         assert_eq!(
             grid.chunk_edge_lengths(1).unwrap(),
-            vec![nz(2), nz(2), nz(2), nz(2), nz(2), nz(2)]
+            Some(vec![nz(2), nz(2), nz(2), nz(2), nz(2), nz(2)])
         );
 
         assert_eq!(
@@ -430,7 +438,7 @@ mod tests {
         assert_eq!(grid.grid_shape(), &[4]);
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            vec![nz(3), nz(2), nz(3), nz(2)]
+            Some(vec![nz(3), nz(2), nz(3), nz(2)])
         );
         assert_eq!(grid.subset(&[1]).unwrap(), Some(ArraySubset::from([3..5])));
         assert_eq!(grid.subset(&[2]).unwrap(), Some(ArraySubset::from([5..8])));
@@ -453,7 +461,7 @@ mod tests {
         assert_eq!(grid.grid_shape(), &[0, 2]);
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            Vec::<NonZeroU64>::new()
+            Some(Vec::<NonZeroU64>::new())
         );
         assert_eq!(grid.chunk_origin(&[0, 0]).unwrap(), None);
         assert_eq!(grid.chunk_shape(&[0, 0]).unwrap(), None);

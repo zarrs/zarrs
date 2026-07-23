@@ -164,6 +164,9 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             let edge_lengths = decoded_chunk_grid
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
+            let Some(edge_lengths) = edge_lengths else {
+                return Ok(ChunkGridEncoded::ChunkLocal);
+            };
             let Some(squeeze) = squeeze_chunk_edge_lengths(&edge_lengths) else {
                 return Ok(ChunkGridEncoded::ChunkLocal);
             };
@@ -171,6 +174,9 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
                 let edge_lengths = decoded_chunk_grid
                     .chunk_edge_lengths(decoded_dim)
                     .map_err(ChunkGridCreateError::from)?;
+                let Some(edge_lengths) = edge_lengths else {
+                    return Ok(ChunkGridEncoded::ChunkLocal);
+                };
                 array_shape.push(decoded_chunk_grid.array_shape()[decoded_dim]);
                 chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
             }
@@ -208,6 +214,9 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             let edge_lengths = decoded_chunk_grid
                 .chunk_edge_lengths(decoded_dim)
                 .map_err(ChunkGridCreateError::from)?;
+            let Some(edge_lengths) = edge_lengths else {
+                return Ok(ChunkGridDecoded::None);
+            };
             let Some(squeeze_dim) = squeeze_chunk_edge_lengths(&edge_lengths) else {
                 return Ok(ChunkGridDecoded::None);
             };
@@ -234,6 +243,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
                     let edge_lengths = encoded_subchunk_grid
                         .chunk_edge_lengths(encoded_dim)
                         .map_err(ChunkGridCreateError::from)?;
+                    let Some(edge_lengths) = edge_lengths else {
+                        return Err(ChunkGridCreateError::new(format!(
+                            "encoded subchunk grid edge lengths in dimension {encoded_dim} cannot be represented"
+                        )));
+                    };
                     encoded_dim += 1;
                     Ok(ChunkEdgeLengths::encode(&edge_lengths))
                 }

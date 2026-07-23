@@ -267,14 +267,20 @@ pub(crate) fn apply_permutation<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
+    use crate::array::chunk_grid::UnstructuredCartesianChunkGrid;
     use crate::array::codec::BytesCodec;
-    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
-    use zarrs_codec::{
-        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    use crate::array::{
+        ArrayBytes, ArraySubset, ChunkGrid, ChunkShapeTraits, DataType, FillValue, data_type,
     };
+    use zarrs_codec::{
+        ChunkGridEncoded, CodecOptions, UnboundArrayToArrayCodecTraits,
+        UnboundArrayToBytesCodecTraits,
+    };
+    use zarrs_metadata_ext::chunk_grid::unstructured_cartesian::UnstructuredCartesianChunk;
 
     fn codec_transpose_round_trip_impl(
         json: &str,
@@ -315,6 +321,44 @@ mod tests {
             "order": [2, 1, 0]
         }"#;
         codec_transpose_round_trip_impl(JSON, data_type::uint16(), 0u16);
+    }
+
+    #[test]
+    fn codec_transpose_encoded_chunk_grid_unstructured_cartesian() {
+        let nz = |value| NonZeroU64::new(value).unwrap();
+        let decoded_chunk_grid = ChunkGrid::new(
+            UnstructuredCartesianChunkGrid::new(
+                vec![3, 4],
+                vec![
+                    UnstructuredCartesianChunk::new(vec![0, 0], vec![nz(2), nz(3)]),
+                    UnstructuredCartesianChunk::new(vec![0, 3], vec![nz(2), nz(1)]),
+                    UnstructuredCartesianChunk::new(vec![2, 0], vec![nz(1), nz(1)]),
+                    UnstructuredCartesianChunk::new(vec![2, 1], vec![nz(1), nz(3)]),
+                ],
+            )
+            .unwrap(),
+        );
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .unwrap();
+
+        let ChunkGridEncoded::Array(encoded_chunk_grid) = codec
+            .encoded_chunk_grid((&decoded_chunk_grid).into())
+            .unwrap()
+        else {
+            panic!("expected encoded chunk grid");
+        };
+
+        assert_eq!(encoded_chunk_grid.array_shape(), &[4, 3]);
+        assert_eq!(encoded_chunk_grid.chunk_edge_lengths(0).unwrap(), None);
+        assert_eq!(
+            encoded_chunk_grid.chunk_shape(&[1, 2]).unwrap(),
+            Some(vec![3, 1])
+        );
+        assert_eq!(
+            encoded_chunk_grid.subset(&[3, 0]).unwrap(),
+            Some(ArraySubset::new_with_ranges(&[3..4, 0..2]))
+        );
     }
 
     #[test]

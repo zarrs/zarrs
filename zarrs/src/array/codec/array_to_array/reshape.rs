@@ -399,7 +399,7 @@ mod tests {
         {
             assert_eq!(
                 subchunk_grid.chunk_edge_lengths(axis).unwrap(),
-                expected_subchunk_grid_edge_lengths_axis
+                Some(expected_subchunk_grid_edge_lengths_axis)
             );
         }
     }
@@ -526,15 +526,15 @@ mod tests {
         };
         assert_eq!(
             decoded_subchunk_grid.chunk_edge_lengths(0).unwrap(),
-            vec![nz(2); 2]
+            Some(vec![nz(2); 2])
         );
         assert_eq!(
             decoded_subchunk_grid.chunk_edge_lengths(1).unwrap(),
-            vec![nz(1); 7]
+            Some(vec![nz(1); 7])
         );
         assert_eq!(
             decoded_subchunk_grid.chunk_edge_lengths(2).unwrap(),
-            vec![nz(2)]
+            Some(vec![nz(2)])
         );
     }
 
@@ -753,7 +753,7 @@ mod tests {
             {
                 assert_eq!(
                     encoded_chunk_grid.chunk_edge_lengths(axis).unwrap(),
-                    expected_edge_lengths,
+                    Some(expected_edge_lengths),
                     "{} axis {axis}",
                     case.name
                 );
@@ -830,7 +830,7 @@ mod tests {
         assert_eq!(encoded_chunk_grid.array_shape(), &[192]);
         assert_eq!(
             encoded_chunk_grid.chunk_edge_lengths(0).unwrap(),
-            vec![nz(24); 8]
+            Some(vec![nz(24); 8])
         );
     }
 

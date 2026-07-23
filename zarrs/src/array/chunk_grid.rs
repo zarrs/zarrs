@@ -12,11 +12,13 @@ pub mod rectilinear;
 pub mod regular;
 pub mod regular_bounded;
 pub(crate) mod repeat;
+pub mod unstructured_cartesian;
 
 pub use rectangular::*;
 pub use rectilinear::*;
 pub use regular::*;
 pub use regular_bounded::*;
+pub use unstructured_cartesian::*;
 
 /// Re-export the `zarrs_chunk_grid` API.
 ///
@@ -53,5 +55,23 @@ mod tests {
     }"#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
         ChunkGrid::from_metadata(&metadata, &[100, 100]).unwrap();
+    }
+
+    #[test]
+    fn chunk_grid_configuration_unstructured_cartesian() {
+        let json = r#"
+    {
+        "name": "zarrs.unstructured_cartesian",
+        "configuration": {
+            "kind": "inline",
+            "chunks": [
+                { "origin": [0, 0], "shape": [2, 3] },
+                { "origin": [2, 0], "shape": [1, 1] },
+                { "origin": [2, 1], "shape": [1, 2] }
+            ]
+        }
+    }"#;
+        let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
+        ChunkGrid::from_metadata(&metadata, &[3, 3]).unwrap();
     }
 }

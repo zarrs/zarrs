@@ -19,7 +19,9 @@ use super::{
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
+use crate::array::chunk_grid::{
+    ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid, UnstructuredCartesianChunkGrid,
+};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
@@ -71,12 +73,13 @@ fn regular_subchunk_grid(
         }
     }
 
-    let mut subchunk_grid_shape = Vec::with_capacity(chunk_grid.dimensionality());
     let mut subchunk_edge_lengths = Vec::with_capacity(chunk_grid.dimensionality());
     let mut needs_rectilinear = false;
 
     for (dim, subchunk) in subchunk_shape.iter().enumerate() {
-        let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim)?;
+        let Some(chunk_edge_lengths) = chunk_grid.chunk_edge_lengths(dim)? else {
+            return unstructured_subchunk_grid(chunk_grid, subchunk_shape);
+        };
         let mut global_edge_lengths = Vec::new();
         for edge_length in chunk_edge_lengths {
             if !edge_length.get().is_multiple_of(subchunk.get()) {
@@ -93,17 +96,26 @@ fn regular_subchunk_grid(
             .iter()
             .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))
             .ok_or_else(|| ChunkGridCreateError::new("subchunk grid shape overflow"))?;
-        let edge_lengths = ChunkEdgeLengths::encode(&global_edge_lengths);
+        let edge_lengths = if dimension_shape > chunk_grid.array_shape()[dim] {
+            ChunkEdgeLengths::Varying(
+                global_edge_lengths
+                    .iter()
+                    .copied()
+                    .map(Into::into)
+                    .collect(),
+            )
+        } else {
+            ChunkEdgeLengths::encode(&global_edge_lengths)
+        };
         if !matches!(edge_lengths, ChunkEdgeLengths::Scalar(_)) {
             needs_rectilinear = true;
         }
-        subchunk_grid_shape.push(dimension_shape);
         subchunk_edge_lengths.push(edge_lengths);
     }
 
     if needs_rectilinear {
         Ok(ChunkGrid::new(RectilinearChunkGrid::new(
-            subchunk_grid_shape,
+            chunk_grid.array_shape().to_vec(),
             &subchunk_edge_lengths,
         )?))
     } else {
@@ -116,10 +128,54 @@ fn regular_subchunk_grid(
             .collect::<Option<ChunkShapeNonEmpty>>()
             .expect("all edge lengths are scalar");
         Ok(ChunkGrid::new(RegularChunkGrid::new(
-            subchunk_grid_shape,
+            chunk_grid.array_shape().to_vec(),
             subchunk_shape,
         )?))
     }
+}
+
+fn unstructured_subchunk_grid(
+    chunk_grid: &ChunkGrid,
+    subchunk_shape: &ChunkShapeNonEmpty,
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    let subchunk_shape_u64 = subchunk_shape
+        .iter()
+        .map(|edge_length| edge_length.get())
+        .collect::<Vec<_>>();
+    let mut subchunks = Vec::new();
+    for (_, chunk_subset) in chunk_grid.iter_chunk_indices_and_subsets() {
+        if std::iter::zip(chunk_subset.shape(), &subchunk_shape_u64)
+            .any(|(&chunk_edge, &subchunk_edge)| !chunk_edge.is_multiple_of(subchunk_edge))
+        {
+            return Err(ChunkGridCreateError::new(format!(
+                "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {:?}",
+                chunk_subset.shape()
+            )));
+        }
+        let subchunks_per_chunk = std::iter::zip(chunk_subset.shape(), &subchunk_shape_u64)
+            .map(|(&chunk_edge, &subchunk_edge)| chunk_edge / subchunk_edge)
+            .collect::<Vec<_>>();
+        for local_subchunk_indices in ArraySubset::new_with_shape(subchunks_per_chunk).indices() {
+            let origin = std::iter::zip(
+                std::iter::zip(chunk_subset.start(), local_subchunk_indices),
+                &subchunk_shape_u64,
+            )
+            .map(|((&chunk_start, local_index), &subchunk_edge)| {
+                chunk_start + local_index * subchunk_edge
+            })
+            .collect::<Vec<_>>();
+            subchunks.push(
+                ArraySubset::new_with_start_shape(origin, subchunk_shape_u64.clone())
+                    .map_err(|err| ChunkGridCreateError::new(err.to_string()))?,
+            );
+        }
+    }
+    Ok(ChunkGrid::new(
+        UnstructuredCartesianChunkGrid::new_from_subsets(
+            chunk_grid.array_shape().to_vec(),
+            subchunks,
+        )?,
+    ))
 }
 
 /// A `sharding` codec implementation.
@@ -1291,5 +1347,46 @@ impl ShardingCodecBound {
             self.index_codecs.as_ref(),
             options,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::array::chunk_grid::UnstructuredCartesianChunkGrid;
+    use zarrs_metadata_ext::chunk_grid::unstructured_cartesian::UnstructuredCartesianChunk;
+
+    fn nz(value: u64) -> NonZeroU64 {
+        NonZeroU64::new(value).unwrap()
+    }
+
+    #[test]
+    fn sharding_subchunk_grid_unstructured_cartesian() {
+        let chunk_grid = ChunkGrid::new(
+            UnstructuredCartesianChunkGrid::new(
+                vec![3, 4],
+                vec![
+                    UnstructuredCartesianChunk::new(vec![0, 0], vec![nz(2), nz(3)]),
+                    UnstructuredCartesianChunk::new(vec![0, 3], vec![nz(2), nz(1)]),
+                    UnstructuredCartesianChunk::new(vec![2, 0], vec![nz(1), nz(1)]),
+                    UnstructuredCartesianChunk::new(vec![2, 1], vec![nz(1), nz(3)]),
+                ],
+            )
+            .unwrap(),
+        );
+
+        let subchunk_grid = regular_subchunk_grid(&chunk_grid, &vec![nz(1), nz(1)]).unwrap();
+
+        assert_eq!(subchunk_grid.array_shape(), &[3, 4]);
+        assert_eq!(subchunk_grid.chunk_edge_lengths(0).unwrap(), None);
+        assert_eq!(
+            subchunk_grid.chunk_shape(&[1, 2]).unwrap(),
+            Some(vec![1, 1])
+        );
+        assert_eq!(subchunk_grid.iter_chunk_indices_and_subsets().count(), 12);
+        assert_eq!(
+            subchunk_grid.subset(&[2, 3]).unwrap(),
+            Some(ArraySubset::new_with_ranges(&[2..3, 3..4]))
+        );
     }
 }

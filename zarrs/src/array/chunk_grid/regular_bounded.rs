@@ -124,7 +124,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
     fn chunk_edge_lengths(
         &self,
         dimension: usize,
-    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+    ) -> Result<Option<Vec<NonZeroU64>>, IncompatibleDimensionError> {
         if dimension >= self.dimensionality() {
             return Err(IncompatibleDimensionError::new(
                 dimension,
@@ -132,7 +132,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             ));
         }
         if self.array_shape[dimension] == 0 {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
         let chunk_size = self.chunk_shape.as_slice()[dimension];
         let n_chunks = self.grid_shape[dimension] as usize;
@@ -143,7 +143,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             // SAFETY: last_edge > 0 because n_chunks = ceil(array_shape / chunk_size)
             unsafe { NonZeroU64::new_unchecked(last_edge) },
         );
-        Ok(result)
+        Ok(Some(result))
     }
 
     fn chunk_shape(
@@ -295,26 +295,26 @@ mod tests {
 
         assert_eq!(
             grid.chunk_edge_lengths(0).unwrap(),
-            vec![
+            Some(vec![
                 NonZeroU64::new(3).unwrap(),
                 NonZeroU64::new(3).unwrap(),
                 NonZeroU64::new(3).unwrap(),
                 NonZeroU64::new(1).unwrap(),
-            ]
+            ])
         );
         assert_eq!(
             grid.chunk_edge_lengths(1).unwrap(),
-            vec![
+            Some(vec![
                 NonZeroU64::new(7).unwrap(),
                 NonZeroU64::new(7).unwrap(),
                 NonZeroU64::new(6).unwrap(),
-            ]
+            ])
         );
 
         let unlimited = RegularBoundedChunkGrid::new(vec![0, 20], chunk_shape.clone()).unwrap();
         assert_eq!(
             unlimited.chunk_edge_lengths(0).unwrap(),
-            Vec::<NonZeroU64>::new()
+            Some(Vec::<NonZeroU64>::new())
         );
 
         let result = grid.chunk_edge_lengths(2);

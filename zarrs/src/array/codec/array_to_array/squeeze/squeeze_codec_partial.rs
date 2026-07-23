@@ -54,7 +54,13 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
                 if *dim == 1 {
                     Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
                 } else {
-                    let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                    let edge_lengths = encoded_subchunk_grid
+                        .chunk_edge_lengths(encoded_dim)?
+                        .ok_or_else(|| {
+                            zarrs_chunk_grid::ChunkGridCreateError::new(format!(
+                                "encoded subchunk grid edge lengths in dimension {encoded_dim} cannot be represented"
+                            ))
+                        })?;
                     encoded_dim += 1;
                     Ok(ChunkEdgeLengths::encode(&edge_lengths))
                 }

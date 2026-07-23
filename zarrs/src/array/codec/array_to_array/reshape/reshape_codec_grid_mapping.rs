@@ -202,6 +202,9 @@ fn regular_chunk_shape(chunk_grid: &ChunkGrid) -> Result<Option<ChunkShape>, Chu
         let edge_lengths = chunk_grid
             .chunk_edge_lengths(dim)
             .map_err(ChunkGridCreateError::from)?;
+        let Some(edge_lengths) = edge_lengths else {
+            return Ok(None);
+        };
         let Some(first) = edge_lengths.first().copied() else {
             return Ok(None);
         };
@@ -291,6 +294,12 @@ fn encoded_chunk_grid_for_input_dim_partitions(
             .iter()
             .map(|&dim| decoded_chunk_grid.chunk_edge_lengths(dim))
             .collect::<Result<Vec<_>, _>>()?;
+        let Some(partition_edge_lengths) = partition_edge_lengths
+            .into_iter()
+            .collect::<Option<Vec<Vec<NonZeroU64>>>>()
+        else {
+            return Ok(None);
+        };
         let Some(encoded_edge_lengths) = cartesian_product_edge_lengths(&partition_edge_lengths)
         else {
             return Ok(None);
@@ -478,6 +487,9 @@ fn rectilinear_grid_to_intervals(
     let edge_lengths = (0..grid.dimensionality())
         .map(|dim| grid.chunk_edge_lengths(dim))
         .collect::<Result<Vec<_>, _>>()?;
+    let Some(edge_lengths) = edge_lengths.into_iter().collect::<Option<Vec<_>>>() else {
+        return Ok(None);
+    };
     for pivot in 0..shape.len() {
         let leading_is_unit = edge_lengths[..pivot]
             .iter()
@@ -537,6 +549,10 @@ fn decoded_subchunk_grid_for_input_dim_partitions(
     let decoded_edge_lengths = (0..decoded_chunk_grid.dimensionality())
         .map(|dim| decoded_chunk_grid.chunk_edge_lengths(dim))
         .collect::<Result<Vec<_>, _>>()?;
+    let Some(decoded_edge_lengths) = decoded_edge_lengths.into_iter().collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
     let mut local_edges = decoded_edge_lengths
         .iter()
         .map(|edges| vec![None; edges.len()])
@@ -550,7 +566,9 @@ fn decoded_subchunk_grid_for_input_dim_partitions(
         let Some(encoded_outer_edges) = cartesian_product_edge_lengths(&partition_edges) else {
             return Ok(None);
         };
-        let refined_edges = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+        let Some(refined_edges) = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)? else {
+            return Ok(None);
+        };
         let Some(refined_by_outer_chunk) =
             split_edge_refinements(&encoded_outer_edges, &refined_edges)
         else {
@@ -627,7 +645,9 @@ fn decoded_subchunk_grid_for_repeated_chunks(
             usize::try_from(*repeat)
                 .map_err(|err| ChunkGridCreateError::new(err.to_string()))?
         ];
-        let refined_edges = encoded_subchunk_grid.chunk_edge_lengths(dim)?;
+        let Some(refined_edges) = encoded_subchunk_grid.chunk_edge_lengths(dim)? else {
+            return Ok(None);
+        };
         let Some(refined_tiles) = split_edge_refinements(&outer_edges, &refined_edges) else {
             return Ok(None);
         };
