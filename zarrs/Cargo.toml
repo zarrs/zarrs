@@ -81,7 +81,7 @@ zarrs_data_type.workspace = true
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
 zarrs_storage.workspace = true
-zfp-sys = {version = "0.4.2", features = ["static"], optional = true }
+zfp-sys = { package = "zfp-rs-ffi", version = "0.1.2", optional = true }
 dlpark = { version = "0.6.0", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
