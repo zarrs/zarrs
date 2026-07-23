@@ -15,6 +15,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 - Remove a redundant offset cast in the 0.23 adapter so all-target Clippy checks pass
 
 ### Changed
+- Validate the workspace after the `zarrs_object_store` extraction (#425/#427), retaining the existing release adapters and compatibility classifications.
 - Verify trait convenience and generic/async sharding-write backports against fixed-seed published releases; preserve the prepared unpublished `zarrs` 0.23.15 and existing dependencies.
 - Test the workspace with the additional compatible DLPack, cache-validation, nested-option and granularity backports, retaining the prepared unpublished crate versions.
 - Preserve historical bytes cases when current writes base64 fill values, by giving pre-0.22 helpers their native array-of-bytes fill values

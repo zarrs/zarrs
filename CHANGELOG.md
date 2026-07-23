@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 
 ### Changed
+- Remove `zarrs_object_store` from this workspace; it is maintained in [its separate repository](https://github.com/zarrs/zarrs_object_store) (backport of #427, `3b34b847`)
 - Use the built-in async memory store and filesystem adapter in tests/examples instead of in-tree `zarrs_object_store`; remove the HTTP examples with that dependency (backport of #425, `cf820981`)
 - Reuse checksum buffers and per-thread Zstd decompressors, remove redundant shuffle/sharding/packbits/codec-chain copies and computations, retrieve complete cached chunks directly and decode async sharding subsets into disjoint outputs
 - Replace codec snapshots with the regression runner and retain reproducible JSON baselines/results; extend in-memory shard benchmarks

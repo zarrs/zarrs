@@ -13,7 +13,6 @@ members = [
     "zarrs_plugin",
     "zarrs_storage",
     "zarrs_filesystem",
-    "zarrs_object_store",
     "zarrs_conformance",
     "zarrs_regression_testing",
 ]
@@ -68,9 +67,6 @@ path = "zarrs_storage"
 [workspace.dependencies.zarrs_filesystem]
 version = "0.3.15"
 path = "zarrs_filesystem"
-
-[workspace.dependencies.object_store]
-version = "0.13"
 
 [workspace.dependencies.half]
 version = "2.4.1"

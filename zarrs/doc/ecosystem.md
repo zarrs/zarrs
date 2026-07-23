@@ -31,7 +31,7 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 #### Stores
 - [`zarrs_filesystem`]: A filesystem store.
   - Re-exports [`zarrs::filesystem`](crate::filesystem).
-- [`zarrs_object_store`]: [`object_store`] store support.
+- [`zarrs_object_store`]: [`object_store`] store support, maintained in its [separate repository](https://github.com/zarrs/zarrs_object_store).
 - [`zarrs_opendal`]: [`opendal`] store support.
 - [`zarrs_http`]: A synchronous http store.
 - [`zarrs_zip`]: A storage adapter for zip files.
