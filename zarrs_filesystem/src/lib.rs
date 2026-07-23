@@ -13,9 +13,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, StorePrefixes, WritableStorageTraits,
+    store_set_partial_many, AtomicRenameStorageTraits, Bytes, ListableStorageTraits,
+    MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
+    StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -278,7 +278,7 @@ impl FilesystemStore {
 
         // If `value` is already page-size aligned, we don't need to copy.
         let need_copy = value.as_ptr().align_offset(page_size::get()) != 0
-            || value.len() % page_size::get() != 0;
+            || !value.len().is_multiple_of(page_size::get());
 
         #[cfg(target_os = "linux")]
         if enable_direct {
@@ -533,6 +533,33 @@ impl WritableStorageTraits for FilesystemStore {
 
     fn supports_set_partial(&self) -> bool {
         true
+    }
+}
+
+impl AtomicRenameStorageTraits for FilesystemStore {
+    fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
+        if source == destination {
+            return Ok(());
+        }
+
+        // The filesystem rename supplies cross-process atomicity. These process-local locks only
+        // keep the file handle cache coherent with the path replacement.
+        let (first_key, second_key) = if source < destination {
+            (source, destination)
+        } else {
+            (destination, source)
+        };
+        let first_file = self.get_file_mutex(first_key);
+        let second_file = self.get_file_mutex(second_key);
+        let _first_lock = first_file.write();
+        let _second_lock = second_file.write();
+        self.invalidate_handle(source);
+        self.invalidate_handle(destination);
+
+        let source_path = self.key_to_fspath(source);
+        let destination_path = self.key_to_fspath(destination);
+        std::fs::rename(source_path, destination_path)?;
+        Ok(())
     }
 }
 
