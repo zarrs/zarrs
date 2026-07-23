@@ -48,7 +48,7 @@ pub use self::storage_async::{
 };
 pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
-    discover_children, store_set_partial_many, ListableStorageTraits,
+    discover_children, store_set_partial_many, AtomicRenameStorageTraits, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
