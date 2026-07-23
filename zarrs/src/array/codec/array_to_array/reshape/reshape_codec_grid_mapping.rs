@@ -208,7 +208,7 @@ fn regular_chunk_shape(chunk_grid: &ChunkGrid) -> Result<Option<ChunkShape>, Chu
         if edge_lengths.iter().any(|&edge_length| edge_length != first) {
             return Ok(None);
         }
-        chunk_shape.push(first);
+        chunk_shape.push(first.get());
     }
     Ok(Some(chunk_shape))
 }
@@ -321,21 +321,36 @@ fn repeat_shape(grid_shape: &[u64], dimensionality: usize) -> Option<Vec<u64>> {
 }
 
 fn repeated_chunk_grid(
-    chunk_shape: &[NonZeroU64],
+    chunk_shape: &[u64],
     repeats: &[u64],
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
+    let Some(chunk_shape_nonzero) = chunk_shape
+        .iter()
+        .copied()
+        .map(NonZeroU64::new)
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
     let inner_chunk_grid = ChunkGrid::new(RegularChunkGrid::new(
-        chunk_shape.iter().map(|dim| dim.get()).collect(),
         chunk_shape.to_vec(),
+        chunk_shape_nonzero,
     )?);
-    repeat_chunk_grid(repeats, inner_chunk_grid)
+    let Some(array_shape) = std::iter::zip(chunk_shape, repeats)
+        .map(|(chunk_shape, repeats)| chunk_shape.checked_mul(*repeats))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
+    repeat_chunk_grid(array_shape, repeats, inner_chunk_grid)
 }
 
 fn repeat_chunk_grid(
+    array_shape: Vec<u64>,
     repeats: &[u64],
     inner_chunk_grid: ChunkGrid,
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-    match RepeatChunkGrid::new(repeats.to_vec(), inner_chunk_grid) {
+    match RepeatChunkGrid::new(array_shape, repeats.to_vec(), inner_chunk_grid) {
         Ok(chunk_grid) => Ok(Some(ChunkGrid::new(chunk_grid))),
         Err(
             RepeatChunkGridCreateError::ZeroRepeat(_) | RepeatChunkGridCreateError::ShapeOverflow,
@@ -377,12 +392,12 @@ fn unravel_flat_index(mut index: usize, shape: &[usize]) -> Vec<usize> {
 
 /// Map a sequence of contiguous row-major intervals to a rectilinear grid.
 fn rectilinear_edge_lengths_from_intervals(
-    shape: &[NonZeroU64],
+    shape: &[u64],
     intervals: &[NonZeroU64],
 ) -> Option<Vec<Vec<NonZeroU64>>> {
     let num_elements = shape
         .iter()
-        .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+        .try_fold(1u64, |product, dim| product.checked_mul(*dim))?;
     if intervals
         .iter()
         .try_fold(0u64, |sum, edge| sum.checked_add(edge.get()))?
@@ -394,10 +409,10 @@ fn rectilinear_edge_lengths_from_intervals(
     for pivot in 0..shape.len() {
         let trailing = shape[pivot + 1..]
             .iter()
-            .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+            .try_fold(1u64, |product, dim| product.checked_mul(*dim))?;
         let outer_repeats = shape[..pivot]
             .iter()
-            .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+            .try_fold(1u64, |product, dim| product.checked_mul(*dim))?;
         let outer_repeats = usize::try_from(outer_repeats).ok()?;
 
         let mut pivot_edges = Vec::new();
@@ -408,15 +423,15 @@ fn rectilinear_edge_lengths_from_intervals(
             }
             let edge = interval.get() / trailing;
             pivot_sum = pivot_sum.checked_add(edge)?;
-            if pivot_sum > shape[pivot].get() {
+            if pivot_sum > shape[pivot] {
                 break;
             }
             pivot_edges.push(NonZeroU64::new(edge)?);
-            if pivot_sum == shape[pivot].get() {
+            if pivot_sum == shape[pivot] {
                 break;
             }
         }
-        if pivot_sum != shape[pivot].get() {
+        if pivot_sum != shape[pivot] {
             continue;
         }
         let expected_len = pivot_edges.len().checked_mul(outer_repeats)?;
@@ -435,12 +450,12 @@ fn rectilinear_edge_lengths_from_intervals(
         for dim in &shape[..pivot] {
             edge_lengths.push(vec![
                 NonZeroU64::new(1).unwrap();
-                usize::try_from(dim.get()).ok()?
+                usize::try_from(*dim).ok()?
             ]);
         }
         edge_lengths.push(pivot_edges);
         for dim in &shape[pivot + 1..] {
-            edge_lengths.push(vec![*dim]);
+            edge_lengths.push(vec![NonZeroU64::new(*dim)?]);
         }
         return Some(edge_lengths);
     }
@@ -448,7 +463,7 @@ fn rectilinear_edge_lengths_from_intervals(
 }
 
 fn rectilinear_grid_to_intervals(
-    shape: &[NonZeroU64],
+    shape: &[u64],
     grid: &ChunkGrid,
 ) -> Result<Option<Vec<NonZeroU64>>, ChunkGridCreateError> {
     if grid.dimensionality() != shape.len()
@@ -456,7 +471,7 @@ fn rectilinear_grid_to_intervals(
             .array_shape()
             .iter()
             .zip(shape)
-            .all(|(grid, shape)| *grid == shape.get())
+            .all(|(grid, shape)| grid == shape)
     {
         return Ok(None);
     }
@@ -470,7 +485,7 @@ fn rectilinear_grid_to_intervals(
         let trailing_is_full = edge_lengths[pivot + 1..]
             .iter()
             .zip(&shape[pivot + 1..])
-            .all(|(edges, shape)| edges.as_slice() == [*shape]);
+            .all(|(edges, shape)| edges.len() == 1 && edges[0].get() == *shape);
         if leading_is_unit && trailing_is_full {
             return Ok(cartesian_product_edge_lengths(&edge_lengths));
         }
@@ -479,18 +494,18 @@ fn rectilinear_grid_to_intervals(
 }
 
 fn rectilinear_grid_from_intervals(
-    shape: &[NonZeroU64],
+    shape: &[u64],
     intervals: &[NonZeroU64],
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
     let Some(edge_lengths) = rectilinear_edge_lengths_from_intervals(shape, intervals) else {
         return Ok(None);
     };
-    rectilinear_chunk_grid(shape.iter().map(|dim| dim.get()).collect(), &edge_lengths).map(Some)
+    rectilinear_chunk_grid(shape.to_vec(), &edge_lengths).map(Some)
 }
 
 pub(super) fn reshape_rectilinear_grid(
-    source_shape: &[NonZeroU64],
-    target_shape: &[NonZeroU64],
+    source_shape: &[u64],
+    target_shape: &[u64],
     source_grid: &ChunkGrid,
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
     if source_grid.dimensionality() != source_shape.len() {
@@ -548,7 +563,7 @@ fn decoded_subchunk_grid_for_input_dim_partitions(
             let decoded_local_shape = partition
                 .iter()
                 .zip(&indices)
-                .map(|(&dim, &index)| decoded_edge_lengths[dim][index])
+                .map(|(&dim, &index)| decoded_edge_lengths[dim][index].get())
                 .collect::<Vec<_>>();
             let Some(decoded_local_edges) =
                 rectilinear_edge_lengths_from_intervals(&decoded_local_shape, intervals)
@@ -590,8 +605,8 @@ fn decoded_subchunk_grid_for_input_dim_partitions(
 fn decoded_subchunk_grid_for_repeated_chunks(
     decoded_chunk_grid: &ChunkGrid,
     encoded_subchunk_grid: &ChunkGrid,
-    decoded_chunk_shape: &[NonZeroU64],
-    encoded_chunk_shape: &[NonZeroU64],
+    decoded_chunk_shape: &[u64],
+    encoded_chunk_shape: &[u64],
     repeats: &[u64],
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
     if encoded_subchunk_grid.dimensionality() != encoded_chunk_shape.len() {
@@ -604,8 +619,11 @@ fn decoded_subchunk_grid_for_repeated_chunks(
 
     let mut local_encoded_edges = Vec::with_capacity(encoded_chunk_shape.len());
     for (dim, (chunk_edge, repeat)) in encoded_chunk_shape.iter().zip(repeats).enumerate() {
+        let Some(chunk_edge) = NonZeroU64::new(*chunk_edge) else {
+            return Ok(None);
+        };
         let outer_edges = vec![
-            *chunk_edge;
+            chunk_edge;
             usize::try_from(*repeat)
                 .map_err(|err| ChunkGridCreateError::new(err.to_string()))?
         ];
@@ -621,10 +639,8 @@ fn decoded_subchunk_grid_for_repeated_chunks(
         }
         local_encoded_edges.push(first.clone());
     }
-    let local_encoded_grid = rectilinear_chunk_grid(
-        encoded_chunk_shape.iter().map(|dim| dim.get()).collect(),
-        &local_encoded_edges,
-    )?;
+    let local_encoded_grid =
+        rectilinear_chunk_grid(encoded_chunk_shape.to_vec(), &local_encoded_edges)?;
     let Some(local_decoded_grid) = reshape_rectilinear_grid(
         encoded_chunk_shape,
         decoded_chunk_shape,
@@ -633,5 +649,9 @@ fn decoded_subchunk_grid_for_repeated_chunks(
     else {
         return Ok(None);
     };
-    repeat_chunk_grid(decoded_chunk_grid.grid_shape(), local_decoded_grid)
+    repeat_chunk_grid(
+        decoded_chunk_grid.array_shape().to_vec(),
+        decoded_chunk_grid.grid_shape(),
+        local_decoded_grid,
+    )
 }

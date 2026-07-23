@@ -191,7 +191,7 @@ pub(super) fn maybe_regular_chunk_grid_shape(chunk_grid: &ChunkGrid) -> Option<C
         {
             return None;
         }
-        chunk_shape.push(edge_length);
+        chunk_shape.push(edge_length.get());
     }
     Some(chunk_shape)
 }

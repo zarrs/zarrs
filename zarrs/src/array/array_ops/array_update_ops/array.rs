@@ -34,7 +34,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
+            .chunk_shape(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
             .any(|(end_exc, shape)| end_exc > *shape)
@@ -153,6 +153,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
+                if chunk_subset_in_array.is_empty() || overlap.is_empty() {
+                    return Ok(());
+                }
                 let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
                 let chunk_subset_bytes = subset_bytes.extract_array_subset(
                     &chunk_subset_in_array_subset,

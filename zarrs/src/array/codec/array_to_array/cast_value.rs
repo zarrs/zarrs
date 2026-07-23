@@ -44,8 +44,6 @@ pub use zarrs_data_type::codec_traits::cast_value::{
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
-
     use zarrs_codec::{CodecOptions, UnboundArrayToArrayCodecTraits};
     use zarrs_data_type::FillValue;
 
@@ -61,7 +59,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(4).unwrap()];
+        let shape = [4];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let codec = codec
@@ -97,7 +95,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(4).unwrap()];
+        let shape = [4];
         let data_type = data_type::int16();
         let fill_value = FillValue::from(0i16);
         let codec = codec
@@ -126,7 +124,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(1).unwrap()];
+        let shape = [1];
         let data_type = data_type::uint64();
         let fill_value = FillValue::from(0u64);
         let codec = codec
@@ -153,7 +151,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(2).unwrap()];
+        let shape = [2];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
@@ -186,7 +184,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(3).unwrap()];
+        let shape = [3];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
@@ -219,7 +217,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(1).unwrap()];
+        let shape = [1];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
@@ -245,7 +243,7 @@ mod tests {
             ("towards-negative", vec![1i8, 2, -2, -3]),
             ("nearest-away", vec![2i8, 3, -2, -3]),
         ];
-        let shape = [NonZeroU64::new(4).unwrap()];
+        let shape = [4];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
 
@@ -302,7 +300,7 @@ mod tests {
                 [18_446_744_073_709_551_616.0, 9_007_199_254_740_994.0],
             ),
         ];
-        let shape = [NonZeroU64::new(2).unwrap()];
+        let shape = [2];
         let data_type = data_type::uint64();
         let fill_value = FillValue::from(0u64);
         let elements = vec![u64::MAX, 9_007_199_254_740_993u64];
@@ -343,7 +341,7 @@ mod tests {
         )
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
-        let shape = [NonZeroU64::new(3).unwrap()];
+        let shape = [3];
         let codec_f32 = codec
             .with_context(data_type::float32(), FillValue::from(0.0f32))
             .unwrap();
@@ -364,7 +362,7 @@ mod tests {
         let codec_f64 = codec
             .with_context(data_type::float64(), FillValue::from(0.0f64))
             .unwrap();
-        let shape = [NonZeroU64::new(1).unwrap()];
+        let shape = [1];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![2.0f64.powi(127)]));
         let encoded = codec_f64
             .encode(bytes, &shape, &CodecOptions::default())
@@ -378,7 +376,7 @@ mod tests {
     #[test]
     fn codec_cast_value_huge_float_clamp() {
         // floats beyond the i128 range must still clamp to the target range
-        let shape = [NonZeroU64::new(2).unwrap()];
+        let shape = [2];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             f32::MAX,
             f32::MIN,
@@ -471,7 +469,7 @@ mod tests {
         };
 
         let num_elements = 64_usize;
-        let shape = [NonZeroU64::new(num_elements as u64).unwrap()];
+        let shape = [num_elements as u64];
         let options = CodecOptions::default();
 
         for (source_name, source_dt) in &data_types {

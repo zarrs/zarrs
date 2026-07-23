@@ -1,4 +1,3 @@
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
@@ -64,7 +63,7 @@ impl TransposeCodec {
 
 impl TransposeCodecBound {
     /// Validate the shape and data type for this codec.
-    fn validate(&self, shape: &[NonZeroU64]) -> Result<(), CodecError> {
+    fn validate(&self, shape: &[u64]) -> Result<(), CodecError> {
         if self.data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
@@ -150,7 +149,7 @@ impl ArrayCodecTraits for TransposeCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: This could be increased, need to implement `transpose_array` without ndarray
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -239,7 +238,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         &self.fill_value
     }
 
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+    fn encoded_shape(&self, decoded_shape: &[u64]) -> Result<ChunkShape, CodecError> {
         if self.order.0.len() != decoded_shape.len() {
             return Err(CodecError::Other(
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
@@ -251,7 +250,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
@@ -264,7 +263,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
@@ -283,7 +282,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -300,7 +299,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -318,7 +317,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -336,7 +335,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(

@@ -47,10 +47,7 @@ fn subchunk_grid_regular_outer_uses_repeat_chunk_grid() -> Result<(), Box<dyn st
     let array = builder.build(store, "/array")?;
 
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
-    assert_eq!(
-        array.subchunk_shape(),
-        Some(vec![NonZeroU64::new(2).unwrap(); 2])
-    );
+    assert_eq!(array.subchunk_shape(), Some(vec![2; 2]));
     assert_eq!(subchunk_grid.name_v3(), None);
     assert_eq!(subchunk_grid.array_shape(), &[8, 8]);
     assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
@@ -71,14 +68,11 @@ fn subchunk_grid_regular_outer_covers_full_repeated_shard_extent()
     let array = builder.build(store, "/array")?;
 
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
-    assert_eq!(
-        array.subchunk_shape(),
-        Some(vec![NonZeroU64::new(2).unwrap(); 2])
-    );
+    assert_eq!(array.subchunk_shape(), Some(vec![2; 2]));
     assert_eq!(array.shape(), &[7, 7]);
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
     assert_eq!(subchunk_grid.name_v3(), None);
-    assert_eq!(subchunk_grid.array_shape(), &[8, 8]);
+    assert_eq!(subchunk_grid.array_shape(), &[7, 7]);
     assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
     assert_eq!(
         subchunk_grid.subset(&[3, 3])?,
@@ -135,7 +129,7 @@ fn subchunk_grid_from_varying_shard_edges_requires_even_division()
     for array in arrays {
         let subchunk_grid =
             assert_subchunk_grid(&array, &[15], &[5], &[nz(3), nz(3), nz(3), nz(3), nz(3)])?;
-        assert_eq!(array.subchunk_shape(), Some(vec![nz(3)]));
+        assert_eq!(array.subchunk_shape(), Some(vec![3]));
         assert_eq!(
             subchunk_grid.subset(&[1])?,
             Some(ArraySubset::new_with_ranges(&[3..6]))
@@ -166,7 +160,7 @@ fn subchunk_grid_accounts_for_transpose_before_sharding() -> Result<(), Box<dyn 
     let array = builder.build(store, "/array")?;
 
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
-    assert_eq!(array.subchunk_shape(), Some(vec![nz(2), nz(3)]));
+    assert_eq!(array.subchunk_shape(), Some(vec![2, 3]));
     assert_eq!(subchunk_grid.array_shape(), &[8, 6]);
     assert_eq!(subchunk_grid.grid_shape(), &[4, 2]);
     assert_eq!(

@@ -89,7 +89,6 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
@@ -118,7 +117,7 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
+        let chunk_shape = vec![10, 10];
         let fill_value = fill_value.into();
         let size = chunk_shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
@@ -311,7 +310,7 @@ mod tests {
 
     #[test]
     fn codec_pcodec_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
@@ -353,7 +352,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let chunk_shape: ChunkShape = vec![4; 2];
         let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();

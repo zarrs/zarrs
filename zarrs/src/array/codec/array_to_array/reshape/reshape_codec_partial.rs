@@ -1,9 +1,8 @@
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
-use crate::array::{ChunkGrid, DataType};
+use crate::array::{ChunkGrid, ChunkShape, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
@@ -14,8 +13,8 @@ use zarrs_storage::StorageError;
 /// Partial codec for the Reshape codec.
 pub(crate) struct ReshapeCodecPartial<T: ?Sized> {
     input_handle: Arc<T>,
-    decoded_shape: Vec<NonZeroU64>,
-    encoded_shape: Vec<NonZeroU64>,
+    decoded_shape: ChunkShape,
+    encoded_shape: ChunkShape,
     data_type: DataType,
 }
 
@@ -48,9 +47,9 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
     /// Create a new [`ReshapeCodecPartial`].
     pub(crate) fn new(
         input_handle: Arc<T>,
-        decoded_shape: &[NonZeroU64],
+        decoded_shape: &[u64],
         data_type: &DataType,
-        encoded_shape: Vec<NonZeroU64>,
+        encoded_shape: ChunkShape,
     ) -> Self {
         Self {
             input_handle,

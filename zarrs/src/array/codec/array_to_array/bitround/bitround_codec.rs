@@ -7,7 +7,6 @@ use super::{
     bitround_codec_partial, round_bytes,
 };
 use crate::array::{ChunkShape, DataType, FillValue};
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
@@ -141,7 +140,7 @@ impl ArrayCodecTraits for BitroundCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: bitround is well suited to multithread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -168,14 +167,14 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         &self.encoded_fill_value
     }
 
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+    fn encoded_shape(&self, decoded_shape: &[u64]) -> Result<ChunkShape, CodecError> {
         Ok(decoded_shape.to_vec())
     }
 
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
@@ -186,7 +185,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -195,7 +194,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
@@ -208,7 +207,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
@@ -222,7 +221,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
@@ -236,7 +235,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(

@@ -89,7 +89,6 @@ pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use zarrs_data_type::FillValue;
@@ -103,7 +102,7 @@ mod tests {
     fn codec_fixedscaleoffset() {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
-        let shape = [NonZeroU64::new(4).unwrap()];
+        let shape = [4];
         let data_type = data_type::float64();
         let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![

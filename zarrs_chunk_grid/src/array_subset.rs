@@ -8,7 +8,6 @@
 //!  - computing the byte ranges of array subsets within an array with a fixed element size.
 
 use std::fmt::{Debug, Display};
-use std::num::NonZeroU64;
 use std::ops::Range;
 
 use crate::iterators::{
@@ -17,7 +16,7 @@ use crate::iterators::{
 use thiserror::Error;
 
 use crate::indexer::{Indexer, IndexerError, IndexerIterator};
-use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits, ChunkShape};
+use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits};
 
 /// An incompatible start/end indices error.
 #[derive(Clone, Debug, Error)]
@@ -200,14 +199,6 @@ impl ArraySubset {
     #[must_use]
     pub fn shape(&self) -> &[u64] {
         &self.shape
-    }
-
-    /// Return the shape of the array as a chunk shape.
-    ///
-    /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
-    #[must_use]
-    pub fn chunk_shape(&self) -> Option<ChunkShape> {
-        self.shape.iter().map(|s| NonZeroU64::new(*s)).collect()
     }
 
     /// Return the shape of the array subset.

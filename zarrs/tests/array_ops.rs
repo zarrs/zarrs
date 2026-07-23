@@ -75,22 +75,16 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         &array.metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))
     );
     let _ = array.builder().build_metadata()?;
-    assert_eq!(
-        array.subchunk_shape(),
-        Some(vec![NonZeroU64::new(1).unwrap(); 2])
-    );
+    assert_eq!(array.subchunk_shape(), Some(vec![1; 2]));
     assert_eq!(array.subchunk_grids().len(), 1);
     assert_eq!(array.subchunk_shape_at_level(0), array.subchunk_shape());
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
     assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
     assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
-    assert_eq!(
-        array.chunk_shape(&[0, 0])?,
-        vec![NonZeroU64::new(3).unwrap(); 2]
-    );
+    assert_eq!(array.chunk_shape(&[0, 0])?, vec![3u64; 2]);
     assert_eq!(
         subchunk_grid.chunk_shape(&[0, 0]).unwrap(),
-        Some(vec![NonZeroU64::new(1).unwrap(); 2])
+        Some(vec![1u64; 2])
     );
     assert_eq!(array.chunk_shape_usize(&[0, 0])?, [3, 3]);
     assert_eq!(array.subset_all(), ArraySubset::new_with_shape(vec![5, 5]));
@@ -165,7 +159,6 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
     chunk_indices: &[u64],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let shape = array.chunk_shape(chunk_indices)?;
-    let shape = shape.iter().map(|size| size.get()).collect::<Vec<_>>();
     let mut output = vec![0; shape.iter().product::<u64>() as usize];
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
@@ -351,7 +344,7 @@ fn array_ops_subchunks_with_reshape_codec() -> TestResult {
         .collect();
     array.store_array_subset(&array.subset_all(), &data)?;
 
-    assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(3)]));
+    assert_eq!(array.subchunk_shape(), Some(vec![1, 3]));
     assert_eq!(
         array.subchunk_grid().as_chunk_grid().unwrap().grid_shape(),
         &[4, 2]
@@ -388,7 +381,7 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
         .collect();
     array.store_array_subset(&array.subset_all(), &data)?;
 
-    assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(2)]));
+    assert_eq!(array.subchunk_shape(), Some(vec![1, 2]));
     assert_eq!(
         array.subchunk_grid().as_chunk_grid().unwrap().grid_shape(),
         &[2, 2]
@@ -423,9 +416,9 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     array.store_array_subset(&array.subset_all(), &data)?;
 
     assert_eq!(array.subchunk_grids().len(), 2);
-    assert_eq!(array.subchunk_shape(), Some(vec![nz(4), nz(4)]));
-    assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
-    assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
+    assert_eq!(array.subchunk_shape(), Some(vec![4, 4]));
+    assert_eq!(array.subchunk_shape_at_level(0), Some(vec![4, 4]));
+    assert_eq!(array.subchunk_shape_at_level(1), Some(vec![2, 2]));
     assert_eq!(
         array
             .subchunk_grid_at_level(0)
@@ -564,8 +557,8 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/reshape")?;
         array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
-        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(8)]));
-        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(4)]));
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![1, 8]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![1, 4]));
         assert_eq!(
             array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 1], &options)?,
             [20, 21, 22, 23]
@@ -583,8 +576,8 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/squeeze")?;
         array.store_array_subset(&array.subset_all(), (0..8).collect::<Vec<u16>>())?;
-        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(4)]));
-        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(2)]));
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![1, 4]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![1, 2]));
         assert_eq!(
             array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[0, 2], &options)?,
             [4, 5]
@@ -604,8 +597,8 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/transpose")?;
         array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
-        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
-        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
+        assert_eq!(array.subchunk_shape_at_level(0), Some(vec![4, 4]));
+        assert_eq!(array.subchunk_shape_at_level(1), Some(vec![2, 2]));
         assert_eq!(
             array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[1, 3], &options)?,
             [22, 23, 30, 31]

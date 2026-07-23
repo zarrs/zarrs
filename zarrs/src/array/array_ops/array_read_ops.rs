@@ -3,6 +3,7 @@ use crate::array::ArrayBytes;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError};
 use zarrs_storage::MaybeSync;
 
@@ -40,7 +41,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = ArrayBytes::new_fill_value(
                 self.data_type(),
-                chunk_shape.iter().map(|&x| x.get()).product::<u64>(),
+                chunk_shape.num_elements(),
                 self.fill_value(),
             )
             .map_err(CodecError::from)

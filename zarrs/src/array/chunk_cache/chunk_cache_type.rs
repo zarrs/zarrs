@@ -59,6 +59,6 @@ where
         Ok(bytes)
     } else {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64())
+        fill_value_bytes(array, chunk_shape.num_elements())
     }
 }

@@ -8,7 +8,6 @@ use super::{
 };
 use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -486,7 +485,7 @@ impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -515,7 +514,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_encode(
@@ -531,7 +530,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?.into_owned();

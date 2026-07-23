@@ -15,6 +15,7 @@ use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
+use zarrs_chunk_grid::ChunkShapeTraits;
 
 /// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
 const USE_MEMORY_STORE: bool = false;
@@ -70,7 +71,7 @@ fn populate_array(store: ReadableWritableListableStorage) {
     .unwrap();
     array.store_metadata().unwrap();
 
-    let total_elements = SHAPE.iter().product::<u64>() as usize;
+    let total_elements = SHAPE.num_elements_usize();
     let data = random_data(total_elements);
     array
         .store_array_subset(

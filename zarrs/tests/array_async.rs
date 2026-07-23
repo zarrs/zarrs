@@ -38,7 +38,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
-    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
+    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2u64; 2]);
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();

@@ -267,7 +267,6 @@ pub(crate) fn apply_permutation<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
@@ -282,11 +281,7 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) {
-        let shape = vec![
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let shape = vec![2, 2, 3];
         let fill_value = fill_value.into();
         let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
@@ -327,7 +322,7 @@ mod tests {
         use crate::array::Element;
 
         // Create a 2x3 array of strings
-        let shape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()];
+        let shape = vec![2, 3];
         let data_type = data_type::string();
         let fill_value = FillValue::from("");
 
@@ -389,7 +384,7 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let shape = vec![4, 4];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -444,7 +439,7 @@ mod tests {
     #[tokio::test]
     async fn codec_transpose_async_partial_decode() {
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let shape = vec![4, 4];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);

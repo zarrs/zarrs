@@ -6,7 +6,6 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use async_generic::async_generic;
 use num::Integer;
-use std::num::NonZeroU64;
 
 use super::PackBitsCodecComponents;
 use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
@@ -24,7 +23,7 @@ use zarrs_storage::byte_range::ByteRange;
 #[cfg_attr(feature = "async", async_generic(
     async_signature(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
@@ -36,7 +35,7 @@ use zarrs_storage::byte_range::ByteRange;
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,

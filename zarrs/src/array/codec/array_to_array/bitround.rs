@@ -83,7 +83,6 @@ fn round_bytes(
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use zarrs_data_type::FillValue;
@@ -99,7 +98,7 @@ mod tests {
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &str = r#"{ "keepbits": 3 }"#;
-        let shape = vec![NonZeroU64::new(4).unwrap()];
+        let shape = vec![4];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = vec![
@@ -153,7 +152,7 @@ mod tests {
     #[test]
     fn codec_bitround_uint() {
         const JSON: &str = r#"{ "keepbits": 3 }"#;
-        let shape = vec![NonZeroU64::new(7).unwrap()];
+        let shape = vec![7];
         let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
@@ -186,7 +185,7 @@ mod tests {
     #[test]
     fn codec_bitround_uint8() {
         const JSON: &str = r#"{ "keepbits": 3 }"#;
-        let shape = vec![NonZeroU64::new(9).unwrap()];
+        let shape = vec![9];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
@@ -220,7 +219,7 @@ mod tests {
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let shape = vec![elements.len() as u64];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
@@ -273,7 +272,7 @@ mod tests {
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let shape = vec![elements.len() as u64];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);

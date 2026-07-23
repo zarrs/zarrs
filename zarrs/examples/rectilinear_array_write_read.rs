@@ -84,10 +84,7 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         let chunk_indices = vec![i, 0];
         if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices)? {
             let chunk_array = ndarray::ArrayD::<f32>::from_elem(
-                chunk_shape
-                    .iter()
-                    .map(|u| u.get() as usize)
-                    .collect::<Vec<_>>(),
+                chunk_shape.iter().map(|&u| u as usize).collect::<Vec<_>>(),
                 i as f32,
             );
             array.store_chunk(&chunk_indices, chunk_array)

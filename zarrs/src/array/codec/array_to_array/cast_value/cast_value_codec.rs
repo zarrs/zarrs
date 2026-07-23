@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_codec::{
@@ -206,7 +205,7 @@ impl ArrayCodecTraits for CastValueCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -235,7 +234,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.data_type.codec_castvalue()?;
@@ -258,7 +257,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.encoded_data_type.codec_castvalue()?;
@@ -281,7 +280,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_handle.data_type())?;
@@ -291,7 +290,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_output_handle.data_type())?;
@@ -302,7 +301,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_handle.data_type())?;
@@ -313,7 +312,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_output_handle.data_type())?;

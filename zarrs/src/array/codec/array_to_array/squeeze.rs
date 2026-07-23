@@ -30,7 +30,6 @@
 mod squeeze_codec;
 mod squeeze_codec_partial;
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::{Itertools, izip};
@@ -63,7 +62,7 @@ impl CodecTraitsV3 for SqueezeCodec {
 
 fn get_squeezed_array_subset(
     decoded_region: &dyn ArraySubsetTraits,
-    shape: &[NonZeroU64],
+    shape: &[u64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
         return Err(IndexerError::new_incompatible_dimensionality(
@@ -80,17 +79,14 @@ fn get_squeezed_array_subset(
         decoded_region_shape.iter(),
         shape.iter()
     )
-    .filter(|&(_, _, shape)| shape.get() > 1)
+    .filter(|&(_, _, shape)| *shape > 1)
     .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
 
     let decoded_region_squeeze = ArraySubset::from(ranges);
     Ok(decoded_region_squeeze)
 }
 
-fn get_squeezed_indexer(
-    indexer: &dyn Indexer,
-    shape: &[NonZeroU64],
-) -> Result<impl Indexer, CodecError> {
+fn get_squeezed_indexer(indexer: &dyn Indexer, shape: &[u64]) -> Result<impl Indexer, CodecError> {
     let indices = indexer
         .iter_indices()
         .map(|indices| {
@@ -98,9 +94,7 @@ fn get_squeezed_indexer(
                 Ok(indices
                     .into_iter()
                     .zip(shape)
-                    .filter_map(
-                        |(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None },
-                    )
+                    .filter_map(|(indices, &shape)| if shape > 1 { Some(indices) } else { None })
                     .collect_vec())
             } else {
                 Err(IndexerError::new_incompatible_dimensionality(
@@ -122,12 +116,13 @@ mod tests {
     use super::*;
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::codec::BytesCodec;
-    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
-    use zarrs_chunk_grid::ChunkGrid;
+    use crate::array::{ArrayBytes, ArraySubset, DataType, FillValue, data_type};
+    use zarrs_chunk_grid::{ChunkGrid, ChunkShapeTraits};
     use zarrs_codec::{
         ChunkGridDecoded, CodecOptions, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
     };
+    use zarrs_metadata::{ArrayShape, ChunkShapeNonEmpty};
 
     const fn nz(value: u64) -> NonZeroU64 {
         NonZeroU64::new(value).unwrap()
@@ -138,13 +133,7 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) {
-        let shape = vec![
-            NonZeroU64::new(1).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(1).unwrap(),
-            NonZeroU64::new(2).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ];
+        let shape = vec![1, 2, 1, 2, 3];
         let fill_value = fill_value.into();
         let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
@@ -154,14 +143,7 @@ mod tests {
         let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration).unwrap())
             .with_context(data_type.clone(), fill_value.clone())
             .unwrap();
-        assert_eq!(
-            codec.encoded_shape(&shape).unwrap(),
-            vec![
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-            ]
-        );
+        assert_eq!(codec.encoded_shape(&shape).unwrap(), vec![2, 2, 3,]);
 
         let encoded = codec
             .encode(bytes.clone(), &shape, &CodecOptions::default())
@@ -179,10 +161,10 @@ mod tests {
     }
 
     fn test_squeeze_partial_decode_granularity(
-        array_shape: Vec<u64>,
-        chunk_shape: Vec<NonZeroU64>,
-        inner_array_shape: Vec<u64>,
-        inner_subchunk_shape: Vec<NonZeroU64>,
+        array_shape: ArrayShape,
+        chunk_shape: ChunkShapeNonEmpty,
+        inner_array_shape: ArrayShape,
+        inner_subchunk_shape: ChunkShapeNonEmpty,
         expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
     ) {
         let codec = Arc::new(SqueezeCodec::new())
@@ -232,13 +214,7 @@ mod tests {
         let codec = Arc::new(SqueezeCodec::new());
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let shape = vec![
-            NonZeroU64::new(1).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(1).unwrap(),
-            NonZeroU64::new(4).unwrap(),
-            NonZeroU64::new(1).unwrap(),
-        ];
+        let shape = vec![1, 4, 1, 4, 1];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);

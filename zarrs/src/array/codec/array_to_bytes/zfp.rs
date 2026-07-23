@@ -96,9 +96,9 @@ mod zfp_codec;
 mod zfp_field;
 mod zfp_stream;
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
 use zfp_sys::{
@@ -111,7 +111,7 @@ use self::zfp_array::ZfpArray;
 use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
-use crate::array::{ChunkShapeTraits, convert_from_bytes_slice};
+use crate::array::convert_from_bytes_slice;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
 
@@ -201,7 +201,7 @@ fn promote_before_zfp_encoding(decoded_value: &[u8], encoding: ZfpEncoding) -> Z
     }
 }
 
-fn init_zfp_decoding_output(shape: &[NonZeroU64], encoding: ZfpEncoding) -> ZfpArray {
+fn init_zfp_decoding_output(shape: &[u64], encoding: ZfpEncoding) -> ZfpArray {
     let num_elements = shape.num_elements_usize();
     ZfpArray::new_zeroed(encoding, num_elements)
 }
@@ -210,7 +210,7 @@ fn zfp_decode(
     zfp_mode: &ZfpMode,
     write_header: bool,
     encoded_value: &mut [u8],
-    shape: &[NonZeroU64],
+    shape: &[u64],
     encoding: ZfpEncoding,
     parallel: bool,
 ) -> Result<Vec<u8>, CodecError> {
@@ -241,7 +241,7 @@ fn zfp_decode(
             &mut array,
             &shape
                 .iter()
-                .map(|u| usize::try_from(u.get()).unwrap())
+                .map(|u| usize::try_from(*u).unwrap())
                 .collect::<Vec<usize>>(),
         )
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
@@ -263,7 +263,6 @@ fn zfp_decode(
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use num::traits::AsPrimitive;
@@ -297,24 +296,20 @@ mod tests {
     }
 
     fn chunk_shape() -> ChunkShape {
-        ChunkShape::from(vec![
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ])
+        vec![3, 3, 3]
     }
 
     fn codec_zfp_round_trip<
         T: core::fmt::Debug + std::cmp::PartialEq + ElementOwned + Copy + 'static,
     >(
-        chunk_shape: &[NonZeroU64],
+        chunk_shape: &[u64],
         data_type: &DataType,
         fill_value: &FillValue,
         configuration: &str,
     ) where
         u64: num::traits::AsPrimitive<T>,
     {
-        let elements: Vec<T> = (0..chunk_shape.num_elements_u64())
+        let elements: Vec<T> = (0..chunk_shape.num_elements())
             .map(|i: u64| i.as_())
             .collect();
         let bytes = T::to_array_bytes(data_type, &elements).unwrap();
@@ -488,11 +483,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_partial_decode() {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ]);
+        let chunk_shape = vec![3, 3, 3];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
@@ -542,11 +533,7 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_zfp_async_partial_decode() {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ]);
+        let chunk_shape = vec![3, 3, 3];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
@@ -599,16 +586,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_f32_6d() {
-        let chunk_shape = || {
-            ChunkShape::from(vec![
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-            ])
-        };
+        let chunk_shape = || vec![4, 1, 3, 1, 2, 1];
 
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),

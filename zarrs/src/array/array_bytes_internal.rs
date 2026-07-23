@@ -1,8 +1,7 @@
 //! Internal utilities for handling array bytes.
 
-use std::num::NonZeroU64;
-
 use itertools::Itertools;
+use zarrs_chunk_grid::ChunkShapeTraits;
 
 use super::{ArraySubset, DataType, Indexer};
 use zarrs_codec::{
@@ -63,7 +62,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
     chunk_bytes_and_subsets: Vec<(ArrayBytesVariableLength<'_>, ArraySubset)>,
     array_shape: &[u64],
 ) -> ArrayBytesVariableLength<'a> {
-    let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+    let num_elements = usize::try_from(array_shape.num_elements()).unwrap();
 
     #[cfg(debug_assertions)]
     {
@@ -154,7 +153,7 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
 ) -> Result<ArrayBytesOptional<'a>, CodecError> {
     debug_assert!(nesting_depth > 0);
 
-    let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+    let num_elements = usize::try_from(array_shape.num_elements()).unwrap();
 
     // Allocate mask buffers for each nesting level (1 byte per element per level)
     let mut merged_masks: Vec<Vec<u8>> = (0..nesting_depth)
@@ -215,7 +214,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
     indexer: &dyn Indexer,
-    array_shape: &[NonZeroU64],
+    array_shape: &[u64],
 ) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
     let indices = indexer.iter_linearised_indices(bytemuck::must_cast_slice(array_shape))?;
     let indices: Vec<_> = indices.into_iter().collect();

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
 - **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 
+### Removed
+- **Breaking**: Remove `ArraySubset::chunk_shape()`
+- **Breaking**: Remove `ChunkGridTraits::chunk_shape_u64()`
+
 ## [0.5.1] - 2026-02-08
 
 ### Added

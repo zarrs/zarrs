@@ -464,7 +464,6 @@ mod tests {
     use zarrs_metadata::{ChunkKeySeparator, Endianness};
 
     use super::*;
-    use crate::array::ChunkShape;
 
     #[cfg(all(feature = "blosc", feature = "transpose"))]
     use zarrs_metadata_ext::codec::{
@@ -500,7 +499,7 @@ mod tests {
             serde_json::from_str(json).unwrap();
         assert_eq!(
             array_metadata_v2.chunks,
-            ChunkShape::try_from(vec![NonZeroU64::new(1000).unwrap(); 2]).unwrap()
+            vec![NonZeroU64::new(1000).unwrap(); 2]
         );
         assert_eq!(array_metadata_v2.shape, vec![10000, 10000]);
         assert_eq!(

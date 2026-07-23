@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, DataType, FillValue};
+use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
@@ -14,7 +14,7 @@ use zarrs_storage::StorageError;
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
 }
 
@@ -23,7 +23,7 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Self {
@@ -38,7 +38,7 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
         &self,
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<ChunkGrid, CodecError> {
-        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
+        let expected_dimensionality = self.shape.iter().filter(|&&dim| dim > 1).count().max(1);
         if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
             return Err(CodecError::Other(
                 "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
@@ -51,7 +51,7 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
             .shape
             .iter()
             .map(|dim| {
-                if dim.get() == 1 {
+                if *dim == 1 {
                     Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
                 } else {
                     let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
@@ -61,9 +61,8 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
             })
             .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
             .map_err(|err| CodecError::Other(err.to_string()))?;
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
         Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+            RectilinearChunkGrid::new(self.shape.clone(), &chunk_shapes)
                 .map_err(|err| CodecError::Other(err.to_string()))?,
         ))
     }

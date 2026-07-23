@@ -1,19 +1,20 @@
 // TODO: Support actual partial decoding, coalescing required
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
+use zarrs_chunk_grid::ChunkShapeTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata::ChunkShape;
 use zarrs_storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenV2PartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -22,7 +23,7 @@ impl VlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
+        shape: ChunkShape,
         data_type: DataType,
         fill_value: FillValue,
     ) -> Self {
@@ -40,11 +41,10 @@ fn decode_vlen_bytes<'a>(
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,
-    shape: &[NonZeroU64],
+    shape: &[u64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
-        let num_elements =
-            usize::try_from(shape.iter().copied().map(NonZeroU64::get).product::<u64>()).unwrap();
+        let num_elements = shape.num_elements_usize();
         let (bytes, offsets) = super::get_interleaved_bytes_and_offsets(num_elements, &bytes)?;
         Ok(ArrayBytes::Variable(extract_decoded_regions_vlen(
             &bytes, &offsets, indexer, shape,
@@ -100,7 +100,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 /// Asynchronous partial decoder for the `bytes` codec.
 pub(crate) struct AsyncVlenV2PartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
+    shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -110,7 +110,7 @@ impl AsyncVlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
+        shape: ChunkShape,
         data_type: DataType,
         fill_value: FillValue,
     ) -> Self {

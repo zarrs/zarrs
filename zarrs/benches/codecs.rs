@@ -30,7 +30,7 @@ fn codec_bytes(c: &mut Criterion) {
         .unwrap();
     for size in [32, 64, 128, 256, 512].iter() {
         let num_elements = size * size * size;
-        let shape = [num_elements.try_into().unwrap(); 1];
+        let shape = [num_elements; 1];
         let data = vec![0u16; num_elements.try_into().unwrap()];
         let bytes = Element::into_array_bytes(&data_type::uint16(), data).unwrap();
         group.throughput(Throughput::Bytes(num_elements * 2));

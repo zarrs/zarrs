@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::array::{ArrayCreateError, ArrayShape, ChunkShape};
 use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_metadata::ChunkShapeNonEmpty;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
@@ -16,8 +17,8 @@ pub struct ArrayBuilderChunkGridMetadata(ArrayBuilderChunkGridMetadataImpl);
 enum ArrayBuilderChunkGridMetadataImpl {
     Metadata(MetadataV3),
     MetadataString(String),
-    ArrayShape(ArrayShape),
     ChunkShape(ChunkShape),
+    ChunkShapeNonEmpty(ChunkShapeNonEmpty),
 }
 
 impl ArrayBuilderChunkGridMetadata {
@@ -32,7 +33,7 @@ impl ArrayBuilderChunkGridMetadata {
                 })?;
                 Ok(metadata)
             }
-            ArrayBuilderChunkGridMetadataImpl::ArrayShape(chunk_shape) => {
+            ArrayBuilderChunkGridMetadataImpl::ChunkShape(chunk_shape) => {
                 #[derive(Serialize)]
                 struct RegularChunkGridConfiguration {
                     chunk_shape: ArrayShape,
@@ -46,7 +47,7 @@ impl ArrayBuilderChunkGridMetadata {
                 .expect("RegularChunkGridConfigurationInvalid is serialisable");
                 Ok(metadata)
             }
-            ArrayBuilderChunkGridMetadataImpl::ChunkShape(chunk_shape) => {
+            ArrayBuilderChunkGridMetadataImpl::ChunkShapeNonEmpty(chunk_shape) => {
                 let metadata = MetadataV3::new_with_serializable_configuration(
                     "regular".to_string(),
                     &RegularChunkGridConfiguration {
@@ -82,7 +83,7 @@ impl From<&str> for ArrayBuilderChunkGridMetadata {
 
 impl<const N: usize> From<[u64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: [u64; N]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ArrayShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
             chunk_shape.to_vec(),
         ))
     }
@@ -90,7 +91,7 @@ impl<const N: usize> From<[u64; N]> for ArrayBuilderChunkGridMetadata {
 
 impl<const N: usize> From<&[u64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[u64; N]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ArrayShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
             chunk_shape.to_vec(),
         ))
     }
@@ -98,7 +99,7 @@ impl<const N: usize> From<&[u64; N]> for ArrayBuilderChunkGridMetadata {
 
 impl From<&[u64]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[u64]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ArrayShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
             chunk_shape.to_vec(),
         ))
     }
@@ -106,7 +107,7 @@ impl From<&[u64]> for ArrayBuilderChunkGridMetadata {
 
 impl<const N: usize> From<[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: [NonZeroU64; N]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShapeNonEmpty(
             chunk_shape.to_vec(),
         ))
     }
@@ -114,7 +115,7 @@ impl<const N: usize> From<[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
 
 impl<const N: usize> From<&[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[NonZeroU64; N]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShapeNonEmpty(
             chunk_shape.to_vec(),
         ))
     }
@@ -122,7 +123,7 @@ impl<const N: usize> From<&[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
 
 impl From<&[NonZeroU64]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[NonZeroU64]) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShapeNonEmpty(
             chunk_shape.to_vec(),
         ))
     }
@@ -130,12 +131,14 @@ impl From<&[NonZeroU64]> for ArrayBuilderChunkGridMetadata {
 
 impl From<Vec<NonZeroU64>> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: Vec<NonZeroU64>) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(chunk_shape))
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShapeNonEmpty(
+            chunk_shape,
+        ))
     }
 }
 
 impl From<Vec<u64>> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: Vec<u64>) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ArrayShape(chunk_shape))
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(chunk_shape))
     }
 }

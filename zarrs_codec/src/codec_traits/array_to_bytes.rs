@@ -1,4 +1,3 @@
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
@@ -118,10 +117,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError>;
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError>;
 
     /// Encode a chunk.
     ///
@@ -130,7 +126,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError>;
 
@@ -141,7 +137,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
@@ -157,7 +153,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn compact<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         Ok(None)
@@ -179,7 +175,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn decode_into(
         &self,
         bytes: ArrayBytesRaw<'_>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -193,7 +189,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         _ = options;
@@ -213,7 +209,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         _ = options;
@@ -234,7 +230,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         _ = options;
@@ -255,7 +251,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         _ = options;

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata-v0.7.5...HEAD)
 
+### Added
+- Add `ChunkShapeNonEmpty`, an alias for `Vec<NonZeroU64>`
+
+### Changed
+- **Breaking**: Change `ChunkShape` to `Vec<u64>` from `Vec<NonZeroU64>`
+
 ## [0.7.5](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata-v0.7.5) - 2026-05-13
 
 ### Fixed

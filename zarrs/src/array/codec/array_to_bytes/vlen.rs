@@ -98,13 +98,12 @@
 mod vlen_codec;
 mod vlen_partial_decoder;
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChainBound, Endianness,
-    convert_from_bytes_slice, data_type,
+    ArrayBytesRaw, ChunkShapeTraits, CodecChainBound, Endianness, convert_from_bytes_slice,
+    data_type,
 };
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
@@ -138,15 +137,13 @@ impl CodecTraitsV3 for VlenCodec {
 
 fn get_vlen_bytes_and_offsets(
     bytes: &ArrayBytesRaw,
-    shape: &[NonZeroU64],
+    shape: &[u64],
     index_codecs: &CodecChainBound,
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
-    let index_shape = ChunkShape::from(vec![
-        NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
-    ]);
+    let index_shape = vec![shape.num_elements() + 1];
     // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
@@ -199,14 +196,14 @@ fn get_vlen_bytes_and_offsets(
     };
 
     // Decode the data
-    let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
-        data_codecs
-            .decode(data_enc.into(), &[data_len_expected], options)?
-            .into_fixed()?
-            .into_owned()
-    } else {
-        vec![]
-    };
+    let data = data_codecs
+        .decode(
+            data_enc.into(),
+            &[u64::try_from(data_len_expected).unwrap()],
+            options,
+        )?
+        .into_fixed()?
+        .into_owned();
 
     // Check the data length is as expected
     let data_len = data.len();

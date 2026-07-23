@@ -133,6 +133,9 @@ where
     let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+        if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+            return Ok(());
+        }
         let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset.start())?;
 
         let chunk_start_in_view: Vec<u64> = chunk_subset_in_array

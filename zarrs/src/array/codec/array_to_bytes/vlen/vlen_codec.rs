@@ -1,4 +1,3 @@
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
@@ -215,7 +214,7 @@ impl ArrayCodecTraits for VlenCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -236,17 +235,16 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements = shape.iter().product::<u64>();
         bytes.validate(num_elements, &self.data_type)?;
         let (data, offsets) = bytes.into_variable()?.into_parts();
         assert_eq!(offsets.len(), usize::try_from(num_elements).unwrap() + 1);
 
         // Encode offsets
-        let num_offsets =
-            NonZeroU64::try_from(usize::try_from(num_elements).unwrap() as u64 + 1).unwrap();
+        let num_offsets = num_elements + 1;
         let offsets = if *self.index_codecs.data_type() == crate::array::data_type::uint32() {
             let offsets = offsets
                 .iter()
@@ -277,12 +275,8 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         };
 
         // Encode data
-        let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
-            let data_shape = vec![data_len];
-            self.data_codecs.encode(data.into(), &data_shape, options)?
-        } else {
-            vec![].into()
-        };
+        let data_shape = vec![data.len() as u64];
+        let data = self.data_codecs.encode(data.into(), &data_shape, options)?;
 
         // Pack encoded offsets length, encoded offsets, and encoded data
         let mut bytes = Vec::with_capacity(size_of::<u64>() + offsets.len() + data.len());
@@ -306,7 +300,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
@@ -325,7 +319,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
@@ -343,7 +337,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
@@ -359,10 +353,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         ))
     }
 
-    fn encoded_representation(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, _shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         match self.data_type.size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(

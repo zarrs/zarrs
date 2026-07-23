@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::num::NonZeroU64;
 
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_plugin::{MaybeSend, MaybeSync};
@@ -21,8 +20,5 @@ pub trait ArrayCodecTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the decoded `shape` is not valid for the codec.
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError>;
+    fn recommended_concurrency(&self, shape: &[u64]) -> Result<RecommendedConcurrency, CodecError>;
 }

@@ -129,7 +129,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
 
         // Validation
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        chunk_bytes.validate(chunk_shape.num_elements(), self.data_type())?;
 
         let is_fill_value =
             !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());
@@ -189,6 +189,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
 
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
+                    if chunk_subset.is_empty() {
+                        return futures::future::Either::Left(std::future::ready(Ok(())));
+                    }
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(
                             &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
@@ -196,10 +199,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                             self.data_type(),
                         )
                         .unwrap(); // FIXME: unwrap
-                    async move {
+                    futures::future::Either::Right(async move {
                         self.async_store_chunk_opt(&chunk_indices, chunk_bytes, &options)
                             .await
-                    }
+                    })
                 };
                 futures::stream::iter(&chunks.indices())
                     .map(Ok)

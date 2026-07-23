@@ -69,7 +69,6 @@ inventory::submit! {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
@@ -170,7 +169,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_partial_decode() {
-        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let shape = vec![2; 3];
         let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
@@ -223,7 +222,7 @@ mod tests {
     async fn codec_blosc_async_partial_decode() {
         use crate::array::Indexer;
 
-        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let shape = vec![2; 3];
         let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;

@@ -47,7 +47,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = ArrayBytes::new_fill_value(
                 self.data_type(),
-                chunk_shape.num_elements_u64(),
+                chunk_shape.num_elements(),
                 self.fill_value(),
             )
             .map_err(CodecError::from)
@@ -289,7 +289,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 .codecs_bound()
                 .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
-            bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+            bytes.validate(chunk_shape.num_elements(), self.data_type())?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
                 bytemuck::must_cast_slice(&chunk_shape),
@@ -518,7 +518,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    Ok::<_, ArrayError>((
+                    if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                        return Ok::<_, ArrayError>(None);
+                    }
+                    Ok(Some((
                         self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
                             &chunk_indices,
                             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
@@ -527,15 +530,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         .await?
                         .into_optional()?,
                         chunk_subset_overlap.relative_to(array_subset_start)?,
-                    ))
+                    )))
                 }
             };
 
-            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
+            let chunk_bytes_and_subsets = futures::stream::iter(chunks.indices().iter())
                 .map(|chunk_indices| retrieve_chunk(chunk_indices.clone()))
                 .buffered(chunk_concurrent_limit)
-                .try_collect()
+                .try_collect::<Vec<_>>()
                 .await?;
+            let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
 
             Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
                 chunk_bytes_and_subsets,
@@ -548,7 +555,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    Ok::<_, ArrayError>((
+                    if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                        return Ok::<_, ArrayError>(None);
+                    }
+                    Ok(Some((
                         self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
                             &chunk_indices,
                             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
@@ -557,15 +567,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         .await?
                         .into_variable()?,
                         chunk_subset_overlap.relative_to(array_subset_start)?,
-                    ))
+                    )))
                 }
             };
 
-            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
+            let chunk_bytes_and_subsets = futures::stream::iter(chunks.indices().iter())
                 .map(|chunk_indices| retrieve_chunk(chunk_indices.clone()))
                 .buffered(chunk_concurrent_limit)
-                .try_collect()
+                .try_collect::<Vec<_>>()
                 .await?;
+            let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
 
             Ok(ArrayBytes::Variable(merge_chunks_vlen(
                 chunk_bytes_and_subsets,
@@ -612,6 +626,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                    if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                        return Ok(());
+                    }
                     let chunk_subset_in_array =
                         chunk_subset_overlap.relative_to(array_subset_start)?;
 
@@ -689,6 +706,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             async move {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                    return Ok(());
+                }
                 let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
 
                 let chunk_start_in_view: Vec<u64> = chunk_subset_in_array

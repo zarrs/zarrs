@@ -427,12 +427,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let chunk_indices = chunks.indices();
         if nesting_depth > 0 {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<
-                (ArrayBytesOptional<'static>, ArraySubset),
+                Option<(ArrayBytesOptional<'static>, ArraySubset)>,
                 ArrayError,
             > {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                Ok((
+                if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some((
                     self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
@@ -440,10 +443,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     )?
                     .into_optional()?,
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
-                ))
+                )))
             };
             let chunk_bytes_and_subsets =
                 iter_concurrent_limit!(chunk_concurrent_limit, chunk_indices, map, retrieve_chunk)
+                    .filter_map(Result::transpose)
                     .collect::<Result<Vec<_>, _>>()?;
             Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
                 chunk_bytes_and_subsets,
@@ -452,12 +456,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             )?))
         } else {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<
-                (ArrayBytesVariableLength<'static>, ArraySubset),
+                Option<(ArrayBytesVariableLength<'static>, ArraySubset)>,
                 ArrayError,
             > {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                Ok((
+                if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some((
                     self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
@@ -465,10 +472,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     )?
                     .into_variable()?,
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
-                ))
+                )))
             };
             let chunk_bytes_and_subsets =
                 iter_concurrent_limit!(chunk_concurrent_limit, chunk_indices, map, retrieve_chunk)
+                    .filter_map(Result::transpose)
                     .collect::<Result<Vec<_>, _>>()?;
             Ok(ArrayBytes::Variable(merge_chunks_vlen(
                 chunk_bytes_and_subsets,
@@ -509,6 +517,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                if chunk_subset.is_empty() || chunk_subset_overlap.is_empty() {
+                    return Ok(());
+                }
                 let chunk_subset_in_array =
                     chunk_subset_overlap.relative_to(&array_subset.start())?;
 
@@ -573,7 +584,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 #[cfg(test)]
 mod tests {
     #![expect(clippy::single_range_in_vec_init)]
-    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
@@ -597,7 +607,7 @@ mod tests {
             let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
             assert_eq!(
                 subchunk_grid.chunk_shape(&vec![0; array.dimensionality()])?,
-                Some(vec![NonZeroU64::new(2).unwrap(); 2])
+                Some(vec![2; 2])
             );
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
 
@@ -610,7 +620,7 @@ mod tests {
                 array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
             assert_eq!(
                 local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
-                vec![NonZeroU64::new(2).unwrap(); 2]
+                vec![2; 2]
             );
 
             #[cfg(feature = "ndarray")]

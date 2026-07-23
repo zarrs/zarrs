@@ -308,17 +308,6 @@ pub unsafe trait ChunkGridTraits:
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError>;
 
-    /// The shape of the chunk at `chunk_indices`.
-    ///
-    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError>;
-
     /// The origin of the chunk at `chunk_indices`.
     ///
     /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds (its origin would fall entirely past the array extent in at least one dimension).
@@ -348,7 +337,7 @@ pub unsafe trait ChunkGridTraits:
             let ranges = chunk_origin
                 .into_iter()
                 .zip(chunk_shape)
-                .map(|(o, s)| o..(o + s.get()));
+                .map(|(o, s)| o..(o + s));
             Ok(Some(ArraySubset::from(ranges)))
         } else {
             Ok(None)
@@ -462,7 +451,7 @@ pub unsafe trait ChunkGridTraits:
     /// Return a serial iterator over the chunk indices of the chunk grid.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
-        let n_chunks = shape.iter().product::<u64>();
+        let n_chunks = shape.num_elements();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         IndicesIntoIterator {
             subset: ArraySubset::new_with_shape(shape),
@@ -473,7 +462,7 @@ pub unsafe trait ChunkGridTraits:
     /// Return a parallel iterator over the chunk indices of the chunk grid.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
         let shape = self.grid_shape().to_vec();
-        let n_chunks = shape.iter().product::<u64>();
+        let n_chunks = shape.num_elements();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         ParIndicesIntoIterator {
             subset: ArraySubset::new_with_shape(shape),

@@ -14,7 +14,7 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
-    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
+    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2u64; 2]);
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
@@ -154,7 +154,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap()
             .chunk_shape(&vec![0; array.dimensionality()])
             .unwrap(),
-        Some(vec![NonZeroU64::new(1).unwrap(); 2])
+        Some(vec![1u64; 2])
     );
 
     array_sync_read(&array)?;

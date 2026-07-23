@@ -7,6 +7,7 @@ use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
+use zarrs_metadata::ChunkShapeNonEmpty;
 
 use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, sharding_index_shape,
@@ -30,7 +31,7 @@ use zarrs_storage::byte_range::ByteRange;
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
     shard_shape: ChunkShape,
-    subchunk_shape: ChunkShape,
+    subchunk_shape: ChunkShapeNonEmpty,
     chunk_grid: RegularChunkGrid,
     inner_codecs: Arc<CodecChainBound>,
     index_codecs: Arc<CodecChainBound>,
@@ -47,7 +48,7 @@ impl ShardingPartialEncoder {
     pub(crate) fn new(
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shard_shape: ChunkShape,
-        subchunk_shape: ChunkShape,
+        subchunk_shape: ChunkShapeNonEmpty,
         inner_codecs: Arc<CodecChainBound>,
         index_codecs: Arc<CodecChainBound>,
         index_location: ShardingIndexLocation,
@@ -67,16 +68,12 @@ impl ShardingPartialEncoder {
             options,
         )?
         .unwrap_or_else(|| {
-            let num_chunks =
-                usize::try_from(chunks_per_shard.iter().map(|x| x.get()).product::<u64>()).unwrap();
+            let num_chunks = chunks_per_shard.num_elements_usize();
             vec![u64::MAX; num_chunks * 2]
         });
 
-        let chunk_grid = RegularChunkGrid::new(
-            bytemuck::must_cast_slice(shard_shape.as_slice()).to_vec(),
-            subchunk_shape.clone(),
-        )
-        .map_err(|err| CodecError::from(err.to_string()))?;
+        let chunk_grid = RegularChunkGrid::new(shard_shape.clone(), subchunk_shape.clone())
+            .map_err(|err| CodecError::from(err.to_string()))?;
         Ok(Self {
             input_output_handle,
             shard_shape,
@@ -109,9 +106,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         &self,
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
         let subchunk_grid = ChunkGrid::new(
-            RegularBoundedChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+            RegularBoundedChunkGrid::new(self.shard_shape.clone(), self.subchunk_shape.clone())
                 .map_err(|err| CodecError::Other(err.to_string()))?,
         );
         nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
@@ -157,7 +153,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let mut shard_index = self.shard_index.lock().unwrap();
 
         let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
-        let chunks_per_shard = chunks_per_shard.to_array_shape();
 
         // Get the maximum offset of existing encoded chunks
         let max_data_offset = shard_index
@@ -180,7 +175,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
                 self.inner_codecs.data_type(),
-                self.subchunk_shape.num_elements_u64(),
+                self.subchunk_shape.num_elements(),
                 self.inner_codecs.fill_value(),
             )
         };
@@ -203,11 +198,11 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .end_exc()
             .iter()
             .zip(&self.shard_shape)
-            .any(|(a, b)| *a > b.get())
+            .any(|(a, b)| a > b)
         {
             Err(IndexerError::new_oob(
                 chunk_subset_indexer.end_exc(),
-                bytemuck::cast_slice(&self.shard_shape).to_vec(),
+                self.shard_shape.clone(),
             ))?;
         }
 
@@ -296,7 +291,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         subchunk_index,
                         self.inner_codecs.decode(
                             Cow::Owned(subchunk_encoded),
-                            &self.subchunk_shape,
+                            bytemuck::must_cast_slice(&self.subchunk_shape),
                             options,
                         )?,
                     ))
@@ -380,7 +375,11 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(subchunk_decoded, &self.subchunk_shape, options)?
+                        .encode(
+                            subchunk_decoded,
+                            bytemuck::must_cast_slice(&self.subchunk_shape),
+                            options,
+                        )?
                         .into_owned();
                     Ok((subchunk_index, Some(subchunk_encoded)))
                 }

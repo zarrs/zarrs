@@ -1,15 +1,14 @@
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
+    ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
+    CodecError, CodecOptions, DataType,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -17,7 +16,6 @@ use crate::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{OffsetBytesIterator, StorageError};
 
@@ -39,7 +37,7 @@ impl ArrayDecodedRepresentation {
     }
 
     /// Return the shape.
-    pub(super) fn shape(&self) -> &[NonZeroU64] {
+    pub(super) fn shape(&self) -> &[u64] {
         &self.shape
     }
 
@@ -60,7 +58,7 @@ impl ArrayDecodedRepresentation {
 
     /// Return the number of elements.
     pub(super) fn num_elements(&self) -> u64 {
-        self.shape.iter().map(|d| d.get()).product()
+        self.shape.iter().product()
     }
 }
 
@@ -143,29 +141,15 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
-            .output_shape()
-            .iter()
-            .map(|f| NonZeroU64::try_from(*f))
-            .collect();
+        let output_shape: Vec<u64> = indexer.output_shape();
 
         // Read the subsets
         let chunk_bytes = self.input_output_handle.partial_decode(indexer, options)?;
 
         // Decode the subsets
-        if let Ok(shape) = output_shape {
-            let shape = ChunkShape::from(shape);
-            self.codec
-                .decode(chunk_bytes, &shape, options)
-                .map(ArrayBytes::into_owned)
-        } else {
-            Ok(match self.decoded_representation.data_type().size() {
-                DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
-                }
-            })
-        }
+        self.codec
+            .decode(chunk_bytes, &output_shape, options)
+            .map(ArrayBytes::into_owned)
     }
 
     fn local_subchunk_grids(
@@ -503,11 +487,7 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
-        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
-            .output_shape()
-            .iter()
-            .map(|f| NonZeroU64::try_from(*f))
-            .collect();
+        let output_shape: Vec<u64> = indexer.output_shape();
 
         // Read the subsets
         let chunk_bytes = self
@@ -516,19 +496,9 @@ where
             .await?;
 
         // Decode the subsets
-        if let Ok(shape) = output_shape {
-            let shape = ChunkShape::from(shape);
-            self.codec
-                .decode(chunk_bytes, &shape, options)
-                .map(ArrayBytes::into_owned)
-        } else {
-            Ok(match self.decoded_representation.data_type().size() {
-                DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
-                }
-            })
-        }
+        self.codec
+            .decode(chunk_bytes, &output_shape, options)
+            .map(ArrayBytes::into_owned)
     }
 
     fn supports_partial_decode(&self) -> bool {

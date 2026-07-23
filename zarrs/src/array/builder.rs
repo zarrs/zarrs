@@ -9,8 +9,8 @@ use zarrs_plugin::ExtensionName;
 
 use super::chunk_key_encoding::DefaultChunkKeyEncoding;
 use super::{
-    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
-    DimensionName, StorageTransformerChain,
+    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, CodecChain, DimensionName,
+    StorageTransformerChain,
 };
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
@@ -22,7 +22,7 @@ use zarrs_codec::{
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
-use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
+use zarrs_metadata::{ChunkKeySeparator, ChunkShapeNonEmpty, IntoDimensionName};
 
 mod array_builder_chunk_grid_metadata;
 pub use array_builder_chunk_grid_metadata::ArrayBuilderChunkGridMetadata;
@@ -546,7 +546,7 @@ impl ArrayBuilder {
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
-            let subchunk_shape: ChunkShape = subchunk_shape
+            let subchunk_shape: ChunkShapeNonEmpty = subchunk_shape
                 .iter()
                 .copied()
                 .map(NonZeroU64::try_from)
@@ -977,6 +977,8 @@ mod tests {
     fn array_builder_codec_options_preserved_from_codec_object_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
+        use zarrs_chunk_grid::ChunkShapeTraits;
+
         use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
         use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
@@ -985,7 +987,7 @@ mod tests {
         const SHARD_SHAPE: [u64; 2] = [2, 2];
         const CHUNK_SHAPE: [u64; 2] = [1, 1];
 
-        let chunk_shape: ChunkShape = CHUNK_SHAPE
+        let chunk_shape: ChunkShapeNonEmpty = CHUNK_SHAPE
             .iter()
             .map(|&x| NonZeroU64::new(x).unwrap())
             .collect();
@@ -1020,7 +1022,7 @@ mod tests {
 
         array.store_metadata().unwrap();
 
-        let total_elements = SHAPE.iter().product::<u64>() as usize;
+        let total_elements = SHAPE.num_elements_usize();
         let data: Vec<f64> = (0..total_elements).map(|x| x as f64).collect();
         array
             .store_array_subset(

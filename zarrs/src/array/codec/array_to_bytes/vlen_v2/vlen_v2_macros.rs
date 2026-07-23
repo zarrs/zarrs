@@ -154,7 +154,7 @@ macro_rules! vlen_v2_codec {
 
             fn recommended_concurrency(
                 &self,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
             ) -> Result<RecommendedConcurrency, CodecError> {
                 self.inner.recommended_concurrency(shape)
             }
@@ -175,7 +175,7 @@ macro_rules! vlen_v2_codec {
             fn encode<'a>(
                 &self,
                 bytes: ArrayBytes<'a>,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
                 options: &CodecOptions,
             ) -> Result<ArrayBytesRaw<'a>, CodecError> {
                 self.inner.encode(bytes, shape, options)
@@ -184,7 +184,7 @@ macro_rules! vlen_v2_codec {
             fn decode<'a>(
                 &self,
                 bytes: ArrayBytesRaw<'a>,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
                 options: &CodecOptions,
             ) -> Result<ArrayBytes<'a>, CodecError> {
                 self.inner.decode(bytes, shape, options)
@@ -193,7 +193,7 @@ macro_rules! vlen_v2_codec {
             fn partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
                 self.inner.clone().partial_decoder(input_handle, shape, options)
@@ -202,7 +202,7 @@ macro_rules! vlen_v2_codec {
             fn partial_encoder(
                 self: Arc<Self>,
                 input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
                 self.inner.clone().partial_encoder(input_output_handle, shape, options)
@@ -212,7 +212,7 @@ macro_rules! vlen_v2_codec {
             async fn async_partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
                 options: &CodecOptions,
             ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
                 self.inner
@@ -223,7 +223,7 @@ macro_rules! vlen_v2_codec {
 
             fn encoded_representation(
                 &self,
-                shape: &[std::num::NonZeroU64],
+                shape: &[u64],
             ) -> Result<BytesRepresentation, CodecError> {
                 self.inner.encoded_representation(shape)
             }

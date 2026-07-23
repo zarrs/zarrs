@@ -266,35 +266,6 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
 
         Ok(std::iter::zip(chunk_indices, &self.chunks)
             .map(|(chunk_index, chunk_dim)| match chunk_dim {
-                RectilinearChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
-                RectilinearChunkGridDimension::Varying(offsets_sizes) => {
-                    let chunk_index = usize::try_from(*chunk_index).unwrap();
-                    if chunk_index < offsets_sizes.len() {
-                        Some(offsets_sizes[chunk_index].size)
-                    } else {
-                        None
-                    }
-                }
-            })
-            .collect::<Option<Vec<_>>>())
-    }
-
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() != self.dimensionality() {
-            return Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ));
-        }
-        if self.array_shape.contains(&0) {
-            return Ok(None);
-        }
-
-        Ok(std::iter::zip(chunk_indices, &self.chunks)
-            .map(|(chunk_index, chunk_dim)| match chunk_dim {
                 RectilinearChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let chunk_index = usize::try_from(*chunk_index).unwrap();
@@ -662,7 +633,6 @@ mod tests {
         // Fully out-of-bounds: scalar dim past grid, varying dim past list
         assert_eq!(chunk_grid.chunk_origin(&[5, 4]).unwrap(), None);
         assert_eq!(chunk_grid.chunk_shape(&[5, 4]).unwrap(), None);
-        assert_eq!(chunk_grid.chunk_shape_u64(&[5, 4]).unwrap(), None);
         assert_eq!(chunk_grid.subset(&[5, 4]).unwrap(), None);
 
         // Fully out-of-bounds: both dims far past extent
@@ -680,17 +650,7 @@ mod tests {
             chunk_grid.chunk_origin(&[4, 3]).unwrap(),
             Some(vec![40, 45])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[4, 3]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(15).unwrap()
-            ])
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape_u64(&[4, 3]).unwrap(),
-            Some(vec![10, 15])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[4, 3]).unwrap(), Some(vec![10, 15]));
         assert_eq!(
             chunk_grid.subset(&[4, 3]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[40..50, 45..60]))
@@ -711,13 +671,7 @@ mod tests {
             chunk_grid.chunk_origin(&[2, 1]).unwrap(),
             Some(vec![20, 10])
         );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[2, 1]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(15).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[2, 1]).unwrap(), Some(vec![10, 15]));
     }
 
     #[test]
@@ -773,20 +727,8 @@ mod tests {
         );
 
         // Test chunk shape for scalar chunks (all chunks same size)
-        assert_eq!(
-            chunk_grid.chunk_shape(&[0, 0]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(20).unwrap()
-            ])
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[9, 4]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(20).unwrap()
-            ])
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[0, 0]).unwrap(), Some(vec![10, 20]));
+        assert_eq!(chunk_grid.chunk_shape(&[9, 4]).unwrap(), Some(vec![10, 20]));
 
         // Test chunk element indices
         assert_eq!(
@@ -839,8 +781,8 @@ mod tests {
 
     #[test]
     fn chunk_grid_rectilinear_comprehensive() {
-        // Test from_metadata, array_shape, chunk_shape_u64, array_indices_inbounds,
-        // and error paths for chunk_indices, chunk_origin, chunk_shape, chunk_shape_u64
+        // Test from_metadata, array_shape, chunk_shape, array_indices_inbounds,
+        // and error paths for chunk_indices, chunk_origin, and chunk_shape
 
         // Setup a mixed scalar/varying chunk grid
         let array_shape: ArrayShape = vec![100, 100, 50];
@@ -865,23 +807,23 @@ mod tests {
         assert_eq!(chunk_grid.array_shape(), &array_shape);
         assert_eq!(chunk_grid.array_shape(), &vec![100, 100, 50]);
 
-        // Test chunk_shape_u64 with valid indices
+        // Test chunk_shape with valid indices
         assert_eq!(
-            chunk_grid.chunk_shape_u64(&[0, 0, 0]).unwrap(),
+            chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(),
             Some(vec![10, 25, 5])
         );
         assert_eq!(
-            chunk_grid.chunk_shape_u64(&[1, 2, 1]).unwrap(),
+            chunk_grid.chunk_shape(&[1, 2, 1]).unwrap(),
             Some(vec![20, 25, 15])
         );
         assert_eq!(
-            chunk_grid.chunk_shape_u64(&[3, 3, 2]).unwrap(),
+            chunk_grid.chunk_shape(&[3, 3, 2]).unwrap(),
             Some(vec![40, 25, 30])
         );
 
-        // Test chunk_shape_u64 with out-of-bounds chunk indices (returns None)
-        assert_eq!(chunk_grid.chunk_shape_u64(&[4, 0, 0]).unwrap(), None); // First dim out of bounds
-        assert_eq!(chunk_grid.chunk_shape_u64(&[0, 0, 3]).unwrap(), None); // Third dim out of bounds
+        // Test chunk_shape with out-of-bounds chunk indices (returns None)
+        assert_eq!(chunk_grid.chunk_shape(&[4, 0, 0]).unwrap(), None); // First dim out of bounds
+        assert_eq!(chunk_grid.chunk_shape(&[0, 0, 3]).unwrap(), None); // Third dim out of bounds
 
         // Test array_indices_inbounds with valid indices
         assert!(chunk_grid.array_indices_inbounds(&[0, 0, 0]));
@@ -942,21 +884,6 @@ mod tests {
             IncompatibleDimensionalityError { .. }
         ));
 
-        // Error paths: Test chunk_shape_u64 with incompatible dimensionality
-        let result = chunk_grid.chunk_shape_u64(&[1, 1]);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            IncompatibleDimensionalityError { .. }
-        ));
-
-        let result = chunk_grid.chunk_shape_u64(&[1, 1, 1, 1]);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            IncompatibleDimensionalityError { .. }
-        ));
-
         // Error paths: Test chunk_element_indices with incompatible dimensionality
         let result = chunk_grid.chunk_element_indices(&[50, 50]);
         assert!(result.is_err());
@@ -982,10 +909,6 @@ mod tests {
         assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
 
         let result = chunk_grid.chunk_shape(&[10, 10, 10]);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
-
-        let result = chunk_grid.chunk_shape_u64(&[10, 10, 10]);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
     }

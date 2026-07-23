@@ -19,7 +19,6 @@ use super::{
     promote_before_zfp_encoding, zfp_decode, zfp_native_type_to_sys,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
-use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
     CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -205,7 +204,7 @@ impl ArrayCodecTraits for ZfpCodecBound {
 
     fn recommended_concurrency(
         &self,
-        _shape: &[NonZeroU64],
+        _shape: &[u64],
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: zfp supports multi thread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -222,7 +221,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
@@ -232,7 +231,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             &mut bytes_promoted,
             &shape
                 .iter()
-                .map(|u| usize::try_from(u.get()).unwrap())
+                .map(|&u| usize::try_from(u).unwrap())
                 .collect::<Vec<usize>>(),
         )
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
@@ -288,7 +287,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        shape: &[u64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         zfp_decode(
@@ -302,10 +301,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         .map(ArrayBytes::from)
     }
 
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<BytesRepresentation, CodecError> {
+    fn encoded_representation(&self, shape: &[u64]) -> Result<BytesRepresentation, CodecError> {
         let bufsize = {
             let field = unsafe {
                 // SAFETY: zfp_stream_maximum_size does not use the data in the field, so it can be empty
@@ -313,7 +309,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
                     self.zfp_type,
                     &shape
                         .iter()
-                        .map(|u| usize::try_from(u.get()).unwrap())
+                        .map(|&u| usize::try_from(u).unwrap())
                         .collect::<Vec<usize>>(),
                 )
             }
