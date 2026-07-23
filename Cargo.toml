@@ -13,7 +13,6 @@ members = [
     "zarrs_plugin",
     "zarrs_storage",
     "zarrs_filesystem",
-    "zarrs_object_store",
     "zarrs_conformance",
 ]
 
