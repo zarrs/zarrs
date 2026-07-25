@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Count async erase operations in `PerformanceMetricsStorageAdapter`
+- Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
 
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.4) - 2026-07-05
 
