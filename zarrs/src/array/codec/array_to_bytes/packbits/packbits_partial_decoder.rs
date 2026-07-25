@@ -3,8 +3,7 @@
 use std::ops::Div;
 use std::sync::Arc;
 
-#[cfg(feature = "async")]
-use async_generic::async_generic;
+use ambisync::ambisync;
 use num::Integer;
 use std::num::NonZeroU64;
 
@@ -18,24 +17,17 @@ use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
-// https://github.com/scouten/async-generic/pull/17
 #[allow(clippy::too_many_lines)]
 #[expect(clippy::too_many_arguments)]
-#[cfg_attr(feature = "async", async_generic(
-    async_signature(
+#[ambisync(
+    sync(
+        name = "partial_decode",
+        types(AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits),
+    ),
+    async(feature = "async"),
+)]
+async fn partial_decode_async<'a>(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: &[NonZeroU64],
-    data_type: &DataType,
-    fill_value: &FillValue,
-    padding_encoding: PackBitsPaddingEncoding,
-    components: PackBitsCodecComponents,
-    first_bit: u64,
-    last_bit: u64,
-    indexer: &dyn crate::array::Indexer,
-    options: &CodecOptions,
-)))]
-fn partial_decode<'a>(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     shape: &[NonZeroU64],
     data_type: &DataType,
     fill_value: &FillValue,
@@ -80,16 +72,9 @@ fn partial_decode<'a>(
     });
 
     // Retrieve those bytes
-    #[cfg(feature = "async")]
-    let encoded_bytes = if _async {
-        input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
-            .await
-    } else {
-        input_handle.partial_decode_many(Box::new(byte_ranges), options)
-    }?;
-    #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode_many(Box::new(byte_ranges), options)?;
+    let encoded_bytes = input_handle
+        .partial_decode_many(Box::new(byte_ranges), options)
+        .await?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {
@@ -144,90 +129,16 @@ fn partial_decode<'a>(
     Ok(decoded_bytes)
 }
 
-/// Partial decoder for the `packbits` codec.
-pub(crate) struct PackBitsPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    shape: ChunkShape,
-    data_type: DataType,
-    fill_value: FillValue,
-    padding_encoding: PackBitsPaddingEncoding,
-    components: PackBitsCodecComponents,
-    first_bit: u64,
-    last_bit: u64,
-}
-
-impl PackBitsPartialDecoder {
-    /// Create a new partial decoder for the `packbits` codec.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: ChunkShape,
-        data_type: DataType,
-        fill_value: FillValue,
-        padding_encoding: PackBitsPaddingEncoding,
-        components: PackBitsCodecComponents,
-        first_bit: u64,
-        last_bit: u64,
-    ) -> Self {
-        Self {
-            input_handle,
-            shape,
-            data_type,
-            fill_value,
-            padding_encoding,
-            components,
-            first_bit,
-            last_bit,
-        }
-    }
-}
-
-impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        partial_decode(
-            &self.input_handle,
-            &self.shape,
-            &self.data_type,
-            &self.fill_value,
-            self.padding_encoding,
-            self.components,
-            self.first_bit,
-            self.last_bit,
-            indexer,
-            options,
-        )
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_handle.supports_partial_decode()
-    }
-}
-
-#[cfg(feature = "async")]
 /// Asynchronous partial decoder for the `packbits` codec.
+#[ambisync(
+    sync(
+        types(
+            AsyncPackBitsPartialDecoder => PackBitsPartialDecoder,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 pub(crate) struct AsyncPackBitsPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     shape: ChunkShape,
@@ -239,7 +150,16 @@ pub(crate) struct AsyncPackBitsPartialDecoder {
     last_bit: u64,
 }
 
-#[cfg(feature = "async")]
+#[ambisync(
+    sync(
+        fns("{}"),
+        types(
+            AsyncPackBitsPartialDecoder => PackBitsPartialDecoder,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
 impl AsyncPackBitsPartialDecoder {
     /// Create a new partial decoder for the `packbits` codec.
     #[allow(clippy::too_many_arguments)]
@@ -266,9 +186,21 @@ impl AsyncPackBitsPartialDecoder {
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("{}", partial_decode_async => partial_decode),
+        types(
+            AsyncPackBitsPartialDecoder => PackBitsPartialDecoder,
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -289,6 +221,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
         Ok(Vec::new())
     }
 
+    #[sync_signature(
+        fn partial_decode(
+            &self,
+            indexer: &dyn crate::array::Indexer,
+            options: &CodecOptions,
+        ) -> Result<ArrayBytes<'_>, CodecError>
+    )]
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::array::Indexer,

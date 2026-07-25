@@ -162,11 +162,14 @@ macro_rules! vlen_v2_codec {
 
         impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for [<$struct Bound>] {}
 
-        #[cfg_attr(
-            all(feature = "async", not(target_arch = "wasm32")),
-            async_trait::async_trait
+        #[ambisync::paired(
+            sync(fns("async_{}"), types("Async{}")),
+            async(
+                feature = "async",
+                flavor = async_trait,
+                send = cfg(not(target_arch = "wasm32")),
+            ),
         )]
-        #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
         impl ArrayToBytesCodecTraits for [<$struct Bound>] {
             fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
                 self as Arc<dyn ArrayToBytesCodecTraits>
@@ -190,15 +193,6 @@ macro_rules! vlen_v2_codec {
                 self.inner.decode(bytes, shape, options)
             }
 
-            fn partial_decoder(
-                self: Arc<Self>,
-                input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                shape: &[std::num::NonZeroU64],
-                options: &CodecOptions,
-            ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-                self.inner.clone().partial_decoder(input_handle, shape, options)
-            }
-
             fn partial_encoder(
                 self: Arc<Self>,
                 input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
@@ -208,7 +202,6 @@ macro_rules! vlen_v2_codec {
                 self.inner.clone().partial_encoder(input_output_handle, shape, options)
             }
 
-            #[cfg(feature = "async")]
             async fn async_partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,

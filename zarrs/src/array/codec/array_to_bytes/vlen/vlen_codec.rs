@@ -1,7 +1,10 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
+#[cfg(feature = "async")]
+use super::vlen_partial_decoder::AsyncVlenPartialDecoder;
+use super::vlen_partial_decoder::VlenPartialDecoder;
+use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1};
 use crate::array::codec::BytesCodec;
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound,
@@ -223,11 +226,14 @@ impl ArrayCodecTraits for VlenCodecBound {
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for VlenCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for VlenCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -322,13 +328,13 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         Ok(array_bytes)
     }
 
-    fn partial_decoder(
+    async fn async_partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        Ok(Arc::new(AsyncVlenPartialDecoder::new(
             input_handle,
             shape.to_vec(),
             self.data_type.clone(),
@@ -337,26 +343,6 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
             self.data_codecs.clone(),
             self.index_location,
         )))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            vlen_partial_decoder::AsyncVlenPartialDecoder::new(
-                input_handle,
-                shape.to_vec(),
-                self.data_type.clone(),
-                self.fill_value.clone(),
-                self.index_codecs.clone(),
-                self.data_codecs.clone(),
-                self.index_location,
-            ),
-        ))
     }
 
     fn encoded_representation(

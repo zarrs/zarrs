@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
@@ -32,74 +34,14 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for BitroundCodecPartial<T>
-where
-    T: ArrayPartialDecoderTraits,
-{
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Bytes codec does pass-through decoding
-        self.input_output_handle.partial_decode(indexer, options)
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
-where
-    T: ArrayPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        // For bitround codec, we need to apply the rounding to the input bytes before encoding
-        let mut bytes_copy = bytes.clone().into_fixed()?;
-        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
-        let rounded_bytes = ArrayBytes::from(bytes_copy);
-
-        self.input_output_handle
-            .partial_encode(indexer, &rounded_bytes, options)
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for BitroundCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -139,9 +81,14 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits for BitroundCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,

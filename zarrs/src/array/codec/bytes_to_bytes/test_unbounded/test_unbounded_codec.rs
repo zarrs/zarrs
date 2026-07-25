@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use zarrs_plugin::ZarrVersion;
 
-use super::test_unbounded_partial_decoder;
+#[cfg(feature = "async")]
+use super::test_unbounded_partial_decoder::AsyncTestUnboundedPartialDecoder;
+use super::test_unbounded_partial_decoder::TestUnboundedPartialDecoder;
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
@@ -59,11 +61,14 @@ impl CodecTraits for TestUnboundedCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for TestUnboundedCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
@@ -94,27 +99,13 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         Ok(encoded_value)
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        r: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            test_unbounded_partial_decoder::TestUnboundedPartialDecoder::new(r),
-        ))
-    }
-
-    #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
         r: Arc<dyn AsyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            test_unbounded_partial_decoder::AsyncTestUnboundedPartialDecoder::new(r),
-        ))
+        Ok(Arc::new(AsyncTestUnboundedPartialDecoder::new(r)))
     }
 
     fn encoded_representation(

@@ -14,30 +14,22 @@ pub(crate) struct BytesPartialDecoderCache {
     cache: Option<Vec<u8>>,
 }
 
+#[ambisync::paired(
+    sync(
+        fns("async_{}"),
+        types(AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits),
+    ),
+    async(feature = "async"),
+)]
 impl BytesPartialDecoderCache {
     /// Create a new partial decoder cache.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if caching fails.
-    pub(crate) fn new(
-        input_handle: &dyn BytesPartialDecoderTraits,
-        options: &CodecOptions,
-    ) -> Result<Self, CodecError> {
-        let cache = input_handle
-            .partial_decode(ByteRange::FromStart(0, None), options)?
-            .map(Cow::into_owned);
-        Ok(Self { cache })
-    }
-
-    #[cfg(feature = "async")]
-    /// Create a new asynchronous partial decoder cache.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if caching fails.
     pub(crate) async fn async_new(
         input_handle: &dyn AsyncBytesPartialDecoderTraits,
         options: &CodecOptions,
-    ) -> Result<BytesPartialDecoderCache, CodecError> {
+    ) -> Result<Self, CodecError> {
         let cache = input_handle
             .partial_decode(ByteRange::FromStart(0, None), options)
             .await?

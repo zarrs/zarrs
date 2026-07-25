@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
@@ -63,77 +65,14 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for BytesCodecPartial<T>
-where
-    T: BytesPartialDecoderTraits,
-{
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
-
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
-
-        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-        // Get byte ranges
-        let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
-            .map(ByteRange::new);
-
-        // Decode
-        let decoded = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)?;
-
-        let decoded = if let Some(decoded) = decoded {
-            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
-        } else {
-            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
-        };
-
-        Ok(decoded)
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for BytesCodecPartial<T>
 where
     T: AsyncBytesPartialDecoderTraits,
@@ -204,89 +143,14 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
-where
-    T: BytesPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
-
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
-
-        // If the chunk is empty, initialise the chunk with the fill value and update
-        if self.input_output_handle.exists()? {
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
-
-            let bytes_to_encode = self.encode_bytes(bytes.clone().into_fixed()?)?;
-
-            let offset_bytes: Vec<_> = byte_ranges
-                .scan(0usize, |offset_in, range_out| {
-                    let len = usize::try_from(range_out.end - range_out.start).unwrap();
-                    let range_in = *offset_in..*offset_in + len;
-                    *offset_in += len;
-                    Some((
-                        range_out.start,
-                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
-                    ))
-                })
-                .collect();
-
-            self.input_output_handle
-                .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
-        } else {
-            // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let chunk_bytes = update_array_bytes(
-                chunk_bytes,
-                chunk_shape,
-                indexer,
-                bytes,
-                self.data_type.size(),
-            )?;
-            let chunk_bytes: Vec<u8> = chunk_bytes
-                .into_fixed()
-                .expect("fixed data type")
-                .into_owned();
-
-            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
-
-            self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
-        }
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: AsyncBytesPartialEncoderTraits,

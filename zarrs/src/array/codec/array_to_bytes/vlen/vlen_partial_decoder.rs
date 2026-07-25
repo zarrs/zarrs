@@ -3,6 +3,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, ArrayBytesRaw, CodecChainBound, DataType, FillValue};
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -11,9 +13,18 @@ use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits
 use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 use zarrs_storage::StorageError;
 
-/// Partial decoder for the `bytes` codec.
-pub(crate) struct VlenPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+/// Asynchronous partial decoder for the `bytes` codec.
+#[ambisync(
+    sync(
+        types(
+            AsyncVlenPartialDecoder => VlenPartialDecoder,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
+pub(crate) struct AsyncVlenPartialDecoder {
+    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
     fill_value: FillValue,
@@ -22,11 +33,21 @@ pub(crate) struct VlenPartialDecoder {
     index_location: VlenIndexLocation,
 }
 
-impl VlenPartialDecoder {
+#[ambisync(
+    sync(
+        fns("{}"),
+        types(
+            AsyncVlenPartialDecoder => VlenPartialDecoder,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
+impl AsyncVlenPartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
         fill_value: FillValue,
@@ -76,91 +97,21 @@ fn decode_vlen_bytes<'a>(
     }
 }
 
-impl ArrayPartialDecoderTraits for VlenPartialDecoder {
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all the input bytes (cached due to PartialDecoderCapability.partial_read == false)
-        let bytes = self.input_handle.decode(options)?;
-        decode_vlen_bytes(
-            &self.index_codecs,
-            &self.data_codecs,
-            self.index_location,
-            bytes,
-            indexer,
-            &self.data_type,
-            &self.fill_value,
-            &self.shape,
-            options,
-        )
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        false
-    }
-}
-
-#[cfg(feature = "async")]
-/// Asynchronous partial decoder for the `bytes` codec.
-pub(crate) struct AsyncVlenPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
-    data_type: DataType,
-    fill_value: FillValue,
-    index_codecs: Arc<CodecChainBound>,
-    data_codecs: Arc<CodecChainBound>,
-    index_location: VlenIndexLocation,
-}
-
-#[cfg(feature = "async")]
-impl AsyncVlenPartialDecoder {
-    /// Create a new partial decoder for the `bytes` codec.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
-        data_type: DataType,
-        fill_value: FillValue,
-        index_codecs: Arc<CodecChainBound>,
-        data_codecs: Arc<CodecChainBound>,
-        index_location: VlenIndexLocation,
-    ) -> Self {
-        Self {
-            input_handle,
-            shape,
-            data_type,
-            fill_value,
-            index_codecs,
-            data_codecs,
-            index_location,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("{}"),
+        types(
+            AsyncVlenPartialDecoder => VlenPartialDecoder,
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+        ),
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -181,6 +132,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
         Ok(Vec::new())
     }
 
+    #[sync_signature(
+        fn partial_decode(
+            &self,
+            indexer: &dyn crate::array::Indexer,
+            options: &CodecOptions,
+        ) -> Result<ArrayBytes<'_>, CodecError>
+    )]
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::array::Indexer,

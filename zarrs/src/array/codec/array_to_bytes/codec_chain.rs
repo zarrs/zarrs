@@ -520,11 +520,14 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for CodecChainBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -686,108 +689,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-        let mut codec_index = 0;
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-            }
-            codec_index += 1;
-            input_handle =
-                Arc::clone(codec).partial_decoder(input_handle, bytes_representation, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-        }
-
-        let mut input_handle = {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
-            codec_index += 1;
-            self.array_to_bytes
-                .clone()
-                .partial_decoder(input_handle, shape, options)?
-        };
-
-        for (codec, (shape, data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                    &*input_handle,
-                    shape.clone(),
-                    data_type.clone(),
-                    options,
-                )?);
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .partial_decoder(input_handle, shape, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            let (shape, data_type, _fill_value) = array_representations.first().unwrap();
-            input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                &*input_handle,
-                shape.clone(),
-                data_type.clone(),
-                options,
-            )?);
-        }
-
-        Ok(input_handle)
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle = Arc::clone(codec).partial_encoder(
-                input_output_handle,
-                bytes_representation,
-                options,
-            )?;
-        }
-
-        let mut input_output_handle = self.array_to_bytes.clone().partial_encoder(
-            input_output_handle,
-            &array_representations.last().unwrap().0,
-            options,
-        )?;
-
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle =
-                codec
-                    .clone()
-                    .partial_encoder(input_output_handle, shape, options)?;
-        }
-
-        Ok(input_output_handle)
-    }
-
-    #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
         mut input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
@@ -863,7 +764,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         Ok(input_handle)
     }
 
-    #[cfg(feature = "async")]
     async fn async_partial_encoder(
         self: Arc<Self>,
         mut input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,

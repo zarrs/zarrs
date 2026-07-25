@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reduce duplicated synchronous and asynchronous implementations with `ambisync`
+  - Includes the codec partial decoders/encoders and the codec partial decoder/encoder factory methods
+  - Replaces the last use of `async-generic` in `src` (the `packbits` partial decoder)
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0

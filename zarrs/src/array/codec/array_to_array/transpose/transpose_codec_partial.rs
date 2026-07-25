@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
@@ -96,96 +98,14 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
-where
-    T: ArrayPartialDecoderTraits,
-{
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
-            let encoded_value = self
-                .input_output_handle
-                .partial_decode(&array_subset_transposed, options)?;
-            self.decode(&encoded_value, &array_subset.shape())
-        } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
-            self.input_output_handle
-                .partial_decode(&indexer_transposed, options)
-        }
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits for TransposeCodecPartial<T>
-where
-    T: ArrayPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        if let Some(array_subset) = indexer.as_array_subset() {
-            let encoded_value = self.encode(bytes, &array_subset.shape())?;
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
-            self.input_output_handle.partial_encode(
-                &array_subset_transposed,
-                &encoded_value,
-                options,
-            )
-        } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
-            self.input_output_handle
-                .partial_encode(&indexer_transposed, bytes, options)
-        }
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for TransposeCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -202,6 +122,13 @@ where
         self.input_output_handle.size_held()
     }
 
+    #[sync_signature(
+        fn partial_decode(
+            &self,
+            indexer: &dyn crate::array::Indexer,
+            options: &CodecOptions,
+        ) -> Result<ArrayBytes<'_>, CodecError>
+    )]
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::array::Indexer,
@@ -242,9 +169,14 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits for TransposeCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,

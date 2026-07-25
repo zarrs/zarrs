@@ -3,6 +3,9 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 
+#[cfg(feature = "async")]
+use super::vlen_v2_partial_decoder::AsyncVlenV2PartialDecoder;
+use super::vlen_v2_partial_decoder::VlenV2PartialDecoder;
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
     FillValue,
@@ -111,11 +114,14 @@ impl ArrayCodecTraits for VlenV2CodecBound {
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for VlenV2CodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -165,37 +171,18 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         Ok(array_bytes)
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::vlen_v2_partial_decoder::VlenV2PartialDecoder::new(
-                input_handle,
-                shape.to_vec(),
-                self.data_type.clone(),
-                self.fill_value.clone(),
-            ),
-        ))
-    }
-
-    #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::vlen_v2_partial_decoder::AsyncVlenV2PartialDecoder::new(
-                input_handle,
-                shape.to_vec(),
-                self.data_type.clone(),
-                self.fill_value.clone(),
-            ),
-        ))
+        Ok(Arc::new(AsyncVlenV2PartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
+        )))
     }
 
     fn encoded_representation(

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
@@ -111,72 +113,14 @@ fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
     Ok(())
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
-where
-    T: ArrayPartialDecoderTraits,
-{
-    fn data_type(&self) -> &DataType {
-        &self.decoded_data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        let encoded = self.input_output_handle.partial_decode(indexer, options)?;
-        encoded.validate(indexer.len(), &self.encoded_data_type)?;
-        self.decode(encoded)
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits for CastValueCodecPartial<T>
-where
-    T: ArrayPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        bytes.validate(indexer.len(), &self.decoded_data_type)?;
-        let encoded = self.encode(bytes.clone())?;
-        self.input_output_handle
-            .partial_encode(indexer, &encoded, options)
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -218,9 +162,14 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits for CastValueCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,

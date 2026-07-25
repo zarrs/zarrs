@@ -6,11 +6,13 @@ use zarrs_metadata::Configuration;
 use zarrs_plugin::ZarrVersion;
 
 use super::super::blosc_impl::compressor_as_str;
+#[cfg(feature = "async")]
+use super::super::blosc_partial_decoder::AsyncBloscPartialDecoder;
+use super::super::blosc_partial_decoder::BloscPartialDecoder;
 use super::super::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscError, BloscShuffleMode,
-    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder,
-    blosc_validate,
+    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_validate,
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 #[cfg(feature = "async")]
@@ -191,11 +193,14 @@ impl CodecTraits for BloscCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for BloscCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
@@ -238,27 +243,13 @@ impl BytesToBytesCodecTraits for BloscCodec {
         Ok(Cow::Owned(Self::do_decode(&encoded_value, n_threads)?))
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _parallel: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(blosc_partial_decoder::BloscPartialDecoder::new(
-            input_handle,
-        )))
-    }
-
-    #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _parallel: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),
-        ))
+        Ok(Arc::new(AsyncBloscPartialDecoder::new(input_handle)))
     }
 
     fn encoded_representation(

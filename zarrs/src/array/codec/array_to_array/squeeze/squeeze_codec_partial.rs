@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use ambisync::ambisync;
+
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, DataType, FillValue};
@@ -69,90 +71,14 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for SqueezeCodecPartial<T>
-where
-    T: ArrayPartialDecoderTraits,
-{
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
-            self.input_output_handle
-                .partial_decode(&array_subset_squeezed, options)
-        } else {
-            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
-            self.input_output_handle
-                .partial_decode(&indexer_squeezed, options)
-        }
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl<T: ?Sized> ArrayPartialEncoderTraits for SqueezeCodecPartial<T>
-where
-    T: ArrayPartialEncoderTraits,
-{
-    fn erase(&self) -> Result<(), CodecError> {
-        self.input_output_handle.erase()
-    }
-
-    fn partial_encode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        bytes: &ArrayBytes<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
-            self.input_output_handle
-                .partial_encode(&array_subset_squeezed, bytes, options)
-        } else {
-            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
-            self.input_output_handle
-                .partial_encode(&indexer_squeezed, bytes, options)
-        }
-    }
-
-    fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for SqueezeCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -207,9 +133,14 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits for SqueezeCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,

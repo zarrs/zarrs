@@ -14,34 +14,15 @@ pub(crate) struct ArrayPartialDecoderCache {
     local_subchunk_grids: Vec<Option<ChunkGrid>>,
 }
 
+#[ambisync::paired(
+    sync(
+        fns("async_{}"),
+        types(AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits),
+    ),
+    async(feature = "async"),
+)]
 impl ArrayPartialDecoderCache {
     /// Create a new partial decoder cache.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
-    pub(crate) fn new(
-        input_handle: &dyn ArrayPartialDecoderTraits,
-        shape: ChunkShape,
-        data_type: DataType,
-        options: &CodecOptions,
-    ) -> Result<Self, CodecError> {
-        let local_subchunk_grids = input_handle.local_subchunk_grids(options)?;
-        let bytes = input_handle
-            .partial_decode(
-                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
-                options,
-            )?
-            .into_owned();
-        Ok(Self {
-            shape,
-            data_type,
-            cache: bytes,
-            local_subchunk_grids,
-        })
-    }
-
-    #[cfg(feature = "async")]
-    /// Create a new asynchronous partial decoder cache.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
@@ -50,7 +31,7 @@ impl ArrayPartialDecoderCache {
         shape: ChunkShape,
         data_type: DataType,
         options: &CodecOptions,
-    ) -> Result<ArrayPartialDecoderCache, CodecError> {
+    ) -> Result<Self, CodecError> {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options).await?;
         let bytes = input_handle
             .partial_decode(

@@ -203,11 +203,14 @@ impl ArrayCodecTraits for PackBitsCodecBound {
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PackBitsCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -399,44 +402,6 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes_dec)))
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let component_size_bits = self.components.component_size_bits;
-        let first_bit = self.first_bit;
-        let last_bit = self.last_bit;
-
-        // Bytes codec fast path
-        if component_size_bits.is_multiple_of(8)
-            && first_bit == 0
-            && last_bit == component_size_bits - 1
-        {
-            // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            Ok(Arc::new(BytesCodecPartial::new(
-                input_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-                Some(Endianness::Little),
-            )))
-        } else {
-            Ok(Arc::new(PackBitsPartialDecoder::new(
-                input_handle,
-                shape.to_vec(),
-                self.data_type.clone(),
-                self.fill_value.clone(),
-                self.padding_encoding,
-                self.components,
-                self.first_bit,
-                self.last_bit,
-            )))
-        }
-    }
-
-    #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
