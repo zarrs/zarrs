@@ -64,13 +64,17 @@ impl<TStorage: ?Sized> Seek for StorageValueIO<TStorage> {
 
 impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let len = buf.len() as u64;
+        let len =
+            usize::try_from((self.size.saturating_sub(self.pos)).min(buf.len() as u64)).unwrap();
+        if len == 0 {
+            return Ok(0);
+        }
         let data = self
             .storage
-            .get_partial(&self.key, ByteRange::FromStart(self.pos, Some(len)))
+            .get_partial(&self.key, ByteRange::FromStart(self.pos, Some(len as u64)))
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         if let Some(data) = data {
-            buf.copy_from_slice(&data);
+            buf[..data.len()].copy_from_slice(&data);
             self.pos += data.len() as u64;
             Ok(data.len())
         } else {
@@ -83,3 +87,23 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
 }
 
 // TODO: AsyncRead
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WritableStorageTraits;
+
+    #[test]
+    fn read_stops_at_end_of_value() {
+        let store = Arc::new(crate::store::MemoryStore::new());
+        let key = StoreKey::new("value").unwrap();
+        store.set(&key, b"0123456789".as_slice().into()).unwrap();
+        let mut reader = StorageValueIO::new(store, key, 10);
+        std::io::Seek::seek(&mut reader, SeekFrom::End(-2)).unwrap();
+
+        let mut bytes = [0; 4];
+        assert_eq!(reader.read(&mut bytes).unwrap(), 2);
+        assert_eq!(&bytes[..2], b"89");
+        assert_eq!(reader.read(&mut bytes).unwrap(), 0);
+    }
+}
