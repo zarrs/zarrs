@@ -4,18 +4,34 @@ use std::sync::Arc;
 use super::byte_range::ByteRange;
 use super::{ReadableStorageTraits, StoreKey};
 
-/// Provides a [`Read`] interface to a storage value.
-#[derive(Clone)]
-pub struct StorageValueIO<TStorage: ?Sized> {
+#[cfg(feature = "async")]
+mod r#async;
+
+#[cfg(feature = "async")]
+pub use r#async::AsyncStorageValueIO;
+
+/// The storage key and seek position shared by the sync and async readers.
+struct StorageValueCursor<TStorage: ?Sized> {
     storage: Arc<TStorage>,
     key: StoreKey,
     pos: u64,
     size: u64,
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> StorageValueIO<TStorage> {
-    /// Create a new `StorageValueIO` for the `key` in `storage`.
-    pub fn new(storage: Arc<TStorage>, key: StoreKey, size: u64) -> Self {
+// Manual impl to avoid a `TStorage: Clone` bound, which `derive` would add.
+impl<TStorage: ?Sized> Clone for StorageValueCursor<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+            key: self.key.clone(),
+            pos: self.pos,
+            size: self.size,
+        }
+    }
+}
+
+impl<TStorage: ?Sized> StorageValueCursor<TStorage> {
+    fn new(storage: Arc<TStorage>, key: StoreKey, size: u64) -> Self {
         debug_assert!(size > 0);
         Self {
             storage,
@@ -24,24 +40,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits> StorageValueIO<TStorage> {
             size,
         }
     }
-}
 
-// #[cfg(feature = "async")]
-// impl<TStorage: ?Sized + super::AsyncReadableStorageTraits> StorageValueIO<TStorage> {
-//     /// Create a new `StorageValueIO` for the `key` in `storage`.
-//     pub fn async_new(storage: Arc<TStorage>, key: StoreKey, size: u64) -> Self {
-//         debug_assert!(size > 0);
-//         Self {
-//             storage,
-//             key,
-//             pos: 0,
-//             size,
-//         }
-//     }
-// }
-
-impl<TStorage: ?Sized> Seek for StorageValueIO<TStorage> {
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         use std::io::{Error, ErrorKind};
         self.pos = match pos {
             SeekFrom::Start(offset) => offset,
@@ -60,25 +60,74 @@ impl<TStorage: ?Sized> Seek for StorageValueIO<TStorage> {
         };
         Ok(self.pos)
     }
+
+    /// The number of bytes to request, clamped to the end of the value.
+    fn next_read_len(&self, requested: usize) -> usize {
+        let remaining = self.size.saturating_sub(self.pos);
+        let requested = u64::try_from(requested).unwrap_or(u64::MAX);
+        usize::try_from(remaining.min(requested)).expect("bounded above by requested: usize")
+    }
+
+    /// Copy `data` into `buf` and advance the position, clamped in case a store returns
+    /// more bytes than were requested.
+    fn consume(&mut self, data: &[u8], buf: &mut [u8]) -> usize {
+        let len = data.len().min(buf.len());
+        buf[..len].copy_from_slice(&data[..len]);
+        self.pos += len as u64;
+        len
+    }
+}
+
+/// Provides a [`Read`] interface to a storage value.
+#[cfg_attr(
+    feature = "async",
+    doc = "\nSee [`AsyncStorageValueIO`] for the asynchronous equivalent."
+)]
+pub struct StorageValueIO<TStorage: ?Sized> {
+    cursor: StorageValueCursor<TStorage>,
+}
+
+// Manual impl to avoid a `TStorage: Clone` bound, which `derive` would add.
+impl<TStorage: ?Sized> Clone for StorageValueIO<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            cursor: self.cursor.clone(),
+        }
+    }
+}
+
+impl<TStorage: ?Sized> StorageValueIO<TStorage> {
+    /// Create a new `StorageValueIO` for the `key` in `storage`.
+    #[must_use]
+    pub fn new(storage: Arc<TStorage>, key: StoreKey, size: u64) -> Self {
+        Self {
+            cursor: StorageValueCursor::new(storage, key, size),
+        }
+    }
+}
+
+impl<TStorage: ?Sized> Seek for StorageValueIO<TStorage> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.cursor.seek(pos)
+    }
 }
 
 impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let len =
-            usize::try_from((self.size.saturating_sub(self.pos)).min(buf.len() as u64)).unwrap();
+        let len = self.cursor.next_read_len(buf.len());
         if len == 0 {
             return Ok(0);
         }
         let data = self
+            .cursor
             .storage
-            .get_partial(&self.key, ByteRange::FromStart(self.pos, Some(len as u64)))
+            .get_partial(
+                &self.cursor.key,
+                ByteRange::FromStart(self.cursor.pos, Some(len as u64)),
+            )
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         if let Some(data) = data {
-            // Clamp in case a store returns more bytes than were requested
-            let len = data.len().min(buf.len());
-            buf[..len].copy_from_slice(&data[..len]);
-            self.pos += len as u64;
-            Ok(len)
+            Ok(self.cursor.consume(&data, buf))
         } else {
             // This shouldn't happen, the data is only None if the key is not found. Which won't be the case if the size is known.
             Err(std::io::Error::other(
@@ -87,8 +136,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
         }
     }
 }
-
-// TODO: AsyncRead
 
 #[cfg(test)]
 mod tests {

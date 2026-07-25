@@ -34,6 +34,8 @@ pub mod store_test;
 
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+pub use storage_value_io::AsyncStorageValueIO;
 pub use storage_value_io::StorageValueIO;
 pub use store_key::{StoreKey, StoreKeyError, StoreKeys};
 pub use store_prefix::{StorePrefix, StorePrefixError, StorePrefixes};
