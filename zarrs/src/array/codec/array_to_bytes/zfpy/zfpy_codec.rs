@@ -6,10 +6,14 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayPartialEncoderTraits,
+    ArrayToBytesCodecPartialDefault, ArrayToBytesCodecTraits, BytesPartialEncoderTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialEncoderTraits, AsyncBytesPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
 use zarrs_metadata_ext::codec::zfpy::{
@@ -212,5 +216,20 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
         self.inner.encoded_representation(shape)
+    }
+
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
     }
 }

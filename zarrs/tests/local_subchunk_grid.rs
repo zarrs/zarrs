@@ -22,10 +22,16 @@ use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayCodecTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecPartialDefault, ArrayToBytesCodecSubchunkingTraits, BytesPartialEncoderTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
     PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToArrayCodecTraits,
     register_codec_v3, unregister_codec_v3,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -185,6 +191,14 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCod
     }
 }
 
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -228,6 +242,54 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
             shape: shape.to_vec(),
             data_type: self.data_type.clone(),
         }))
+    }
+
+    // The test partial decoder is sync-only, and there is no partial encoder.
+    #[async_only]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    #[async_only]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
+            self.into_dyn(),
+        )))
     }
 }
 
@@ -470,6 +532,14 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
     }
 }
 
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self
@@ -504,6 +574,44 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    #[async_only]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    #[async_only]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        _input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
 }
@@ -617,6 +725,14 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBou
     }
 }
 
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -644,6 +760,44 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    #[async_only]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        _input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        unimplemented!("test codec only exercises subchunk-grid propagation")
+    }
+
+    #[async_only]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        _input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        _shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
 }

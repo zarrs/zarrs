@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Export `ArrayToArrayCodecPartialDefault`, `ArrayToBytesCodecPartialDefault`, and `BytesToBytesCodecPartialDefault` so implementors can delegate to the default partial codecs
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
@@ -15,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Use `ambisync` to share sync and async partial codec traits, default partial codecs, byte interval decoders, and codec partial factory methods
+- **Breaking**: Remove the default bodies of the `[async_]partial_{decoder,encoder}` methods on `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, and `BytesToBytesCodecTraits`
+  - Implementors must now state their partial codec explicitly, returning the exported `*CodecPartialDefault` where they previously relied on the default
+  - Previously, an implementor that omitted a method silently got the decode-everything-then-extract fallback, which is a correctness hazard if the codec transforms element order
 - **Breaking**: Decouple partial codec iterator lifetimes from decoder and encoder lifetimes
   - `AsyncBytesPartialDecoderTraits::partial_decode_many` no longer requires its `ByteRangeIterator` to live as long as the decoder borrow; returned bytes remain tied only to the decoder
   - `AsyncBytesPartialEncoderTraits::partial_encode_many` likewise accepts an independently lived `OffsetBytesIterator`

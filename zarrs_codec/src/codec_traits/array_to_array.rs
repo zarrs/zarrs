@@ -5,7 +5,6 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
-use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
@@ -168,6 +167,9 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
 
     /// Initialise a partial decoder.
     ///
+    /// Codecs without a specialised partial decoder should return an
+    /// [`ArrayToArrayCodecPartialDefault`](crate::ArrayToArrayCodecPartialDefault), which decodes the full chunk and then extracts.
+    ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
     async fn async_partial_decoder(
@@ -175,18 +177,12 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
-            input_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
-    }
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError>;
 
     /// Initialise a partial encoder.
+    ///
+    /// Codecs without a specialised partial encoder should return an
+    /// [`ArrayToArrayCodecPartialDefault`](crate::ArrayToArrayCodecPartialDefault).
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
@@ -195,14 +191,5 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
-            input_output_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
-    }
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError>;
 }

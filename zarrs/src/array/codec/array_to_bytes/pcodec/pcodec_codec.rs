@@ -14,10 +14,16 @@ use crate::array::{
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecPartialDefault, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::pcodec::{
@@ -199,6 +205,14 @@ impl ArrayCodecTraits for PcodecCodecBound {
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PcodecCodecBound {}
 
+#[ambisync::paired(
+    sync(fns("async_{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
 impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -286,5 +300,35 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         Ok(BytesRepresentation::BoundedSize(
             u64::try_from(size).unwrap(),
         ))
+    }
+
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
     }
 }

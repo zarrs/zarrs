@@ -49,7 +49,10 @@ macro_rules! vlen_v2_codec {
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
         #[cfg(feature = "async")]
-        use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use zarrs_codec::{
+            AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits,
+            AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
+        };
         use zarrs_codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
@@ -193,13 +196,16 @@ macro_rules! vlen_v2_codec {
                 self.inner.decode(bytes, shape, options)
             }
 
-            fn partial_encoder(
+            async fn async_partial_encoder(
                 self: Arc<Self>,
-                input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+                input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
-            ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-                self.inner.clone().partial_encoder(input_output_handle, shape, options)
+            ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+                self.inner
+                    .clone()
+                    .async_partial_encoder(input_output_handle, shape, options)
+                    .await
             }
 
             async fn async_partial_decoder(

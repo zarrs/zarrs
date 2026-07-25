@@ -13,11 +13,11 @@ use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStri
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecPartialDefault,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -172,5 +172,18 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
             }
             BytesRepresentation::UnboundedSize => BytesRepresentation::UnboundedSize,
         }
+    }
+
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        decoded_representation: &BytesRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
+            input_output_handle,
+            *decoded_representation,
+            self.into_dyn(),
+        )))
     }
 }

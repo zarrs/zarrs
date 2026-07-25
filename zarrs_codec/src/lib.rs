@@ -12,8 +12,10 @@ mod options;
 pub use codec_specific_options::CodecSpecificOptions;
 
 mod codec_partial_default;
-use codec_partial_default::BytesToBytesCodecPartialDefault;
-pub use codec_partial_default::CodecPartialDefault;
+pub use codec_partial_default::{
+    ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
+    BytesToBytesCodecPartialDefault, CodecPartialDefault,
+};
 
 mod array_bytes_fixed_disjoint_view;
 pub use array_bytes_fixed_disjoint_view::{

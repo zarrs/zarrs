@@ -22,7 +22,7 @@ use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{OffsetBytesIterator, StorageError};
 
 /// Decoded representation for array codecs shape, data type, and fill value.
-pub(super) struct ArrayDecodedRepresentation {
+pub struct ArrayDecodedRepresentation {
     shape: ChunkShape,
     data_type: DataType,
     fill_value: FillValue,
@@ -30,7 +30,7 @@ pub(super) struct ArrayDecodedRepresentation {
 
 impl ArrayDecodedRepresentation {
     /// Create a new array decoded representation.
-    pub(super) fn new(shape: ChunkShape, data_type: DataType, fill_value: FillValue) -> Self {
+    pub(crate) fn new(shape: ChunkShape, data_type: DataType, fill_value: FillValue) -> Self {
         Self {
             shape,
             data_type,
@@ -76,15 +76,15 @@ pub struct CodecPartialDefault<T: ?Sized, R, C: ?Sized> {
 }
 
 /// Type alias for the default array-to-array partial codec.
-pub(super) type ArrayToArrayCodecPartialDefault<T> =
+pub type ArrayToArrayCodecPartialDefault<T> =
     CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>;
 
 /// Type alias for the default array-to-bytes partial codec.
-pub(super) type ArrayToBytesCodecPartialDefault<T> =
+pub type ArrayToBytesCodecPartialDefault<T> =
     CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>;
 
 /// Type alias for the default bytes-to-bytes partial codec.
-pub(super) type BytesToBytesCodecPartialDefault<T> =
+pub type BytesToBytesCodecPartialDefault<T> =
     CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>;
 
 impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, C> {

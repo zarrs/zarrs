@@ -16,11 +16,11 @@ use super::super::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecPartialDefault,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
@@ -266,5 +266,18 @@ impl BytesToBytesCodecTraits for BloscCodec {
             .map_or(BytesRepresentation::UnboundedSize, |size| {
                 BytesRepresentation::BoundedSize(size + u64::from(BLOSC_MAX_OVERHEAD))
             })
+    }
+
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        decoded_representation: &BytesRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
+            input_output_handle,
+            *decoded_representation,
+            self.into_dyn(),
+        )))
     }
 }

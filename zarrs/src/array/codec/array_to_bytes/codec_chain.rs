@@ -895,6 +895,7 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
+    use zarrs_codec::BytesToBytesCodecPartialDefault;
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
@@ -993,6 +994,14 @@ mod tests {
         }
     }
 
+    #[ambisync::paired(
+        sync(fns("async_{}"), types("Async{}")),
+        async(
+            feature = "async",
+            flavor = async_trait,
+            send = cfg(not(target_arch = "wasm32")),
+        ),
+    )]
     impl BytesToBytesCodecTraits for RepresentationCheckingBytesCodec {
         fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
             self
@@ -1052,6 +1061,45 @@ mod tests {
                 )));
             }
             Ok(input_handle)
+        }
+
+        // This test codec only exercises the synchronous representation check.
+        #[async_only]
+        async fn async_partial_decoder(
+            self: Arc<Self>,
+            input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+            decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
+            let _ = decoded_representation;
+            Ok(input_handle)
+        }
+
+        fn partial_encoder(
+            self: Arc<Self>,
+            input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+            decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
+            Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
+                input_output_handle,
+                *decoded_representation,
+                self.into_dyn(),
+            )))
+        }
+
+        #[async_only]
+        async fn async_partial_encoder(
+            self: Arc<Self>,
+            input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+            decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
+            Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
+                input_output_handle,
+                *decoded_representation,
+                self.into_dyn(),
+            )))
         }
     }
 

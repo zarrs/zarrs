@@ -7,12 +7,14 @@ use super::test_unbounded_partial_decoder::AsyncTestUnboundedPartialDecoder;
 use super::test_unbounded_partial_decoder::TestUnboundedPartialDecoder;
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::AsyncBytesPartialEncoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    AsyncBytesPartialDecoderTraits, BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
+#[cfg(feature = "async")]
+use zarrs_codec::{BytesPartialEncoderTraits, BytesToBytesCodecPartialDefault};
 use zarrs_metadata::Configuration;
 
 zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
@@ -113,5 +115,18 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         _decoded_representation: &BytesRepresentation,
     ) -> BytesRepresentation {
         BytesRepresentation::UnboundedSize
+    }
+
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        decoded_representation: &BytesRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
+            input_output_handle,
+            *decoded_representation,
+            self.into_dyn(),
+        )))
     }
 }
