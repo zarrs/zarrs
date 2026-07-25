@@ -287,8 +287,14 @@ async fn indexer_partial_decode_impl_async<T: ElementOwned>(
     .unwrap()
 }
 
-// TODO: Add an ambisync async partial encoder variant.
-fn indexer_partial_encode_impl<T: ElementOwned>(
+#[ambisync::ambisync(
+    sync(
+        name = "indexer_partial_encode_impl",
+        fns(async_partial_encoder => partial_encoder),
+    ),
+    async(feature = "async"),
+)]
+async fn indexer_partial_encode_impl_async<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
@@ -311,11 +317,11 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
             .into_owned(),
     );
 
-    // TODO: Async partial encoder
     let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
     let partial_encoder = bound_codec
         .clone()
-        .partial_encoder(output.clone(), shape, &CodecOptions::default())
+        .async_partial_encoder(output.clone(), shape, &CodecOptions::default())
+        .await
         .unwrap();
     assert_eq!(
         partial_encoder.supports_partial_encode(),
@@ -332,6 +338,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
             &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
             &CodecOptions::default(),
         )
+        .await
         .unwrap();
 
     let output = output.lock().unwrap().clone().unwrap();
@@ -435,6 +442,18 @@ async fn async_indexer_array_subsets_fixed() {
                     data_type::float32(),
                     &elements,
                 ),
+                expected_partial_encode
+            );
+            assert_eq!(
+                indexer_partial_encode_impl_async(
+                    codec.clone(),
+                    &shape,
+                    &indexer,
+                    &elements_partial_encode,
+                    data_type::float32(),
+                    &elements,
+                )
+                .await,
                 expected_partial_encode
             );
         }
@@ -563,6 +582,18 @@ async fn async_indexer_array_subsets_variable() {
                     data_type::string(),
                     &elements
                 ),
+                expected_partial_encode
+            );
+            assert_eq!(
+                indexer_partial_encode_impl_async(
+                    codec.clone(),
+                    &shape,
+                    &indexer,
+                    &elements_partial_encode,
+                    data_type::string(),
+                    &elements
+                )
+                .await,
                 expected_partial_encode
             );
         }

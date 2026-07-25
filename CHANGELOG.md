@@ -27,17 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
+- Add efficient asynchronous partial encoding for the `sharding_indexed` codec
 
 ### Changed
 - Reduce duplicated synchronous and asynchronous implementations with `ambisync`
   - Includes the storage and array operation traits
   - Includes the codec partial decoders/encoders and the codec partial decoder/encoder factory methods
   - Replaces the last use of `async-generic` in `src` (the `packbits` partial decoder)
+- Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Every codec now states its partial decoder/encoder explicitly, following the removal of the `zarrs_codec` trait defaults
   - Codecs without a specialised partial codec return a `*CodecPartialDefault`, which is what the trait default previously supplied implicitly
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
-- **Breaking**: Bump `zarrs_codec` to 0.3.0
+- **Breaking**: Bump `zarrs_codec` to 0.3.1
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
@@ -45,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
-- Bump `zarrs_storage` to 0.4.4
+- Bump `zarrs_storage` to 0.4.5
 - Bump `zarrs_data_type` to 0.9.1
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
@@ -84,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
+- Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
+- Make async child discovery ignore unrecognized listed prefixes consistently with sync discovery
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 

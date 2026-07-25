@@ -6,18 +6,52 @@ use std::sync::Arc;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{ArrayBuilder, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+#[cfg(feature = "async")]
+use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+#[cfg(feature = "async")]
+use zarrs::storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
 
-fn array_partial_encode_sharding(
+#[cfg(feature = "async")]
+struct TokioSpawnBlocking;
+
+#[cfg(feature = "async")]
+impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        tokio::task::spawn_blocking(f).await.unwrap()
+    }
+}
+
+#[ambisync::ambisync(
+    sync(
+        name = "array_partial_encode_sharding",
+        fns("async_{}"),
+        types(AsyncReadableStorageTraits => ReadableStorageTraits),
+    ),
+    async(feature = "async"),
+)]
+async fn array_partial_encode_sharding_async(
     sharding_index_location: ShardingIndexLocation,
     inner_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
-    let store = std::sync::Arc::new(MemoryStore::default());
+    let store = ambisync::alt!(
+        sync => Arc::new(MemoryStore::default()),
+        async => Arc::new(SyncToAsyncStorageAdapter::new(
+            Arc::new(MemoryStore::default()),
+            TokioSpawnBlocking,
+        )),
+    );
     // let log_writer = Arc::new(std::sync::Mutex::new(
     //     // std::io::BufWriter::new(
     //     std::io::stdout(),
@@ -52,10 +86,7 @@ fn array_partial_encode_sharding(
 
     let array = builder.build(store_perf.clone(), array_path).unwrap();
 
-    let get_bytes_0_0 = || {
-        let key = array.chunk_key_encoding().encode(&[0, 0]);
-        store.get(&key)
-    };
+    let key_0_0 = array.chunk_key_encoding().encode(&[0, 0]);
 
     let expected_writes_per_shard = match sharding_index_location {
         ShardingIndexLocation::Start => 2, // Separate write for subchunks and index
@@ -64,19 +95,21 @@ fn array_partial_encode_sharding(
 
     let chunks_per_shard = 2 * 2;
     let shard_index_size = size_of::<u64>() * 2 * chunks_per_shard;
-    assert!(get_bytes_0_0()?.is_none());
+    assert!(store.get(&key_0_0).await?.is_none());
     assert_eq!(store_perf.reads(), 0);
     assert_eq!(store_perf.bytes_read(), 0);
 
     // [1, 0]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..1], &[1u16], &opt)?;
+    array
+        .async_store_array_subset_opt(&[0..1, 0..1], &[1u16], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     assert_eq!(store_perf.bytes_read(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
-            get_bytes_0_0()?.unwrap().len(),
+            store.get(&key_0_0).await?.unwrap().len(),
             shard_index_size + size_of::<u16>()
         );
     }
@@ -84,33 +117,42 @@ fn array_partial_encode_sharding(
 
     // [0, 0]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..1], &[0u16], &opt)?;
+    array
+        .async_store_array_subset_opt(&[0..1, 0..1], &[0u16], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(store_perf.bytes_read(), shard_index_size);
     }
-    assert!(get_bytes_0_0()?.is_none());
+    assert!(store.get(&key_0_0).await?.is_none());
     store_perf.reset();
 
     // [1, 2]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..2], &[1u16, 2], &opt)?;
+    array
+        .async_store_array_subset_opt(&[0..1, 0..2], &[1u16, 2], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
-            get_bytes_0_0()?.unwrap().len(),
+            store.get(&key_0_0).await?.unwrap().len(),
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![1, 2, 0, 0]);
+    assert_eq!(
+        array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,
+        vec![1, 2, 0, 0]
+    );
     store_perf.reset();
 
     // Check that the shard is entirely rewritten when possible, rather than appended
     // [3, 4]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..2], &[3u16, 4], &opt)?;
+    array
+        .async_store_array_subset_opt(&[0..1, 0..2], &[3u16, 4], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index + 1x subchunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -118,26 +160,31 @@ fn array_partial_encode_sharding(
     }
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
-            get_bytes_0_0()?.unwrap().len(),
+            store.get(&key_0_0).await?.unwrap().len(),
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![3, 4, 0, 0]);
+    assert_eq!(
+        array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,
+        vec![3, 4, 0, 0]
+    );
     store_perf.reset();
 
     // [99, 4]
     // [5, 0]
-    array.store_array_subset_opt(&[0..2, 0..1], &[99u16, 5], &opt)?;
+    array
+        .async_store_array_subset_opt(&[0..2, 0..1], &[99u16, 5], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
-            get_bytes_0_0()?.unwrap().len(),
+            store.get(&key_0_0).await?.unwrap().len(),
             shard_index_size + size_of::<u16>() * 4 // 1 stale subchunk + 3 subchunks
         );
     }
     assert_eq!(
-        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
+        array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,
         vec![99, 4, 5, 0]
     );
     store_perf.reset();
@@ -145,37 +192,61 @@ fn array_partial_encode_sharding(
     // [99, 4]
     // [5, 100]
     store_perf.reset();
-    array.store_array_subset_opt(&[1..2, 1..2], &[100u16], &opt)?;
+    array
+        .async_store_array_subset_opt(&[1..2, 1..2], &[100u16], &opt)
+        .await?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
-            get_bytes_0_0()?.unwrap().len(),
+            store.get(&key_0_0).await?.unwrap().len(),
             shard_index_size + size_of::<u16>() * 5 // 1 stale subchunk + 4 subchunks
         );
     }
     store_perf.reset();
 
     assert_eq!(
-        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
+        array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,
         vec![99, 4, 5, 100]
     );
 
     Ok(())
 }
 
-#[test]
-fn array_partial_encode_sharding_index_start() {
-    array_partial_encode_sharding(ShardingIndexLocation::Start, vec![]).unwrap();
+#[ambisync::test(
+    sync(
+        name = "array_partial_encode_sharding_index_start",
+        fns(array_partial_encode_sharding_async => array_partial_encode_sharding),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
+async fn array_partial_encode_sharding_index_start_async() {
+    array_partial_encode_sharding_async(ShardingIndexLocation::Start, vec![])
+        .await
+        .unwrap();
 }
 
-#[test]
-fn array_partial_encode_sharding_index_end() {
-    array_partial_encode_sharding(ShardingIndexLocation::End, vec![]).unwrap();
+#[ambisync::test(
+    sync(
+        name = "array_partial_encode_sharding_index_end",
+        fns(array_partial_encode_sharding_async => array_partial_encode_sharding),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
+async fn array_partial_encode_sharding_index_end_async() {
+    array_partial_encode_sharding_async(ShardingIndexLocation::End, vec![])
+        .await
+        .unwrap();
 }
 
-#[test]
-fn array_partial_encode_sharding_index_compressed() {
+#[ambisync::test(
+    sync(
+        name = "array_partial_encode_sharding_index_compressed",
+        fns(array_partial_encode_sharding_async => array_partial_encode_sharding),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
+async fn array_partial_encode_sharding_index_compressed_async() {
     #[cfg(feature = "blosc")]
     use zarrs::metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
@@ -184,7 +255,7 @@ fn array_partial_encode_sharding_index_compressed() {
     use zarrs::metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     for index_location in &[ShardingIndexLocation::Start, ShardingIndexLocation::End] {
-        array_partial_encode_sharding(
+        array_partial_encode_sharding_async(
             *index_location,
             vec![
                 #[cfg(feature = "gzip")]
@@ -212,6 +283,7 @@ fn array_partial_encode_sharding_index_compressed() {
                 Arc::new(zarrs::array::codec::Adler32Codec::default()),
             ],
         )
+        .await
         .unwrap();
     }
 }
