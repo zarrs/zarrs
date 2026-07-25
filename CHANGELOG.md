@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 
