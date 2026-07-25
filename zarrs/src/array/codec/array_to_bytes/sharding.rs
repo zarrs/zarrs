@@ -64,14 +64,12 @@
 mod sharding_codec;
 mod sharding_codec_builder;
 mod sharding_options;
-#[cfg(feature = "async")]
-mod sharding_partial_decoder_async;
-mod sharding_partial_decoder_sync;
+mod sharding_partial_decoder;
 mod sharding_partial_encoder;
 
 #[cfg(feature = "async")]
-pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
+pub use sharding_partial_decoder::AsyncShardingPartialDecoder;
+pub use sharding_partial_decoder::ShardingPartialDecoder;
 
 use std::borrow::Cow;
 use std::num::NonZeroU64;

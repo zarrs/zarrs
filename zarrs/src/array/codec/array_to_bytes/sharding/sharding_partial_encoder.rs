@@ -123,7 +123,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
-        super::sharding_partial_decoder_sync::partial_decode(
+        super::sharding_partial_decoder::partial_decode(
             &handle,
             &self.shard_shape,
             &self.subchunk_shape,

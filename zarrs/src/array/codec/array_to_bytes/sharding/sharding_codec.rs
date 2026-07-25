@@ -10,8 +10,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ChunkGridCreateError;
 
 #[cfg(feature = "async")]
-use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
+use super::sharding_partial_decoder::AsyncShardingPartialDecoder;
+use super::sharding_partial_decoder::ShardingPartialDecoder;
 use super::{
     CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
     ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
