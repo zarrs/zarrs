@@ -1,17 +1,49 @@
 #![allow(missing_docs)]
-
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::ReshapeDim;
 use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
+#[cfg(feature = "async")]
+use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+#[cfg(feature = "async")]
+use zarrs::storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToArrayCodecTraits};
+#[cfg(feature = "async")]
+struct TokioSpawnBlocking;
 
-/// Test sync partial encoding for array-to-array codecs in isolation
-fn test_array_to_array_codec_sync_partial_encoding<
+#[cfg(feature = "async")]
+impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        tokio::task::spawn_blocking(f).await.unwrap()
+    }
+}
+
+ambisync::scoped! {
+#![defaults(
+    sync(
+        fns(
+            "async_{} => {}",
+            test_array_to_array_codec_async_partial_encoding => test_array_to_array_codec_sync_partial_encoding,
+            test_bytes_to_bytes_codec_async_partial_encoding => test_bytes_to_bytes_codec_sync_partial_encoding,
+        ),
+        types(AsyncReadableStorageTraits => ReadableStorageTraits),
+    ),
+    async(feature = "async"),
+)]
+
+/// Test partial encoding for array-to-array codecs in isolation.
+#[ambisync]
+async fn test_array_to_array_codec_async_partial_encoding<
     T: UnboundArrayToArrayCodecTraits + Send + Sync + 'static,
 >(
     codec: Arc<T>,
@@ -20,7 +52,13 @@ fn test_array_to_array_codec_sync_partial_encoding<
 ) -> Result<(), Box<dyn std::error::Error>> {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
-    let store = Arc::new(MemoryStore::default());
+    let store = ambisync::alt!(
+        sync => Arc::new(MemoryStore::new()),
+        async => Arc::new(SyncToAsyncStorageAdapter::new(
+            Arc::new(MemoryStore::new()),
+            TokioSpawnBlocking,
+        )),
+    );
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_array";
@@ -39,7 +77,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
 
     // Verify the chunk doesn't exist initially
-    assert!(store.get(&chunk_key).unwrap().is_none());
+    assert!(store.get(&chunk_key).await.unwrap().is_none());
     assert_eq!(store_perf.reads(), 0);
     assert_eq!(store_perf.bytes_read(), 0);
 
@@ -47,7 +85,8 @@ fn test_array_to_array_codec_sync_partial_encoding<
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10.0f32, 20.0, 30.0, 40.0];
     array
-        .store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .await
         .unwrap();
 
     // Verify that data was written
@@ -70,7 +109,10 @@ fn test_array_to_array_codec_sync_partial_encoding<
     store_perf.reset();
 
     // Retrieve and verify the data
-    let retrieved = array.retrieve_array_subset::<Vec<f32>>(&subset).unwrap();
+    let retrieved = array
+        .async_retrieve_array_subset::<Vec<f32>>(&subset)
+        .await
+        .unwrap();
     assert_eq!(retrieved, elements, "Codec {codec_name} round-trip failed");
 
     // Test partial encoding by storing overlapping data
@@ -78,7 +120,8 @@ fn test_array_to_array_codec_sync_partial_encoding<
     let elements2 = vec![100f32, 200.0, 300.0, 400.0];
 
     array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .await
         .unwrap();
 
     let writes_after_partial = store_perf.writes();
@@ -109,7 +152,10 @@ fn test_array_to_array_codec_sync_partial_encoding<
     }
 
     // Retrieve the full chunk to verify overlapping data was handled correctly
-    let full_chunk = array.retrieve_chunk::<Vec<f32>>(&[0, 0]).unwrap();
+    let full_chunk = array
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
+        .await
+        .unwrap();
     assert_eq!(
         full_chunk,
         vec![
@@ -121,18 +167,19 @@ fn test_array_to_array_codec_sync_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
-    assert!(partial_encoder.exists().unwrap());
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
-    partial_encoder.erase().unwrap();
-    assert!(!partial_encoder.exists().unwrap());
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
 
     Ok(())
 }
 
-/// Test sync partial encoding for bytes-to-bytes codecs in isolation  
-fn test_bytes_to_bytes_codec_sync_partial_encoding<
+/// Test partial encoding for bytes-to-bytes codecs in isolation.
+#[ambisync]
+async fn test_bytes_to_bytes_codec_async_partial_encoding<
     T: BytesToBytesCodecTraits + Send + Sync + 'static,
 >(
     codec: Arc<T>,
@@ -141,7 +188,13 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
 ) -> Result<(), Box<dyn std::error::Error>> {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
-    let store = Arc::new(MemoryStore::default());
+    let store = ambisync::alt!(
+        sync => Arc::new(MemoryStore::new()),
+        async => Arc::new(SyncToAsyncStorageAdapter::new(
+            Arc::new(MemoryStore::new()),
+            TokioSpawnBlocking,
+        )),
+    );
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_array";
@@ -160,7 +213,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
 
     // Verify the chunk doesn't exist initially
-    assert!(store.get(&chunk_key).unwrap().is_none());
+    assert!(store.get(&chunk_key).await.unwrap().is_none());
 
     // Store a subset of elements
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
@@ -170,7 +223,8 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let initial_bytes_read = store_perf.bytes_read();
 
     array
-        .store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .await
         .unwrap();
 
     let writes_after_store = store_perf.writes();
@@ -203,7 +257,8 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .await
         .unwrap();
 
     let writes_after_partial = store_perf.writes();
@@ -255,7 +310,10 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     }
 
     // Retrieve and verify the final data
-    let full_chunk = array.retrieve_chunk::<Vec<f32>>(&[0, 0]).unwrap();
+    let full_chunk = array
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
+        .await
+        .unwrap();
     assert_eq!(
         full_chunk,
         vec![
@@ -267,20 +325,23 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
-    assert!(partial_encoder.exists().unwrap());
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
-    partial_encoder.erase().unwrap();
-    assert!(!partial_encoder.exists().unwrap());
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
 
     Ok(())
 }
 
 // Array-to-Array Codec Tests
 
-#[test]
-fn test_cast_value_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_cast_value_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_cast_value_async_partial_encoding() {
     use zarrs::array::codec::CastValueCodec;
     use zarrs::metadata_ext::codec::cast_value::CastValueCodecConfiguration;
 
@@ -296,12 +357,17 @@ fn test_cast_value_sync_partial_encoding() {
     .unwrap();
     let codec = Arc::new(CastValueCodec::new_with_configuration(&config).unwrap());
 
-    test_array_to_array_codec_sync_partial_encoding(codec, "cast_value", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "cast_value", true)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "bitround")]
-#[test]
-fn test_bitround_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_bitround_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_bitround_async_partial_encoding() {
     use zarrs::array::codec::BitroundCodec;
     use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 
@@ -309,12 +375,17 @@ fn test_bitround_sync_partial_encoding() {
     let codec = Arc::new(BitroundCodec::new_with_configuration(&config).unwrap());
 
     // Bitround supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "bitround", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "bitround", true)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "transpose")]
-#[test]
-fn test_transpose_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_transpose_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_transpose_async_partial_encoding() {
     use zarrs::array::codec::TransposeCodec;
     use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 
@@ -322,12 +393,17 @@ fn test_transpose_sync_partial_encoding() {
     let codec = Arc::new(TransposeCodec::new(order));
 
     // Transpose supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "transpose", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "transpose", true)
+        .await
+        .unwrap();
 }
 
-#[test]
+#[ambisync::test(
+    sync(name = "test_reshape_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
 #[ignore = "partial encoding with reshape is not yet supported"] // FIXME
-fn test_reshape_sync_partial_encoding() {
+async fn test_reshape_async_partial_encoding() {
     use zarrs::array::codec::ReshapeCodec;
     use zarrs::metadata_ext::codec::reshape::ReshapeShape;
 
@@ -339,22 +415,32 @@ fn test_reshape_sync_partial_encoding() {
     let codec = Arc::new(ReshapeCodec::new(reshape_shape));
 
     // Reshape supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "reshape", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "reshape", true)
+        .await
+        .unwrap();
 }
 
-#[test]
-fn test_squeeze_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_squeeze_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_squeeze_async_partial_encoding() {
     use zarrs::array::codec::SqueezeCodec;
 
     let codec = Arc::new(SqueezeCodec::default());
 
     // Squeeze supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "squeeze", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "squeeze", true)
+        .await
+        .unwrap();
 }
 
-#[test]
+#[ambisync::test(
+    sync(name = "test_fixedscaleoffset_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
 #[ignore = "partial encoding with fixedscaleoffset is not yet supported"] // FIXME
-fn test_fixedscaleoffset_sync_partial_encoding() {
+async fn test_fixedscaleoffset_async_partial_encoding() {
     use zarrs::array::codec::FixedScaleOffsetCodec;
     use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
@@ -363,36 +449,51 @@ fn test_fixedscaleoffset_sync_partial_encoding() {
             .unwrap();
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(&config).unwrap());
 
-    test_array_to_array_codec_sync_partial_encoding(codec, "fixedscaleoffset", true).unwrap();
+    test_array_to_array_codec_async_partial_encoding(codec, "fixedscaleoffset", true)
+        .await
+        .unwrap();
 }
 
 // Bytes-to-Bytes Codec Tests
 
 #[cfg(feature = "gzip")]
-#[test]
-fn test_gzip_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_gzip_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_gzip_async_partial_encoding() {
     use zarrs::array::codec::GzipCodec;
 
     let codec = Arc::new(GzipCodec::new(5).unwrap());
 
     // Gzip does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gzip", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "gzip", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "zstd")]
-#[test]
-fn test_zstd_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_zstd_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_zstd_async_partial_encoding() {
     use zarrs::array::codec::ZstdCodec;
 
     let codec = Arc::new(ZstdCodec::new(5, true));
 
     // Zstd does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zstd", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "zstd", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "blosc")]
-#[test]
-fn test_blosc_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_blosc_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_blosc_async_partial_encoding() {
     use zarrs::array::codec::BloscCodec;
     use zarrs::metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
@@ -410,56 +511,81 @@ fn test_blosc_sync_partial_encoding() {
     );
 
     // Blosc does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "blosc", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "blosc", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "bz2")]
-#[test]
-fn test_bz2_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_bz2_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_bz2_async_partial_encoding() {
     use zarrs::array::codec::Bz2Codec;
     use zarrs::metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     let codec = Arc::new(Bz2Codec::new(Bz2CompressionLevel::try_from(5u8).unwrap()));
 
     // Bz2 does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "bz2", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "bz2", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "crc32c")]
-#[test]
-fn test_crc32c_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_crc32c_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_crc32c_async_partial_encoding() {
     use zarrs::array::codec::Crc32cCodec;
 
     let codec = Arc::new(Crc32cCodec::new());
 
     // CRC32C is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "crc32c", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "crc32c", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "adler32")]
-#[test]
-fn test_adler32_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_adler32_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_adler32_async_partial_encoding() {
     use zarrs::array::codec::Adler32Codec;
 
     let codec = Arc::new(Adler32Codec::default());
 
     // Adler32 is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "adler32", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "adler32", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "fletcher32")]
-#[test]
-fn test_fletcher32_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_fletcher32_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_fletcher32_async_partial_encoding() {
     use zarrs::array::codec::Fletcher32Codec;
 
     let codec = Arc::new(Fletcher32Codec);
 
     // Fletcher32 is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "fletcher32", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "fletcher32", false)
+        .await
+        .unwrap();
 }
 
-#[test]
-fn test_shuffle_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_shuffle_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_shuffle_async_partial_encoding() {
     use zarrs::array::codec::ShuffleCodec;
     use zarrs::metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
 
@@ -467,37 +593,59 @@ fn test_shuffle_sync_partial_encoding() {
     let codec = Arc::new(ShuffleCodec::new_with_configuration(&config).unwrap());
 
     // TODO: Shuffle rearranges bytes - may not support efficient partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "shuffle", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "shuffle", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "zlib")]
-#[test]
-fn test_zlib_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_zlib_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_zlib_async_partial_encoding() {
     use zarrs::array::codec::ZlibCodec;
     use zarrs::metadata_ext::codec::zlib::ZlibCompressionLevel;
+
     let codec = Arc::new(ZlibCodec::new(ZlibCompressionLevel::try_from(5u8).unwrap()));
 
     // Zlib does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zlib", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "zlib", false)
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "gdeflate")]
-#[test]
-fn test_gdeflate_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_gdeflate_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_gdeflate_async_partial_encoding() {
     use zarrs::array::codec::GDeflateCodec;
 
     let codec = Arc::new(GDeflateCodec::new(5).unwrap());
 
     // Gdeflate does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gdeflate", false).unwrap();
+    test_bytes_to_bytes_codec_async_partial_encoding(codec, "gdeflate", false)
+        .await
+        .unwrap();
 }
 
 // Combined codec chain test
-#[test]
-fn test_codec_chain_sync_partial_encoding() {
+#[ambisync::test(
+    sync(name = "test_codec_chain_sync_partial_encoding"),
+    async(test_attr = #[tokio::test]),
+)]
+async fn test_codec_chain_async_partial_encoding() {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
-    let store = Arc::new(MemoryStore::default());
+    let store = ambisync::alt!(
+        sync => Arc::new(MemoryStore::new()),
+        async => Arc::new(SyncToAsyncStorageAdapter::new(
+            Arc::new(MemoryStore::new()),
+            TokioSpawnBlocking,
+        )),
+    );
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_chain";
@@ -533,7 +681,8 @@ fn test_codec_chain_sync_partial_encoding() {
     let elements = vec![10f32, 20f32, 30f32, 40f32];
 
     array
-        .store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .await
         .unwrap();
 
     let writes_after_store = store_perf.writes();
@@ -549,7 +698,10 @@ fn test_codec_chain_sync_partial_encoding() {
     );
 
     // Verify round-trip
-    let retrieved = array.retrieve_array_subset::<Vec<f32>>(&subset).unwrap();
+    let retrieved = array
+        .async_retrieve_array_subset::<Vec<f32>>(&subset)
+        .await
+        .unwrap();
     assert_eq!(retrieved, elements, "Codec chain round-trip failed");
 
     store_perf.reset();
@@ -559,7 +711,8 @@ fn test_codec_chain_sync_partial_encoding() {
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .await
         .unwrap();
 
     let writes_after_partial = store_perf.writes();
@@ -572,7 +725,10 @@ fn test_codec_chain_sync_partial_encoding() {
     );
 
     // Verify data integrity after partial update
-    let full_chunk = array.retrieve_chunk::<Vec<f32>>(&[0, 0]).unwrap();
+    let full_chunk = array
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
+        .await
+        .unwrap();
     assert_eq!(
         full_chunk,
         vec![
@@ -584,10 +740,11 @@ fn test_codec_chain_sync_partial_encoding() {
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
-    assert!(partial_encoder.exists().unwrap());
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec chain partial encoder size_held(): {encoder_size_held}");
-    partial_encoder.erase().unwrap();
-    assert!(!partial_encoder.exists().unwrap());
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
+}
 }

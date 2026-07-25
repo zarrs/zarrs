@@ -137,51 +137,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn codec_adler32_partial_decode() {
-        let elements: Vec<u8> = (0..32).collect();
-        let bytes = elements;
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        for json in [JSON1, JSON2, JSON3] {
-            let codec_configuration: Adler32CodecConfiguration =
-                serde_json::from_str(json).unwrap();
-            let codec =
-                Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
-
-            let encoded = codec
-                .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
-                .unwrap();
-            let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-            let input_handle = Arc::new(encoded);
-            let partial_decoder = codec
-                .partial_decoder(
-                    input_handle.clone(),
-                    &bytes_representation,
-                    &CodecOptions::default(),
-                )
-                .unwrap();
-            assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // adler32 partial decoder does not hold bytes
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode_many(
-                    Box::new(decoded_regions.into_iter()),
-                    &CodecOptions::default(),
-                )
-                .unwrap()
-                .unwrap();
-            let answer: &[Vec<u8>] = &[vec![3, 4]];
-            assert_eq!(
-                answer,
-                decoded_partial_chunk
-                    .into_iter()
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<_>>()
-            );
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
+    #[ambisync::test(
+        sync(name = "codec_adler32_partial_decode", fns(async_partial_decoder => partial_decoder)),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn codec_adler32_async_partial_decode() {
         let elements: Vec<u8> = (0..32).collect();
         let bytes = elements;
@@ -200,12 +159,13 @@ mod tests {
             let input_handle = Arc::new(encoded);
             let partial_decoder = codec
                 .async_partial_decoder(
-                    input_handle,
+                    input_handle.clone(),
                     &bytes_representation,
                     &CodecOptions::default(),
                 )
                 .await
                 .unwrap();
+            assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // adler32 partial decoder does not hold bytes
             let decoded_partial_chunk = partial_decoder
                 .partial_decode_many(
                     Box::new(decoded_regions.into_iter()),

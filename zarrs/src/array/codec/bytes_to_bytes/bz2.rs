@@ -110,61 +110,12 @@ mod tests {
         assert_eq!(bytes, decoded.to_vec());
     }
 
-    #[test]
     #[cfg_attr(miri, ignore)]
-    fn codec_bz2_partial_decode() {
-        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = data_type::uint16();
-        let data_type_size = data_type.fixed_size().unwrap();
-        let array_size = shape.num_elements_usize() * data_type_size;
-        let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
-
-        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-
-        let codec_configuration: Bz2CodecConfiguration = serde_json::from_str(JSON_VALID1).unwrap();
-        let codec = Arc::new(Bz2Codec::new_with_configuration(&codec_configuration).unwrap());
-
-        let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
-            .unwrap()
-            .map(ByteRange::new);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bz2 partial decoder does not hold bytes
-        let decoded = partial_decoder
-            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
-            .unwrap()
-            .unwrap()
-            .concat();
-
-        let decoded: Vec<u16> = decoded
-            .clone()
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-
-        let answer: Vec<u16> = vec![2, 6];
-        assert_eq!(answer, decoded);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
+    #[ambisync::test(
+        sync(name = "codec_bz2_partial_decode", fns(async_partial_decoder => partial_decoder)),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn codec_bz2_async_partial_decode() {
-        use crate::array::Indexer;
-
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
         let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
@@ -187,12 +138,13 @@ mod tests {
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .await
             .unwrap();
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bz2 partial decoder does not hold bytes
         let decoded = partial_decoder
             .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .await

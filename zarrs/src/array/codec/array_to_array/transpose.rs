@@ -384,64 +384,10 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
-    #[test]
-    fn codec_transpose_partial_decode() {
-        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
-
-        let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = data_type::float32();
-        let fill_value = FillValue::from(0.0f32);
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
-        let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let bytes_codec = bytes_codec
-            .with_context(
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .unwrap();
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[0..4, 0..4]),
-            ArraySubset::new_with_ranges(&[1..3, 1..4]),
-            ArraySubset::new_with_ranges(&[2..4, 0..2]),
-        ];
-        let answer: &[Vec<f32>] = &[
-            vec![
-                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
-                15.0,
-            ],
-            vec![5.0, 6.0, 7.0, 9.0, 10.0, 11.0],
-            vec![8.0, 9.0, 12.0, 13.0],
-        ];
-        for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .unwrap();
-            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
-                &decoded_partial_chunk.into_fixed().unwrap(),
-            );
-            assert_eq!(expected, &decoded_partial_chunk);
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
+    #[ambisync::test(
+        sync(name = "codec_transpose_partial_decode", fns(async_partial_decoder => partial_decoder)),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn codec_transpose_async_partial_decode() {
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
@@ -465,13 +411,14 @@ mod tests {
             )
             .unwrap();
         let input_handle = bytes_codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .async_partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .await
             .unwrap();
         let partial_decoder = codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .async_partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .await
             .unwrap();
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..4, 0..4]),
             ArraySubset::new_with_ranges(&[1..3, 1..4]),

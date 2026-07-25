@@ -757,7 +757,25 @@ mod tests {
 
     use super::*;
     use zarrs_storage::StoreKey;
+    #[cfg(feature = "async")]
+    use zarrs_storage::storage_adapter::sync_to_async::{
+        SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+    };
     use zarrs_storage::store::MemoryStore;
+
+    #[cfg(feature = "async")]
+    struct TokioSpawnBlocking;
+
+    #[cfg(feature = "async")]
+    impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
+        async fn spawn_blocking<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: Send + 'static,
+        {
+            tokio::task::spawn_blocking(f).await.unwrap()
+        }
+    }
 
     const JSON_VALID1: &str = r#"{
     "zarr_format": 3,
@@ -939,61 +957,17 @@ mod tests {
         assert!(Group::open(store, group_path).is_err());
     }
 
-    #[test]
-    fn group_traverse() {
-        let store = Arc::new(MemoryStore::new());
-
-        let builder = GroupBuilder::default();
-        let root = builder
-            .build(store.clone(), NodePath::root().as_str())
-            .unwrap();
-
-        assert!(root.store_metadata().is_ok());
-
-        assert!(
-            builder
-                .build(store.clone(), "/group")
-                .unwrap()
-                .store_metadata()
-                .is_ok()
-        );
-        assert!(
-            builder
-                .build(store.clone(), "/group/subgroup")
-                .unwrap()
-                .store_metadata()
-                .is_ok()
-        );
-        assert!(
-            builder
-                .build(store.clone(), "/group/subgroup/leafgroup")
-                .unwrap()
-                .store_metadata()
-                .is_ok()
-        );
-
-        let nodes = root.traverse();
-        assert!(nodes.is_ok());
-
-        let nodes = nodes.unwrap();
-
-        assert!(nodes.len() == 3);
-        assert_eq!(
-            nodes
-                .iter()
-                .map(|(path, _metadata)| path.as_str())
-                .collect::<HashSet<_>>(),
-            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].into()
-        );
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
+    #[ambisync::test(
+        sync(name = "group_traverse", fns("async_{}")),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn group_async_traverse() {
-        use zarrs_storage::AsyncReadableWritableListableStorage;
-
-        let store: AsyncReadableWritableListableStorage = std::sync::Arc::new(
-            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
+        let store = ambisync::alt!(
+            sync => Arc::new(MemoryStore::new()),
+            async => Arc::new(SyncToAsyncStorageAdapter::new(
+                Arc::new(MemoryStore::new()),
+                TokioSpawnBlocking,
+            )),
         );
 
         let builder = GroupBuilder::default();

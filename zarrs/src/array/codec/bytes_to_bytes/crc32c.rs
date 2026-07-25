@@ -126,47 +126,10 @@ mod tests {
         assert_eq!(checksum, &[20, 133, 9, 65]);
     }
 
-    #[test]
-    fn codec_crc32c_partial_decode() {
-        let elements: Vec<u8> = (0..32).collect();
-        let bytes = elements;
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(JSON1).unwrap();
-        let codec = Arc::new(Crc32cCodec::new_with_configuration(&codec_configuration));
-
-        let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // crc32c partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap();
-        let answer: &[Vec<u8>] = &[vec![3, 4]];
-        assert_eq!(
-            answer,
-            decoded_partial_chunk
-                .into_iter()
-                .map(|v| v.to_vec())
-                .collect::<Vec<_>>()
-        );
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
+    #[ambisync::test(
+        sync(name = "codec_crc32c_partial_decode", fns(async_partial_decoder => partial_decoder)),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn codec_crc32c_async_partial_decode() {
         let elements: Vec<u8> = (0..32).collect();
         let bytes = elements;
@@ -182,12 +145,13 @@ mod tests {
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .await
             .unwrap();
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // crc32c partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),

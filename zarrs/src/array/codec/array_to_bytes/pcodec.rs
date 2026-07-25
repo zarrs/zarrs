@@ -309,49 +309,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn codec_pcodec_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_type::uint32();
-        let fill_value = FillValue::from(0u32);
-        let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
-        let bytes = transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-
-        let codec = Arc::new(
-            PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
-                .unwrap(),
-        )
-        .with_context(data_type.clone(), fill_value.clone())
-        .unwrap();
-
-        let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
-            .unwrap();
-
-        let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_fixed()
-            .unwrap()
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|b| u8::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u32> = vec![4, 8];
-        assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
+    #[ambisync::test(
+        sync(name = "codec_pcodec_partial_decode", fns(async_partial_decoder => partial_decoder)),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     async fn codec_pcodec_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
         let data_type = data_type::uint32();
@@ -373,9 +334,10 @@ mod tests {
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
+            .async_partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
             .await
             .unwrap();
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_region, &CodecOptions::default())
             .await

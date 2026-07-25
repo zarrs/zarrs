@@ -88,111 +88,16 @@ fn consolidated_metadata() {
     }
 }
 
-#[test]
-#[serial]
-fn child_arrays() {
-    reset_config();
-    let store = sync_store();
-
-    // Two arrays in /a
-    let group = Group::open(store.clone(), "/a").unwrap();
-    let arrays = group.child_arrays().unwrap();
-    let array_paths: Vec<_> = arrays.iter().map(|a| a.path().as_str()).collect();
-    assert_eq!(array_paths, ["/a/baz", "/a/foo"]);
-
-    // At root, there are no arrays
-    let group = Group::open(store.clone(), "/").unwrap();
-    let arrays = group.child_arrays().unwrap();
-    assert!(arrays.is_empty());
-}
-
-#[test]
-#[serial]
-fn child_groups() {
-    reset_config();
-    let store = sync_store();
-
-    // At root, there are two groups: a and b
-    let group = Group::open(store.clone(), "/").unwrap();
-    let groups = group.child_groups().unwrap();
-    let group_paths: Vec<_> = groups.iter().map(|g| g.path().as_str()).collect();
-    assert_eq!(group_paths, ["/a", "/b"]);
-
-    // In /a, there are no child groups (only arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
-    let groups = group.child_groups().unwrap();
-    assert!(groups.is_empty());
-}
-
-#[test]
-#[serial]
-fn child_paths() {
-    reset_config();
-    let store = sync_store();
-
-    // At root, there are two child paths: a and b (both groups)
-    let group = Group::open(store.clone(), "/").unwrap();
-    let paths = group.child_paths().unwrap();
-    let path_strings: Vec<_> = paths
-        .iter()
-        .map(zarrs::hierarchy::NodePath::as_str)
-        .collect();
-    assert_eq!(path_strings, ["/a", "/b"]);
-
-    // In /a, there are two child paths: baz and foo (both arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
-    let paths = group.child_paths().unwrap();
-    let path_strings: Vec<_> = paths
-        .iter()
-        .map(zarrs::hierarchy::NodePath::as_str)
-        .collect();
-    assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
-}
-
-#[test]
-#[serial]
-fn child_group_paths() {
-    reset_config();
-    let store = sync_store();
-
-    // At root, there are two group paths: a and b
-    let group = Group::open(store.clone(), "/").unwrap();
-    let paths = group.child_group_paths().unwrap();
-    let path_strings: Vec<_> = paths
-        .iter()
-        .map(zarrs::hierarchy::NodePath::as_str)
-        .collect();
-    assert_eq!(path_strings, ["/a", "/b"]);
-
-    // In /a, there are no child group paths (only arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
-    let paths = group.child_group_paths().unwrap();
-    assert!(paths.is_empty());
-}
-
-#[test]
-#[serial]
-fn child_array_paths() {
-    reset_config();
-    let store = sync_store();
-
-    // At root, there are no array paths (only groups)
-    let group = Group::open(store.clone(), "/").unwrap();
-    let paths = group.child_array_paths().unwrap();
-    assert!(paths.is_empty());
-
-    // In /a, there are two array paths: baz and foo
-    let group = Group::open(store.clone(), "/a").unwrap();
-    let paths = group.child_array_paths().unwrap();
-    let path_strings: Vec<_> = paths
-        .iter()
-        .map(zarrs::hierarchy::NodePath::as_str)
-        .collect();
-    assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
-}
-
-#[cfg(feature = "async")]
-#[tokio::test]
+#[ambisync::test(
+    sync(
+        name = "child_arrays",
+        fns(
+            async_store => sync_store,
+            "async_{} => {}",
+        ),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
 #[serial]
 async fn async_child_arrays() {
     reset_config();
@@ -210,8 +115,16 @@ async fn async_child_arrays() {
     assert!(arrays.is_empty());
 }
 
-#[cfg(feature = "async")]
-#[tokio::test]
+#[ambisync::test(
+    sync(
+        name = "child_groups",
+        fns(
+            async_store => sync_store,
+            "async_{} => {}",
+        ),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
 #[serial]
 async fn async_child_groups() {
     reset_config();
@@ -229,8 +142,16 @@ async fn async_child_groups() {
     assert!(groups.is_empty());
 }
 
-#[cfg(feature = "async")]
-#[tokio::test]
+#[ambisync::test(
+    sync(
+        name = "child_paths",
+        fns(
+            async_store => sync_store,
+            "async_{} => {}",
+        ),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
 #[serial]
 async fn async_child_paths() {
     reset_config();
@@ -255,8 +176,16 @@ async fn async_child_paths() {
     assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
 }
 
-#[cfg(feature = "async")]
-#[tokio::test]
+#[ambisync::test(
+    sync(
+        name = "child_group_paths",
+        fns(
+            async_store => sync_store,
+            "async_{} => {}",
+        ),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
 #[serial]
 async fn async_child_group_paths() {
     reset_config();
@@ -277,8 +206,16 @@ async fn async_child_group_paths() {
     assert!(paths.is_empty());
 }
 
-#[cfg(feature = "async")]
-#[tokio::test]
+#[ambisync::test(
+    sync(
+        name = "child_array_paths",
+        fns(
+            async_store => sync_store,
+            "async_{} => {}",
+        ),
+    ),
+    async(feature = "async", test_attr = #[tokio::test]),
+)]
 #[serial]
 async fn async_child_array_paths() {
     reset_config();
@@ -309,8 +246,26 @@ mod consolidated_open {
     use zarrs::metadata::NodeMetadata;
     use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
     use zarrs::node::Node;
+    #[cfg(feature = "async")]
+    use zarrs_storage::storage_adapter::sync_to_async::{
+        SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+    };
     use zarrs_storage::store::MemoryStore;
     use zarrs_storage::{StoreKey, WritableStorageTraits};
+
+    #[cfg(feature = "async")]
+    struct TokioSpawnBlocking;
+
+    #[cfg(feature = "async")]
+    impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
+        async fn spawn_blocking<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: Send + 'static,
+        {
+            tokio::task::spawn_blocking(f).await.unwrap()
+        }
+    }
 
     /// Build a v3 root group with a `consolidated_metadata` block that lists a
     /// phantom child array `phantom`. The child is *not* written to storage.
@@ -375,14 +330,23 @@ mod consolidated_open {
         *global_config_mut() = Config::default();
     }
 
-    #[test]
+    #[ambisync::test(
+        sync(name = "auto_uses_consolidated", fns("async_{}")),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     #[serial]
-    fn auto_uses_consolidated() {
+    async fn async_auto_uses_consolidated() {
         reset_config();
-        let store = build_store_with_phantom();
+        let store = ambisync::alt!(
+            sync => build_store_with_phantom(),
+            async => Arc::new(SyncToAsyncStorageAdapter::new(
+                build_store_with_phantom(),
+                TokioSpawnBlocking,
+            )),
+        );
 
         // Default policy is Auto: phantom child is reported via consolidated metadata.
-        let h = Hierarchy::open(&store, "/").unwrap();
+        let h = Hierarchy::async_open(&store, "/").await.unwrap();
         let tree = h.tree();
         assert!(
             tree.contains("phantom"),
@@ -390,7 +354,9 @@ mod consolidated_open {
         );
         assert!(tree.contains("real"), "tree should include real: {tree}");
 
-        let node = Node::open(&store, "/").unwrap();
+        let node = Node::async_open(ambisync::alt!(sync => &store, async => store.clone()), "/")
+            .await
+            .unwrap();
         let names: Vec<_> = node
             .children()
             .iter()
@@ -547,65 +513,6 @@ mod consolidated_open {
             sub.children()[0].path(),
             &NodePath::try_from("/sub/leaf").unwrap()
         );
-
-        reset_config();
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[serial]
-    async fn async_auto_uses_consolidated() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
-        use zarrs_storage::AsyncWritableStorageTraits;
-
-        reset_config();
-
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
-
-        // Manually serialize a root v3 group with a phantom child via consolidated metadata.
-        let phantom_md: NodeMetadata = serde_json::from_str(
-            r#"{
-                "zarr_format": 3,
-                "node_type": "array",
-                "shape": [3],
-                "data_type": "float32",
-                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [3]}},
-                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
-                "fill_value": 0,
-                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
-            }"#,
-        )
-        .unwrap();
-        let mut consolidated = ConsolidatedMetadata::default();
-        consolidated
-            .metadata
-            .insert("phantom".to_string(), phantom_md);
-
-        let root_md = serde_json::json!({
-            "zarr_format": 3,
-            "node_type": "group",
-            "consolidated_metadata": serde_json::to_value(&consolidated).unwrap(),
-        });
-
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
-
-        let h = Hierarchy::async_open(&store, "/").await.unwrap();
-        assert!(h.tree().contains("phantom"));
-
-        let node = Node::async_open(store.clone(), "/").await.unwrap();
-        let names: Vec<_> = node
-            .children()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect();
-        assert!(names.contains(&"phantom".to_string()), "names: {names:?}");
 
         reset_config();
     }
@@ -841,15 +748,18 @@ mod consolidated_open {
         reset_config();
     }
 
-    #[test]
+    #[ambisync::test(
+        sync(name = "node_open_falls_back_when_no_consolidated", fns("async_{}")),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     #[serial]
-    fn node_open_falls_back_when_no_consolidated() {
+    async fn async_node_open_falls_back_when_no_consolidated() {
         reset_config();
 
         // V3 group with one real child, no consolidated_metadata.
-        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let inner: Arc<MemoryStore> = Arc::new(MemoryStore::new());
         let root = zarrs::group::GroupBuilder::default()
-            .build(store.clone(), "/")
+            .build(inner.clone(), "/")
             .unwrap();
         let arr = zarrs::array::ArrayBuilder::new(
             vec![5],
@@ -857,61 +767,20 @@ mod consolidated_open {
             zarrs::array::data_type::float32(),
             0.0f32,
         )
-        .build(store.clone(), "/only")
+        .build(inner.clone(), "/only")
         .unwrap();
         root.store_metadata().unwrap();
         arr.store_metadata().unwrap();
 
+        let store = ambisync::alt!(
+            sync => inner,
+            async => Arc::new(SyncToAsyncStorageAdapter::new(inner, TokioSpawnBlocking)),
+        );
+
         // Node::open must fall back to listing storage and find /only.
-        let node = Node::open(&store, "/").unwrap();
-        let names: Vec<_> = node
-            .children()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect();
-        assert!(names.contains(&"only".to_string()), "names: {names:?}");
-
-        reset_config();
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[serial]
-    async fn async_node_open_falls_back_when_no_consolidated() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
-        use zarrs_storage::AsyncWritableStorageTraits;
-
-        reset_config();
-
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
-        let root_md = serde_json::json!({"zarr_format": 3, "node_type": "group"});
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
+        let node = Node::async_open(ambisync::alt!(sync => &store, async => store.clone()), "/")
             .await
             .unwrap();
-        let arr_md = serde_json::json!({
-            "zarr_format": 3,
-            "node_type": "array",
-            "shape": [5],
-            "data_type": "float32",
-            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [5]}},
-            "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
-            "fill_value": 0,
-            "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
-        });
-        store
-            .set(
-                &StoreKey::new("only/zarr.json").unwrap(),
-                serde_json::to_vec(&arr_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
-
-        let node = Node::async_open(store.clone(), "/").await.unwrap();
         let names: Vec<_> = node
             .children()
             .iter()
@@ -923,18 +792,21 @@ mod consolidated_open {
     }
 
     /// Trigger the malformed-key error path in `expand_consolidated_metadata`
-    /// through `Node::open` / `Group::children` / async variants. This covers
+    /// through hierarchy, node, and group traversal entry points. This covers
     /// the `?` propagation arms.
-    #[test]
+    #[ambisync::test(
+        sync(name = "malformed_consolidated_key_propagates_error", fns("async_{}")),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
     #[serial]
-    fn malformed_consolidated_key_propagates_error() {
+    async fn async_malformed_consolidated_key_propagates_error() {
         reset_config();
 
         // Build a root group with consolidated metadata containing an invalid
         // relative path ("foo/", which yields "/foo/" — invalid NodePath).
-        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let inner: Arc<MemoryStore> = Arc::new(MemoryStore::new());
         let root = zarrs::group::GroupBuilder::default()
-            .build(store.clone(), "/")
+            .build(inner.clone(), "/")
             .unwrap();
 
         let bad_array_md: NodeMetadata = serde_json::from_str(
@@ -959,73 +831,21 @@ mod consolidated_open {
         let mut root = root;
         root.set_consolidated_metadata(Some(consolidated));
         let serialized = serde_json::to_vec(root.metadata()).unwrap();
-        store
+        inner
             .set(&StoreKey::new("zarr.json").unwrap(), serialized.into())
             .unwrap();
 
-        // Hierarchy::open propagates the NodePath error (covers expand `?`).
-        assert!(Hierarchy::open(&store, "/").is_err());
-        // Node::open same.
-        assert!(Node::open(&store, "/").is_err());
-        // Group::children same (covers Group::children's `?`).
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
-        assert!(group.children(false).is_err());
-        assert!(group.traverse().is_err());
-
-        reset_config();
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[serial]
-    async fn async_malformed_consolidated_key_propagates_error() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
-        use zarrs_storage::AsyncWritableStorageTraits;
-
-        reset_config();
-
-        let bad_array_md: NodeMetadata = serde_json::from_str(
-            r#"{
-                "zarr_format": 3,
-                "node_type": "array",
-                "shape": [3],
-                "data_type": "float32",
-                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [3]}},
-                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
-                "fill_value": 0,
-                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
-            }"#,
-        )
-        .unwrap();
-        let mut consolidated = ConsolidatedMetadata::default();
-        consolidated
-            .metadata
-            .insert("foo/".to_string(), bad_array_md);
-
-        let mut consolidated_value = serde_json::to_value(&consolidated).unwrap();
-        consolidated_value.as_object_mut().unwrap().insert(
-            "must_understand".to_string(),
-            serde_json::Value::Bool(false),
+        let store = ambisync::alt!(
+            sync => inner,
+            async => Arc::new(SyncToAsyncStorageAdapter::new(inner, TokioSpawnBlocking)),
         );
-        let root_md = serde_json::json!({
-            "zarr_format": 3,
-            "node_type": "group",
-            "consolidated_metadata": consolidated_value,
-        });
 
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
-
-        // Node::async_open propagates the error (covers expand `?` in async path).
-        assert!(Node::async_open(store.clone(), "/").await.is_err());
-        // Group::async_children same.
+        // Hierarchy::open propagates the NodePath error (covers expand `?`).
+        assert!(Hierarchy::async_open(&store, "/").await.is_err());
+        // Node::open same.
+        let node_store = ambisync::alt!(sync => &store, async => store.clone());
+        assert!(Node::async_open(node_store, "/").await.is_err());
+        // Group::children same (covers Group::children's `?`).
         let group = zarrs::group::Group::async_open(store.clone(), "/")
             .await
             .unwrap();
@@ -1035,23 +855,35 @@ mod consolidated_open {
         reset_config();
     }
 
-    #[test]
+    #[ambisync::test(
+        sync(name = "group_must_errors_when_absent", fns("async_{}")),
+        async(feature = "async", test_attr = #[tokio::test]),
+    )]
+    #[allow(clippy::err_expect)]
     #[serial]
-    fn group_must_errors_when_absent() {
+    async fn async_group_must_errors_when_absent() {
         reset_config();
 
         // V3 group with no consolidated_metadata.
-        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let inner: Arc<MemoryStore> = Arc::new(MemoryStore::new());
         let root = zarrs::group::GroupBuilder::default()
-            .build(store.clone(), "/")
+            .build(inner.clone(), "/")
             .unwrap();
         root.store_metadata().unwrap();
 
+        let store = ambisync::alt!(
+            sync => inner,
+            async => Arc::new(SyncToAsyncStorageAdapter::new(inner, TokioSpawnBlocking)),
+        );
+
         global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
 
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::async_open(store.clone(), "/")
+            .await
+            .unwrap();
         let err = group
-            .children(false)
+            .async_children(false)
+            .await
             .expect_err("children should fail under Must when consolidated absent");
         assert!(
             err.to_string()
@@ -1060,7 +892,8 @@ mod consolidated_open {
         );
 
         let err = group
-            .traverse()
+            .async_traverse()
+            .await
             .expect_err("traverse should fail under Must when consolidated absent");
         assert!(
             err.to_string()
@@ -1071,8 +904,10 @@ mod consolidated_open {
         // child_arrays propagates as ArrayCreateError — covers the
         // From<NodeCreateError> for ArrayCreateError path for missing consolidated metadata.
         let err = group
-            .child_arrays()
-            .expect_err("child_arrays should fail under Must when consolidated absent");
+            .async_child_arrays()
+            .await
+            .err()
+            .expect("child_arrays should fail under Must when consolidated absent");
         assert!(
             err.to_string()
                 .contains("Consolidated metadata required but missing"),
@@ -1082,8 +917,10 @@ mod consolidated_open {
         // child_groups propagates as GroupCreateError — covers the
         // From<NodeCreateError> for GroupCreateError path for missing consolidated metadata.
         let err = group
-            .child_groups()
-            .expect_err("child_groups should fail under Must when consolidated absent");
+            .async_child_groups()
+            .await
+            .err()
+            .expect("child_groups should fail under Must when consolidated absent");
         assert!(
             err.to_string()
                 .contains("Consolidated metadata required but missing"),
@@ -1184,57 +1021,6 @@ mod consolidated_open {
             .map(|a| a.path().as_str().to_string())
             .collect();
         assert_eq!(array_paths, vec!["/phantom".to_string()]);
-
-        reset_config();
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[serial]
-    async fn async_group_must_errors_when_absent() {
-        use object_store::memory::InMemory;
-        use zarrs_object_store::AsyncObjectStore;
-        use zarrs_storage::AsyncWritableStorageTraits;
-
-        reset_config();
-
-        // V3 group with no consolidated_metadata.
-        let root_md = serde_json::json!({
-            "zarr_format": 3,
-            "node_type": "group",
-        });
-        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
-
-        global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
-
-        let group = zarrs::group::Group::async_open(store.clone(), "/")
-            .await
-            .unwrap();
-        let err = group
-            .async_children(false)
-            .await
-            .expect_err("async_children should fail under Must when consolidated absent");
-        assert!(
-            err.to_string()
-                .contains("Consolidated metadata required but missing"),
-            "unexpected error: {err}"
-        );
-        let err = group
-            .async_traverse()
-            .await
-            .expect_err("async_traverse should fail under Must when consolidated absent");
-        assert!(
-            err.to_string()
-                .contains("Consolidated metadata required but missing"),
-            "unexpected error: {err}"
-        );
 
         reset_config();
     }

@@ -116,11 +116,22 @@ pub fn try_create_storage_transformer(
 }
 
 /// A storage transformer extension (Zarr V3 only).
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
+#[ambisync::paired(
+    sync(
+        fns("create_async_{} => create_{}"),
+        types(
+            AsyncReadableStorage => ReadableStorage,
+            AsyncWritableStorage => WritableStorage,
+            AsyncReadableWritableStorage => ReadableWritableStorage,
+            AsyncListableStorage => ListableStorage,
+        ),
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
 )]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait StorageTransformerTraits:
     ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
 {
@@ -142,50 +153,12 @@ pub trait StorageTransformerTraits:
     ///
     /// # Errors
     /// Returns an error if creation fails.
-    fn create_readable_transformer(
-        self: Arc<Self>,
-        storage: ReadableStorage,
-    ) -> Result<ReadableStorage, StorageError>;
-
-    /// Create a writable transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    fn create_writable_transformer(
-        self: Arc<Self>,
-        storage: WritableStorage,
-    ) -> Result<WritableStorage, StorageError>;
-
-    /// Create a readable and writable transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    fn create_readable_writable_transformer(
-        self: Arc<Self>,
-        storage: ReadableWritableStorage,
-    ) -> Result<ReadableWritableStorage, StorageError>;
-
-    /// Create a listable transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    fn create_listable_transformer(
-        self: Arc<Self>,
-        storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError>;
-
-    #[cfg(feature = "async")]
-    /// Create an asynchronous readable transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
     async fn create_async_readable_transformer(
         self: Arc<Self>,
         storage: AsyncReadableStorage,
     ) -> Result<AsyncReadableStorage, StorageError>;
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous writable transformer.
+    /// Create a writable transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
@@ -194,8 +167,7 @@ pub trait StorageTransformerTraits:
         storage: AsyncWritableStorage,
     ) -> Result<AsyncWritableStorage, StorageError>;
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous readable and writable transformer.
+    /// Create a readable and writable transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
@@ -204,8 +176,7 @@ pub trait StorageTransformerTraits:
         storage: AsyncReadableWritableStorage,
     ) -> Result<AsyncReadableWritableStorage, StorageError>;
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous listable transformer.
+    /// Create a listable transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.

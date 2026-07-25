@@ -69,67 +69,20 @@ impl StorageTransformerChain {
     }
 }
 
+#[ambisync::paired(
+    sync(
+        fns("create_async_{} => create_{}"),
+        types(
+            AsyncReadableStorage => ReadableStorage,
+            AsyncWritableStorage => WritableStorage,
+            AsyncReadableWritableStorage => ReadableWritableStorage,
+            AsyncListableStorage => ListableStorage,
+        ),
+    ),
+    async(feature = "async"),
+)]
 impl StorageTransformerChain {
     /// Create a readable storage transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    pub fn create_readable_transformer(
-        &self,
-        mut storage: ReadableStorage,
-    ) -> Result<ReadableStorage, StorageError> {
-        for transformer in &self.0 {
-            storage = transformer.clone().create_readable_transformer(storage)?;
-        }
-        Ok(storage)
-    }
-
-    /// Create a writable storage transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    pub fn create_writable_transformer(
-        &self,
-        mut storage: WritableStorage,
-    ) -> Result<WritableStorage, StorageError> {
-        for transformer in &self.0 {
-            storage = transformer.clone().create_writable_transformer(storage)?;
-        }
-        Ok(storage)
-    }
-
-    /// Create a readable and writable storage transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    pub fn create_readable_writable_transformer(
-        &self,
-        mut storage: ReadableWritableStorage,
-    ) -> Result<ReadableWritableStorage, StorageError> {
-        for transformer in &self.0 {
-            storage = transformer
-                .clone()
-                .create_readable_writable_transformer(storage)?;
-        }
-        Ok(storage)
-    }
-
-    /// Create a listable storage transformer.
-    ///
-    /// # Errors
-    /// Returns an error if creation fails.
-    pub fn create_listable_transformer(
-        &self,
-        mut storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError> {
-        for transformer in &self.0 {
-            storage = transformer.clone().create_listable_transformer(storage)?;
-        }
-        Ok(storage)
-    }
-
-    #[cfg(feature = "async")]
-    /// Create an asynchronous readable storage transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
@@ -146,8 +99,7 @@ impl StorageTransformerChain {
         Ok(storage)
     }
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous writable storage transformer.
+    /// Create a writable storage transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
@@ -164,8 +116,7 @@ impl StorageTransformerChain {
         Ok(storage)
     }
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous redable and writable storage transformer.
+    /// Create a readable and writable storage transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
@@ -182,8 +133,7 @@ impl StorageTransformerChain {
         Ok(storage)
     }
 
-    #[cfg(feature = "async")]
-    /// Create an asynchronous listable storage transformer.
+    /// Create a listable storage transformer.
     ///
     /// # Errors
     /// Returns an error if creation fails.
