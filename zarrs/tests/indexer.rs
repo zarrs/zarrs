@@ -242,8 +242,14 @@ fn indexer_array_subsets_vec() {
     );
 }
 
-#[async_generic::async_generic]
-fn indexer_partial_decode_impl<T: ElementOwned>(
+#[ambisync::ambisync(
+    sync(
+        name = "indexer_partial_decode_impl",
+        fns(async_partial_decoder => partial_decoder),
+    ),
+    async(feature = "async"),
+)]
+async fn indexer_partial_decode_impl_async<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
@@ -265,34 +271,23 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
             .into_owned(),
     );
 
-    let partial_decoder = if _async {
-        bound_codec
-            .clone()
-            .async_partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
-            .await
-            .unwrap()
-    } else {
-        bound_codec
-            .clone()
-            .partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
-            .unwrap()
-    };
+    let partial_decoder = bound_codec
+        .clone()
+        .async_partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
+        .await
+        .unwrap();
 
     T::from_array_bytes(
         &data_type,
-        if _async {
-            partial_decoder
-                .partial_decode(indexer, &CodecOptions::default())
-                .await
-        } else {
-            partial_decoder.partial_decode(indexer, &CodecOptions::default())
-        }
-        .unwrap(),
+        partial_decoder
+            .partial_decode(indexer, &CodecOptions::default())
+            .await
+            .unwrap(),
     )
     .unwrap()
 }
 
-// #[async_generic::async_generic]
+// TODO: Add an ambisync async partial encoder variant.
 fn indexer_partial_encode_impl<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],

@@ -1,15 +1,26 @@
 use super::*;
 
-/// Synchronous array write operations.
-pub trait ArrayWriteOps: ArrayOps {
+/// Asynchronous array write operations.
+#[ambisync::ambisync(
+    sync(
+        fns("async_{}"),
+        types(AsyncArrayWriteOps => ArrayWriteOps),
+        declaration {
+            /// Synchronous array write operations.
+            pub trait ArrayWriteOps: ArrayOps {}
+        },
+    ),
+    async(feature = "async"),
+)]
+pub trait AsyncArrayWriteOps: ArrayOps {
     /// Store metadata with default [`ArrayMetadataOptions`].
     ///
     /// The metadata is created with [`Array::metadata_opt`].
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(self.metadata_options())
+    async fn async_store_metadata(&self) -> Result<(), StorageError> {
+        self.async_store_metadata_opt(self.metadata_options()).await
     }
 
     /// Store metadata with non-default [`ArrayMetadataOptions`].
@@ -18,7 +29,10 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError>;
+    async fn async_store_metadata_opt(
+        &self,
+        options: &ArrayMetadataOptions,
+    ) -> Result<(), StorageError>;
 
     /// Erase the metadata with default [`MetadataEraseVersion`] options.
     ///
@@ -26,8 +40,9 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.erase_metadata_opt(self.metadata_erase_version())
+    async fn async_erase_metadata(&self) -> Result<(), StorageError> {
+        self.async_erase_metadata_opt(self.metadata_erase_version())
+            .await
     }
 
     /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
@@ -36,11 +51,14 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError>;
+    async fn async_erase_metadata_opt(
+        &self,
+        options: MetadataEraseVersion,
+    ) -> Result<(), StorageError>;
 
     /// Encode `chunk_data` and store at `chunk_indices`.
     ///
-    /// Use [`store_chunk_opt`](ArrayWriteOps::store_chunk_opt) to control codec options.
+    /// Use the explicit-options variant to control codec options.
     /// A chunk composed entirely of the fill value will not be written to the store.
     ///
     /// # Errors
@@ -49,16 +67,26 @@ pub trait ArrayWriteOps: ArrayOps {
     ///  - the length of `chunk_data` is not equal to the expected length (the product of the number of elements in the chunk and the data type size in bytes),
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
-    fn store_chunk<'a, T: IntoArrayBytes<'a>>(
+    async fn async_store_chunk<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
+        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
+            .await
     }
 
-    /// Explicit options version of [`store_chunk`](ArrayWriteOps::store_chunk).
-    fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
+    /// Explicit-options variant of the corresponding default-options method.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if encoding or storage fails.
+    async fn async_store_chunk_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
@@ -67,7 +95,7 @@ pub trait ArrayWriteOps: ArrayOps {
 
     /// Encode `chunks_data` and store at the chunks with indices represented by the `chunks` array subset.
     ///
-    /// Use [`store_chunks_opt`](ArrayWriteOps::store_chunks_opt) to control codec options.
+    /// Use the explicit-options variant to control codec options.
     /// A chunk composed entirely of the fill value will not be written to the store.
     ///
     /// # Errors
@@ -76,16 +104,26 @@ pub trait ArrayWriteOps: ArrayOps {
     ///  - the length of `chunks_data` is not equal to the expected length (the product of the number of elements in the chunks and the data type size in bytes),
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
-    fn store_chunks<'a, T: IntoArrayBytes<'a>>(
+    async fn async_store_chunks<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
     ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_data, self.codec_options())
+        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
+            .await
     }
 
-    /// Explicit options version of [`store_chunks`](ArrayWriteOps::store_chunks).
-    fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
+    /// Explicit-options variant of the corresponding default-options method.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if encoding or storage fails.
+    async fn async_store_chunks_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
@@ -98,13 +136,13 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError>;
+    async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError>;
 
     /// Erase the chunks in `chunks`.
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError>;
+    async fn async_erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError>;
 
     /// Store `encoded_chunk_bytes` at `chunk_indices`.
     ///
@@ -113,7 +151,7 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    unsafe fn store_encoded_chunk(
+    async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
         encoded_chunk_bytes: bytes::Bytes,

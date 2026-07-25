@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reduce duplicated synchronous and asynchronous implementations with `ambisync`
+  - Includes the storage and array operation traits
   - Includes the codec partial decoders/encoders and the codec partial decoder/encoder factory methods
   - Replaces the last use of `async-generic` in `src` (the `packbits` partial decoder)
 - Every codec now states its partial decoder/encoder explicitly, following the removal of the `zarrs_codec` trait defaults

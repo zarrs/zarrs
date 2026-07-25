@@ -1,12 +1,32 @@
 use super::*;
+use std::sync::Arc;
 use zarrs_codec::ArrayPartialEncoderTraits;
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncArrayPartialEncoderTraits;
 
-/// Synchronous array read/write update operations.
-pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
+/// Asynchronous array read/write update operations.
+#[ambisync::ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            AsyncArrayUpdateOps => ArrayUpdateOps,
+            AsyncArrayReadOps => ArrayReadOps,
+            AsyncArrayWriteOps => ArrayWriteOps,
+            AsyncReadableStorageTraits => ReadableStorageTraits,
+            AsyncArrayPartialEncoderTraits => ArrayPartialEncoderTraits,
+        ),
+        declaration {
+            /// Synchronous array read/write update operations.
+            pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {}
+        },
+    ),
+    async(feature = "async"),
+)]
+pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
     /// Encode `chunk_subset_data` and store in `chunk_subset` of the chunk at `chunk_indices` with default codec options.
     ///
-    /// Use [`store_chunk_subset_opt`](ArrayUpdateOps::store_chunk_subset_opt) to control codec options.
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
+    /// Use the explicit-options variant to control codec options.
+    /// Prefer to use the whole-chunk store operation where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -16,22 +36,32 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///
     /// # Panics
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
-    fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    async fn async_store_chunk_subset<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_subset_opt(
+        self.async_store_chunk_subset_opt(
             chunk_indices,
             chunk_subset,
             chunk_subset_data,
             self.codec_options(),
         )
+        .await
     }
 
-    /// Explicit options version of [`store_chunk_subset`](ArrayUpdateOps::store_chunk_subset).
-    fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
+    /// Explicit-options variant of the corresponding default-options method.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if encoding or storage fails.
+    async fn async_store_chunk_subset_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
@@ -41,8 +71,8 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
 
     /// Encode `subset_data` and store in `array_subset`.
     ///
-    /// Use [`store_array_subset_opt`](ArrayUpdateOps::store_array_subset_opt) to control codec options.
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::ArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
+    /// Use the explicit-options variant to control codec options.
+    /// Prefer to use the whole-chunk store operations where possible, since this will decode and encode each chunk intersecting `array_subset`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -50,16 +80,26 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///  - the length of `subset_data` does not match the expected length governed by the shape of the array subset and the data type size,
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
-    fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
+    async fn async_store_array_subset<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.store_array_subset_opt(array_subset, subset_data, self.codec_options())
+        self.async_store_array_subset_opt(array_subset, subset_data, self.codec_options())
+            .await
     }
 
-    /// Explicit options version of [`store_array_subset`](ArrayUpdateOps::store_array_subset).
-    fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(
+    /// Explicit-options variant of the corresponding default-options method.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if encoding or storage fails.
+    async fn async_store_array_subset_opt<
+        'a,
+        #[sync_bounds(IntoArrayBytes<'a>)] T: IntoArrayBytes<'a> + MaybeSend,
+    >(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
@@ -74,14 +114,15 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Returns an [`ArrayError`] if
     ///  - there is a codec error, or
     ///  - an underlying store error.
-    fn compact_chunk(
+    async fn async_compact_chunk(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
-    fn readable(&self) -> Array<dyn ReadableStorageTraits>;
+    #[sync_name(readable)]
+    fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits>;
 
     /// Initialises a partial encoder for the chunk at `chunk_indices`.
     ///
@@ -89,13 +130,13 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// - partial encoders can hold internal state that may become out of sync, and
     /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
     ///
-    /// Partial encoding with [`ArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
+    /// Partial encoding with [`AsyncArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
-    fn partial_encoder(
+    async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError>;
 }
