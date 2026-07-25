@@ -649,8 +649,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
-    #[sync_only]
-    fn partial_decode_into(
+    async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
@@ -667,18 +666,30 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             && let Some(subset) = indexer.as_array_subset()
             && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
         {
-            rayon::partial_decode_fixed_array_subset_into(
-                &self.input_handle,
-                &self.shard_shape,
-                &self.subchunk_shape,
-                &self.inner_codecs,
-                self.shard_index.as_deref(),
-                subset,
-                options,
-                output_view,
+            ambisync::alt!(
+                sync => rayon::partial_decode_fixed_array_subset_into(
+                    &self.input_handle,
+                    &self.shard_shape,
+                    &self.subchunk_shape,
+                    &self.inner_codecs,
+                    self.shard_index.as_deref(),
+                    subset,
+                    options,
+                    output_view,
+                ),
+                async => futures::partial_decode_fixed_array_subset_into(
+                    &self.input_handle,
+                    &self.shard_shape,
+                    &self.subchunk_shape,
+                    &self.inner_codecs,
+                    self.shard_index.as_deref(),
+                    subset,
+                    options,
+                    output_view,
+                ).await,
             )
         } else {
-            let decoded_value = self.partial_decode(indexer, options)?;
+            let decoded_value = self.partial_decode(indexer, options).await?;
             decode_into_array_bytes_target(&decoded_value, output_target)
         }
     }

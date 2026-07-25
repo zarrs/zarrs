@@ -26,8 +26,6 @@ use crate::array::{
     ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
     chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::ArrayToBytesCodecPartialDefault;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -742,41 +740,23 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             .await?,
         ))
     }
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            sharding_partial_encoder::ShardingPartialEncoder::new(
-                input_output_handle,
-                ChunkShape::from(shape.to_vec()),
-                self.subchunk_shape.clone(),
-                self.inner_codecs.clone(),
-                self.index_codecs.clone(),
-                self.index_location,
-                options,
-                self.options.clone(),
-            )?,
-        ))
-    }
-
-    // There is no async sharding partial encoder, so fall back to reencoding the whole shard.
-    #[async_only]
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
-        _options: &CodecOptions,
+        options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+        sharding_partial_encoder::async_new_sharding_partial_encoder(
             input_output_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
+            ChunkShape::from(shape.to_vec()),
+            self.subchunk_shape.clone(),
+            self.inner_codecs.clone(),
+            self.index_codecs.clone(),
+            self.index_location,
+            options,
+            self.options.clone(),
+        )
+        .await
     }
 
     fn encoded_representation(

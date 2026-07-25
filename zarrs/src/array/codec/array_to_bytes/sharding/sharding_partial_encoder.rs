@@ -2,6 +2,9 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use ambisync::ambisync;
+#[cfg(feature = "async")]
+use futures::lock::Mutex as AsyncMutex;
 use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
@@ -24,11 +27,23 @@ use zarrs_codec::{
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
     CodecOptions, update_array_bytes,
 };
+#[cfg(feature = "async")]
+use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
-pub(crate) struct ShardingPartialEncoder {
-    input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+#[ambisync(
+    sync(types(
+        AsyncShardingPartialEncoder => ShardingPartialEncoder,
+        AsyncBytesPartialEncoderTraits => BytesPartialEncoderTraits,
+    )),
+    async(feature = "async"),
+)]
+pub(crate) struct AsyncShardingPartialEncoder {
+    input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
     shard_shape: ChunkShape,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularChunkGrid,
@@ -36,16 +51,32 @@ pub(crate) struct ShardingPartialEncoder {
     index_codecs: Arc<CodecChainBound>,
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
+    #[sync_only]
     shard_index: Arc<Mutex<Vec<u64>>>,
+    #[async_only]
+    shard_index: Arc<AsyncMutex<Vec<u64>>>,
     #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
     sharding_options: ShardingCodecOptions,
 }
 
-impl ShardingPartialEncoder {
+#[ambisync(
+    sync(
+        fns(
+            "{}",
+            decode_shard_index_async_partial_decoder => decode_shard_index_partial_decoder,
+        ),
+        types(
+            AsyncShardingPartialEncoder => ShardingPartialEncoder,
+            AsyncBytesPartialEncoderTraits => BytesPartialEncoderTraits,
+        ),
+    ),
+    async(feature = "async"),
+)]
+impl AsyncShardingPartialEncoder {
     /// Create a new partial encoder for the sharding codec.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+    pub(crate) async fn new(
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
@@ -58,14 +89,15 @@ impl ShardingPartialEncoder {
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
 
         // Decode the index
-        let shard_index = super::decode_shard_index_partial_decoder(
+        let shard_index = super::decode_shard_index_async_partial_decoder(
             input_output_handle.as_ref(),
             &index_codecs,
             index_location,
             &shard_shape,
             &subchunk_shape,
             options,
-        )?
+        )
+        .await?
         .unwrap_or_else(|| {
             let num_chunks =
                 usize::try_from(chunks_per_shard.iter().map(|x| x.get()).product::<u64>()).unwrap();
@@ -86,26 +118,84 @@ impl ShardingPartialEncoder {
             index_codecs,
             index_location,
             index_shape,
-            shard_index: Arc::new(Mutex::new(shard_index)),
+            shard_index: Arc::new(ambisync::alt!(
+                sync => Mutex::new(shard_index),
+                async => AsyncMutex::new(shard_index),
+            )),
             sharding_options,
         })
     }
 }
 
-impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
+#[ambisync(
+    sync(
+        name = "new_sharding_partial_encoder",
+        types(
+            AsyncArrayPartialEncoderTraits => ArrayPartialEncoderTraits,
+            AsyncBytesPartialEncoderTraits => BytesPartialEncoderTraits,
+            AsyncShardingPartialEncoder => ShardingPartialEncoder,
+        ),
+    ),
+    async(feature = "async"),
+)]
+#[expect(clippy::too_many_arguments)]
+pub(super) async fn async_new_sharding_partial_encoder(
+    input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+    shard_shape: ChunkShape,
+    subchunk_shape: ChunkShape,
+    inner_codecs: Arc<CodecChainBound>,
+    index_codecs: Arc<CodecChainBound>,
+    index_location: ShardingIndexLocation,
+    options: &CodecOptions,
+    sharding_options: ShardingCodecOptions,
+) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+    Ok(Arc::new(
+        AsyncShardingPartialEncoder::new(
+            input_output_handle,
+            shard_shape,
+            subchunk_shape,
+            inner_codecs,
+            index_codecs,
+            index_location,
+            options,
+            sharding_options,
+        )
+        .await?,
+    ))
+}
+
+#[ambisync(
+    sync(
+        fns(
+            "{}",
+            partial_decode_async => partial_decode,
+        ),
+        types(
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+            AsyncBytesPartialDecoderTraits => BytesPartialDecoderTraits,
+            AsyncShardingPartialEncoder => ShardingPartialEncoder,
+        ),
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
+impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
     }
 
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists().await
     }
 
     fn size_held(&self) -> usize {
-        self.shard_index.lock().unwrap().len()
+        self.index_shape.num_elements_usize()
     }
 
-    fn local_subchunk_grids(
+    async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
@@ -117,21 +207,26 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
-    fn partial_decode(
+    async fn partial_decode(
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
-        super::sharding_partial_decoder::partial_decode(
+        let handle: Arc<dyn AsyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
+        let shard_index = ambisync::alt!(
+            sync => self.shard_index.lock().unwrap(),
+            async => self.shard_index.lock().await,
+        );
+        super::sharding_partial_decoder::partial_decode_async(
             &handle,
             &self.shard_shape,
             &self.subchunk_shape,
             &self.inner_codecs,
-            Some(self.shard_index.lock().unwrap().as_slice()),
+            Some(shard_index.as_slice()),
             indexer,
             options,
         )
+        .await
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -139,14 +234,28 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     }
 }
 
-impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
-    fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
+#[ambisync(
+    sync(
+        fns("{}"),
+        types(
+            AsyncArrayPartialEncoderTraits => ArrayPartialEncoderTraits,
+            AsyncShardingPartialEncoder => ShardingPartialEncoder,
+        ),
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
+impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
+    async fn erase(&self) -> Result<(), super::CodecError> {
+        self.input_output_handle.erase().await
     }
 
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::similar_names)]
-    fn partial_encode(
+    async fn partial_encode(
         &self,
         chunk_subset_indexer: &dyn crate::array::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
@@ -154,7 +263,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     ) -> Result<(), super::CodecError> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
-        let mut shard_index = self.shard_index.lock().unwrap();
+        let mut shard_index = ambisync::alt!(
+            sync => self.shard_index.lock().unwrap(),
+            async => self.shard_index.lock().await,
+        );
 
         let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
@@ -279,7 +391,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling subchunks
         let subchunks_encoded = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+            .await?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
         // Decode the straddling subchunks
@@ -394,7 +507,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
         }
         let max_data_offset = if shard_index.par_iter().all(|&x| x == u64::MAX) {
-            self.input_output_handle.erase()?;
+            self.input_output_handle.erase().await?;
             0
         } else {
             max_data_offset
@@ -426,7 +539,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         if shard_index.par_iter().all(|&x| x == u64::MAX) {
             // Erase the shard if all chunks are empty
-            self.input_output_handle.erase()?;
+            self.input_output_handle.erase().await?;
         } else {
             // Encode the updated shard index
             let shard_index_bytes: ArrayBytesRaw =
@@ -459,23 +572,27 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             // Write the encoded index and updated subchunks
             match self.index_location {
                 ShardingIndexLocation::Start => {
-                    self.input_output_handle.partial_encode_many(
-                        Box::new(
-                            [
-                                (0, Cow::Owned(encoded_array_index)),
-                                (offset_new_chunks, Cow::Owned(encoded_output)),
-                            ]
-                            .into_iter(),
-                        ),
-                        options,
-                    )?;
+                    self.input_output_handle
+                        .partial_encode_many(
+                            Box::new(
+                                [
+                                    (0, Cow::Owned(encoded_array_index)),
+                                    (offset_new_chunks, Cow::Owned(encoded_output)),
+                                ]
+                                .into_iter(),
+                            ),
+                            options,
+                        )
+                        .await?;
                 }
                 ShardingIndexLocation::End => {
                     encoded_output.extend(encoded_array_index);
-                    self.input_output_handle.partial_encode_many(
-                        Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
-                        options,
-                    )?;
+                    self.input_output_handle
+                        .partial_encode_many(
+                            Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
+                            options,
+                        )
+                        .await?;
                 }
             }
         }
