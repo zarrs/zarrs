@@ -257,8 +257,16 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
 
 }
 
-impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
-    fn exists(&self) -> Result<bool, StorageError> {
+#[ambisync::ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
+impl AsyncBytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
+    async fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.lock().unwrap().is_some())
     }
 
@@ -266,7 +274,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
         self.lock().unwrap().as_ref().map_or(0, Vec::len)
     }
 
-    fn partial_decode_many(
+    async fn partial_decode_many(
         &self,
         decoded_regions: ByteRangeIterator<'_>,
         _options: &CodecOptions,
@@ -292,13 +300,21 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
-    fn erase(&self) -> Result<(), CodecError> {
+#[ambisync::ambisync(
+    sync(fns("{}"), types("Async{}")),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32")),
+    ),
+)]
+impl AsyncBytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
+    async fn erase(&self) -> Result<(), CodecError> {
         *self.lock().unwrap() = None;
         Ok(())
     }
 
-    fn partial_encode_many(
+    async fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<'_, ArrayBytesRaw<'_>>,
         _options: &CodecOptions,
