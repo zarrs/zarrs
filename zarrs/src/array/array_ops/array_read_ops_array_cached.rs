@@ -5,8 +5,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::super::*;
-use super::ArrayReadOps;
+use super::{ArrayReadOps, *};
 use crate::array::array_bytes_internal::{
     merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
@@ -466,7 +465,7 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        super::common::retrieve_array_subset_into(
+        super::array_read_ops_common::retrieve_array_subset_into(
             self.array(),
             array_subset,
             output_target,

@@ -21,17 +21,33 @@ use zarrs_storage::{
 };
 
 mod array_mut_ops;
+mod array_mut_ops_array;
 #[allow(clippy::module_inception)]
 mod array_ops;
+mod array_ops_array;
+mod array_ops_array_cached;
 mod array_read_ops;
+mod array_read_ops_array;
+mod array_read_ops_array_cached;
+mod array_read_ops_common;
 mod array_update_ops;
+mod array_update_ops_array;
+mod array_update_ops_array_cached;
 mod array_write_ops;
+mod array_write_ops_array;
+mod array_write_ops_array_cached;
 #[cfg(feature = "async")]
 mod async_array_read_ops;
 #[cfg(feature = "async")]
+mod async_array_read_ops_array;
+#[cfg(feature = "async")]
 mod async_array_update_ops;
 #[cfg(feature = "async")]
+mod async_array_update_ops_array;
+#[cfg(feature = "async")]
 mod async_array_write_ops;
+#[cfg(feature = "async")]
+mod async_array_write_ops_array;
 
 pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;

@@ -1,8 +1,7 @@
 use inherent::inherent;
 use std::sync::Arc;
 
-use super::super::*;
-use super::ArrayUpdateOps;
+use super::{ArrayUpdateOps, *};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,

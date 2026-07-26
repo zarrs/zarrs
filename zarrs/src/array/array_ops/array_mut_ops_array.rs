@@ -1,8 +1,7 @@
 use inherent::inherent;
 use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 
-use super::super::*;
-use super::ArrayMutOps;
+use super::{ArrayMutOps, *};
 
 #[inherent]
 impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {

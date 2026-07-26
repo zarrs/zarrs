@@ -11,10 +11,8 @@ use zarrs_codec::{
 };
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
-use super::super::super::array_bytes_internal::{
-    build_nested_optional_target, extract_target_views,
-};
-use super::super::super::concurrency::concurrency_chunks_and_codec;
+use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
+use super::super::concurrency::concurrency_chunks_and_codec;
 
 pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveChunkSubsetInto>(
     array: &Array<TStorage>,

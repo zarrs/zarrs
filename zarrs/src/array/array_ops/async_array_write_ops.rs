@@ -1,7 +1,5 @@
 use super::*;
 
-mod array;
-
 /// Asynchronous array write operations.
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
