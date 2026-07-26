@@ -59,19 +59,27 @@ use super::Array;
 /// chunk may each fetch the chunk; only one of the retrieved values is retained by the
 /// cache.
 ///
-/// <div class="warning">
+/// Asynchronous operations require a cache with
+/// [`ChunkCacheLocalityShared`](super::chunk_cache::ChunkCacheLocalityShared) locality, since an asynchronous task may resume
+/// on a different thread after each `await`.
+/// `ThreadLocal` caches have [`ChunkCacheLocalityPerThread`](super::chunk_cache::ChunkCacheLocalityPerThread) locality and are
+/// rejected at compile time (see [`ChunkCacheLocality`](super::chunk_cache::ChunkCacheLocality)):
 ///
-/// Do not use a `ThreadLocal` cache with asynchronous operations on a work-stealing
-/// executor (such as a multi-threaded `tokio` runtime).
-///
-/// A thread-local cache keys its entries, and its invalidations, on the thread that
-/// happens to be executing. An asynchronous task may resume on a different thread after
-/// each `await`, so a chunk can be cached on one thread while a subsequent write
-/// invalidates it on another. The stale entry then remains visible to later retrievals
-/// that resume on the original thread. This applies even to a single task, since a task
-/// migrates between threads at await points.
-///
-/// </div>
+/// ```compile_fail
+/// # use std::sync::Arc;
+/// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
+/// # use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimitThreadLocal;
+/// # use zarrs_storage::store::AsyncMemoryStore;
+/// # async fn f() {
+/// let store = Arc::new(AsyncMemoryStore::new());
+/// let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+///     .build_arc(store, "/")
+///     .unwrap();
+/// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimitThreadLocal::new(2));
+/// // error: `Locality = ChunkCacheLocalityShared` is not satisfied
+/// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,

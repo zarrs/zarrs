@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` implement both
   - `ChunkCacheTypePartialDecoder` only supports synchronous retrieval
 - Add `ChunkCacheTypeAsyncPartialDecoder` and the `ChunkCacheAsyncPartialDecoderLru{ChunkLimit,SizeLimit}` caches for cached asynchronous partial decoding
+- Add the sealed `ChunkCacheLocality` trait and its `ChunkCacheLocality{Shared,PerThread}` markers for `ChunkCache::Locality`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
@@ -53,7 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
   - **Breaking**: Add a required `get` method for cache retrieval without insertion
+  - **Breaking**: Add a required `Locality` associated type (`ChunkCacheLocality{Shared,PerThread}`) declaring whether the cache is shared between threads
   - Add `invalidate` methods
+- **Breaking**: `ArrayCached` asynchronous operations now require a cache with `ChunkCacheLocalityShared` locality
+  - `ThreadLocal` caches are `ChunkCacheLocalityPerThread` and are rejected at compile time: a task may resume on a different thread after an `await`, so a chunk cached on one thread could be invalidated on another, leaving stale entries visible
+  - `ThreadLocal` caches remain fully supported for synchronous operations
 - **Breaking**: Move the `ChunkCacheType` retrieval methods to the new `SyncChunkCacheType` subtrait; `ChunkCacheType` now only exposes `size()`
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`

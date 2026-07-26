@@ -31,14 +31,9 @@
 //! [`ChunkCacheTypePartialDecoder`] caches only support synchronous retrieval and
 //! `ChunkCacheTypeAsyncPartialDecoder` caches only support asynchronous retrieval (see [`SyncChunkCacheType`]).
 //!
-//! <div class="warning">
-//!
-//! `ThreadLocal` caches are intended for synchronous operations only.
-//! Combining one with asynchronous operations on a work-stealing executor can yield stale
-//! reads, because a task may cache a chunk on one thread and invalidate it on another.
-//! See [`ArrayCached`](super::ArrayCached) for details.
-//!
-//! </div>
+//! Asynchronous operations additionally require a cache with [`ChunkCacheLocalityShared`] locality.
+//! `ThreadLocal` caches have [`ChunkCacheLocalityPerThread`] locality and are rejected at compile time, since a
+//! task may cache a chunk on one thread and invalidate it on another (see [`ChunkCacheLocality`]).
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
@@ -193,6 +188,31 @@ mod chunk_cache_type_sealed {
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
 }
 
+mod chunk_cache_locality_sealed {
+    pub trait Sealed {}
+
+    impl Sealed for super::ChunkCacheLocalityShared {}
+    impl Sealed for super::ChunkCacheLocalityPerThread {}
+}
+
+/// Whether a chunk cache is shared between threads ([`ChunkCacheLocalityShared`]) or per-thread ([`ChunkCacheLocalityPerThread`]).
+///
+/// This is a sealed trait implemented only by [`ChunkCacheLocalityShared`] and [`ChunkCacheLocalityPerThread`].
+pub trait ChunkCacheLocality: chunk_cache_locality_sealed::Sealed {}
+
+/// A [`ChunkCacheLocality`] marker for a cache shared by all threads.
+#[derive(Debug)]
+pub struct ChunkCacheLocalityShared;
+
+/// A [`ChunkCacheLocality`] marker for a per-thread cache.
+///
+/// Caches with this locality only support synchronous operations, see [`ChunkCacheLocality`].
+#[derive(Debug)]
+pub struct ChunkCacheLocalityPerThread;
+
+impl ChunkCacheLocality for ChunkCacheLocalityShared {}
+impl ChunkCacheLocality for ChunkCacheLocalityPerThread {}
+
 /// A chunk cache.
 ///
 /// A chunk cache stores values by chunk indices. It is intentionally unaware of
@@ -201,6 +221,13 @@ mod chunk_cache_type_sealed {
 pub trait ChunkCache: MaybeSend + MaybeSync {
     /// The value stored for each chunk.
     type Value: ChunkCacheType;
+
+    /// Whether the cache is shared between threads ([`ChunkCacheLocalityShared`]) or per-thread ([`ChunkCacheLocalityPerThread`]).
+    ///
+    /// Asynchronous operations require [`ChunkCacheLocalityShared`], because an asynchronous task may resume on
+    /// a different thread after each `await`, and a per-thread cache would then be able to
+    /// retain an entry that a write invalidated on another thread.
+    type Locality: ChunkCacheLocality;
 
     /// Return the cached value for a chunk without inserting, if it is cached.
     ///

@@ -1,12 +1,13 @@
 use inherent::inherent;
 
 use super::{AsyncArrayWriteOps, *};
+use crate::array::chunk_cache::ChunkCacheLocalityShared;
 
 #[inherent]
 impl<TStorage, C> AsyncArrayWriteOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncWritableStorageTraits + 'static,
-    C: ChunkCache,
+    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {

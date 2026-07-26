@@ -510,9 +510,9 @@ mod tests {
         ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimitThreadLocal,
         ChunkCacheEncodedLruSizeLimit, ChunkCacheEncodedLruSizeLimitThreadLocal,
-        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruChunkLimitThreadLocal,
-        ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
-        ChunkCacheTypeDecoded,
+        ChunkCacheLocalityShared, ChunkCachePartialDecoderLruChunkLimit,
+        ChunkCachePartialDecoderLruChunkLimitThreadLocal, ChunkCachePartialDecoderLruSizeLimit,
+        ChunkCachePartialDecoderLruSizeLimitThreadLocal, ChunkCacheTypeDecoded,
     };
     use crate::array::{ArrayBuilder, ArrayError, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -672,6 +672,7 @@ mod tests {
 
     impl ChunkCache for CustomDecodedCache {
         type Value = ChunkCacheTypeDecoded;
+        type Locality = ChunkCacheLocalityShared;
 
         fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value> {
             self.values.lock().unwrap().get(chunk_indices).cloned()

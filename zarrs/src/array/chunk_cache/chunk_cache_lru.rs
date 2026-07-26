@@ -3,8 +3,8 @@ use std::sync::{Arc, atomic};
 #[cfg(feature = "async")]
 use super::ChunkCacheTypeAsyncPartialDecoder;
 use super::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder,
+    ChunkCache, ChunkCacheLocalityPerThread, ChunkCacheLocalityShared, ChunkCacheType,
+    ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
 };
 use crate::array::{ArrayError, ArrayIndices};
 
@@ -134,18 +134,22 @@ macro_rules! impl_ChunkCacheLruCommon {
 }
 
 impl<CT: ChunkCacheType> ChunkCache for ChunkCacheLruChunkLimit<CT> {
+    type Locality = ChunkCacheLocalityShared;
     impl_ChunkCacheLruCommon!();
 }
 
 impl<CT: ChunkCacheType> ChunkCache for ChunkCacheLruChunkLimitThreadLocal<CT> {
+    type Locality = ChunkCacheLocalityPerThread;
     impl_ChunkCacheLruCommon!();
 }
 
 impl<CT: ChunkCacheType> ChunkCache for ChunkCacheLruSizeLimit<CT> {
+    type Locality = ChunkCacheLocalityShared;
     impl_ChunkCacheLruCommon!();
 }
 
 impl<CT: ChunkCacheType> ChunkCache for ChunkCacheLruSizeLimitThreadLocal<CT> {
+    type Locality = ChunkCacheLocalityPerThread;
     impl_ChunkCacheLruCommon!();
 }
 

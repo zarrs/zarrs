@@ -9,7 +9,9 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, extract_target_views, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth,
 };
-use crate::array::chunk_cache::{AsyncChunkCacheType, async_retrieve_chunk_bytes};
+use crate::array::chunk_cache::{
+    AsyncChunkCacheType, ChunkCacheLocalityShared, async_retrieve_chunk_bytes,
+};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use zarrs_codec::{
@@ -344,7 +346,7 @@ where
 impl<TStorage, C> AsyncArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache,
+    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
     C::Value: AsyncChunkCacheType,
 {
     #[allow(clippy::missing_errors_doc)]
@@ -694,7 +696,7 @@ mod tests {
     #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_async<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
         C::Value: AsyncChunkCacheType,
     {
         let store = Arc::new(AsyncMemoryStore::new());
@@ -775,7 +777,7 @@ mod tests {
     #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_sharded_async<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
         C::Value: AsyncChunkCacheType,
     {
         let store = Arc::new(AsyncMemoryStore::new());
@@ -823,7 +825,7 @@ mod tests {
 
     async fn test_cache_into_async<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
         C::Value: AsyncChunkCacheType,
     {
         let store = Arc::new(AsyncMemoryStore::new());
@@ -891,7 +893,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     async fn test_cache_spawn_async<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
         C::Value: AsyncChunkCacheType,
     {
         let store = Arc::new(AsyncMemoryStore::new());

@@ -2,7 +2,7 @@ use inherent::inherent;
 use std::sync::Arc;
 
 use super::{AsyncArrayUpdateOps, *};
-use crate::array::chunk_cache::AsyncChunkCacheType;
+use crate::array::chunk_cache::{AsyncChunkCacheType, ChunkCacheLocalityShared};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits,
@@ -97,7 +97,7 @@ where
 impl<TStorage, C> AsyncArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
-    C: ChunkCache + 'static,
+    C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
     C::Value: AsyncChunkCacheType,
 {
     #[allow(clippy::missing_errors_doc)]
@@ -210,7 +210,7 @@ mod tests {
 
     async fn test_async_partial_encoder_invalidates<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
         C::Value: AsyncChunkCacheType,
     {
         let store = Arc::new(AsyncMemoryStore::new());
