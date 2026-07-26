@@ -20,8 +20,10 @@ use crate::array::{
     IndexerError, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
+    AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
+    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    decode_into_array_bytes_target,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -50,7 +52,7 @@ impl AsyncShardingPartialDecoder {
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
-    ) -> Result<AsyncShardingPartialDecoder, CodecError> {
+    ) -> Result<Self, CodecError> {
         let shard_index = super::decode_shard_index_async_partial_decoder(
             &*input_handle,
             index_codecs,
@@ -233,6 +235,40 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
+    async fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if indexer.len() != output_target.num_elements() {
+            return Err(InvalidNumberOfElementsError::new(
+                indexer.len(),
+                output_target.num_elements(),
+            )
+            .into());
+        }
+        if let DataTypeSize::Fixed(_) = self.inner_codecs.data_type().size()
+            && let Some(subset) = indexer.as_array_subset()
+            && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
+        {
+            partial_decode_fixed_array_subset_into(
+                &self.input_handle,
+                &self.shard_shape,
+                &self.subchunk_shape,
+                &self.inner_codecs,
+                self.shard_index.as_deref(),
+                subset,
+                options,
+                output_view,
+            )
+            .await
+        } else {
+            let decoded_value = self.partial_decode(indexer, options).await?;
+            decode_into_array_bytes_target(&decoded_value, output_target)
+        }
+    }
+
     fn supports_partial_decode(&self) -> bool {
         self.input_handle.supports_partial_decode()
     }
@@ -268,6 +304,120 @@ async fn get_subchunk_partial_decoder(
                 err
             }
         })
+}
+
+#[expect(clippy::too_many_arguments)]
+async fn partial_decode_fixed_array_subset_into(
+    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+    shard_shape: &[NonZeroU64],
+    subchunk_shape: &[NonZeroU64],
+    inner_codecs: &Arc<CodecChainBound>,
+    shard_index: Option<&[u64]>,
+    array_subset: &dyn ArraySubsetTraits,
+    options: &CodecOptions,
+    output_view: &mut ArrayBytesFixedDisjointView<'_>,
+) -> Result<(), CodecError> {
+    let fill_value = inner_codecs.fill_value();
+    if array_subset.len() != output_view.num_elements() {
+        return Err(InvalidNumberOfElementsError::new(
+            array_subset.len(),
+            output_view.num_elements(),
+        )
+        .into());
+    }
+    let Some(shard_index) = shard_index else {
+        return output_view
+            .fill(fill_value.as_ne_bytes())
+            .map_err(CodecError::from);
+    };
+    let chunks_per_shard =
+        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        subchunk_shape,
+        &chunks_per_shard,
+        options,
+    )?;
+    let shard_chunk_grid = RegularChunkGrid::new(
+        bytemuck::must_cast_slice(shard_shape).to_vec(),
+        subchunk_shape.to_vec(),
+    )
+    .map_err(Into::<IncompatibleDimensionalityError>::into)?;
+
+    let array_subset_start = array_subset.start();
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
+    let mut subchunks = Vec::with_capacity(chunks.num_elements_usize());
+    for chunk_indices in chunks.indices() {
+        let shard_index_idx =
+            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
+        let chunk_subset = shard_chunk_grid
+            .subset(&chunk_indices)
+            .expect("matching dimensionality")
+            .expect("subchunk always within shard");
+        let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
+        let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
+        let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
+        subchunks.push((
+            offset,
+            size,
+            chunk_subset,
+            chunk_subset_overlap,
+            chunk_output_overlap_subset,
+        ));
+    }
+
+    use futures::{StreamExt, TryStreamExt};
+    let decoded_subchunks = futures::stream::iter(subchunks)
+        .map(
+            |(offset, size, chunk_subset, chunk_subset_overlap, output_subset)| {
+                let options = &options;
+                async move {
+                    if offset == u64::MAX && size == u64::MAX {
+                        Ok::<_, CodecError>((None, output_subset))
+                    } else {
+                        let inner_partial_decoder = get_subchunk_partial_decoder(
+                            input_handle,
+                            subchunk_shape,
+                            inner_codecs,
+                            options,
+                            offset,
+                            size,
+                        )
+                        .await?;
+                        let decoded = inner_partial_decoder
+                            .partial_decode(
+                                &chunk_subset_overlap
+                                    .relative_to(chunk_subset.start())
+                                    .unwrap(),
+                                options,
+                            )
+                            .await?
+                            .into_fixed()?
+                            .into_owned();
+                        Ok((Some(decoded), output_subset))
+                    }
+                }
+            },
+        )
+        .buffer_unordered(subchunk_concurrent_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
+
+    for (decoded, output_subset) in decoded_subchunks {
+        // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
+        let mut subchunk_view = unsafe { output_view.subdivide(output_subset)? };
+        if let Some(decoded) = decoded {
+            subchunk_view.copy_from_slice(&decoded)?;
+        } else {
+            subchunk_view.fill(fill_value.as_ne_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]

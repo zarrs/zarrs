@@ -35,7 +35,10 @@ use zarrs_codec::{
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -770,6 +773,28 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 options,
                 self.options.clone(),
             )?,
+        ))
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(
+            super::sharding_partial_encoder_async::AsyncShardingPartialEncoder::new(
+                input_output_handle,
+                ChunkShape::from(shape.to_vec()),
+                self.subchunk_shape.clone(),
+                self.inner_codecs.clone(),
+                self.index_codecs.clone(),
+                self.index_location,
+                options,
+                self.options.clone(),
+            )
+            .await?,
         ))
     }
 
