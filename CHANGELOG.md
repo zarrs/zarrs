@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `SyncChunkCacheType` and `AsyncChunkCacheType` for chunk cache types supporting synchronous and asynchronous retrieval
   - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` implement both
   - `ChunkCacheTypePartialDecoder` only supports synchronous retrieval
-- Add `ChunkCacheTypeAsyncPartialDecoder` and the `ChunkCacheAsyncPartialDecoderLru*` caches for cached asynchronous partial decoding
+- Add `ChunkCacheTypeAsyncPartialDecoder` and the `ChunkCacheAsyncPartialDecoderLru{ChunkLimit,SizeLimit}` caches for cached asynchronous partial decoding
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids

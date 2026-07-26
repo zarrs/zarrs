@@ -684,12 +684,9 @@ where
 mod tests {
     use super::*;
     use crate::array::chunk_cache::{
-        ChunkCacheAsyncPartialDecoderLruChunkLimit,
-        ChunkCacheAsyncPartialDecoderLruChunkLimitThreadLocal,
-        ChunkCacheAsyncPartialDecoderLruSizeLimit, ChunkCacheDecodedLruChunkLimit,
-        ChunkCacheDecodedLruChunkLimitThreadLocal, ChunkCacheDecodedLruSizeLimit,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimitThreadLocal,
-        ChunkCacheEncodedLruSizeLimit,
+        ChunkCacheAsyncPartialDecoderLruChunkLimit, ChunkCacheAsyncPartialDecoderLruSizeLimit,
+        ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
     };
     use crate::array::{ArrayBuilder, data_type};
     use zarrs_storage::store::AsyncMemoryStore;
@@ -868,7 +865,6 @@ mod tests {
     #[tokio::test]
     async fn async_lru_caches_support_encoded_values() {
         test_cache_async(ChunkCacheEncodedLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheEncodedLruChunkLimitThreadLocal::new(2)).await;
         test_cache_async(ChunkCacheEncodedLruSizeLimit::new(1024)).await;
         test_cache_sharded_async(ChunkCacheEncodedLruChunkLimit::new(4)).await;
         test_cache_into_async(ChunkCacheEncodedLruChunkLimit::new(4)).await;
@@ -877,7 +873,6 @@ mod tests {
     #[tokio::test]
     async fn async_lru_caches_support_decoded_values() {
         test_cache_async(ChunkCacheDecodedLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheDecodedLruChunkLimitThreadLocal::new(2)).await;
         test_cache_async(ChunkCacheDecodedLruSizeLimit::new(1024)).await;
         test_cache_sharded_async(ChunkCacheDecodedLruChunkLimit::new(4)).await;
         test_cache_into_async(ChunkCacheDecodedLruChunkLimit::new(4)).await;
@@ -886,10 +881,6 @@ mod tests {
     #[tokio::test]
     async fn async_lru_caches_support_async_partial_decoder_values() {
         test_cache_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheAsyncPartialDecoderLruChunkLimitThreadLocal::new(
-            2,
-        ))
-        .await;
         test_cache_async(ChunkCacheAsyncPartialDecoderLruSizeLimit::new(1024)).await;
         test_cache_sharded_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
         test_cache_into_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;

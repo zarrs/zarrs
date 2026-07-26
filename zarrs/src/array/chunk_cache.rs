@@ -20,7 +20,8 @@
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
 //! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache,
-//! and (with the `async` feature) `ChunkCacheAsyncPartialDecoder` prefixed variants of the partial decoder caches.
+//! and (with the `async` feature) `ChunkCacheAsyncPartialDecoderLru{ChunkLimit,SizeLimit}` for cached
+//! asynchronous partial decoding.
 //! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
 //!
@@ -29,6 +30,15 @@
 //! `ChunkCacheTypeAsyncPartialDecoder` values (see `AsyncChunkCacheType`).
 //! [`ChunkCacheTypePartialDecoder`] caches only support synchronous retrieval and
 //! `ChunkCacheTypeAsyncPartialDecoder` caches only support asynchronous retrieval (see [`SyncChunkCacheType`]).
+//!
+//! <div class="warning">
+//!
+//! `ThreadLocal` caches are intended for synchronous operations only.
+//! Combining one with asynchronous operations on a work-stealing executor can yield stale
+//! reads, because a task may cache a chunk on one thread and invalidate it on another.
+//! See [`ArrayCached`](super::ArrayCached) for details.
+//!
+//! </div>
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.

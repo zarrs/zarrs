@@ -198,17 +198,7 @@ pub type ChunkCachePartialDecoderLruSizeLimitThreadLocal =
 pub type ChunkCacheAsyncPartialDecoderLruChunkLimit =
     ChunkCacheLruChunkLimit<ChunkCacheTypeAsyncPartialDecoder>;
 
-/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed chunk capacity.
-#[cfg(feature = "async")]
-pub type ChunkCacheAsyncPartialDecoderLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeAsyncPartialDecoder>;
-
 /// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed size capacity.
 #[cfg(feature = "async")]
 pub type ChunkCacheAsyncPartialDecoderLruSizeLimit =
     ChunkCacheLruSizeLimit<ChunkCacheTypeAsyncPartialDecoder>;
-
-/// An LRU (least recently used) asynchronous partial decoder chunk cache with a fixed size capacity.
-#[cfg(feature = "async")]
-pub type ChunkCacheAsyncPartialDecoderLruSizeLimitThreadLocal =
-    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeAsyncPartialDecoder>;

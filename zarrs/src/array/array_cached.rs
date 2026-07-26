@@ -58,6 +58,20 @@ use super::Array;
 /// Unlike synchronous operations, concurrent asynchronous retrievals of an uncached
 /// chunk may each fetch the chunk; only one of the retrieved values is retained by the
 /// cache.
+///
+/// <div class="warning">
+///
+/// Do not use a `ThreadLocal` cache with asynchronous operations on a work-stealing
+/// executor (such as a multi-threaded `tokio` runtime).
+///
+/// A thread-local cache keys its entries, and its invalidations, on the thread that
+/// happens to be executing. An asynchronous task may resume on a different thread after
+/// each `await`, so a chunk can be cached on one thread while a subsequent write
+/// invalidates it on another. The stale entry then remains visible to later retrievals
+/// that resume on the original thread. This applies even to a single task, since a task
+/// migrates between threads at await points.
+///
+/// </div>
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,
