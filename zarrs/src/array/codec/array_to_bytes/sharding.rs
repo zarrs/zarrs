@@ -59,6 +59,8 @@ mod sharding_options;
 mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
+#[cfg(feature = "async")]
+mod sharding_partial_encoder_async;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;

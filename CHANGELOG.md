@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Efficient async sharding partial writes using the existing codec interface, including generic indexers (backport of #433, `0da2d1ce`)
 - Support generic indexers in sharding codec partial writes, batching each affected subchunk and retaining duplicate update order (backport of #466/#469, `297b0f8b`/`18cd5ec7`)
 - Implement `Clone` and `Debug` for `Tensor`, retaining owned/borrowed bytes semantics (backport of #456, `fa226fa4`)
 - Implement `Copy` for `GroupMetadataOptions` (backport of #399, `f662c596`)

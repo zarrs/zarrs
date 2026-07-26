@@ -53,7 +53,7 @@ impl BytesPartialEncoderTraits for Handle {
     }
     fn erase(&self) -> Result<(), CodecError> {
         if self.fail_erase.load(Ordering::SeqCst) {
-            return Err(CodecError::from("erase failure"));
+            return Err(StorageError::Other("erase failure".into()).into());
         }
         self.writes.fetch_add(1, Ordering::SeqCst);
         self.bytes.erase()
@@ -64,7 +64,7 @@ impl BytesPartialEncoderTraits for Handle {
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if self.fail_write.load(Ordering::SeqCst) {
-            return Err(CodecError::from("write failure"));
+            return Err(StorageError::Other("write failure".into()).into());
         }
         self.writes.fetch_add(1, Ordering::SeqCst);
         self.bytes.partial_encode_many(values, options)
@@ -136,8 +136,10 @@ fn cases() -> Vec<(
     cases
 }
 
-#[test]
-fn sync_partial_writes() {
+// Run the same selections and storage assertions through both encoder traits.
+macro_rules! write_cases {
+    ($new:ident, $wait:ident) => {{
+
     for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         for target in [0, 1, 2, 8] {
             for compressed in [false, true] {
@@ -161,15 +163,15 @@ fn sync_partial_writes() {
                             );
                         }
                         let initial_encoded = handle.bytes.lock().unwrap().clone();
-                        let encoder = codec
+                        let encoder = $wait!(codec
                             .clone()
-                            .partial_encoder(handle.clone(), &shape, &dtype, &fill, &options)
+                            .$new(handle.clone(), &shape, &dtype, &fill, &options))
                             .unwrap();
                         handle.reads.lock().unwrap().clear();
                         // Two affected subchunks, with interleaved duplicates in the first.
                         let indices =
                             vec![vec![0, 0], vec![3, 3], vec![0, 1], vec![3, 2], vec![0, 0]];
-                        encoder.partial_encode(&indices, &update, &options).unwrap();
+                        $wait!(encoder.partial_encode(&indices, &update, &options)).unwrap();
                         assert_eq!(
                             handle.reads.lock().unwrap().len(),
                             if populated { 2 } else { 0 }
@@ -178,8 +180,8 @@ fn sync_partial_writes() {
                             update_array_bytes(expected, &[4, 4], &indices, &update, dtype.size())
                                 .unwrap();
                         assert_eq!(
-                            encoder
-                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options)
+                            $wait!(encoder
+                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options))
                                 .unwrap(),
                             expected
                         );
@@ -220,55 +222,55 @@ fn sync_partial_writes() {
                             .extract_array_subset(&subset, &[4, 4], &dtype)
                             .unwrap()
                             .into_owned();
-                        encoder.partial_encode(&subset, &values, &options).unwrap();
+                        $wait!(encoder.partial_encode(&subset, &values, &options)).unwrap();
                         assert!(handle.reads.lock().unwrap().is_empty());
                         // Invalid selection, byte count, and empty selection do not mutate storage.
                         let before = handle.bytes.lock().unwrap().clone();
                         let writes = handle.writes.load(Ordering::SeqCst);
                         assert!(
-                            encoder
-                                .partial_encode(&vec![vec![0]], &update, &options)
+                            $wait!(encoder
+                                .partial_encode(&vec![vec![0]], &update, &options))
                                 .is_err()
                         );
                         assert!(
-                            encoder
-                                .partial_encode(&vec![vec![4, 0]; 5], &update, &options)
+                            $wait!(encoder
+                                .partial_encode(&vec![vec![4, 0]; 5], &update, &options))
                                 .is_err()
                         );
-                        assert!(encoder.partial_encode(&indices, &values, &options).is_err());
+                        assert!($wait!(encoder.partial_encode(&indices, &values, &options)).is_err());
                         let empty = ArraySubset::new_with_shape(vec![0, 4]);
                         let empty_values = ArrayBytes::new_fill_value(&dtype, 0, &fill).unwrap();
-                        encoder
-                            .partial_encode(&empty, &empty_values, &options)
+                        $wait!(encoder
+                            .partial_encode(&empty, &empty_values, &options))
                             .unwrap();
-                        encoder
-                            .partial_encode(&vec![empty.clone()], &empty_values, &options)
+                        $wait!(encoder
+                            .partial_encode(&vec![empty.clone()], &empty_values, &options))
                             .unwrap();
                         assert_eq!(handle.writes.load(Ordering::SeqCst), writes);
                         assert_eq!(*handle.bytes.lock().unwrap(), before);
                         // Failed writes and erases must leave the cached index usable.
                         handle.fail_write.store(true, Ordering::SeqCst);
-                        assert!(encoder.partial_encode(&subset, &values, &options).is_err());
+                        assert!($wait!(encoder.partial_encode(&subset, &values, &options)).is_err());
                         handle.fail_write.store(false, Ordering::SeqCst);
                         handle.fail_erase.store(true, Ordering::SeqCst);
-                        assert!(encoder.erase().is_err());
+                        assert!($wait!(encoder.erase()).is_err());
                         handle.fail_erase.store(false, Ordering::SeqCst);
                         assert_eq!(
-                            encoder
-                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options)
+                            $wait!(encoder
+                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options))
                                 .unwrap(),
                             expected
                         );
-                        encoder.erase().unwrap();
-                        assert!(!encoder.exists().unwrap());
+                        $wait!(encoder.erase()).unwrap();
+                        assert!(!$wait!(encoder.exists()).unwrap());
                         let empty_shard = ArrayBytes::new_fill_value(&dtype, 16, &fill).unwrap();
                         assert_eq!(
-                            encoder
-                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options)
+                            $wait!(encoder
+                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options))
                                 .unwrap(),
                             empty_shard
                         );
-                        encoder.partial_encode(&indices, &update, &options).unwrap();
+                        $wait!(encoder.partial_encode(&indices, &update, &options)).unwrap();
                         let expected = update_array_bytes(
                             empty_shard,
                             &[4, 4],
@@ -278,24 +280,248 @@ fn sync_partial_writes() {
                         )
                         .unwrap();
                         assert_eq!(
-                            encoder
-                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options)
+                            $wait!(encoder
+                                .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options))
                                 .unwrap(),
                             expected
                         );
                         let full = ArraySubset::new_with_shape(vec![4, 4]);
-                        encoder
+                        $wait!(encoder
                             .partial_encode(
                                 &full,
                                 &ArrayBytes::new_fill_value(&dtype, 16, &fill).unwrap(),
                                 &options,
-                            )
+                            ))
                             .unwrap();
-                        assert!(!encoder.exists().unwrap());
+                        assert!(!$wait!(encoder.exists()).unwrap());
                         assert!(handle.bytes.lock().unwrap().is_none());
                     }
                 }
             }
+        }
+    }
+
+    }};
+}
+macro_rules! immediate {
+    ($value:expr) => {
+        $value
+    };
+}
+#[test]
+fn sync_partial_writes() {
+    write_cases!(partial_encoder, immediate);
+}
+
+#[cfg(feature = "async")]
+macro_rules! awaited {
+    ($value:expr) => {
+        $value.await
+    };
+}
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_partial_writes() {
+    write_cases!(async_partial_encoder, awaited);
+}
+
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+impl zarrs_codec::AsyncBytesPartialDecoderTraits for Handle {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        BytesPartialDecoderTraits::exists(self)
+    }
+    fn size_held(&self) -> usize {
+        BytesPartialDecoderTraits::size_held(self)
+    }
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+    async fn partial_decode_many<'a>(
+        &'a self,
+        ranges: ByteRangeIterator<'a>,
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+        // Yield so competing operations can exercise the encoder's async mutex.
+        tokio::task::yield_now().await;
+        BytesPartialDecoderTraits::partial_decode_many(self, ranges, options)
+    }
+}
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+impl zarrs_codec::AsyncBytesPartialEncoderTraits for Handle {
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits> {
+        self
+    }
+    fn supports_partial_encode(&self) -> bool {
+        true
+    }
+    async fn erase(&self) -> Result<(), CodecError> {
+        tokio::task::yield_now().await;
+        BytesPartialEncoderTraits::erase(self)
+    }
+    async fn partial_encode_many<'a>(
+        &'a self,
+        values: OffsetBytesIterator<'a, ArrayBytesRaw<'_>>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        tokio::task::yield_now().await;
+        BytesPartialEncoderTraits::partial_encode_many(self, values, options)
+    }
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn concurrent_async_updates_share_the_cached_index() {
+    let dtype = data_type::uint8();
+    let shape = vec![NonZeroU64::new(4).unwrap(); 2];
+    let options = CodecOptions::default().with_concurrent_target(2);
+    let codec = codec(&dtype, ShardingIndexLocation::End, false);
+    let handle = Arc::new(Handle::default());
+    let encoder = codec
+        .async_partial_encoder(handle, &shape, &dtype, &0u8.into(), &options)
+        .await
+        .unwrap();
+    let one = vec![vec![0, 0], vec![3, 3]];
+    let two = vec![vec![0, 1], vec![3, 2]];
+    let bytes_one = vec![7u8, 8].into();
+    let bytes_two = vec![9u8, 10].into();
+    let (first, second) = tokio::join!(
+        encoder.partial_encode(&one, &bytes_one, &options),
+        encoder.partial_encode(&two, &bytes_two, &options)
+    );
+    first.unwrap();
+    second.unwrap();
+    let decoded = encoder
+        .partial_decode(&ArraySubset::new_with_shape(vec![4, 4]), &options)
+        .await
+        .unwrap()
+        .into_fixed()
+        .unwrap();
+    assert_eq!(
+        decoded.as_ref(),
+        &[7, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 8]
+    );
+}
+
+mod full_write_fallback {
+    use super::*;
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{
+        Bytes, MaybeBytesIterator, ReadableStorageTraits, StoreKey, StorePrefix,
+        WritableStorageTraits,
+    };
+    #[derive(Default)]
+    struct FullWritesOnly(MemoryStore);
+    impl ReadableStorageTraits for FullWritesOnly {
+        fn get_partial_many<'a>(
+            &'a self,
+            key: &StoreKey,
+            ranges: ByteRangeIterator<'a>,
+        ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+            self.0.get_partial_many(key, ranges)
+        }
+        fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+            self.0.size_key(key)
+        }
+        fn supports_get_partial(&self) -> bool {
+            true
+        }
+    }
+    impl WritableStorageTraits for FullWritesOnly {
+        fn set(&self, key: &StoreKey, bytes: Bytes) -> Result<(), StorageError> {
+            self.0.set(key, bytes)
+        }
+        fn set_partial_many(
+            &self,
+            _: &StoreKey,
+            _: OffsetBytesIterator,
+        ) -> Result<(), StorageError> {
+            panic!("store does not support partial writes")
+        }
+        fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
+            self.0.erase(key)
+        }
+        fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
+            self.0.erase_prefix(prefix)
+        }
+        fn supports_set_partial(&self) -> bool {
+            false
+        }
+    }
+    fn builder(location: ShardingIndexLocation) -> zarrs::array::ArrayBuilder {
+        let dtype = data_type::uint8();
+        let mut builder =
+            zarrs::array::ArrayBuilder::new(vec![4, 4], vec![4, 4], dtype.clone(), 0u8);
+        builder.array_to_bytes_codec(codec(&dtype, location, false));
+        builder
+    }
+    #[test]
+    fn sync_store_without_partial_writes() {
+        for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+            let array = builder(location)
+                .build(Arc::new(FullWritesOnly::default()), "/")
+                .unwrap();
+            let options = CodecOptions::default().with_experimental_partial_encoding(true);
+            array.store_chunk(&[0, 0], vec![1u8; 16]).unwrap();
+            array
+                .store_chunk_subset_opt(
+                    &[0, 0],
+                    &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                    vec![2u8; 4],
+                    &options,
+                )
+                .unwrap();
+            assert_eq!(
+                array.retrieve_chunk::<Vec<u8>>(&[0, 0]).unwrap(),
+                [1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1]
+            );
+        }
+    }
+    #[cfg(feature = "async")]
+    struct SpawnBlocking;
+    #[cfg(feature = "async")]
+    impl zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking for SpawnBlocking {
+        async fn spawn_blocking<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: Send + 'static,
+        {
+            tokio::task::spawn_blocking(f).await.unwrap()
+        }
+    }
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_store_without_partial_writes() {
+        for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+            let store = Arc::new(
+                zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncStorageAdapter::new(
+                    Arc::new(FullWritesOnly::default()),
+                    SpawnBlocking,
+                ),
+            );
+            let array = builder(location).build(store, "/").unwrap();
+            let options = CodecOptions::default().with_experimental_partial_encoding(true);
+            array
+                .async_store_chunk(&[0, 0], vec![1u8; 16])
+                .await
+                .unwrap();
+            array
+                .async_store_chunk_subset_opt(
+                    &[0, 0],
+                    &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                    vec![2u8; 4],
+                    &options,
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                array
+                    .async_retrieve_chunk::<Vec<u8>>(&[0, 0])
+                    .await
+                    .unwrap(),
+                [1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1]
+            );
         }
     }
 }

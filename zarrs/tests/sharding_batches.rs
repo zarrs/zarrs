@@ -1,7 +1,7 @@
 //! Generic-indexer batching and nested option propagation backported from main.
 #![cfg(feature = "sharding")]
 use std::num::NonZeroU64;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zarrs::array::codec::{BytesCodec, OptionalCodec, ShardingCodecBuilder, VlenCodec};
 use zarrs::array::{
@@ -22,6 +22,24 @@ use zarrs_storage::StorageError;
 struct Counts {
     options: AtomicUsize,
     batches: Mutex<Vec<u64>>,
+    monitoring: AtomicBool,
+    active: AtomicUsize,
+    peak: AtomicUsize,
+    encodes: AtomicUsize,
+    decodes: AtomicUsize,
+}
+impl Counts {
+    fn track<T>(&self, action: impl FnOnce() -> T) -> T {
+        if !self.monitoring.load(Ordering::SeqCst) {
+            return action();
+        }
+        let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.peak.fetch_max(active, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        let result = action();
+        self.active.fetch_sub(1, Ordering::SeqCst);
+        result
+    }
 }
 #[derive(Debug)]
 struct ProbeCodec(Arc<Counts>);
@@ -82,7 +100,9 @@ impl ArrayToBytesCodecTraits for ProbeCodec {
         fill: &FillValue,
         opts: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        BytesCodec::default().encode(bytes, shape, dtype, fill, opts)
+        self.0.encodes.fetch_add(1, Ordering::SeqCst);
+        self.0
+            .track(|| BytesCodec::default().encode(bytes, shape, dtype, fill, opts))
     }
     fn decode<'a>(
         &self,
@@ -92,7 +112,9 @@ impl ArrayToBytesCodecTraits for ProbeCodec {
         fill: &FillValue,
         opts: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        BytesCodec::default().decode(bytes, shape, dtype, fill, opts)
+        self.0.decodes.fetch_add(1, Ordering::SeqCst);
+        self.0
+            .track(|| BytesCodec::default().decode(bytes, shape, dtype, fill, opts))
     }
     fn partial_decoder(
         self: Arc<Self>,
@@ -203,4 +225,103 @@ fn nested_codecs_receive_options() {
             .build_arc();
     codec.with_codec_specific_options(&CodecSpecificOptions::default());
     assert_eq!(counts.options.load(Ordering::SeqCst), 5);
+}
+
+// Only two of four subchunks are selected, with repeated coordinates.
+macro_rules! bounded_writes {
+    ($encoder:expr, $wait:ident, $counts:ident, $target:ident) => {{
+        let encoder = $encoder;
+        $counts.encodes.store(0, Ordering::SeqCst);
+        $counts.decodes.store(0, Ordering::SeqCst);
+        $counts.peak.store(0, Ordering::SeqCst);
+        $counts.monitoring.store(true, Ordering::SeqCst);
+        let indices = vec![vec![0, 0], vec![3, 3], vec![0, 0], vec![3, 2]];
+        $wait!(encoder.partial_encode(
+            &indices,
+            &vec![30, 31, 32, 33u8].into(),
+            &CodecOptions::default().with_concurrent_target($target)
+        ))
+        .unwrap();
+        $counts.monitoring.store(false, Ordering::SeqCst);
+        assert_eq!($counts.encodes.load(Ordering::SeqCst), 2);
+        assert_eq!($counts.decodes.load(Ordering::SeqCst), 2);
+        let peak = $counts.peak.load(Ordering::SeqCst);
+        assert!(peak > 0 && peak <= if $target == 0 { 4 } else { $target });
+    }};
+}
+macro_rules! immediate {
+    ($value:expr) => {
+        $value
+    };
+}
+#[test]
+fn sync_writes_batch_and_bound_subchunk_work() {
+    for target in [0, 1, 2, 4] {
+        let counts = Arc::new(Counts::default());
+        let dtype = data_type::uint8();
+        let shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let codec = ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &dtype)
+            .array_to_bytes_codec(Arc::new(ProbeCodec(counts.clone())))
+            .build_arc();
+        let options = CodecOptions::default();
+        let encoded = codec
+            .encode(vec![1u8; 16].into(), &shape, &dtype, &0u8.into(), &options)
+            .unwrap()
+            .into_owned();
+        bounded_writes!(
+            codec
+                .partial_encoder(
+                    Arc::new(Mutex::new(Some(encoded))),
+                    &shape,
+                    &dtype,
+                    &0u8.into(),
+                    &options
+                )
+                .unwrap(),
+            immediate,
+            counts,
+            target
+        );
+    }
+}
+#[cfg(feature = "async")]
+macro_rules! awaited {
+    ($value:expr) => {
+        $value.await
+    };
+}
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_writes_batch_and_bound_subchunk_work() {
+    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::{AsyncWritableStorageTraits, StoreKey};
+    for target in [0, 1, 2, 4] {
+        let counts = Arc::new(Counts::default());
+        let dtype = data_type::uint8();
+        let shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let codec = ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &dtype)
+            .array_to_bytes_codec(Arc::new(ProbeCodec(counts.clone())))
+            .build_arc();
+        let options = CodecOptions::default();
+        let encoded = codec
+            .encode(vec![1u8; 16].into(), &shape, &dtype, &0u8.into(), &options)
+            .unwrap()
+            .into_owned();
+        let store = Arc::new(AsyncMemoryStore::new());
+        let key = StoreKey::new("shard").unwrap();
+        store.set(&key, encoded.into()).await.unwrap();
+        let handle = Arc::new(zarrs_codec::StoragePartialEncoder::new(
+            store as zarrs_storage::AsyncReadableWritableStorage,
+            key,
+        ));
+        bounded_writes!(
+            codec
+                .async_partial_encoder(handle, &shape, &dtype, &0u8.into(), &options)
+                .await
+                .unwrap(),
+            awaited,
+            counts,
+            target
+        );
+    }
 }

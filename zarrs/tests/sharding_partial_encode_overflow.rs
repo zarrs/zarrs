@@ -88,10 +88,18 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]);
             store.set(&key, encoded.clone().into()).await.unwrap();
-            let encoder = array
+            let encoder = match array
                 .async_partial_encoder(&[0, 0], &CodecOptions::default())
                 .await
-                .unwrap();
+            {
+                Ok(encoder) => encoder,
+                Err(_) => {
+                    assert_eq!(store.get(&key).await.unwrap().unwrap().as_ref(), encoded);
+                    assert_eq!(store.writes(), 1); // Only the corrupt fixture was written.
+                    assert_eq!(store.keys_erased(), 0);
+                    continue;
+                }
+            };
             store.reset();
             for _ in 0..2 {
                 assert!(
