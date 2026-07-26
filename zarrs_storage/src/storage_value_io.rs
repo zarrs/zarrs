@@ -74,9 +74,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
             .get_partial(&self.key, ByteRange::FromStart(self.pos, Some(len as u64)))
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         if let Some(data) = data {
-            buf[..data.len()].copy_from_slice(&data);
-            self.pos += data.len() as u64;
-            Ok(data.len())
+            // Clamp in case a store returns more bytes than were requested
+            let len = data.len().min(buf.len());
+            buf[..len].copy_from_slice(&data[..len]);
+            self.pos += len as u64;
+            Ok(len)
         } else {
             // This shouldn't happen, the data is only None if the key is not found. Which won't be the case if the size is known.
             Err(std::io::Error::other(
@@ -92,6 +94,45 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
 mod tests {
     use super::*;
     use crate::WritableStorageTraits;
+
+    /// A store that returns the whole value regardless of the requested byte range.
+    struct OverreadingStore;
+
+    impl ReadableStorageTraits for OverreadingStore {
+        fn get_partial_many<'a>(
+            &'a self,
+            _key: &StoreKey,
+            _byte_ranges: crate::byte_range::ByteRangeIterator<'a>,
+        ) -> Result<crate::MaybeBytesIterator<'a>, crate::StorageError> {
+            unimplemented!()
+        }
+
+        fn get_partial(
+            &self,
+            _key: &StoreKey,
+            _byte_range: ByteRange,
+        ) -> Result<crate::MaybeBytes, crate::StorageError> {
+            Ok(Some(crate::Bytes::from_static(b"0123456789")))
+        }
+
+        fn size_key(&self, _key: &StoreKey) -> Result<Option<u64>, crate::StorageError> {
+            Ok(Some(10))
+        }
+
+        fn supports_get_partial(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn read_clamps_oversized_store_response() {
+        let key = StoreKey::new("value").unwrap();
+        let mut reader = StorageValueIO::new(Arc::new(OverreadingStore), key, 10);
+
+        let mut bytes = [0; 4];
+        assert_eq!(reader.read(&mut bytes).unwrap(), 4);
+        assert_eq!(&bytes, b"0123");
+    }
 
     #[test]
     fn read_stops_at_end_of_value() {
