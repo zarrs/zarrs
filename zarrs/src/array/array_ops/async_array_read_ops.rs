@@ -22,6 +22,15 @@ pub trait AsyncArrayReadOps: ArrayOps {
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
+    /// Async variant of [`ArrayReadOps::retrieve_chunk_into`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunk_into(
+        &self,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError>;
+
     /// Async variant of [`ArrayReadOps::retrieve_chunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunks<T: FromArrayBytes>(
