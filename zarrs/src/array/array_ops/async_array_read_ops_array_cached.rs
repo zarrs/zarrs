@@ -894,4 +894,36 @@ mod tests {
         test_cache_sharded_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
         test_cache_into_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
     }
+
+    /// Cached async retrievals must be `Send` so that they can be used with
+    /// executors that move tasks between threads (e.g. `tokio::spawn`).
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_cache_spawn_async<C>(cache: C)
+    where
+        C: ChunkCache + 'static,
+        C::Value: AsyncChunkCacheType,
+    {
+        let store = Arc::new(AsyncMemoryStore::new());
+        let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+            .build_arc(store, "/")
+            .unwrap();
+        array.async_store_chunk(&[0], &[1u8, 2]).await.unwrap();
+
+        let cached = Arc::new(ArrayCached::new(array, cache));
+        let handles = (0..4).map(|_| {
+            let cached = cached.clone();
+            tokio::spawn(async move { cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap() })
+        });
+        for handle in handles {
+            assert_eq!(handle.await.unwrap(), vec![1, 2]);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn async_lru_caches_are_send() {
+        test_cache_spawn_async(ChunkCacheEncodedLruChunkLimit::new(2)).await;
+        test_cache_spawn_async(ChunkCacheDecodedLruChunkLimit::new(2)).await;
+        test_cache_spawn_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(2)).await;
+    }
 }

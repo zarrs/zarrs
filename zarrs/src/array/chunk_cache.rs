@@ -131,7 +131,8 @@ pub trait SyncChunkCacheType: ChunkCacheType {
 /// It is not implemented for [`ChunkCacheTypePartialDecoder`], which caches synchronous
 /// partial decoders that cannot be created from asynchronous storage.
 #[cfg(feature = "async")]
-#[allow(async_fn_in_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncChunkCacheType: ChunkCacheType {
     #[doc(hidden)]
     async fn async_partial_decoder<TStorage, C>(

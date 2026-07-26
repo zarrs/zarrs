@@ -147,6 +147,8 @@ where
 }
 
 #[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncChunkCacheType for ChunkCacheTypeEncoded {
     async fn async_partial_decoder<TStorage, C>(
         cache: &C,
