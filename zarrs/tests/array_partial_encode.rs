@@ -174,6 +174,40 @@ fn array_partial_encode_sharding_index_end() {
     array_partial_encode_sharding(ShardingIndexLocation::End, vec![]).unwrap();
 }
 
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn array_partial_encode_sharding_async() {
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let options = CodecOptions::default().with_experimental_partial_encoding(true);
+    for index_location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        let store = Arc::new(AsyncMemoryStore::new());
+        let mut builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint16(), 0u16);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &data_type::uint16())
+                .index_location(index_location)
+                .build(),
+        ));
+        let array = builder.build(store, "/").unwrap();
+
+        array
+            .async_store_array_subset_opt(&[0..1, 0..2], &[1u16, 2], &options)
+            .await
+            .unwrap();
+        array
+            .async_store_array_subset_opt(&[0..2, 0..1], &[3u16, 4], &options)
+            .await
+            .unwrap();
+        assert_eq!(
+            array
+                .async_retrieve_chunk::<Vec<u16>>(&[0, 0])
+                .await
+                .unwrap(),
+            vec![3, 2, 4, 0]
+        );
+    }
+}
+
 #[test]
 fn array_partial_encode_sharding_index_compressed() {
     #[cfg(feature = "blosc")]
