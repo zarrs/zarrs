@@ -36,6 +36,20 @@ pub(crate) fn build_nested_optional_target<'a>(
     }
 }
 
+/// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
+///
+/// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
+/// [`build_nested_optional_target`].
+pub(crate) fn wrap_optional_masks<'a>(
+    bytes: ArrayBytes<'a>,
+    masks: Vec<Vec<u8>>,
+) -> ArrayBytes<'a> {
+    masks
+        .into_iter()
+        .rev()
+        .fold(bytes, ArrayBytes::with_optional_mask)
+}
+
 /// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
 ///
 /// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
