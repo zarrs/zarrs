@@ -425,6 +425,28 @@ pub struct Array<TStorage: ?Sized> {
     metadata_erase_version: MetadataEraseVersion,
 }
 
+impl<TStorage: ?Sized> Clone for Array<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+            path: self.path.clone(),
+            data_type: self.data_type.clone(),
+            chunk_grid: self.chunk_grid.clone(),
+            subchunk_grids: self.subchunk_grids.clone(),
+            chunk_key_encoding: self.chunk_key_encoding.clone(),
+            fill_value: self.fill_value.clone(),
+            codecs: self.codecs.clone(),
+            codecs_bound: self.codecs_bound.clone(),
+            storage_transformers: self.storage_transformers.clone(),
+            dimension_names: self.dimension_names.clone(),
+            metadata: self.metadata.clone(),
+            codec_options: self.codec_options,
+            metadata_options: self.metadata_options,
+            metadata_erase_version: self.metadata_erase_version,
+        }
+    }
+}
+
 impl<TStorage: ?Sized> Array<TStorage> {
     /// Replace the storage backing an array.
     pub fn with_storage<TStorage2: ?Sized>(&self, storage: Arc<TStorage2>) -> Array<TStorage2> {
