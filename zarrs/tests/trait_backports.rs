@@ -23,3 +23,20 @@ fn cloned_builder_is_independent() {
     assert_eq!(original.dimension_names(), cloned.dimension_names());
     assert_eq!(original.fill_value(), cloned.fill_value());
 }
+
+#[test]
+fn array_clone_accepts_non_clone_and_unsized_storage() {
+    struct NonClone;
+    let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 3u8)
+        .build(Arc::new(NonClone), "/array")
+        .unwrap()
+        .with_codec_options(zarrs::array::CodecOptions::default().with_concurrent_target(3));
+    let mut cloned = array.clone();
+    assert!(Arc::ptr_eq(&array.storage(), &cloned.storage()));
+    assert_eq!(array.metadata(), cloned.metadata());
+    cloned.attributes_mut().insert("cloned".into(), true.into());
+    assert!(!array.attributes().contains_key("cloned"));
+    let storage: Arc<dyn std::any::Any> = Arc::new(NonClone);
+    let dynamic = array.with_storage(storage);
+    assert!(Arc::ptr_eq(&dynamic.storage(), &dynamic.clone().storage()));
+}

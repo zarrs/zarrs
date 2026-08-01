@@ -420,6 +420,12 @@ pub struct Array<TStorage: ?Sized> {
     metadata_erase_version: MetadataEraseVersion,
 }
 
+impl<TStorage: ?Sized> Clone for Array<TStorage> {
+    fn clone(&self) -> Self {
+        self.with_storage(self.storage.clone())
+    }
+}
+
 impl<TStorage: ?Sized> Array<TStorage> {
     /// Replace the storage backing an array.
     pub fn with_storage<TStorage2: ?Sized>(&self, storage: Arc<TStorage2>) -> Array<TStorage2> {
@@ -1582,6 +1588,36 @@ mod tests {
     use super::*;
     use zarrs_metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
     use zarrs_storage::store::MemoryStore;
+
+    #[test]
+    fn array_clone_preserves_options_and_shared_components() {
+        struct NonClone;
+        let mut builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 7u8);
+        builder.dimension_names(Some(["x"]));
+        let mut array = builder
+            .build(Arc::new(NonClone), "/array")
+            .unwrap()
+            .with_codec_options(CodecOptions::default().with_concurrent_target(3))
+            .with_metadata_options(
+                ArrayMetadataOptions::default()
+                    .with_include_zarrs_metadata(false)
+                    .with_convert_aliased_extension_names(true),
+            );
+        array.metadata_erase_version = MetadataEraseVersion::V2;
+        let cloned = array.clone();
+        assert_eq!(cloned.codec_options.concurrent_target(), 3);
+        assert!(!cloned.metadata_options.include_zarrs_metadata());
+        assert!(cloned.metadata_options.convert_aliased_extension_names());
+        assert!(matches!(
+            cloned.metadata_erase_version,
+            MetadataEraseVersion::V2
+        ));
+        assert_eq!(cloned.path, array.path);
+        assert_eq!(cloned.metadata, array.metadata);
+        assert_eq!(cloned.dimension_names, array.dimension_names);
+        assert!(Arc::ptr_eq(&cloned.storage, &array.storage));
+        assert!(Arc::ptr_eq(&cloned.codecs, &array.codecs));
+    }
 
     #[test]
     fn array_metadata_opt_codecs_as_objects() {
