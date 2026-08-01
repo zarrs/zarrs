@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use super::{SyncPartialDecoderAsAsync, async_try_get_or_insert_with};
-use super::{cache_error, fill_value_bytes, validate_chunk_indices};
+use super::{cache_error, fill_value_bytes, sync_try_get_or_insert_with, validate_chunk_indices};
 #[cfg(feature = "async")]
 use crate::array::chunk_cache::AsyncChunkCacheType;
 use crate::array::chunk_cache::{
@@ -108,13 +108,12 @@ impl SyncChunkCacheType for ChunkCacheTypeDecoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array
-                    .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)?
-                    .map(Arc::new))
-            })
-            .map_err(cache_error)
+        sync_try_get_or_insert_with(cache, chunk_indices, || {
+            Ok(array
+                .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)?
+                .map(Arc::new))
+        })
+        .map_err(cache_error)
     }
 
     fn retrieve_chunk_subset_bytes<TStorage, C>(
@@ -183,7 +182,7 @@ impl AsyncChunkCacheType for ChunkCacheTypeDecoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        async_try_get_or_insert_with(cache, chunk_indices.to_vec(), async || {
+        async_try_get_or_insert_with(cache, chunk_indices, async || {
             Ok(array
                 .async_retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)
                 .await?

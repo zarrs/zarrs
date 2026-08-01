@@ -236,7 +236,9 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value>;
 
     /// Return a cached value or insert the value returned by `f`.
-    #[doc(hidden)]
+    ///
+    /// Implementations should evaluate `f` at most once per uncached chunk where possible, so
+    /// that concurrent retrievals of the same uncached chunk do not each decode it.
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -245,17 +247,64 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         F: FnOnce() -> Result<Self::Value, ArrayError>;
 
+    /// Return a token identifying the current invalidation state of the cache.
+    ///
+    /// # Correctness
+    ///
+    /// The returned value **must** change whenever [`invalidate`](ChunkCache::invalidate),
+    /// [`invalidate_chunk`](ChunkCache::invalidate_chunk), or
+    /// [`invalidate_chunks`](ChunkCache::invalidate_chunks) is called, **even if no cached chunk
+    /// was removed**.
+    ///
+    /// A retrieval that has to fetch a chunk reads this before it begins fetching and passes it
+    /// to [`retain_since`](ChunkCache::retain_since) after inserting. That is what stops a value
+    /// fetched before a concurrent write from being reinserted afterwards and remaining cached
+    /// for every later read. An implementation that does not advance the token on an invalidation
+    /// that removed nothing reintroduces exactly that bug, because the invalidation of a chunk
+    /// whose fetch is still in flight removes nothing.
+    ///
+    /// An `AtomicU64` incremented at the start of each invalidation method is sufficient.
+    #[must_use]
+    fn invalidation_generation(&self) -> u64;
+
+    /// Remove `chunk_indices` from the cache unless
+    /// [`invalidation_generation`](ChunkCache::invalidation_generation) still equals
+    /// `generation`, returning true if the chunk was retained.
+    ///
+    /// This is called after a retrieval inserts a chunk it had to fetch, with the generation read
+    /// before the fetch began. A changed generation means some invalidation overlapped the fetch,
+    /// so the inserted value may predate a write and must not be left cached.
+    ///
+    /// # Correctness
+    ///
+    /// Implementations **must not** change the invalidation generation. Removing a chunk here is
+    /// not itself an invalidation: if it advanced the generation it would signal a write to every
+    /// other retrieval in flight, and they would each drop their own chunk in turn.
+    ///
+    /// Removal is deliberately conservative. The generation is cache-wide, so a chunk may be
+    /// dropped because of a write to an unrelated chunk, and the value dropped may even be newer
+    /// than the one that was fetched. That costs a cache entry, never correctness.
+    fn retain_since(&self, chunk_indices: &[u64], generation: u64) -> bool;
+
     /// Invalidate all cached chunks, returning the number of chunks invalidated.
     ///
     /// For a thread-local cache, clears only the current thread's cache.
+    ///
+    /// This must advance [`invalidation_generation`](ChunkCache::invalidation_generation), even
+    /// if no chunks were cached.
     fn invalidate(&self) -> usize;
 
     /// Invalidate a cached chunk, returning true if the chunk was cached.
     ///
+    /// This must advance [`invalidation_generation`](ChunkCache::invalidation_generation), even
+    /// if the chunk was not cached.
     fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool;
 
     /// Invalidate cached chunks, returning the number of chunks invalidated.
     ///
+    /// This must advance [`invalidation_generation`](ChunkCache::invalidation_generation) if
+    /// `chunks` indexes at least one chunk, even if none of those chunks were cached. An empty
+    /// `chunks` invalidates nothing, so it need not advance the generation.
     fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
         let mut invalidated = 0;
         for chunk_indices in chunks.iter_indices() {

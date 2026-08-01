@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
   - **Breaking**: Add a required `get` method for cache retrieval without insertion
   - **Breaking**: Add a required `Locality` associated type (`ChunkCacheLocality{Shared,PerThread}`) declaring whether the cache is shared between threads
+  - **Breaking**: Add required `invalidation_generation` and `retain_since` methods, so that a retrieval can detect an invalidation that raced its fetch and drop the value it inserted
+    - Without this, a chunk fetched before a concurrent write could be inserted after that write invalidated the chunk, leaving a stale value cached for all later reads
+    - The invalidation methods must advance the generation even when no chunk was removed, since a chunk whose fetch is still in flight is not yet cached
+  - `try_get_or_insert_with` is no longer `#[doc(hidden)]`, as it is a required method of a trait intended to be implemented by `zarrs` consumers
   - Add `invalidate` methods
 - **Breaking**: `ArrayCached` asynchronous operations now require a cache with `ChunkCacheLocalityShared` locality
   - `ThreadLocal` caches are `ChunkCacheLocalityPerThread` and are rejected at compile time: a task may resume on a different thread after an `await`, so a chunk cached on one thread could be invalidated on another, leaving stale entries visible

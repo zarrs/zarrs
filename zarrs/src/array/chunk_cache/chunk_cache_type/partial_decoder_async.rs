@@ -31,7 +31,7 @@ impl AsyncChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        async_try_get_or_insert_with(cache, chunk_indices.to_vec(), async || {
+        async_try_get_or_insert_with(cache, chunk_indices, async || {
             array
                 .async_partial_decoder_opt(chunk_indices, options)
                 .await
