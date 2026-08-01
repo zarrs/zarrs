@@ -50,6 +50,15 @@ pub struct ArrayCached<TStorage: ?Sized, C> {
     cache: Arc<C>,
 }
 
+impl<TStorage: ?Sized, C> Clone for ArrayCached<TStorage, C> {
+    fn clone(&self) -> Self {
+        Self {
+            array: self.array.clone(),
+            cache: self.cache.clone(),
+        }
+    }
+}
+
 impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
     #[must_use]
