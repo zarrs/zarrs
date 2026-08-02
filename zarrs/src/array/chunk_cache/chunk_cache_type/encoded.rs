@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "async")]
 use super::{SyncPartialDecoderAsAsync, async_try_get_or_insert_with};
-use super::{cache_error, sync_try_get_or_insert_with, validate_chunk_indices};
+use super::{cache_error, validate_chunk_indices};
 #[cfg(feature = "async")]
 use crate::array::chunk_cache::AsyncChunkCacheType;
 use crate::array::chunk_cache::{
@@ -36,12 +36,13 @@ impl SyncChunkCacheType for ChunkCacheTypeEncoded {
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let encoded = sync_try_get_or_insert_with(cache, chunk_indices, || {
-            Ok(array
-                .retrieve_encoded_chunk(chunk_indices)?
-                .map(|chunk| Arc::new(Cow::Owned(chunk))))
-        })
-        .map_err(cache_error)?;
+        let encoded = cache
+            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+                Ok(array
+                    .retrieve_encoded_chunk(chunk_indices)?
+                    .map(|chunk| Arc::new(Cow::Owned(chunk))))
+            })
+            .map_err(cache_error)?;
         let input: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> = match encoded {
             Some(encoded) => encoded,
             None => Arc::new(Mutex::new(None)),
@@ -63,12 +64,13 @@ impl SyncChunkCacheType for ChunkCacheTypeEncoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        let encoded = sync_try_get_or_insert_with(cache, chunk_indices, || {
-            Ok(array
-                .retrieve_encoded_chunk(chunk_indices)?
-                .map(|chunk| Arc::new(Cow::Owned(chunk))))
-        })
-        .map_err(cache_error)?;
+        let encoded = cache
+            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+                Ok(array
+                    .retrieve_encoded_chunk(chunk_indices)?
+                    .map(|chunk| Arc::new(Cow::Owned(chunk))))
+            })
+            .map_err(cache_error)?;
         encoded
             .as_ref()
             .map(|encoded| {
@@ -111,7 +113,7 @@ where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: ChunkCache<Value = ChunkCacheTypeEncoded> + ?Sized,
 {
-    async_try_get_or_insert_with(cache, chunk_indices, async || {
+    async_try_get_or_insert_with(cache, chunk_indices.to_vec(), async || {
         Ok(array
             .async_retrieve_encoded_chunk(chunk_indices)
             .await?

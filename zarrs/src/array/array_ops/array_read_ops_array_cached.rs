@@ -487,7 +487,6 @@ where
 mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
     use crate::array::chunk_cache::{
@@ -698,7 +697,6 @@ mod tests {
     #[derive(Default)]
     struct CustomDecodedCache {
         values: Mutex<HashMap<Vec<u64>, ChunkCacheTypeDecoded>>,
-        generation: AtomicU64,
     }
 
     impl ChunkCache for CustomDecodedCache {
@@ -726,22 +724,7 @@ mod tests {
             Ok(value)
         }
 
-        fn invalidation_generation(&self) -> u64 {
-            self.generation.load(Ordering::SeqCst)
-        }
-
-        fn retain_since(&self, chunk_indices: &[u64], generation: u64) -> bool {
-            if self.generation.load(Ordering::SeqCst) == generation {
-                true
-            } else {
-                // Note that this must not advance the generation.
-                self.values.lock().unwrap().remove(chunk_indices);
-                false
-            }
-        }
-
         fn invalidate(&self) -> usize {
-            self.generation.fetch_add(1, Ordering::SeqCst);
             let mut values = self.values.lock().unwrap();
             let len = values.len();
             values.clear();
@@ -749,7 +732,6 @@ mod tests {
         }
 
         fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
-            self.generation.fetch_add(1, Ordering::SeqCst);
             self.values.lock().unwrap().remove(chunk_indices).is_some()
         }
 

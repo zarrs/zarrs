@@ -8,7 +8,6 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use bytes::BytesMut;
-use std::sync::RwLock;
 use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
@@ -22,7 +21,6 @@ use zarrs_storage::{
 mod direct_io;
 use lru::LruCache;
 use positioned_io::{RandomAccessFile, ReadAt, WriteAt};
-use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::num::NonZeroUsize;
@@ -110,12 +108,15 @@ struct CachedFile {
 /// A synchronous file system store.
 ///
 /// See <https://zarr-specs.readthedocs.io/en/latest/v3/stores/filesystem/index.html>.
+///
+/// Operations on distinct keys may be performed concurrently. As with any `zarrs` store, it is the
+/// responsibility of the consumer to ensure that a key is not written concurrently with any other
+/// read or write of that key; the store performs no locking of its own.
 #[derive(Debug)]
 pub struct FilesystemStore {
     base_path: PathBuf,
     sort: bool,
     options: FilesystemStoreOptions,
-    files: Mutex<HashMap<StoreKey, Arc<RwLock<()>>>>,
     handle_cache: Option<Mutex<LruCache<StoreKey, Arc<CachedFile>>>>,
 }
 
@@ -148,7 +149,6 @@ impl FilesystemStore {
             base_path,
             sort: false,
             options,
-            files: Mutex::default(),
             handle_cache,
         })
     }
@@ -197,7 +197,9 @@ impl FilesystemStore {
     /// enabled.
     ///
     /// Returns [`None`] if the file does not exist.
-    /// Must be called with the file mutex of `key` held (read or write).
+    ///
+    /// The cached handle records the file size at open time, so it is only valid while the file is
+    /// not being written. Writes to `key` must not overlap a read of `key`.
     fn open_or_cached(&self, key: &StoreKey) -> Result<Option<Arc<CachedFile>>, StorageError> {
         if let Some(cache) = &self.handle_cache {
             if let Some(handle) = cache.lock().unwrap().get(key) {
@@ -226,7 +228,7 @@ impl FilesystemStore {
 
     /// Invalidate the cached file handle for `key`, if any.
     ///
-    /// Must be called with the file mutex of `key` held for writing.
+    /// Must be called before mutating the file for `key`.
     fn invalidate_handle(&self, key: &StoreKey) {
         if let Some(cache) = &self.handle_cache {
             cache.lock().unwrap().pop(key);
@@ -240,16 +242,6 @@ impl FilesystemStore {
         }
     }
 
-    fn get_file_mutex(&self, key: &StoreKey) -> Arc<RwLock<()>> {
-        let mut files = self.files.lock().unwrap();
-        let file = files
-            .entry(key.clone())
-            .or_insert_with(|| Arc::new(RwLock::default()))
-            .clone();
-        drop(files);
-        file
-    }
-
     fn set_impl(
         &self,
         key: &StoreKey,
@@ -257,8 +249,6 @@ impl FilesystemStore {
         offset: ByteOffset,
         truncate: bool,
     ) -> Result<(), StorageError> {
-        let file = self.get_file_mutex(key);
-        let _lock = file.write();
         self.invalidate_handle(key);
 
         // Create directories
@@ -328,9 +318,7 @@ impl FilesystemStore {
         use std::collections::BTreeMap;
         use std::os::unix::fs::FileExt;
 
-        // Lock and open the file
-        let file = self.get_file_mutex(key);
-        let _lock = file.read();
+        // Open the file
         let mut flags = OpenOptions::new();
         flags.read(true);
         flags.custom_flags(O_DIRECT);
@@ -427,9 +415,7 @@ impl ReadableStorageTraits for FilesystemStore {
             return self.get_partial_many_direct_io(key, byte_ranges);
         }
 
-        // Lock and open the file (or reuse a cached handle)
-        let file_mutex = self.get_file_mutex(key);
-        let _lock = file_mutex.read();
+        // Open the file (or reuse a cached handle)
         let Some(handle) = self.open_or_cached(key)? else {
             return Ok(None);
         };
@@ -499,8 +485,6 @@ impl WritableStorageTraits for FilesystemStore {
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        let file = self.get_file_mutex(key);
-        let _lock = file.write();
         self.invalidate_handle(key);
 
         let key_path = self.key_to_fspath(key);
@@ -516,7 +500,6 @@ impl WritableStorageTraits for FilesystemStore {
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let _lock = self.files.lock(); // lock all operations
         self.invalidate_all_handles();
 
         let prefix_path = self.prefix_to_fs_path(prefix);
@@ -542,17 +525,8 @@ impl AtomicRenameStorageTraits for FilesystemStore {
             return Ok(());
         }
 
-        // The filesystem rename supplies cross-process atomicity. These process-local locks only
-        // keep the file handle cache coherent with the path replacement.
-        let (first_key, second_key) = if source < destination {
-            (source, destination)
-        } else {
-            (destination, source)
-        };
-        let first_file = self.get_file_mutex(first_key);
-        let second_file = self.get_file_mutex(second_key);
-        let _first_lock = first_file.write();
-        let _second_lock = second_file.write();
+        // The filesystem rename supplies atomicity of the path replacement itself. The handle
+        // cache is invalidated first so that a later read opens the renamed file.
         self.invalidate_handle(source);
         self.invalidate_handle(destination);
 

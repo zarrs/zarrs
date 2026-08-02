@@ -47,7 +47,6 @@ mod platform;
 /// A chunk cache with a fixed chunk capacity.
 pub struct ChunkCacheLruChunkLimit<CT: ChunkCacheType> {
     cache: platform::CacheChunkLimit<CT>,
-    generation: atomic::AtomicU64,
 }
 
 impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
@@ -55,17 +54,13 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     #[must_use]
     pub fn new(chunk_capacity: u64) -> Self {
         let cache = platform::CacheChunkLimit::new_with_chunk_capacity(chunk_capacity);
-        Self {
-            cache,
-            generation: atomic::AtomicU64::new(0),
-        }
+        Self { cache }
     }
 }
 
 /// A thread local chunk cache with a fixed chunk capacity per thread.
 pub struct ChunkCacheLruChunkLimitThreadLocal<CT: ChunkCacheType> {
     cache: platform::ThreadLocalCacheChunkLimit<CT>,
-    generation: atomic::AtomicU64,
 }
 
 impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
@@ -73,17 +68,13 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
     #[must_use]
     pub fn new(capacity: u64) -> Self {
         let cache = platform::ThreadLocalCacheChunkLimit::new_with_chunk_capacity(capacity);
-        Self {
-            cache,
-            generation: atomic::AtomicU64::new(0),
-        }
+        Self { cache }
     }
 }
 
 /// A chunk cache with a fixed size capacity.
 pub struct ChunkCacheLruSizeLimit<CT: ChunkCacheType> {
     cache: platform::CacheSizeLimit<CT>,
-    generation: atomic::AtomicU64,
 }
 
 impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
@@ -91,17 +82,13 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     #[must_use]
     pub fn new(capacity: u64) -> Self {
         let cache = platform::CacheSizeLimit::new_with_size_capacity(capacity);
-        Self {
-            cache,
-            generation: atomic::AtomicU64::new(0),
-        }
+        Self { cache }
     }
 }
 
 /// A thread local chunk cache with a fixed size capacity per thread.
 pub struct ChunkCacheLruSizeLimitThreadLocal<CT: ChunkCacheType> {
     cache: platform::ThreadLocalCacheSizeLimit<CT>,
-    generation: atomic::AtomicU64,
 }
 
 impl<CT: ChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
@@ -109,10 +96,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
     #[must_use]
     pub fn new(capacity: u64) -> Self {
         let cache = platform::ThreadLocalCacheSizeLimit::new_with_size_capacity(capacity);
-        Self {
-            cache,
-            generation: atomic::AtomicU64::new(0),
-        }
+        Self { cache }
     }
 }
 
@@ -135,25 +119,7 @@ macro_rules! impl_ChunkCacheLruCommon {
             self.cache.try_get_or_insert_with(chunk_indices, f)
         }
 
-        fn invalidation_generation(&self) -> u64 {
-            self.generation.load(atomic::Ordering::SeqCst)
-        }
-
-        fn retain_since(&self, chunk_indices: &[u64], generation: u64) -> bool {
-            if self.generation.load(atomic::Ordering::SeqCst) == generation {
-                true
-            } else {
-                // Note that `CacheTraits::remove` does not advance the generation.
-                CacheTraits::remove(&self.cache, chunk_indices);
-                false
-            }
-        }
-
         fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
-            // The generation is advanced before the removal so that it is visible to any
-            // retrieval that inserts afterwards, including one whose fetch is still in flight
-            // and so has nothing here to remove.
-            self.generation.fetch_add(1, atomic::Ordering::SeqCst);
             CacheTraits::remove(&self.cache, chunk_indices)
         }
 
@@ -162,7 +128,6 @@ macro_rules! impl_ChunkCacheLruCommon {
         }
 
         fn invalidate(&self) -> usize {
-            self.generation.fetch_add(1, atomic::Ordering::SeqCst);
             CacheTraits::clear(&self.cache)
         }
     };

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.12...HEAD)
 
+### Removed
+- Remove the per-key `RwLock`s held across `get`/`set`/`erase`/`rename`
+  - These only served to make a read of a key concurrent with a write of that key well defined, which `zarrs` does not support
+  - Removes a global mutex acquisition (and a per-key `StoreKey` clone) from the path of every store operation
+  - Also removes the map that retained one lock per key for the lifetime of the store, which grew unboundedly with the number of distinct keys accessed
+
 ## [0.3.12](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.12) - 2026-07-23
 
 ### Added

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{cache_error, sync_try_get_or_insert_with, validate_chunk_indices};
+use super::{cache_error, validate_chunk_indices};
 use crate::array::chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SyncChunkCacheType,
 };
@@ -29,10 +29,11 @@ impl SyncChunkCacheType for ChunkCacheTypePartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        sync_try_get_or_insert_with(cache, chunk_indices, || {
-            array.partial_decoder_opt(chunk_indices, options)
-        })
-        .map_err(cache_error)
+        cache
+            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+                array.partial_decoder_opt(chunk_indices, options)
+            })
+            .map_err(cache_error)
     }
 
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(

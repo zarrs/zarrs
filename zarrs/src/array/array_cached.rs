@@ -45,6 +45,13 @@ use super::Array;
 /// For thread-local caches, invalidation only affects the thread performing the
 /// mutation.
 ///
+/// Invalidation makes a cache coherent with writes that *precede* the retrievals of
+/// the chunks they invalidate. It does not make concurrent reads and writes of the same
+/// chunk safe, which [`Array`] does not support (see its *Parallel Writing* section). A
+/// retrieval that fetches a chunk while a write to that chunk invalidates the cache
+/// inserts its value after the invalidation, leaving a pre-write value cached for every
+/// later read.
+///
 /// ## Asynchronous Operations
 ///
 /// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
@@ -56,20 +63,8 @@ use super::Array;
 /// [`chunk_cache`](super::chunk_cache)).
 ///
 /// Unlike synchronous operations, concurrent asynchronous retrievals of an uncached
-/// chunk may each fetch the chunk; at most one of the retrieved values is retained by the
+/// chunk may each fetch the chunk; only one of the retrieved values is retained by the
 /// cache.
-///
-/// ## Concurrent Reads and Writes
-///
-/// A retrieval that overlaps a write to the same chunk may return either the pre-write or
-/// the post-write value. It will not, however, leave a pre-write value cached: a retrieval
-/// that has to fetch a chunk drops what it inserted if an invalidation overlapped the fetch,
-/// so a subsequent retrieval always sees the post-write value. In that case the chunk is
-/// retained by *neither* caller.
-///
-/// This applies to synchronous and asynchronous operations alike. Dropping is conservative
-/// and cache-wide, so a chunk may also be dropped because of a concurrent write to an
-/// unrelated chunk; this costs a cache entry, never correctness.
 ///
 /// Asynchronous operations require a cache with
 /// [`ChunkCacheLocalityShared`](super::chunk_cache::ChunkCacheLocalityShared) locality, since an asynchronous task may resume
