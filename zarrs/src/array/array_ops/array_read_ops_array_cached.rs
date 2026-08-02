@@ -7,15 +7,15 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{ArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
+    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
+    optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{ChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use crate::iter_concurrent_limit;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError,
-    decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
 
 #[allow(clippy::too_many_lines)]
@@ -171,20 +171,24 @@ where
     let data_type_size = array.data_type().fixed_size().expect("fixed data type");
     let num_elements = array_subset.num_elements_usize();
     let size_output = num_elements * data_type_size;
+    let nesting_depth = optional_nesting_depth(array.data_type());
     if size_output == 0 {
-        return Ok(ArrayBytes::new_flen(vec![]).into());
+        return Ok(
+            wrap_optional_masks(ArrayBytes::new_flen(vec![]), vec![vec![]; nesting_depth]).into(),
+        );
     }
     let mut data_output = Vec::with_capacity(size_output);
-    let mut mask_output = array
-        .data_type()
-        .is_optional()
-        .then(|| Vec::with_capacity(num_elements));
+    let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
+        .map(|_| Vec::with_capacity(num_elements))
+        .collect();
 
     {
         let data_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
-        let mask_slice = mask_output
-            .as_mut()
-            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
+        let mask_slices: Vec<_> = mask_outputs
+            .iter_mut()
+            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+            .collect();
+        let mask_slices = mask_slices.as_slice();
         let array_subset_start = array_subset.start();
         let array_subset_shape = array_subset.shape();
         let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
@@ -206,34 +210,19 @@ where
                     output_subset.clone(),
                 )?
             };
-            let mut mask_view = mask_slice
-                .map(|slice| unsafe {
+            let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_slices
+                .iter()
+                .map(|mask_slice| unsafe {
                     ArrayBytesFixedDisjointView::new(
-                        slice,
+                        *mask_slice,
                         1,
                         &array_subset_shape,
                         output_subset.clone(),
                     )
                 })
-                .transpose()?;
-            match bytes.as_ref() {
-                ArrayBytes::Fixed(bytes) => {
-                    data_view.copy_from_slice(bytes).map_err(CodecError::from)?;
-                }
-                ArrayBytes::Optional(bytes) => {
-                    let ArrayBytes::Fixed(data) = bytes.data() else {
-                        unreachable!("optional fixed data contains fixed bytes");
-                    };
-                    data_view.copy_from_slice(data).map_err(CodecError::from)?;
-                    if let Some(mask_view) = &mut mask_view {
-                        mask_view
-                            .copy_from_slice(bytes.mask())
-                            .map_err(CodecError::from)?;
-                    }
-                }
-                ArrayBytes::Variable(_) => unreachable!("fixed data contains fixed bytes"),
-            }
-            Ok::<_, ArrayError>(())
+                .collect::<Result<Vec<_>, _>>()?;
+            let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
         };
         iter_concurrent_limit!(
             chunk_concurrent_limit,
@@ -244,15 +233,10 @@ where
     }
 
     unsafe { data_output.set_len(size_output) };
-    if let Some(mask) = &mut mask_output {
+    for mask in &mut mask_outputs {
         unsafe { mask.set_len(num_elements) };
     }
-    let bytes = ArrayBytes::from(data_output);
-    Ok(if let Some(mask) = mask_output {
-        bytes.with_optional_mask(mask).into()
-    } else {
-        bytes.into()
-    })
+    Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
 }
 
 #[inherent]
@@ -510,7 +494,7 @@ mod tests {
         ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
         ChunkCacheTypeDecoded,
     };
-    use crate::array::{ArrayBuilder, ArrayError, data_type};
+    use crate::array::{ArrayBuilder, ArrayError, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
     #[expect(clippy::single_range_in_vec_init)]
@@ -623,6 +607,44 @@ mod tests {
         assert!(!cached.cache().is_empty());
     }
 
+    /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
+    #[expect(clippy::single_range_in_vec_init)]
+    fn test_cache_nested_optional<C>(cache: C)
+    where
+        C: ChunkCache,
+    {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(
+            vec![6],
+            vec![2],
+            data_type::uint8().to_optional().to_optional(),
+            FillValue::from(None::<Option<u8>>),
+        )
+        .build_arc(store, "/")
+        .unwrap();
+        array
+            .store_chunk(&[0], &[Some(Some(1u8)), Some(None)])
+            .unwrap();
+        array.store_chunk(&[1], &[None, Some(Some(4u8))]).unwrap();
+        // chunk 2 is unwritten, so it decodes to the fill value (`None`)
+
+        let cached = ArrayCached::new(array, cache);
+        // Spans all three chunks
+        assert_eq!(
+            cached
+                .retrieve_array_subset::<Vec<Option<Option<u8>>>>(&[0..6])
+                .unwrap(),
+            vec![Some(Some(1)), Some(None), None, Some(Some(4)), None, None]
+        );
+        // Partial overlap of two chunks
+        assert_eq!(
+            cached
+                .retrieve_array_subset::<Vec<Option<Option<u8>>>>(&[1..4])
+                .unwrap(),
+            vec![Some(None), None, Some(Some(4))]
+        );
+    }
+
     #[test]
     fn all_lru_policies_support_encoded_values() {
         test_cache(ChunkCacheEncodedLruChunkLimit::new(2));
@@ -633,6 +655,8 @@ mod tests {
         test_cache_sharded(ChunkCacheEncodedLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCacheEncodedLruSizeLimit::new(4096));
         test_cache_sharded(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
+        test_cache_nested_optional(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
     }
 
     #[test]
@@ -645,6 +669,8 @@ mod tests {
         test_cache_sharded(ChunkCacheDecodedLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCacheDecodedLruSizeLimit::new(4096));
         test_cache_sharded(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
+        test_cache_nested_optional(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
     }
 
     #[test]
@@ -657,6 +683,8 @@ mod tests {
         test_cache_sharded(ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimit::new(4096));
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
+        test_cache_nested_optional(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
     }
 
     #[derive(Default)]
