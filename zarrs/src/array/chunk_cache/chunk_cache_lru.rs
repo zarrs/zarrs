@@ -423,7 +423,7 @@ mod tests {
         ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
     };
-    use crate::array::{Array, ArrayBuilder, ArraySubset, data_type};
+    use crate::array::{Array, ArrayBuilder, ArraySubset, FillValue, data_type};
     use zarrs_codec::CodecOptions;
     use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
     use zarrs_storage::store::MemoryStore;
@@ -458,6 +458,56 @@ mod tests {
         // Return a read only version
         let array = Arc::new(array.readable());
         (store, array)
+    }
+
+    /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
+    #[expect(clippy::single_range_in_vec_init)]
+    fn test_cache_nested_optional<C, F>(create_cache: F)
+    where
+        C: ChunkCache,
+        F: FnOnce(Arc<Array<dyn ReadableStorageTraits>>) -> C,
+    {
+        let store: ReadableWritableStorage = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(
+            vec![6],
+            vec![2],
+            data_type::uint8().to_optional().to_optional(),
+            FillValue::from(None::<Option<u8>>),
+        )
+        .build_arc(store, "/")
+        .unwrap();
+        array
+            .store_chunk(&[0], &[Some(Some(1u8)), Some(None)])
+            .unwrap();
+        array.store_chunk(&[1], &[None, Some(Some(4u8))]).unwrap();
+        // Chunk 2 is unwritten, so it decodes to the fill value (`None`).
+
+        let cache = create_cache(Arc::new(array.readable()));
+        assert_eq!(
+            cache
+                .retrieve_array_subset::<Vec<Option<Option<u8>>>>(
+                    &[0..6],
+                    &CodecOptions::default(),
+                )
+                .unwrap(),
+            vec![Some(Some(1)), Some(None), None, Some(Some(4)), None, None]
+        );
+        assert_eq!(
+            cache
+                .retrieve_array_subset::<Vec<Option<Option<u8>>>>(
+                    &[1..4],
+                    &CodecOptions::default(),
+                )
+                .unwrap(),
+            vec![Some(None), None, Some(Some(4))]
+        );
+    }
+
+    #[test]
+    fn array_chunk_cache_nested_optional() {
+        test_cache_nested_optional(|array| ChunkCacheEncodedLruChunkLimit::new(array, 4));
+        test_cache_nested_optional(|array| ChunkCacheDecodedLruChunkLimit::new(array, 4));
+        test_cache_nested_optional(|array| ChunkCachePartialDecoderLruChunkLimit::new(array, 4));
     }
 
     fn array_chunk_cache_impl<TChunkCache: ChunkCache>(

@@ -52,10 +52,13 @@ use crate::array::{
     IncompatibleDimensionalityError,
 };
 use crate::iter_concurrent_limit;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{
+    ArrayPartialDecoderTraits, CodecError, CodecOptions, decode_into_array_bytes_target,
+};
 
 use super::array_bytes_internal::{
-    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
+    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
+    optional_nesting_depth, wrap_optional_masks,
 };
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
@@ -514,22 +517,24 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
         .expect("data_type must have fixed size");
     let num_elements = array_subset.num_elements_usize();
     let size_output = num_elements * data_type_size;
+    let nesting_depth = optional_nesting_depth(array.data_type());
     if size_output == 0 {
-        return Ok(ArrayBytes::new_flen(vec![]).into());
+        return Ok(
+            wrap_optional_masks(ArrayBytes::new_flen(vec![]), vec![vec![]; nesting_depth]).into(),
+        );
     }
-    let is_optional = array.data_type().is_optional();
     let mut data_output = Vec::with_capacity(size_output);
-    let mut mask_output = if is_optional {
-        Some(Vec::with_capacity(num_elements))
-    } else {
-        None
-    };
+    let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
+        .map(|_| Vec::with_capacity(num_elements))
+        .collect();
 
     {
         let data_output_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
-        let mask_output_slice = mask_output
-            .as_mut()
-            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
+        let mask_output_slices: Vec<_> = mask_outputs
+            .iter_mut()
+            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+            .collect();
+        let mask_output_slices = mask_output_slices.as_slice();
 
         let array_subset_start = array_subset.start();
         let array_subset_shape = array_subset.shape();
@@ -556,46 +561,21 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
                 )?
             };
 
-            let mut mask_view = mask_output_slice
+            let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
+                .iter()
                 .map(|mask_slice| unsafe {
                     // SAFETY: chunks represent disjoint array subsets
                     ArrayBytesFixedDisjointView::new(
-                        mask_slice,
+                        *mask_slice,
                         1, // 1 byte per element for mask
                         &array_subset_shape,
                         chunk_subset_in_array.clone(),
                     )
                 })
-                .transpose()?;
-
-            // Copy data from chunk_subset_bytes into the views
-            match chunk_subset_bytes.as_ref() {
-                ArrayBytes::Fixed(bytes) => {
-                    data_view.copy_from_slice(bytes).map_err(CodecError::from)?;
-                }
-                ArrayBytes::Optional(optional_bytes) => {
-                    // Extract the data bytes from the boxed ArrayBytes
-                    let data_bytes = match optional_bytes.data() {
-                        ArrayBytes::Fixed(bytes) => bytes.as_ref(),
-                        ArrayBytes::Variable(..) | ArrayBytes::Optional(..) => {
-                            unreachable!("Optional data should contain Fixed array bytes")
-                        }
-                    };
-                    data_view
-                        .copy_from_slice(data_bytes)
-                        .map_err(CodecError::from)?;
-                    if let Some(ref mut mask_view) = mask_view {
-                        mask_view
-                            .copy_from_slice(optional_bytes.mask().as_ref())
-                            .map_err(CodecError::from)?;
-                    }
-                }
-                ArrayBytes::Variable(..) => {
-                    unreachable!("Variable-length data should not reach this code path");
-                }
-            }
-
-            Ok::<_, ArrayError>(())
+                .collect::<Result<Vec<_>, _>>()?;
+            let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+            decode_into_array_bytes_target(&chunk_subset_bytes, target)
+                .map_err(ArrayError::CodecError)
         };
 
         let indices = chunks.indices();
@@ -608,16 +588,11 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
     }
 
     unsafe { data_output.set_len(size_output) };
-    if let Some(ref mut mask) = mask_output {
+    for mask in &mut mask_outputs {
         unsafe { mask.set_len(num_elements) };
     }
 
-    let array_bytes = ArrayBytes::from(data_output);
-    Ok(if let Some(mask) = mask_output {
-        array_bytes.with_optional_mask(mask).into()
-    } else {
-        array_bytes.into()
-    })
+    Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
 }
 
 // TODO: AsyncChunkCache
