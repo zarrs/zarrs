@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.12...HEAD)
 
+### Changed
+- **Behavioural change**: `FilesystemStore` no longer serialises operations on the same key
+  - A read of a key concurrent with a write of that key is now undefined, which is aligned with the `zarrs` store expectations
+
 ## [0.3.12](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.12) - 2026-07-23
 
 ### Added
