@@ -1,6 +1,6 @@
 //! Chunk caching.
 //!
-//! `zarrs` supports three types of chunk caches:
+//! `zarrs` supports the following types of chunk caches:
 //! - [`ChunkCacheTypeDecoded`]: caches decoded chunks.
 //!   - Preferred where decoding is expensive and memory is abundant.
 //! - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
@@ -9,7 +9,8 @@
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
-//!   - With the `async` feature, `ChunkCacheTypeAsyncPartialDecoder` is the asynchronous counterpart.
+//! - `ChunkCacheTypeAsyncPartialDecoder` (with the `async` feature): caches asynchronous partial decoders.
+//!   - The asynchronous counterpart of [`ChunkCacheTypePartialDecoder`].
 //!
 //! `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 //!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
@@ -18,10 +19,11 @@
 //!  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
 //!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
+//!  - `ChunkCacheAsyncPartialDecoderLruChunkLimit` (with the `async` feature): an asynchronous partial decoder chunk cache with a fixed chunk capacity.
+//!  - `ChunkCacheAsyncPartialDecoderLruSizeLimit` (with the `async` feature): an asynchronous partial decoder chunk cache with a fixed size in bytes.
 //!
 //! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache,
-//! and (with the `async` feature) `ChunkCacheAsyncPartialDecoderLru{ChunkLimit,SizeLimit}` for cached
-//! asynchronous partial decoding.
+//! except for the asynchronous partial decoder caches (see the locality requirement below).
 //! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
 //!

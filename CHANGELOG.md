@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
   - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+- Implement the asynchronous operation traits for `ArrayCached`, so that chunk caches can be used with asynchronous stores
+  - `ArrayCached` now implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`
 - Add `SyncChunkCacheType` and `AsyncChunkCacheType` for chunk cache types supporting synchronous and asynchronous retrieval
   - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` implement both
   - `ChunkCacheTypePartialDecoder` only supports synchronous retrieval
