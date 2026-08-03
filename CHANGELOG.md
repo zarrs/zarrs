@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `invalidate` methods
 - Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently
   - This has always been the case, but was only explicitly stated for concurrent writes
+  - Also fix a missing negation in the `partial_encoder` rule, which stated the opposite of what was meant
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible

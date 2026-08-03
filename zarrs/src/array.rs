@@ -302,20 +302,18 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// If a chunk is written more than once, its element values depend on whichever operation wrote to the chunk last.
 /// The [`store_chunk_subset`](Array::store_chunk_subset) and [`store_array_subset`](Array::store_array_subset) methods and their variants internally retrieve, update, and store chunks.
-/// So do [`partial_encoder`](Array::partial_encoder)s, which may used internally by the above methods.
+/// So do [`partial_encoder`](Array::partial_encoder)s, which may be used internally by the above methods.
 ///
 /// It is the responsibility of `zarrs` consumers to ensure that:
 ///   - [`store_array_subset`](Array::store_array_subset) is not called concurrently on array subsets sharing chunks,
 ///   - [`store_chunk_subset`](Array::store_chunk_subset) is not called concurrently on the same chunk,
-///   - [`partial_encoder`](Array::partial_encoder)s are created or used concurrently for the same chunk,
-///   - a chunk is not retrieved while it is being written,
+///   - [`partial_encoder`](Array::partial_encoder)s are not created or used concurrently for the same chunk,
 ///   - or any combination of the above are called concurrently on the same chunk.
 ///
 /// **Partial writes to a chunk may be lost if these rules are not respected.**
 ///
-/// A retrieval concurrent with a write to the same chunk is similarly unsupported: it may observe
-/// the chunk in any state, and with an [`ArrayCached`] it may leave the pre-write value cached
-/// indefinitely, since the write invalidates the cache before the retrieval inserts into it.
+/// Retrieving a chunk while it is being written is unsupported for the same reason, but fails differently: the retrieval may observe the chunk in any state, including a partially written one.
+/// With an [`ArrayCached`], it may also leave the pre-write value cached indefinitely, because the write invalidates the cache before the retrieval inserts into it.
 ///
 /// ## Optimising Reads
 /// It is fastest to load arrays using [`retrieve_chunk`](Array::retrieve_chunk) or [`retrieve_chunks`](Array::retrieve_chunks) where possible.
