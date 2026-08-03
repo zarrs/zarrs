@@ -4,10 +4,11 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use futures::{StreamExt, TryStreamExt};
 
+use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, extract_target_views, merge_chunks_vlen,
-    merge_chunks_vlen_optional, optional_nesting_depth, wrap_optional_masks,
+    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
+    optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
     AsyncChunkCacheType, ChunkCacheLocalityShared, async_retrieve_chunk_bytes,
@@ -15,8 +16,7 @@ use crate::array::chunk_cache::{
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, CodecError,
-    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
 use zarrs_storage::Bytes;
 
@@ -254,77 +254,34 @@ where
     Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
 }
 
-async fn async_retrieve_multi_chunk_fixed_into<TStorage, C>(
-    cache: &C,
-    array: &Array<TStorage>,
-    array_subset: &dyn ArraySubsetTraits,
-    chunks: &dyn ArraySubsetTraits,
-    chunk_concurrent_limit: usize,
-    output_target: &ArrayBytesDecodeIntoTarget<'_>,
-    options: &CodecOptions,
-) -> Result<(), ArrayError>
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TStorage, C> AsyncRetrieveInto for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
     C::Value: AsyncChunkCacheType,
 {
-    let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
-    let parent_start = data_view_ref.subset().start().to_vec();
-    let array_subset_start = array_subset.start();
+    async fn retrieve_chunk_into(
+        &self,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+            .await
+    }
 
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-        let array_subset_start = &array_subset_start;
-        let parent_start = &parent_start;
-        let mask_view_refs = &mask_view_refs;
-        async move {
-            let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
-
-            let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
-                .start()
-                .iter()
-                .zip(parent_start.iter())
-                .map(|(&c, &p)| c + p)
-                .collect();
-            let chunk_subset_in_view = ArraySubset::new_with_start_shape(
-                chunk_start_in_view,
-                chunk_subset_in_array.shape().to_vec(),
-            )?;
-
-            let mut data_sub = unsafe {
-                // SAFETY: chunks represent disjoint array subsets
-                data_view_ref.subdivide(chunk_subset_in_view.clone())?
-            };
-
-            let mut mask_subs: Vec<ArrayBytesFixedDisjointView<'_>> = mask_view_refs
-                .iter()
-                .map(|mask_view| unsafe {
-                    // SAFETY: chunks represent disjoint array subsets
-                    mask_view.subdivide(chunk_subset_in_view.clone())
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
-
-            let bytes = C::Value::async_retrieve_chunk_subset_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                options,
-            )
-            .await?;
-            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
-        }
-    };
-
-    futures::stream::iter(&chunks.indices())
-        .map(Ok)
-        .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
-        .await?;
-
-    Ok(())
+    async fn retrieve_chunk_subset_into(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        self.async_retrieve_chunk_subset_into(chunk_indices, chunk_subset, output_target, options)
+            .await
+    }
 }
 
 #[inherent]
@@ -570,82 +527,14 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let array = self.array();
-        if array_subset.dimensionality() != array.dimensionality() {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                array.shape().to_vec(),
-            ));
-        }
-
-        if !array.data_type().is_fixed() {
-            return Err(ArrayError::CodecError(CodecError::Other(
-                "retrieve_array_subset_into does not support variable-length data types"
-                    .to_string(),
-            )));
-        }
-
-        if output_target.num_elements() != array_subset.num_elements() {
-            return Err(ArrayError::CodecError(
-                InvalidNumberOfElementsError::new(
-                    output_target.num_elements(),
-                    array_subset.num_elements(),
-                )
-                .into(),
-            ));
-        }
-
-        let Some(chunks) = array.chunks_in_array_subset(array_subset)? else {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                array.shape().to_vec(),
-            ));
-        };
-
-        let num_chunks = chunks.num_elements_usize();
-        match num_chunks {
-            0 => copy_fill_value_into(array.data_type(), array.fill_value(), output_target)
-                .map_err(ArrayError::CodecError),
-            1 => {
-                let chunk_indices = chunks.start();
-                let chunk_subset = array.chunk_subset(chunk_indices)?;
-                if chunk_subset == array_subset {
-                    let bytes =
-                        async_retrieve_chunk_bytes(self.cache(), array, chunk_indices, options)
-                            .await?;
-                    decode_into_array_bytes_target(&bytes, output_target)
-                        .map_err(ArrayError::CodecError)
-                } else {
-                    self.async_retrieve_chunk_subset_into(
-                        chunk_indices,
-                        &array_subset.relative_to(chunk_subset.start())?,
-                        output_target,
-                        options,
-                    )
-                    .await
-                }
-            }
-            _ => {
-                let chunk_shape = array.chunk_shape(chunks.start())?;
-                let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
-                    options,
-                    &codec_concurrency,
-                );
-                async_retrieve_multi_chunk_fixed_into(
-                    self.cache(),
-                    array,
-                    array_subset,
-                    &chunks,
-                    chunk_concurrent_limit,
-                    &output_target,
-                    &options,
-                )
-                .await
-            }
-        }
+        super::async_array_read_ops_common::retrieve_array_subset_into(
+            self.array(),
+            self,
+            array_subset,
+            output_target,
+            options,
+        )
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]

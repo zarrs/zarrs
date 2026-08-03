@@ -43,6 +43,8 @@ mod async_array_read_ops_array;
 #[cfg(feature = "async")]
 mod async_array_read_ops_array_cached;
 #[cfg(feature = "async")]
+mod async_array_read_ops_common;
+#[cfg(feature = "async")]
 mod async_array_update_ops;
 #[cfg(feature = "async")]
 mod async_array_update_ops_array;

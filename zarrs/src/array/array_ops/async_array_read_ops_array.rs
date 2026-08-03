@@ -6,16 +6,17 @@ use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::super::array_bytes_internal::{
-    build_nested_optional_target, extract_target_views, merge_chunks_vlen,
-    merge_chunks_vlen_optional, optional_nesting_depth,
+    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
+    optional_nesting_depth,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
-use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
+use crate::array::{ArrayBytes, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
+    CodecError, copy_fill_value_into,
 };
 use zarrs_storage::{Bytes, StorageHandle};
 
@@ -439,80 +440,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        if array_subset.dimensionality() != self.dimensionality() {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                self.shape().to_vec(),
-            ));
-        }
-
-        if !self.data_type().is_fixed() {
-            return Err(ArrayError::CodecError(CodecError::Other(
-                "retrieve_array_subset_into does not support variable-length data types"
-                    .to_string(),
-            )));
-        }
-
-        if output_target.num_elements() != array_subset.num_elements() {
-            return Err(ArrayError::CodecError(
-                InvalidNumberOfElementsError::new(
-                    output_target.num_elements(),
-                    array_subset.num_elements(),
-                )
-                .into(),
-            ));
-        }
-
-        let chunks = self.chunks_in_array_subset(array_subset)?;
-        let Some(chunks) = chunks else {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                self.shape().to_vec(),
-            ));
-        };
-
-        let num_chunks = chunks.num_elements_usize();
-        match num_chunks {
-            0 => copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
-                .map_err(ArrayError::CodecError),
-            1 => {
-                let chunk_indices = chunks.start();
-                let chunk_subset = self.chunk_subset(chunk_indices)?;
-                if chunk_subset == array_subset {
-                    self.async_retrieve_chunk_into(chunk_indices, output_target, options)
-                        .await
-                } else {
-                    let array_subset_in_chunk_subset =
-                        array_subset.relative_to(chunk_subset.start())?;
-                    self.async_retrieve_chunk_subset_into(
-                        chunk_indices,
-                        &array_subset_in_chunk_subset,
-                        output_target,
-                        options,
-                    )
-                    .await
-                }
-            }
-            _ => {
-                let chunk_shape = self.chunk_shape(chunks.start())?;
-                let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
-                    options,
-                    &codec_concurrency,
-                );
-
-                self.async_retrieve_multi_chunk_fixed_into(
-                    array_subset,
-                    &chunks,
-                    chunk_concurrent_limit,
-                    &output_target,
-                    &options,
-                )
-                .await
-            }
-        }
+        super::async_array_read_ops_common::retrieve_array_subset_into(
+            self,
+            self,
+            array_subset,
+            output_target,
+            options,
+        )
+        .await
     }
 
     pub async fn async_partial_decoder_opt(
@@ -705,70 +640,31 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         }
         Ok(array_bytes)
     }
+}
 
-    async fn async_retrieve_multi_chunk_fixed_into(
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
+    for Array<TStorage>
+{
+    async fn retrieve_chunk_into(
         &self,
-        array_subset: &dyn ArraySubsetTraits,
-        chunks: &dyn ArraySubsetTraits,
-        chunk_concurrent_limit: usize,
-        output_target: &ArrayBytesDecodeIntoTarget<'_>,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
-        let parent_start = data_view_ref.subset().start().to_vec();
-        let array_subset_start = array_subset.start();
+        self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+            .await
+    }
 
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            let array_subset_start = &array_subset_start;
-            let parent_start = &parent_start;
-            let mask_view_refs = &mask_view_refs;
-            async move {
-                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
-
-                let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
-                    .start()
-                    .iter()
-                    .zip(parent_start.iter())
-                    .map(|(&c, &p)| c + p)
-                    .collect();
-                let chunk_subset_in_view = ArraySubset::new_with_start_shape(
-                    chunk_start_in_view,
-                    chunk_subset_in_array.shape().to_vec(),
-                )?;
-
-                let mut data_sub = unsafe {
-                    // SAFETY: chunks represent disjoint array subsets
-                    data_view_ref.subdivide(chunk_subset_in_view.clone())?
-                };
-
-                let mut mask_subs: Vec<ArrayBytesFixedDisjointView<'_>> = mask_view_refs
-                    .iter()
-                    .map(|mask_view| unsafe {
-                        // SAFETY: chunks represent disjoint array subsets
-                        mask_view.subdivide(chunk_subset_in_view.clone())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
-
-                self.async_retrieve_chunk_subset_into(
-                    &chunk_indices,
-                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    target,
-                    options,
-                )
-                .await?;
-                Ok::<_, ArrayError>(())
-            }
-        };
-
-        futures::stream::iter(&chunks.indices())
-            .map(Ok)
-            .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
-            .await?;
-
-        Ok(())
+    async fn retrieve_chunk_subset_into(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        self.async_retrieve_chunk_subset_into(chunk_indices, chunk_subset, output_target, options)
+            .await
     }
 }
