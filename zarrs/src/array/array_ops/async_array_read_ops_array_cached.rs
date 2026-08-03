@@ -11,7 +11,7 @@ use crate::array::array_bytes_internal::{
     optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCacheType, ChunkCacheLocalityShared, async_retrieve_chunk_bytes,
+    AsyncChunkCacheType, ChunkCacheLocalityShared, async_retrieve_chunk_bytes, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -45,7 +45,7 @@ where
     };
     let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
     match chunks.num_elements_usize() {
-        0 => crate::array::chunk_cache::fill_value_bytes(array, array_subset.num_elements()),
+        0 => fill_value_bytes(array, array_subset.num_elements()),
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
