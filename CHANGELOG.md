@@ -58,7 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `try_get_or_insert_with` is no longer `#[doc(hidden)]`, as it is a required method of a trait intended to be implemented by `zarrs` consumers
   - Add `invalidate` methods
 - Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently
-  - This has always been the case, but was only stated for concurrent writes
+  - This has always been the case, but was only explicitly stated for concurrent writes
+  - Also fix a missing negation in the `partial_encoder` rule, which stated the opposite of what was meant
   - With an `ArrayCached`, a retrieval that races a write to the same chunk may leave the pre-write value cached indefinitely, since the write invalidates the cache before the retrieval inserts into it
 - **Breaking**: `ArrayCached` asynchronous operations now require a cache with `ChunkCacheLocalityShared` locality
   - `ThreadLocal` caches are `ChunkCacheLocalityPerThread` and are rejected at compile time: a task may resume on a different thread after an `await`, so a chunk cached on one thread could be invalidated on another, leaving stale entries visible

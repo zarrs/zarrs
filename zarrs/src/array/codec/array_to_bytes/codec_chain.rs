@@ -89,7 +89,7 @@ pub struct CodecChain {
 }
 
 /// A codec chain bound to an array data type and fill value.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CodecChainBound {
     array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
