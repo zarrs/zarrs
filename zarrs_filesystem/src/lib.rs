@@ -91,6 +91,9 @@ impl FilesystemStoreOptions {
     ///
     /// Cached handles are invalidated on writes and erases through this store, but not on external
     /// modification of the underlying files.
+    /// A read that races a write of the same key (which this store does not support, see
+    /// [`FilesystemStore`]) may cache a handle for the pre-write file, which is then served to
+    /// subsequent reads until it is evicted.
     /// This option has no effect on reads with [`direct_io`](Self::direct_io) enabled.
     pub fn file_handle_cache_size(&mut self, file_handle_cache_size: usize) -> &mut Self {
         self.file_handle_cache_size = file_handle_cache_size;
@@ -112,6 +115,11 @@ struct CachedFile {
 /// Operations on distinct keys may be performed concurrently. As with any `zarrs` store, it is the
 /// responsibility of the consumer to ensure that a key is not written concurrently with any other
 /// read or write of that key; the store performs no locking of its own.
+///
+/// Prefix operations ([`erase_prefix`](WritableStorageTraits::erase_prefix),
+/// [`list_prefix`](ListableStorageTraits::list_prefix) and
+/// [`list_dir`](ListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
+/// that prefix.
 #[derive(Debug)]
 pub struct FilesystemStore {
     base_path: PathBuf,
@@ -199,7 +207,9 @@ impl FilesystemStore {
     /// Returns [`None`] if the file does not exist.
     ///
     /// The cached handle records the file size at open time, so it is only valid while the file is
-    /// not being written. Writes to `key` must not overlap a read of `key`.
+    /// not being written. Writes to `key` must not overlap a read of `key`: a read that races a
+    /// write may cache a handle for the pre-write file, which is then served to subsequent reads
+    /// until it is evicted.
     fn open_or_cached(&self, key: &StoreKey) -> Result<Option<Arc<CachedFile>>, StorageError> {
         if let Some(cache) = &self.handle_cache {
             if let Some(handle) = cache.lock().unwrap().get(key) {
@@ -525,8 +535,10 @@ impl AtomicRenameStorageTraits for FilesystemStore {
             return Ok(());
         }
 
-        // The filesystem rename supplies atomicity of the path replacement itself. The handle
-        // cache is invalidated first so that a later read opens the renamed file.
+        // The filesystem rename supplies atomicity of the path replacement itself, including across
+        // processes. The handle cache is invalidated first so that a later read opens the renamed
+        // file; a read of either key already in flight may still cache the pre-rename file, which
+        // is why a read must not overlap a rename (see `open_or_cached`).
         self.invalidate_handle(source);
         self.invalidate_handle(destination);
 
