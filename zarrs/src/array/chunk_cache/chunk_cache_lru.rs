@@ -206,3 +206,33 @@ pub type ChunkCacheAsyncPartialDecoderLruChunkLimit =
 #[cfg(feature = "async")]
 pub type ChunkCacheAsyncPartialDecoderLruSizeLimit =
     ChunkCacheLruSizeLimit<ChunkCacheTypeAsyncPartialDecoder>;
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ChunkCache, ChunkCacheLocalityPerThread, ChunkCacheLocalityShared, ChunkCacheLruChunkLimit,
+        ChunkCacheLruChunkLimitThreadLocal, ChunkCacheLruSizeLimit,
+        ChunkCacheLruSizeLimitThreadLocal, ChunkCacheTypeDecoded,
+    };
+
+    /// The `Locality` of each cache policy is what makes the asynchronous [`ArrayCached`] operations
+    /// reject `ThreadLocal` caches.
+    ///
+    /// The `compile_fail` doctest on [`ArrayCached`] illustrates the rejection but cannot guard it,
+    /// since rustdoc does not check *why* such a doctest fails to compile.
+    ///
+    /// The `ChunkCache` implementations are generic over the chunk type, so pinning one chunk type
+    /// pins every public alias of these four policies.
+    ///
+    /// [`ArrayCached`]: crate::array::ArrayCached
+    #[test]
+    fn lru_cache_localities_gate_asynchronous_operations() {
+        fn assert_shared<C: ChunkCache<Locality = ChunkCacheLocalityShared>>() {}
+        fn assert_per_thread<C: ChunkCache<Locality = ChunkCacheLocalityPerThread>>() {}
+
+        assert_shared::<ChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>>();
+        assert_shared::<ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>>();
+        assert_per_thread::<ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeDecoded>>();
+        assert_per_thread::<ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeDecoded>>();
+    }
+}
