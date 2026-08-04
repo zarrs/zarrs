@@ -19,10 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Implement the asynchronous operation traits for `ArrayCached`, so that chunk caches can be used with asynchronous stores
   - `ArrayCached` now implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`
-- Add `SyncChunkCacheType` and `AsyncChunkCacheType` for chunk cache types supporting synchronous and asynchronous retrieval
-  - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` implement both
-  - `ChunkCacheTypePartialDecoder` only supports synchronous retrieval
 - Add `ChunkCacheTypeAsyncPartialDecoder` and the `ChunkCacheAsyncPartialDecoderLru{ChunkLimit,SizeLimit}` caches for cached asynchronous partial decoding
+  - These are the asynchronous counterparts of `ChunkCacheTypePartialDecoder` and `ChunkCachePartialDecoderLru{ChunkLimit,SizeLimit}`
+- Add `SyncChunkCacheType` and `AsyncChunkCacheType`, which declare whether a chunk cache type supports synchronous or asynchronous retrieval
+  - `ChunkCacheTypeEncoded` and `ChunkCacheTypeDecoded` cache bytes, which are independent of the storage they came from, so they implement both
+  - A cached partial decoder is bound to the storage it was created from, so `ChunkCacheTypePartialDecoder` implements `SyncChunkCacheType` only and `ChunkCacheTypeAsyncPartialDecoder` implements `AsyncChunkCacheType` only
 - Add the sealed `ChunkCacheLocality` trait and its `ChunkCacheLocality{Shared,PerThread}` markers for `ChunkCache::Locality`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
@@ -63,10 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This has always been the case, but was only explicitly stated for concurrent writes
   - Also fix a missing negation in the `partial_encoder` rule, which stated the opposite of what was meant
   - With an `ArrayCached`, a retrieval that races a write to the same chunk may leave the pre-write value cached indefinitely, since the write invalidates the cache before the retrieval inserts into it
+- **Breaking**: Move the `ChunkCacheType` retrieval methods to the new `SyncChunkCacheType` subtrait; `ChunkCacheType` now only exposes `size()`
+  - `ArrayCached` synchronous operations require a cache whose value implements `SyncChunkCacheType`, and asynchronous operations require `AsyncChunkCacheType`
 - **Breaking**: `ArrayCached` asynchronous operations now require a cache with `ChunkCacheLocalityShared` locality
   - `ThreadLocal` caches are `ChunkCacheLocalityPerThread` and are rejected at compile time: a task may resume on a different thread after an `await`, so a chunk cached on one thread could be invalidated on another, leaving stale entries visible
   - `ThreadLocal` caches remain fully supported for synchronous operations
-- **Breaking**: Move the `ChunkCacheType` retrieval methods to the new `SyncChunkCacheType` subtrait; `ChunkCacheType` now only exposes `size()`
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
