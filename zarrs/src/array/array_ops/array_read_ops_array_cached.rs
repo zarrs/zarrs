@@ -419,6 +419,13 @@ where
     ) -> Result<Option<Vec<u8>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_subchunk_at_level_opt(
         &self,
         level: usize,
@@ -427,10 +434,23 @@ where
     ) -> Result<Option<Vec<u8>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk<T: FromArrayBytes>(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -442,10 +462,23 @@ where
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks<T: FromArrayBytes>(
+        &self,
+        subchunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]

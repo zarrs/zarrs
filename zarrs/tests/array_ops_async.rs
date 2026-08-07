@@ -536,7 +536,7 @@ async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
     );
     assert_eq!(
         array
-            .async_local_subchunk_grid_at_level(1, &[0, 0], &options)
+            .async_local_subchunk_grid_at_level_opt(1, &[0, 0], &options)
             .await?
             .unwrap()
             .grid_shape(),

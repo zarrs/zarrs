@@ -303,6 +303,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<Option<Vec<u8>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_subchunk_at_level_opt(
         &self,
         level: usize,
@@ -311,10 +318,23 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<Option<Vec<u8>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk<T: FromArrayBytes>(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -326,10 +346,23 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks<T: FromArrayBytes>(
+        &self,
+        subchunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_subchunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -626,8 +659,7 @@ mod tests {
                 array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &CodecOptions::default())?;
             assert_eq!(compare, test);
 
-            let local_subchunk_grid =
-                array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
+            let local_subchunk_grid = array.local_subchunk_grid(&[0, 0])?;
             assert_eq!(
                 local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
                 vec![NonZeroU64::new(2).unwrap(); 2]
@@ -661,11 +693,7 @@ mod tests {
             }
         } else {
             assert!(matches!(array.subchunk_grid(), ChunkGridDecodedRef::None));
-            assert!(
-                array
-                    .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
-                    .is_none()
-            );
+            assert!(array.local_subchunk_grid(&[0, 0])?.is_none());
 
             let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
             assert!(matches!(

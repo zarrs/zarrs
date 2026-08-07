@@ -215,11 +215,15 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
 
     // Level one: an encoded subchunk of a subchunk
     let encoded = array
-        .retrieve_encoded_subchunk_at_level_opt(1, &[2, 3], &options)?
+        .retrieve_encoded_subchunk_at_level(1, &[2, 3])?
         .expect("subchunk is stored");
     assert_eq!(
         decode_subchunk(array.as_ref(), 1, encoded)?,
         [38, 39, 46, 47]
+    );
+    assert_eq!(
+        array.retrieve_encoded_subchunk_at_level(1, &[2, 3])?,
+        array.retrieve_encoded_subchunk_at_level_opt(1, &[2, 3], &options)?
     );
 
     // Beyond the hierarchy

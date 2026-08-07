@@ -340,8 +340,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
 /// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk_opt`](ArrayReadOps::retrieve_subchunk_opt)
-///  - [`retrieve_subchunks_opt`](ArrayReadOps::retrieve_subchunks_opt)
+///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///

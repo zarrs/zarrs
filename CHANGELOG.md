@@ -15,13 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
-  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
+  - Add `ArrayReadOps::retrieve_subchunk[s][_at_level][_opt]` for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
-- Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
+- Add `ArrayReadOps::local_subchunk_grid[_at_level][_opt]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
-- Add `ArrayReadOps::retrieve_encoded_subchunk[_opt,_at_level_opt]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
+- Add `ArrayReadOps::retrieve_encoded_subchunk[_at_level][_opt]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
   - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`, but not through array-to-array codecs
   - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`

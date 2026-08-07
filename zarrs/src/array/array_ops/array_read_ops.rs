@@ -295,6 +295,27 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
     /// the codecs of the array do not expose encoded subchunks at that level, the subchunk indices
     /// are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, ArrayError> {
+        self.retrieve_encoded_subchunk_at_level_opt(level, subchunk_indices, self.codec_options())
+    }
+
+    /// Retrieve the encoded bytes of a subchunk from `level` with explicit codec options.
+    /// Explicit options version of [`retrieve_encoded_subchunk_at_level`](ArrayReadOps::retrieve_encoded_subchunk_at_level).
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// The returned bytes are decodable with the codecs of
+    /// [`subchunk_codecs_at_level`](ArrayOps::subchunk_codecs_at_level) at the same level.
+    ///
+    /// Returns [`None`] if the subchunk, or any subchunk containing it, is not stored.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// the codecs of the array do not expose encoded subchunks at that level, the subchunk indices
+    /// are invalid, a codec fails, or there is an underlying store error.
     fn retrieve_encoded_subchunk_at_level_opt(
         &self,
         level: usize,
@@ -316,11 +337,21 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             .map(std::borrow::Cow::into_owned))
     }
 
-    /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
+    /// Read and decode the subchunk at `subchunk_indices`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the array does not have a subchunk grid, the subchunk indices
     /// are invalid, there is a codec decoding error, or there is an underlying store error.
+    fn retrieve_subchunk<T: FromArrayBytes>(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<T, ArrayError> {
+        self.retrieve_subchunk_opt(subchunk_indices, self.codec_options())
+    }
+
+    /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
+    /// Explicit options version of [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk).
+    #[allow(clippy::missing_errors_doc)]
     fn retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
@@ -329,13 +360,24 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_subchunk_at_level_opt(0, subchunk_indices, options)
     }
 
-    /// Read and decode the subchunk at `subchunk_indices` from `level` with explicit codec options.
+    /// Read and decode the subchunk at `subchunk_indices` from `level`.
     ///
     /// Level zero is the outermost subchunk grid and increasing levels move inward.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
     /// the subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<T, ArrayError> {
+        self.retrieve_subchunk_at_level_opt(level, subchunk_indices, self.codec_options())
+    }
+
+    /// Read and decode a subchunk from `level` with explicit codec options.
+    /// Explicit options version of [`retrieve_subchunk_at_level`](ArrayReadOps::retrieve_subchunk_at_level).
+    #[allow(clippy::missing_errors_doc)]
     fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
@@ -352,11 +394,21 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_array_subset_opt(&array_subset, options)
     }
 
-    /// Read and decode the subchunks at `subchunks` with explicit codec options.
+    /// Read and decode the subchunks at `subchunks`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the array does not have a subchunk grid, any subchunk indices
     /// are invalid, there is a codec decoding error, or there is an underlying store error.
+    fn retrieve_subchunks<T: FromArrayBytes>(
+        &self,
+        subchunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.retrieve_subchunks_opt(subchunks, self.codec_options())
+    }
+
+    /// Read and decode the subchunks at `subchunks` with explicit codec options.
+    /// Explicit options version of [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks).
+    #[allow(clippy::missing_errors_doc)]
     fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
@@ -365,13 +417,24 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_subchunks_at_level_opt(0, subchunks, options)
     }
 
-    /// Read and decode subchunks from `level` with explicit codec options.
+    /// Read and decode subchunks from `level`.
     ///
     /// Level zero is the outermost subchunk grid and increasing levels move inward.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
     /// any subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.retrieve_subchunks_at_level_opt(level, subchunks, self.codec_options())
+    }
+
+    /// Read and decode subchunks from `level` with explicit codec options.
+    /// Explicit options version of [`retrieve_subchunks_at_level`](ArrayReadOps::retrieve_subchunks_at_level).
+    #[allow(clippy::missing_errors_doc)]
     fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
@@ -448,12 +511,19 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid cannot be resolved.
-    fn local_subchunk_grid(
+    fn local_subchunk_grid(&self, chunk_indices: &[u64]) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.local_subchunk_grid_opt(chunk_indices, self.codec_options())
+    }
+
+    /// Return the chunk-local subchunk grid for a chunk with explicit codec options.
+    /// Explicit options version of [`local_subchunk_grid`](ArrayReadOps::local_subchunk_grid).
+    #[allow(clippy::missing_errors_doc)]
+    fn local_subchunk_grid_opt(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
-        self.local_subchunk_grid_at_level(0, chunk_indices, options)
+        self.local_subchunk_grid_at_level_opt(0, chunk_indices, options)
     }
 
     /// Return the chunk-local subchunk grid at `level` for a chunk, if available.
@@ -464,6 +534,17 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// # Errors
     /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid hierarchy cannot be resolved.
     fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.local_subchunk_grid_at_level_opt(level, chunk_indices, self.codec_options())
+    }
+
+    /// Return the chunk-local subchunk grid at `level` for a chunk with explicit codec options.
+    /// Explicit options version of [`local_subchunk_grid_at_level`](ArrayReadOps::local_subchunk_grid_at_level).
+    #[allow(clippy::missing_errors_doc)]
+    fn local_subchunk_grid_at_level_opt(
         &self,
         level: usize,
         chunk_indices: &[u64],

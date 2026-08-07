@@ -484,14 +484,14 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
 
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(0, &[0, 0], &options)?
+            .local_subchunk_grid_at_level_opt(0, &[0, 0], &options)?
             .unwrap()
             .grid_shape(),
         &[2, 2]
     );
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(1, &[0, 0], &options)?
+            .local_subchunk_grid_at_level_opt(1, &[0, 0], &options)?
             .unwrap()
             .grid_shape(),
         &[4, 4]
