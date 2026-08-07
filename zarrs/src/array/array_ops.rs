@@ -10,6 +10,7 @@ use super::{
     StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
+use zarrs_codec::{ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits};
 #[cfg(feature = "async")]
 use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits,
@@ -19,6 +20,61 @@ use zarrs_storage::{
     ReadableStorageTraits, ReadableWritableStorageTraits, StorageError, StoreKey,
     WritableStorageTraits,
 };
+
+/// Locate the chunk holding the subchunk at `subchunk_indices` of the `level` subchunk grid.
+///
+/// Returns the chunk indices and the subchunk subset relative to the origin of that chunk.
+fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<(ArrayIndices, ArraySubset), ArrayError> {
+    let subchunk_grid = array
+        .subchunk_grid_at_level(level)
+        .as_chunk_grid()
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    if subchunk_indices.len() != subchunk_grid.dimensionality()
+        || std::iter::zip(subchunk_indices, subchunk_grid.grid_shape())
+            .any(|(indices, shape)| indices >= shape)
+    {
+        return Err(ArrayError::InvalidChunkGridIndicesError(
+            subchunk_indices.to_vec(),
+        ));
+    }
+    let subchunk_subset = subchunk_grid
+        .subset(subchunk_indices)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    let chunks = array
+        .chunks_in_array_subset(&subchunk_subset)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    if chunks.num_elements() != 1 {
+        // This should not happen, as a subchunk grid must refine the chunk grid
+        return Err(ArrayError::UnsupportedMethod(
+            "a subchunk spanning multiple chunks cannot be retrieved".to_string(),
+        ));
+    }
+    let chunk_indices = chunks.start().to_vec();
+    let chunk_origin = array.chunk_origin(&chunk_indices)?;
+    let local_subset = subchunk_subset.relative_to(&chunk_origin)?;
+    Ok((chunk_indices, local_subset))
+}
+
+/// Return the indices of the chunk of `chunk_grid` which encloses `subset`.
+fn enclosing_subchunk_indices(
+    chunk_grid: &ChunkGrid,
+    subset: &ArraySubset,
+) -> Result<ArrayIndices, ArrayError> {
+    let chunks = chunk_grid.chunks_in_array_subset(subset)?.ok_or_else(|| {
+        ArrayError::InvalidArraySubset(subset.clone(), chunk_grid.grid_shape().to_vec())
+    })?;
+    if chunks.num_elements() != 1 {
+        return Err(ArrayError::UnsupportedMethod(
+            "a subchunk spanning multiple subchunks of an inner grid cannot be retrieved"
+                .to_string(),
+        ));
+    }
+    Ok(chunks.start().to_vec())
+}
 
 mod array_mut_ops;
 mod array_mut_ops_array;

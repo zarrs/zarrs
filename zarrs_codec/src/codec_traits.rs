@@ -18,6 +18,7 @@ pub(crate) mod array_to_bytes;
 pub(crate) mod bytes_partial_async;
 pub(crate) mod bytes_partial_sync;
 pub(crate) mod bytes_to_bytes;
+pub(crate) mod subchunking;
 
 /// Trait for creating a codec from Zarr V2 metadata.
 ///

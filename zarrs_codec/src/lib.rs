@@ -22,7 +22,10 @@ pub use array_bytes_fixed_disjoint_view::{
 
 mod codec_traits;
 pub use codec_traits::array::ArrayCodecTraits;
-pub use codec_traits::array_partial_sync::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
+pub use codec_traits::array_partial_sync::{
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+};
 pub use codec_traits::array_to_array::{
     ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecSubchunkingTraits,
     ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits,
@@ -37,7 +40,8 @@ pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 
 #[cfg(feature = "async")]
 pub use codec_traits::array_partial_async::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 pub use codec_traits::bytes_partial_async::{
@@ -159,7 +163,7 @@ mod chunk_grid_mapped {
         /// A chunk grid is resolvable for the whole array.
         Array(ChunkGrid),
         /// No global grid exists, but a grid is resolvable for each chunk via
-        /// [`ArrayPartialDecoderTraits::local_subchunk_grid`](crate::ArrayPartialDecoderTraits::local_subchunk_grid).
+        /// [`ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](crate::ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
         ChunkLocal,
     }
 
@@ -635,6 +639,9 @@ pub enum CodecError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
+    /// Encoded subchunk retrieval is not supported.
+    #[error("encoded subchunks are not exposed by this partial decoder")]
+    UnsupportedEncodedSubchunk,
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"

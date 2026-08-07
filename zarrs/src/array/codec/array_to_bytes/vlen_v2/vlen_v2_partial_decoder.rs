@@ -5,7 +5,10 @@ use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
-use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
+    CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
@@ -55,6 +58,9 @@ fn decode_vlen_bytes<'a>(
     }
 }
 
+/// The `vlen_*` codecs encode a chunk as a whole, so they have no subchunks.
+impl ArrayPartialDecoderNoSubchunkingTraits for VlenV2PartialDecoder {}
+
 impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -66,13 +72,6 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     fn partial_decode(
@@ -124,6 +123,9 @@ impl AsyncVlenV2PartialDecoder {
 }
 
 #[cfg(feature = "async")]
+impl ArrayPartialDecoderNoSubchunkingTraits for AsyncVlenV2PartialDecoder {}
+
+#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
@@ -137,13 +139,6 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
 
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     async fn partial_decode<'a>(

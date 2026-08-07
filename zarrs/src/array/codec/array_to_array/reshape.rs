@@ -51,7 +51,7 @@
 //! The boxes are chunk or subchunk boundaries.
 //! A subchunk can be resolved when its linear span is an n-dimensional box in both representations.
 //! With some chunk grids, the global subchunk grid may not be fully resolvable.
-//! However, the local subchunk grid of an individual chunk can still be recovered via [`ArrayPartialDecoderTraits::local_subchunk_grid`](zarrs_codec::ArrayPartialDecoderTraits::local_subchunk_grid).
+//! However, the local subchunk grid of an individual chunk can still be recovered via [`ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
 
 mod reshape_codec;
 mod reshape_codec_grid_mapping;

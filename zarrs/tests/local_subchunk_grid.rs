@@ -22,10 +22,10 @@ use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
-    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToArrayCodecTraits,
-    register_codec_v3, unregister_codec_v3,
+    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, PartialDecoderCapability, PartialEncoderCapability,
+    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -231,6 +231,27 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     }
 }
 
+impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        let Some(header) = self.input_handle.partial_decode(
+            ByteRange::FromStart(0, Some(header_len(self.shape.len()))),
+            options,
+        )?
+        else {
+            return Ok(vec![None]);
+        };
+        let subchunk_shape = decode_shape_header(&header, self.shape.len())?;
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        Ok(vec![Some(ChunkGrid::new(
+            RegularChunkGrid::new(chunk_shape, subchunk_shape)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        ))])
+    }
+}
+
 impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -250,25 +271,6 @@ impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         zero_bytes(&self.data_type, indexer.len())
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        let Some(header) = self.input_handle.partial_decode(
-            ByteRange::FromStart(0, Some(header_len(self.shape.len()))),
-            options,
-        )?
-        else {
-            return Ok(vec![None]);
-        };
-        let subchunk_shape = decode_shape_header(&header, self.shape.len())?;
-        let chunk_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(vec![Some(ChunkGrid::new(
-            RegularChunkGrid::new(chunk_shape, subchunk_shape)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))])
     }
 
     fn supports_partial_decode(&self) -> bool {

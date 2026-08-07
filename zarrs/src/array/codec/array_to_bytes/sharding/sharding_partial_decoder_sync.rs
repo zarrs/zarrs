@@ -8,7 +8,7 @@ use zarrs_chunk_grid::{ArraySubset, ChunkGridTraits};
 
 use super::{
     ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
-    nested_local_subchunk_grids,
+    nested_local_subchunk_grids, nested_subchunk_codecs,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
@@ -19,9 +19,10 @@ use crate::array::{
     IndexerError, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError,
-    CodecOptions, InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
+    BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    decode_into_array_bytes_target,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -85,20 +86,16 @@ impl ShardingPartialDecoder {
         )
     }
 
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// The `chunk_indices` are relative to the start of the shard.
-    pub fn retrieve_subchunk_encoded(
+    fn subchunk_byte_offset_length(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
-        let byte_range = self.subchunk_byte_range(chunk_indices)?;
-        if let Some(byte_range) = byte_range {
-            self.input_handle
-                .partial_decode(byte_range, &CodecOptions::default())
-        } else {
-            Ok(None)
-        }
+    ) -> Result<Option<(ByteOffset, ByteLength)>, CodecError> {
+        super::subchunk_byte_offset_length(
+            self.shard_index.as_deref(),
+            &self.shard_shape,
+            &self.subchunk_shape,
+            chunk_indices,
+        )
     }
 }
 
@@ -191,6 +188,53 @@ pub(crate) fn partial_decode(
     }
 }
 
+impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialDecoder {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        let subchunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        );
+        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        nested_subchunk_codecs(&self.inner_codecs)
+    }
+
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+        if let Some(byte_range) = self.subchunk_byte_range(subchunk_indices)? {
+            self.input_handle.partial_decode(byte_range, options)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn BytesPartialDecoderTraits>>, CodecError> {
+        // An encoded subchunk is a byte interval of the shard, so it is read lazily
+        Ok(self
+            .subchunk_byte_offset_length(subchunk_indices)?
+            .map(|(offset, length)| {
+                Arc::new(ByteIntervalPartialDecoder::new(
+                    self.input_handle.clone(),
+                    offset,
+                    length,
+                )) as Arc<dyn BytesPartialDecoderTraits>
+            }))
+    }
+}
+
 impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
@@ -219,18 +263,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             indexer,
             options,
         )
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
-        let subchunk_grid = ChunkGrid::new(
-            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        );
-        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
     fn partial_decode_into(

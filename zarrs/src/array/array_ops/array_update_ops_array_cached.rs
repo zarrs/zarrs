@@ -4,7 +4,9 @@ use std::sync::Arc;
 use super::{ArrayUpdateOps, *};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
+    ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -12,6 +14,40 @@ struct CachedArrayPartialEncoder<C> {
     encoder: Arc<dyn ArrayPartialEncoderTraits>,
     cache: Arc<C>,
     chunk_indices: ArrayIndices,
+}
+
+impl<C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<C>
+where
+    C: ChunkCache + 'static,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.encoder.local_subchunk_grids(options)
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.encoder.subchunk_codecs()
+    }
+
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk(subchunk_indices, options)
+    }
+
+    fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn BytesPartialDecoderTraits>>, CodecError> {
+        self.encoder
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)
+    }
 }
 
 impl<C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<C>
@@ -28,13 +64,6 @@ where
 
     fn size_held(&self) -> usize {
         self.encoder.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.encoder.local_subchunk_grids(options)
     }
 
     fn partial_decode(

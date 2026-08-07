@@ -6,7 +6,7 @@ use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, CodecOptions, DataType,
     FillValue, Indexer,
 };
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError};
+use zarrs_codec::{ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, CodecError};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
 
 struct CachedArrayBytesPartialDecoder {
@@ -15,6 +15,9 @@ struct CachedArrayBytesPartialDecoder {
     data_type: DataType,
     fill_value: FillValue,
 }
+
+/// A cache of decoded chunk bytes cannot expose encoded subchunks.
+impl ArrayPartialDecoderNoSubchunkingTraits for CachedArrayBytesPartialDecoder {}
 
 impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
     fn data_type(&self) -> &DataType {
@@ -27,13 +30,6 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
 
     fn size_held(&self) -> usize {
         self.bytes.size()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     fn partial_decode(

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` for `ArrayBuilder`
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
+- Add `ArrayReadOps::retrieve_encoded_subchunk[_opt,_at_level_opt]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
+  - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`, but not through array-to-array codecs
+  - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
@@ -66,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
-  - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
+  - `[async_]retrieve_encoded_subchunk` is now part of `ArrayReadOps` / `AsyncArrayReadOps`; use `[Async]ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk` for low-level encoded subchunk access
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
 - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`

@@ -5,10 +5,14 @@ use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Partial codec for the Reshape codec.
@@ -102,6 +106,22 @@ where
     }
 }
 
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
+            .collect()
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits for ReshapeCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -116,17 +136,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
-            .collect()
     }
 
     fn partial_decode(
@@ -147,18 +156,10 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderTraits for ReshapeCodecPartial<T>
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
 where
-    T: AsyncArrayPartialDecoderTraits,
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
 {
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    async fn exists(&self) -> Result<bool, StorageError> {
-        self.input_handle.exists().await
-    }
-
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
@@ -169,6 +170,22 @@ where
             .into_iter()
             .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
             .collect()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderTraits for ReshapeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderTraits,
+{
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

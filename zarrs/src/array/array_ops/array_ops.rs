@@ -103,6 +103,33 @@ pub trait ArrayOps {
     #[must_use]
     fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
 
+    /// Return the codecs that encode the subchunks at each level, outermost first.
+    ///
+    /// The codecs at each level match the grids returned by
+    /// [`subchunk_grids`](ArrayOps::subchunk_grids). The level zero codecs decode the bytes
+    /// returned by
+    /// [`retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk),
+    /// and deeper levels decode the encoded subchunks of subchunks.
+    ///
+    /// An empty vector indicates that the array does not expose subchunks.
+    ///
+    /// The codecs operate in the encoded domain of the array-to-bytes codec. If the array has
+    /// array-to-array codecs, then decoding an encoded subchunk yields array bytes that those
+    /// codecs have yet to decode.
+    #[must_use]
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        ArrayToBytesCodecSubchunkingTraits::subchunk_codecs(self.codecs_bound().as_ref())
+    }
+
+    /// Return the codecs that encode the subchunks at `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// Returns [`None`] if `level` is beyond the subchunk grid hierarchy.
+    #[must_use]
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().into_iter().nth(level)
+    }
+
     /// Return the store key of the chunk at `chunk_indices`.
     fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;
 

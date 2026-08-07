@@ -5,8 +5,8 @@ use std::sync::Arc;
 use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -63,6 +63,9 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     }
 }
 
+/// The `bytes` codec encodes a chunk as a whole, so it has no subchunks.
+impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for BytesCodecPartial<T> {}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits for BytesCodecPartial<T>
 where
     T: BytesPartialDecoderTraits,
@@ -77,13 +80,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     fn partial_decode(
@@ -144,13 +140,6 @@ where
 
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_output_handle.exists().await
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     fn size_held(&self) -> usize {

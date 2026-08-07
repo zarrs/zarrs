@@ -10,8 +10,8 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
-    ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
-    FillValue, data_type,
+    ArrayMetadataOptions, ArraySubset, AsyncArrayPartialDecoderSubchunkingTraits,
+    AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions, FillValue, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
@@ -276,30 +276,48 @@ where
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
-async fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
+async fn sharding_partial_decoder_retrieve_encoded_subchunk() -> TestResult {
     let array = fixed_fixture();
     populate(&array).await?;
 
     let decoder = sharding_partial_decoder(&array).await?;
+    let options = CodecOptions::default();
 
-    assert!(decoder.retrieve_subchunk_encoded(&[1, 1]).await?.is_some());
-    assert!(decoder.retrieve_subchunk_encoded(&[3, 3]).await.is_err());
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[1, 1], &options)
+            .await?
+            .is_some()
+    );
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[3, 3], &options)
+            .await
+            .is_err()
+    );
     Ok(())
 }
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
-async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
+async fn sharding_partial_decoder_retrieve_encoded_subchunk_missing() -> TestResult {
     let array = fixed_fixture();
+    let options = CodecOptions::default();
 
     let decoder = sharding_partial_decoder(&array).await?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0]).await?, None);
+    assert_eq!(
+        decoder.retrieve_encoded_subchunk(&[0, 0], &options).await?,
+        None
+    );
 
     array
         .async_store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])
         .await?;
     let decoder = sharding_partial_decoder(&array).await?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1]).await?, None);
+    assert_eq!(
+        decoder.retrieve_encoded_subchunk(&[0, 1], &options).await?,
+        None
+    );
     Ok(())
 }
 

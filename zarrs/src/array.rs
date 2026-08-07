@@ -61,23 +61,24 @@ pub use zarrs_chunk_grid::{
     Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
-use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
-    ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
+    ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
+    ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 pub use zarrs_data_type::{
     DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3, FillValue,
@@ -165,6 +166,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_chunk_subset`](Array::retrieve_chunk_subset)
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
+///    - [`retrieve_encoded_subchunk`](Array::retrieve_encoded_subchunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
 ///  - [`[Async]WritableStorageTraits`](crate::storage::WritableStorageTraits): store/erase array data and metadata
 ///    - [`store_metadata`](Array::store_metadata)
@@ -342,6 +344,32 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`retrieve_subchunks_opt`](ArrayReadOps::retrieve_subchunks_opt)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
+///
+/// ### Encoded Subchunks
+/// The encoded bytes of a subchunk can be retrieved without decoding it with
+/// [`retrieve_encoded_subchunk`](ArrayReadOps::retrieve_encoded_subchunk) (or
+/// [`retrieve_encoded_subchunk_at_level_opt`](ArrayReadOps::retrieve_encoded_subchunk_at_level_opt)
+/// for a nested subchunk grid level).
+/// The codecs needed to decode those bytes are exposed by
+/// [`subchunk_codecs`](Array::subchunk_codecs) /
+/// [`subchunk_codecs_at_level`](Array::subchunk_codecs_at_level), and the shape they decode to is
+/// given by the subchunk grid at the same level.
+///
+/// Encoded subchunks are also available from a partial decoder for a chunk with
+/// [`ArrayPartialDecoderSubchunkingTraits`], where subchunk indices are relative to that chunk.
+///
+/// This is codec generic: any array-to-bytes codec that stores independently encoded subchunks can
+/// support it by implementing
+/// [`ArrayToBytesCodecSubchunkingTraits::subchunk_codecs`] and
+/// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk`].
+/// A codec only implements level zero access, and nested levels are then reached with the default
+/// [`retrieve_encoded_subchunk_at_level`](ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level)
+/// implementation.
+/// A partial decoder without subchunks implements the [`ArrayPartialDecoderNoSubchunkingTraits`]
+/// marker trait instead.
+///
+/// Encoded subchunks are not exposed if the array has array-to-array codecs, because an encoded
+/// subchunk is in the encoded domain of the array-to-bytes codec.
 ///
 /// ## Parallelism and Concurrency
 /// ### Sync API

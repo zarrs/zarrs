@@ -29,6 +29,23 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
 
+    /// Return the codecs that encode the subchunks created by this codec, outermost first.
+    ///
+    /// The codecs at each level match the grids returned by
+    /// [`decoded_subchunk_grids`](Self::decoded_subchunk_grids). The level zero codecs decode an
+    /// encoded subchunk of this codec, the level one codecs decode an encoded subchunk of a
+    /// subchunk, and so on. An empty vector indicates that the codec does not expose subchunks.
+    ///
+    /// The returned codecs operate in the encoded domain of this codec. If this codec is preceded
+    /// by array-to-array codecs (e.g. in a codec chain), then decoding an encoded subchunk yields
+    /// array bytes that those codecs have yet to decode.
+    ///
+    /// Encoded subchunk bytes are retrieved with
+    /// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk`](crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk).
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
+    }
+
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
     /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).

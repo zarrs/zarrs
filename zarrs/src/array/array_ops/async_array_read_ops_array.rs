@@ -405,6 +405,24 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    pub async fn async_retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
+    pub async fn async_retrieve_encoded_subchunk_opt(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
+    pub async fn async_retrieve_encoded_subchunk_at_level_opt(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
     pub async fn async_retrieve_subchunk_opt<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
