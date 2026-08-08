@@ -27,7 +27,9 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
         validate_chunk_indices(array, chunk_indices)?;
         cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                array.partial_decoder_opt(chunk_indices, options)
+                array
+                    .with_codec_options(*options)
+                    .partial_decoder(chunk_indices)
             })
             .map_err(cache_error)
     }

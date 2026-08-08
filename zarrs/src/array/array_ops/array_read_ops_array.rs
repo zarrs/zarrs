@@ -27,19 +27,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
-
-    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -74,26 +67,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunks_opt<T: FromArrayBytes>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
@@ -107,7 +86,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             && chunk_subset.shape() == chunk_shape_u64
         {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            return self.retrieve_chunk_opt(chunk_indices, options);
+            return self.retrieve_chunk(chunk_indices);
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -129,8 +108,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
@@ -141,7 +120,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         }
 
         if chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64 {
-            self.retrieve_chunk_into(chunk_indices, output_target, options)
+            self.retrieve_chunk_into(chunk_indices, output_target)
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -159,14 +138,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn retrieve_array_subset_opt<T: FromArrayBytes>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        let options = self.codec_options();
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
                 array_subset.to_array_subset(),
@@ -201,15 +174,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
                 if chunk_subset == array_subset {
                     // Single chunk fast path if the array subset domain matches the chunk domain
-                    self.retrieve_chunk_opt(chunk_indices, options)
+                    self.retrieve_chunk(chunk_indices)
                 } else {
                     let array_subset_in_chunk_subset =
                         array_subset.relative_to(chunk_subset.start())?;
-                    self.retrieve_chunk_subset_opt(
-                        chunk_indices,
-                        &array_subset_in_chunk_subset,
-                        options,
-                    )
+                    self.retrieve_chunk_subset(chunk_indices, &array_subset_in_chunk_subset)
                 }
             }
             _ => {
@@ -247,24 +216,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             }
         }
     }
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn retrieve_chunk_if_exists<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<T>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, StorageError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_encoded_chunk_opt(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<Vec<u8>>, StorageError> {
+        let options = self.codec_options();
         let _ = options;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -283,65 +241,54 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_encoded_chunks_opt(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_subchunk_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn retrieve_array_subset_into(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Result<(), ArrayError>;
-
     #[allow(clippy::missing_errors_doc)]
-    pub fn partial_decoder(
+    pub fn local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
 
     /////////////////////////////////////////////////////////////////////////////
     // Advanced methods
     /////////////////////////////////////////////////////////////////////////////
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
+    pub fn retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<T>, ArrayError> {
+        let options = self.codec_options();
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -371,32 +318,20 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     }
 
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn retrieve_array_subset_into_opt(
+    pub fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        super::array_read_ops_common::retrieve_array_subset_into(
-            self,
-            array_subset,
-            output_target,
-            options,
-            |chunk_indices, output_target, options| {
-                self.retrieve_chunk_into(chunk_indices, output_target, options)
-            },
-            |chunk_indices, chunk_subset, output_target, options| {
-                self.retrieve_chunk_subset_into(chunk_indices, chunk_subset, output_target, options)
-            },
-        )
+        super::array_read_ops_common::retrieve_array_subset_into(self, array_subset, output_target)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn partial_decoder_opt(
+    pub fn partial_decoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -421,6 +356,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Per-chunk retrieval must use the concurrency-adjusted options, so operate
+        // through an array carrying them. Cloned once, outside the loop.
+        let tuned_array = self.with_codec_options(*options);
+
         let nesting_depth = optional_nesting_depth(data_type);
 
         let chunk_indices = chunks.indices();
@@ -432,12 +371,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 Ok((
-                    self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        options,
-                    )?
-                    .into_optional()?,
+                    tuned_array
+                        .retrieve_chunk_subset::<ArrayBytes<'static>>(
+                            &chunk_indices,
+                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        )?
+                        .into_optional()?,
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
                 ))
             };
@@ -457,12 +396,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 Ok((
-                    self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        options,
-                    )?
-                    .into_variable()?,
+                    tuned_array
+                        .retrieve_chunk_subset::<ArrayBytes<'static>>(
+                            &chunk_indices,
+                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        )?
+                        .into_variable()?,
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
                 ))
             };
@@ -486,6 +425,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Per-chunk retrieval must use the concurrency-adjusted options, so operate
+        // through an array carrying them. Cloned once, outside the loop.
+        let tuned_array = self.with_codec_options(*options);
+
         let data_type_size = data_type
             .fixed_size()
             .expect("data_type must have fixed size");
@@ -538,11 +481,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 let target =
                     build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
 
-                self.retrieve_chunk_subset_into(
+                tuned_array.retrieve_chunk_subset_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                     target,
-                    options,
                 )?;
                 Ok::<_, ArrayError>(())
             };
@@ -601,12 +543,10 @@ mod tests {
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
 
             let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?;
-            let test =
-                array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &CodecOptions::default())?;
+            let test = array.retrieve_subchunk::<Vec<u16>>(&[2, 3])?;
             assert_eq!(compare, test);
 
-            let local_subchunk_grid =
-                array.local_subchunk_grid(&[0, 0], &CodecOptions::default())?;
+            let local_subchunk_grid = array.local_subchunk_grid(&[0, 0])?;
             assert_eq!(
                 local_subchunk_grid.unwrap().chunk_shape(&[0, 0])?.unwrap(),
                 vec![NonZeroU64::new(2).unwrap(); 2]
@@ -615,58 +555,39 @@ mod tests {
             #[cfg(feature = "ndarray")]
             {
                 let compare = array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[4..6, 6..8])?;
-                let test = array.retrieve_subchunk_opt::<ndarray::ArrayD<u16>>(
-                    &[2, 3],
-                    &CodecOptions::default(),
-                )?;
+                let test = array.retrieve_subchunk::<ndarray::ArrayD<u16>>(&[2, 3])?;
                 assert_eq!(compare, test);
             }
 
             let subset = ArraySubset::new_with_ranges(&[2..6, 2..6]);
             let subchunks = ArraySubset::new_with_ranges(&[1..3, 1..3]);
             let compare = array.retrieve_array_subset::<Vec<u16>>(&subset)?;
-            let test =
-                array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
+            let test = array.retrieve_subchunks::<Vec<u16>>(&subchunks)?;
             assert_eq!(compare, test);
 
             #[cfg(feature = "ndarray")]
             {
                 let compare = array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&subset)?;
-                let test = array.retrieve_subchunks_opt::<ndarray::ArrayD<u16>>(
-                    &subchunks,
-                    &CodecOptions::default(),
-                )?;
+                let test = array.retrieve_subchunks::<ndarray::ArrayD<u16>>(&subchunks)?;
                 assert_eq!(compare, test);
             }
         } else {
             assert!(matches!(array.subchunk_grid(), ChunkGridDecodedRef::None));
-            assert!(
-                array
-                    .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
-                    .is_none()
-            );
+            assert!(array.local_subchunk_grid(&[0, 0])?.is_none());
 
             let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
             assert!(matches!(
-                array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default()),
+                array.retrieve_subchunk::<Vec<u16>>(&[1, 1]),
                 Err(ArrayError::MissingSubchunkGrid)
             ));
             assert!(matches!(
-                array.retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default()),
+                array.retrieve_subchunks::<Vec<u16>>(&chunks),
                 Err(ArrayError::MissingSubchunkGrid)
             ));
         }
 
-        assert!(
-            array
-                .retrieve_subchunk_opt::<Vec<u16>>(&[0], &CodecOptions::default())
-                .is_err()
-        );
-        assert!(
-            array
-                .retrieve_subchunks_opt::<Vec<u16>>(&[0..1], &CodecOptions::default())
-                .is_err()
-        );
+        assert!(array.retrieve_subchunk::<Vec<u16>>(&[0]).is_err());
+        assert!(array.retrieve_subchunks::<Vec<u16>>(&[0..1]).is_err());
 
         Ok(())
     }

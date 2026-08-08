@@ -33,6 +33,12 @@ pub trait ArrayMutOps: ArrayOps {
     /// Set the metadata options.
     fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self;
 
+    /// Set the metadata erase version.
+    fn set_metadata_erase_version(
+        &mut self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> &mut Self;
+
     /// Set the array shape.
     ///
     /// # Errors

@@ -62,6 +62,30 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().metadata_erase_version()
     }
 
+    // `#[must_use]` is on the `ArrayOps` declaration; rustc rejects it on a trait method
+    // impl, and `#[inherent]` does not propagate it to the generated inherent method.
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
+        self.map_array(|array| array.with_codec_options(codec_options))
+    }
+
+    // `#[must_use]` is on the `ArrayOps` declaration; rustc rejects it on a trait method
+    // impl, and `#[inherent]` does not propagate it to the generated inherent method.
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self {
+        self.map_array(|array| array.with_metadata_options(metadata_options))
+    }
+
+    // `#[must_use]` is on the `ArrayOps` declaration; rustc rejects it on a trait method
+    // impl, and `#[inherent]` does not propagate it to the generated inherent method.
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_metadata_erase_version(
+        &self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> Self {
+        self.map_array(|array| array.with_metadata_erase_version(metadata_erase_version))
+    }
+
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {
         self.array().dimension_names()
     }
@@ -74,8 +98,8 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().metadata()
     }
 
-    pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
-        self.array().metadata_opt(options)
+    pub fn metadata_to_store(&self) -> ArrayMetadata {
+        self.array().metadata_to_store()
     }
 
     pub fn builder(&self) -> ArrayBuilder {

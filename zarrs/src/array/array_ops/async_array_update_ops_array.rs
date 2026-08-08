@@ -20,22 +20,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_data,
-            self.codec_options(),
-        )
-        .await
-    }
-
-    pub async fn async_store_chunk_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self
             .chunk_grid()
             .chunk_shape_u64(chunk_indices)?
@@ -54,7 +39,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             && chunk_subset.start().iter().all(|&x| x == 0)
         {
             // The subset spans the whole chunk, so store the bytes directly and skip decoding
-            self.async_store_chunk_opt(chunk_indices, chunk_subset_data, options)
+            self.async_store_chunk(chunk_indices, chunk_subset_data)
                 .await
         } else {
             let chunk_subset_bytes = chunk_subset_data.into_array_bytes(self.data_type())?;
@@ -64,7 +49,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 && self.codecs.partial_encoder_capability().partial_encode
                 && self.storage.supports_set_partial()
             {
-                let partial_encoder = self.async_partial_encoder(chunk_indices, options).await?;
+                let partial_encoder = self.async_partial_encoder(chunk_indices).await?;
                 debug_assert!(
                     partial_encoder.supports_partial_encode(),
                     "partial encoder is misrepresenting its capabilities"
@@ -75,9 +60,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 Ok(())
             } else {
                 // Decode the entire chunk
-                let chunk_bytes_old = self
-                    .async_retrieve_chunk_opt(chunk_indices, options)
-                    .await?;
+                let chunk_bytes_old = self.async_retrieve_chunk(chunk_indices).await?;
 
                 // Update the chunk
                 let chunk_bytes_new = update_array_bytes(
@@ -89,8 +72,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 )?;
 
                 // Store the updated chunk
-                self.async_store_chunk_opt(chunk_indices, chunk_bytes_new, options)
-                    .await
+                self.async_store_chunk(chunk_indices, chunk_bytes_new).await
             }
         }
     }
@@ -100,16 +82,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_data, self.codec_options())
-            .await
-    }
-
-    pub async fn async_store_array_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
@@ -133,15 +106,13 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             if chunk_subset == array_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_chunk_subset
-                self.async_store_chunk_opt(chunk_indices, subset_data, options)
-                    .await?;
+                self.async_store_chunk(chunk_indices, subset_data).await?;
             } else {
                 // Store the chunk subset
-                self.async_store_chunk_subset_opt(
+                self.async_store_chunk_subset(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
-                    options,
                 )
                 .await?;
             }
@@ -159,6 +130,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 &codec_concurrency,
             );
 
+            // Per-chunk stores must use the concurrency-adjusted options, so operate through
+            // an array carrying them. Cloned once, outside the loop.
+            let tuned_array = self.with_codec_options(options);
+
             let array_subset_start = array_subset.start();
             let array_subset_shape = array_subset.shape();
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
@@ -175,14 +150,15 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                         self.data_type(),
                     )
                     .unwrap(); // FIXME: unwrap
+                let tuned_array = &tuned_array;
                 async move {
-                    self.async_store_chunk_subset_opt(
-                        &chunk_indices,
-                        &array_subset_in_chunk_subset,
-                        chunk_subset_bytes,
-                        &options,
-                    )
-                    .await
+                    tuned_array
+                        .async_store_chunk_subset(
+                            &chunk_indices,
+                            &array_subset_in_chunk_subset,
+                            chunk_subset_bytes,
+                        )
+                        .await
                 }
             };
 
@@ -194,11 +170,8 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         Ok(())
     }
 
-    pub async fn async_compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
+    pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let options = self.codec_options();
         let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
         if let Some(chunk_bytes) = chunk_bytes {
             let chunk_bytes: Vec<u8> = chunk_bytes.into();
@@ -226,15 +199,11 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         self.with_storage(self.storage.clone().readable())
     }
 
-    /////////////////////////////////////////////////////////////////////////////
-    // Advanced methods
-    /////////////////////////////////////////////////////////////////////////////
-
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
         let chunk_shape = self.chunk_shape(chunk_indices)?;

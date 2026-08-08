@@ -1,4 +1,5 @@
 use inherent::inherent;
+use std::sync::Arc;
 use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 
 use super::{ArrayMutOps, *};
@@ -36,13 +37,21 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self
     }
 
+    pub fn set_metadata_erase_version(
+        &mut self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> &mut Self {
+        self.metadata_erase_version = metadata_erase_version;
+        self
+    }
+
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grids = self
             .codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())?;
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
             }
@@ -62,7 +71,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     }
 
     pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => &mut metadata.attributes,
             ArrayMetadata::V2(metadata) => &mut metadata.attributes,
         }

@@ -38,9 +38,10 @@ N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
         .clone(),
     )
     .build(store.clone(), "/array")?;
-    array.store_metadata_opt(
-        &zarrs::array::ArrayMetadataOptions::default().with_include_zarrs_metadata(false),
-    )?;
+    let array = array.with_metadata_options(
+        zarrs::array::ArrayMetadataOptions::default().with_include_zarrs_metadata(false),
+    );
+    array.store_metadata()?;
 
     println!("Array metadata:\n{}", array.metadata().to_string_pretty());
 

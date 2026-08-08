@@ -16,13 +16,6 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     for Array<TStorage>
 {
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(self.metadata_options()).await
-    }
-
-    pub async fn async_store_metadata_opt(
-        &self,
-        options: &ArrayMetadataOptions,
-    ) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -30,7 +23,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await?;
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_opt(options);
+        let metadata = self.metadata_to_store();
 
         // Store the metadata
         let path = self.path();
@@ -67,17 +60,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     }
 
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        self.async_erase_metadata_opt(self.metadata_erase_version())
-            .await
-    }
-
-    pub async fn async_erase_metadata_opt(
-        &self,
-        options: MetadataEraseVersion,
-    ) -> Result<(), StorageError> {
+        let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match *self.metadata {
                 ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
                 ArrayMetadata::V2(_) => {
                     storage_handle
@@ -114,16 +100,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunk_indices: &[u64],
         chunk_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
-            .await
-    }
-
-    pub async fn async_store_chunk_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
         // Validation
@@ -150,16 +127,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
-            .await
-    }
-
-    pub async fn async_store_chunks_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
@@ -168,8 +136,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.async_store_chunk_opt(&chunk_indices, chunks_data, options)
-                    .await?;
+                self.async_store_chunk(&chunk_indices, chunks_data).await?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -186,6 +153,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                     &codec_concurrency,
                 );
 
+                // Per-chunk stores must use the concurrency-adjusted options, so operate
+                // through an array carrying them. Cloned once, outside the loop.
+                let tuned_array = self.with_codec_options(options);
+
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
@@ -195,8 +166,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                             self.data_type(),
                         )
                         .unwrap(); // FIXME: unwrap
+                    let tuned_array = &tuned_array;
                     async move {
-                        self.async_store_chunk_opt(&chunk_indices, chunk_bytes, &options)
+                        tuned_array
+                            .async_store_chunk(&chunk_indices, chunk_bytes)
                             .await
                     }
                 };

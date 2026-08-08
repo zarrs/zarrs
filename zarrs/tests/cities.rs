@@ -56,9 +56,10 @@ fn cities_impl(
         ]);
     }
 
-    let array = builder.build(store.clone(), "/")?;
-    array
-        .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
+    let array = builder
+        .build(store.clone(), "/")?
+        .with_metadata_options(ArrayMetadataOptions::default().with_include_zarrs_metadata(false));
+    array.store_metadata()?;
 
     let subset_all = array.subset_all();
     array.store_array_subset(&subset_all, cities)?;

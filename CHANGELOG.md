@@ -14,9 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Copy` for `GroupMetadataOptions`
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
-  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
-  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
+  - Promote previously private methods to public: `[async_]retrieve_chunk_into`, `[async_]retrieve_chunk_subset_into`
+  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+  - Operations take no options arguments. They use the options stored on the array, exposed by `ArrayOps::{codec_options,metadata_options,metadata_erase_version}`
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
@@ -24,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
+- Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` to derive an array that uses different options, replacing the removed `_opt` method variants
+  - These are trait methods taking `&self`, so code generic over the operation traits can override options
+  - Implemented for `Array` and for `ArrayCached`, where the derived array shares the chunk cache with the original
+- Add `ArrayMutOps::set_metadata_erase_version()`
+- Add `ArrayOps::recommended_codec_concurrency()`, previously a private `Array` method
+- Add `ArrayCached::with_codec_specific_options()`; codec-specific reconfiguration was previously unreachable on a cached array
+- Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
@@ -62,8 +70,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
+- **Breaking**: Rename `[Array,Group]::metadata_opt()` to `metadata_to_store()`, and drop its options parameter
+  - The name now says what it returns: the metadata in the form `store_metadata` writes, with the metadata options applied
+  - `metadata()` is unchanged and still borrows the metadata as stored or constructed
+- `Array::clone()` is now cheap: the metadata document is shared behind an `Arc` rather than deep cloned
+  - This makes deriving an array with different options practical on a hot path
+- **Breaking**: `Array::{with_codec_options,with_metadata_options,with_metadata_erase_version,with_codec_specific_options}()` and `Group::{with_metadata_options,with_metadata_erase_version}()` now take `&self` rather than `self`
+  - Chained forms such as `builder.build(..)?.with_codec_options(o)` are unaffected
+- Implement `Clone` for `Group`
 
 ### Removed
+- **Breaking**: Remove the `_opt` variants of the array and group operation methods
+  - Operations now use the options stored on the array or group, so `store_array_subset_opt(.., &options)` becomes `store_array_subset(..)`
+  - To use different options, derive a value that carries them: `array.clone().with_codec_options(options).store_array_subset(..)`, or `set_codec_options()` where the array is owned. `Array` and `Group` are cheap to clone
+  - Constructors keep their `_opt` variants, since they have no array or group to read options from: `[Array,Group]::[async_]open_opt`, `Group::new_with_metadata_opt`, `Hierarchy::[async_]open_opt`, `Node::[async_]open_opt`, `[async_]get_child_nodes_opt`
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
   - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
@@ -75,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- `Array::with_codec_specific_options()` left the subchunk grids stale, unlike `ArrayMutOps::set_codec_specific_options()`; it now delegates to it so the two cannot diverge
 - `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs

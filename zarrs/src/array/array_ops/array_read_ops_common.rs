@@ -1,40 +1,26 @@
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArraySubset,
-    ArraySubsetTraits,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits,
 };
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
 };
-use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::ArrayReadOps;
 
-pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveChunkSubsetInto>(
-    array: &Array<TStorage>,
+/// Shared implementation of [`ArrayReadOps::retrieve_array_subset_into`].
+///
+/// Generic over the receiver so that `Array` and `ArrayCached` share it: the per-chunk work
+/// dispatches back through [`ArrayReadOps`], which for a cached array goes through its cache.
+pub(super) fn retrieve_array_subset_into<A: ArrayReadOps>(
+    array: &A,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
-    options: &CodecOptions,
-    retrieve_chunk_into: RetrieveChunkInto,
-    retrieve_chunk_subset_into: RetrieveChunkSubsetInto,
-) -> Result<(), ArrayError>
-where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    RetrieveChunkInto:
-        for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
-    RetrieveChunkSubsetInto: for<'a> Fn(
-            &[u64],
-            &dyn ArraySubsetTraits,
-            ArrayBytesDecodeIntoTarget<'a>,
-            &CodecOptions,
-        ) -> Result<(), ArrayError>
-        + MaybeSend
-        + MaybeSync,
-{
+) -> Result<(), ArrayError> {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
             array_subset.to_array_subset(),
@@ -73,13 +59,12 @@ where
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
             if chunk_subset == array_subset {
-                retrieve_chunk_into(chunk_indices, output_target, options)
+                array.retrieve_chunk_into(chunk_indices, output_target)
             } else {
-                retrieve_chunk_subset_into(
+                array.retrieve_chunk_subset_into(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     output_target,
-                    options,
                 )
             }
         }
@@ -87,44 +72,32 @@ where
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
+                array.codec_options().concurrent_target(),
                 num_chunks,
-                options,
+                array.codec_options(),
                 &codec_concurrency,
             );
+            // Per-chunk retrieval must use the concurrency-adjusted options, so operate through
+            // an array carrying them. Derived once, outside the loop.
+            let tuned_array = array.with_codec_options(options);
             retrieve_multi_chunk_fixed_into(
-                array,
+                &tuned_array,
                 array_subset,
                 &chunks,
                 chunk_concurrent_limit,
                 &output_target,
-                &options,
-                &retrieve_chunk_subset_into,
             )
         }
     }
 }
 
-fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
-    array: &Array<TStorage>,
+fn retrieve_multi_chunk_fixed_into<A: ArrayReadOps>(
+    array: &A,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
     output_target: &ArrayBytesDecodeIntoTarget<'_>,
-    options: &CodecOptions,
-    retrieve_chunk_subset_into: &RetrieveChunkSubsetInto,
-) -> Result<(), ArrayError>
-where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    RetrieveChunkSubsetInto: for<'a> Fn(
-            &[u64],
-            &dyn ArraySubsetTraits,
-            ArrayBytesDecodeIntoTarget<'a>,
-            &CodecOptions,
-        ) -> Result<(), ArrayError>
-        + MaybeSend
-        + MaybeSync,
-{
+) -> Result<(), ArrayError> {
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
     let parent_start = data_view_ref.subset().start().to_vec();
 
@@ -158,11 +131,10 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
-        retrieve_chunk_subset_into(
+        array.retrieve_chunk_subset_into(
             &chunk_indices,
             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
             target,
-            options,
         )?;
         Ok::<_, ArrayError>(())
     };

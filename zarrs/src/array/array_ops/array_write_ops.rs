@@ -1,46 +1,29 @@
 use super::*;
 
 /// Synchronous array write operations.
+///
+/// These operations encode with the array's [`codec_options`](ArrayOps::codec_options) and write
+/// metadata according to its [`metadata_options`](ArrayOps::metadata_options) and
+/// [`metadata_erase_version`](ArrayOps::metadata_erase_version).
 pub trait ArrayWriteOps: ArrayOps {
-    /// Store metadata with default [`ArrayMetadataOptions`].
+    /// Store the array metadata.
     ///
-    /// The metadata is created with [`Array::metadata_opt`].
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if there is an underlying store error.
-    fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(self.metadata_options())
-    }
-
-    /// Store metadata with non-default [`ArrayMetadataOptions`].
-    ///
-    /// The metadata is created with [`Array::metadata_opt`].
+    /// The metadata is created with [`ArrayOps::metadata_to_store`].
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError>;
+    fn store_metadata(&self) -> Result<(), StorageError>;
 
-    /// Erase the metadata with default [`MetadataEraseVersion`] options.
+    /// Erase the array metadata.
     ///
     /// Succeeds if the metadata does not exist.
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.erase_metadata_opt(self.metadata_erase_version())
-    }
-
-    /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError>;
+    fn erase_metadata(&self) -> Result<(), StorageError>;
 
     /// Encode `chunk_data` and store at `chunk_indices`.
     ///
-    /// Use [`store_chunk_opt`](ArrayWriteOps::store_chunk_opt) to control codec options.
     /// A chunk composed entirely of the fill value will not be written to the store.
     ///
     /// # Errors
@@ -53,21 +36,10 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
-    }
-
-    /// Explicit options version of [`store_chunk`](ArrayWriteOps::store_chunk).
-    fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Encode `chunks_data` and store at the chunks with indices represented by the `chunks` array subset.
     ///
-    /// Use [`store_chunks_opt`](ArrayWriteOps::store_chunks_opt) to control codec options.
     /// A chunk composed entirely of the fill value will not be written to the store.
     ///
     /// # Errors
@@ -80,16 +52,6 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_data, self.codec_options())
-    }
-
-    /// Explicit options version of [`store_chunks`](ArrayWriteOps::store_chunks).
-    fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Erase the chunk at `chunk_indices`.

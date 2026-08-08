@@ -14,16 +14,14 @@ use zarrs_storage::{Bytes, StorageHandle};
 
 #[inherent]
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
-    pub fn store_metadata(&self) -> Result<(), StorageError>;
-
-    pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
+    pub fn store_metadata(&self) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_opt(options);
+        let metadata = self.metadata_to_store();
 
         // Store the metadata
         let path = self.path();
@@ -57,12 +55,11 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         }
     }
 
-    pub fn erase_metadata(&self) -> Result<(), StorageError>;
-
-    pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
+    pub fn erase_metadata(&self) -> Result<(), StorageError> {
+        let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match *self.metadata {
                 ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
                 ArrayMetadata::V2(_) => {
                     storage_handle.erase(&meta_key_v2_array(self.path()))?;
@@ -86,14 +83,8 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError>;
-
-    pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
         // Validation
@@ -119,14 +110,8 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError>;
-
-    pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
@@ -135,7 +120,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_opt(&chunk_indices, chunks_data, options)?;
+                self.store_chunk(&chunk_indices, chunks_data)?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -152,6 +137,10 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                     &codec_concurrency,
                 );
 
+                // Per-chunk stores must use the concurrency-adjusted options, so operate
+                // through an array carrying them. Cloned once, outside the loop.
+                let tuned_array = self.with_codec_options(options);
+
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
@@ -159,7 +148,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                         array_subset.shape(),
                         self.data_type(),
                     )?;
-                    self.store_chunk_opt(&chunk_indices, chunk_bytes, &options)
+                    tuned_array.store_chunk(&chunk_indices, chunk_bytes)
                 };
 
                 let indices = chunks.indices();

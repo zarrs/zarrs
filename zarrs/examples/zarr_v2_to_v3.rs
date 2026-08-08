@@ -39,7 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let convert_group_metadata_to_v3 =
         GroupMetadataOptions::default().with_metadata_convert_version(MetadataConvertVersion::V3);
     group.store_metadata()?;
-    group.store_metadata_opt(&convert_group_metadata_to_v3)?;
+    group
+        .clone()
+        .with_metadata_options(convert_group_metadata_to_v3)
+        .store_metadata()?;
     println!(
         "group/.zgroup (Zarr V2 group metadata):\n{}\n",
         key_to_str(&store, "group/.zgroup")?
@@ -54,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // println!(
     //     "The equivalent Zarr V3 group metadata is\n{}\n",
-    //     group.metadata_opt(&convert_group_metadata_to_v3).to_string_pretty()
+    //     group.clone().with_metadata_options(convert_group_metadata_to_v3).metadata_to_store().to_string_pretty()
     // );
 
     // Create a Zarr V2 array
@@ -79,7 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let convert_array_metadata_to_v3 =
         ArrayMetadataOptions::default().with_metadata_convert_version(MetadataConvertVersion::V3);
     array.store_metadata()?;
-    array.store_metadata_opt(&convert_array_metadata_to_v3)?;
+    array
+        .clone()
+        .with_metadata_options(convert_array_metadata_to_v3)
+        .store_metadata()?;
     println!(
         "group/array/.zarray (Zarr V2 array metadata):\n{}\n",
         key_to_str(&store, "group/array/.zarray")?
@@ -94,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // println!(
     //     "The equivalent Zarr V3 array metadata is\n{}\n",
-    //     array.metadata_opt(&convert_array_metadata_to_v3).to_string_pretty()
+    //     array.clone().with_metadata_options(convert_array_metadata_to_v3).metadata_to_store().to_string_pretty()
     // );
 
     array.store_chunk(&[0, 1], &[0.0f32; 5 * 5])?;

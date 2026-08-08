@@ -28,17 +28,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, self.codec_options())
-            .await
-    }
-
-    pub async fn async_retrieve_chunk_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
         if let Some(chunk) = self
-            .async_retrieve_chunk_if_exists_opt::<T>(chunk_indices, options)
+            .async_retrieve_chunk_if_exists::<T>(chunk_indices)
             .await?
         {
             Ok(chunk)
@@ -63,8 +54,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -98,15 +89,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, self.codec_options())
-            .await
-    }
-
-    pub async fn async_retrieve_chunks_opt<T: FromArrayBytes>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
@@ -114,16 +96,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, self.codec_options())
-            .await
-    }
-
-    pub async fn async_retrieve_chunk_subset_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
@@ -137,7 +110,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         if chunk_subset.start().iter().all(|&o| o == 0)
             && chunk_subset_shape.as_ref() == chunk_shape_u64
         {
-            self.async_retrieve_chunk_opt(chunk_indices, options).await
+            self.async_retrieve_chunk(chunk_indices).await
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -162,8 +135,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
@@ -176,7 +149,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         if chunk_subset.start().iter().all(|&o| o == 0)
             && chunk_subset.shape().as_ref() == chunk_shape_u64
         {
-            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+            self.async_retrieve_chunk_into(chunk_indices, output_target)
                 .await
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -198,15 +171,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         array_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, self.codec_options())
-            .await
-    }
-
-    pub async fn async_retrieve_array_subset_opt<T: FromArrayBytes>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
+        let options = self.codec_options();
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
                 array_subset.to_array_subset(),
@@ -239,16 +204,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
                 if chunk_subset == array_subset {
-                    self.async_retrieve_chunk_opt(chunk_indices, options).await
+                    self.async_retrieve_chunk(chunk_indices).await
                 } else {
                     let array_subset_in_chunk_subset =
                         array_subset.relative_to(chunk_subset.start())?;
-                    self.async_retrieve_chunk_subset_opt(
-                        chunk_indices,
-                        &array_subset_in_chunk_subset,
-                        options,
-                    )
-                    .await
+                    self.async_retrieve_chunk_subset(chunk_indices, &array_subset_in_chunk_subset)
+                        .await
                 }
             }
             _ => {
@@ -285,24 +246,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
     }
 
-    pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<T>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, self.codec_options())
-            .await
-    }
-
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError>;
-
-    pub async fn async_retrieve_encoded_chunk_opt(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<Bytes>, StorageError> {
+        let options = self.codec_options();
         let _ = options;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -315,32 +263,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
-    pub async fn async_retrieve_array_subset_into(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Result<(), ArrayError> {
-        self.async_retrieve_array_subset_into_opt(array_subset, output_target, self.codec_options())
-            .await
-    }
-
-    pub async fn async_partial_decoder(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        self.async_partial_decoder_opt(chunk_indices, self.codec_options())
-            .await
-    }
-
     /////////////////////////////////////////////////////////////////////////////
     // Advanced methods
     /////////////////////////////////////////////////////////////////////////////
 
-    pub async fn async_retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<T>, ArrayError> {
+        let options = self.codec_options();
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -375,13 +306,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError>;
-
-    pub async fn async_retrieve_encoded_chunks_opt(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<Vec<Option<Bytes>>, StorageError> {
+        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -405,40 +331,36 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
-    pub async fn async_retrieve_subchunk_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    pub async fn async_retrieve_subchunks_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    pub async fn async_retrieve_array_subset_into_opt(
+    pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
                 array_subset.to_array_subset(),
@@ -479,7 +401,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
                 if chunk_subset == array_subset {
-                    self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+                    self.async_retrieve_chunk_into(chunk_indices, output_target)
                         .await
                 } else {
                     let array_subset_in_chunk_subset =
@@ -488,7 +410,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                         chunk_indices,
                         &array_subset_in_chunk_subset,
                         output_target,
-                        options,
                     )
                     .await
                 }
@@ -515,11 +436,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
     }
 
-    pub async fn async_partial_decoder_opt(
+    pub async fn async_partial_decoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
+        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -531,6 +452,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .async_partial_decoder(input_handle, &self.chunk_shape(chunk_indices)?, options)
             .await?)
     }
+
+    pub async fn async_local_subchunk_grid(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
+
+    pub async fn async_local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
 }
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
@@ -544,6 +476,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Per-chunk retrieval must use the concurrency-adjusted options, so operate
+        // through an array carrying them. Cloned once, outside the loop.
+        let tuned_array = self.with_codec_options(*options);
+
         let nesting_depth = optional_nesting_depth(data_type);
         let array_subset_start = array_subset.start();
         let array_subset_shape = array_subset.shape();
@@ -551,17 +487,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if nesting_depth > 0 {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let array_subset_start = &array_subset_start;
+                let tuned_array = &tuned_array;
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                     Ok::<_, ArrayError>((
-                        self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
-                            &chunk_indices,
-                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                            options,
-                        )
-                        .await?
-                        .into_optional()?,
+                        tuned_array
+                            .async_retrieve_chunk_subset::<ArrayBytes>(
+                                &chunk_indices,
+                                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                            )
+                            .await?
+                            .into_optional()?,
                         chunk_subset_overlap.relative_to(array_subset_start)?,
                     ))
                 }
@@ -581,17 +518,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         } else {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let array_subset_start = &array_subset_start;
+                let tuned_array = &tuned_array;
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                     Ok::<_, ArrayError>((
-                        self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
-                            &chunk_indices,
-                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                            options,
-                        )
-                        .await?
-                        .into_variable()?,
+                        tuned_array
+                            .async_retrieve_chunk_subset::<ArrayBytes>(
+                                &chunk_indices,
+                                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                            )
+                            .await?
+                            .into_variable()?,
                         chunk_subset_overlap.relative_to(array_subset_start)?,
                     ))
                 }
@@ -620,6 +558,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Per-chunk retrieval must use the concurrency-adjusted options, so operate
+        // through an array carrying them. Cloned once, outside the loop.
+        let tuned_array = self.with_codec_options(*options);
+
         let data_type_size = data_type
             .fixed_size()
             .expect("data_type must have fixed size");
@@ -645,6 +587,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let array_subset_start = &array_subset_start;
                 let array_subset_shape = &array_subset_shape;
+                let tuned_array = &tuned_array;
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
@@ -677,13 +620,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     let target =
                         build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
 
-                    self.async_retrieve_chunk_subset_into(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        target,
-                        options,
-                    )
-                    .await?;
+                    tuned_array
+                        .async_retrieve_chunk_subset_into(
+                            &chunk_indices,
+                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                            target,
+                        )
+                        .await?;
                     Ok::<_, ArrayError>(())
                 }
             };
@@ -714,6 +657,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         output_target: &ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        // Per-chunk retrieval must use the concurrency-adjusted options, so operate
+        // through an array carrying them. Cloned once, outside the loop.
+        let tuned_array = self.with_codec_options(*options);
+
         let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
         let parent_start = data_view_ref.subset().start().to_vec();
         let array_subset_start = array_subset.start();
@@ -722,6 +669,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let array_subset_start = &array_subset_start;
             let parent_start = &parent_start;
             let mask_view_refs = &mask_view_refs;
+            let tuned_array = &tuned_array;
             async move {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
@@ -753,13 +701,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
                 let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
 
-                self.async_retrieve_chunk_subset_into(
-                    &chunk_indices,
-                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    target,
-                    options,
-                )
-                .await?;
+                tuned_array
+                    .async_retrieve_chunk_subset_into(
+                        &chunk_indices,
+                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        target,
+                    )
+                    .await?;
                 Ok::<_, ArrayError>(())
             }
         };

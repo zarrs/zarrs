@@ -1,4 +1,5 @@
 use super::*;
+use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};
 
 /// Core array operations.
 pub trait ArrayOps {
@@ -38,14 +39,55 @@ pub trait ArrayOps {
     /// Get the storage transformers.
     fn storage_transformers(&self) -> &StorageTransformerChain;
 
-    /// Get the default codec options for no-options methods.
+    /// Get the codec options used by the array operations.
+    ///
+    /// Override them with [`with_codec_options`](ArrayOps::with_codec_options), or
+    /// [`ArrayMutOps::set_codec_options`] where the array is owned.
     fn codec_options(&self) -> &CodecOptions;
 
-    /// Get the default array metadata options for no-options methods.
+    /// Get the array metadata options used by the array operations.
+    ///
+    /// Override them with [`with_metadata_options`](ArrayOps::with_metadata_options), or
+    /// [`ArrayMutOps::set_metadata_options`] where the array is owned.
     fn metadata_options(&self) -> &ArrayMetadataOptions;
 
-    /// Get the default metadata erase version for no-options methods.
+    /// Get the metadata erase version used by the array operations.
+    ///
+    /// Override it with
+    /// [`with_metadata_erase_version`](ArrayOps::with_metadata_erase_version), or
+    /// [`ArrayMutOps::set_metadata_erase_version`] where the array is owned.
     fn metadata_erase_version(&self) -> MetadataEraseVersion;
+
+    /// Return a copy of this array that uses `codec_options` for its operations.
+    ///
+    /// Prefer deriving once and reusing the result over deriving per operation.
+    #[must_use]
+    fn with_codec_options(&self, codec_options: CodecOptions) -> Self
+    where
+        Self: Sized;
+
+    /// Return a copy of this array that uses `metadata_options` for its operations.
+    #[must_use]
+    fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self
+    where
+        Self: Sized;
+
+    /// Return a copy of this array that uses `metadata_erase_version` for its operations.
+    #[must_use]
+    fn with_metadata_erase_version(&self, metadata_erase_version: MetadataEraseVersion) -> Self
+    where
+        Self: Sized;
+
+    /// Calculate the recommended codec concurrency.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the codec chain cannot report its recommended concurrency.
+    fn recommended_codec_concurrency(
+        &self,
+        chunk_shape: &[std::num::NonZeroU64],
+    ) -> Result<RecommendedConcurrency, ArrayError> {
+        Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
+    }
 
     /// Get the dimension names.
     fn dimension_names(&self) -> &Option<Vec<DimensionName>>;
@@ -56,10 +98,13 @@ pub trait ArrayOps {
     /// Return the underlying array metadata.
     fn metadata(&self) -> &ArrayMetadata;
 
-    /// Return a new [`ArrayMetadata`] with [`ArrayMetadataOptions`] applied.
+    /// Return the array metadata in the form that [`Array::store_metadata`] writes.
     ///
-    /// This method is used internally by [`Array::store_metadata`] and [`Array::store_metadata_opt`].
-    fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata;
+    /// Unlike [`metadata`](ArrayOps::metadata), which borrows the metadata as it was stored or
+    /// constructed, this applies [`metadata_options`](ArrayOps::metadata_options): it may inject
+    /// `zarrs` provenance attributes, convert between Zarr versions, and rewrite aliased
+    /// extension names.
+    fn metadata_to_store(&self) -> ArrayMetadata;
 
     /// Create an array builder matching the parameters of this array.
     fn builder(&self) -> ArrayBuilder;

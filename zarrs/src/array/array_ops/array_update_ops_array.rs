@@ -21,16 +21,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         let chunk_shape = self
             .chunk_grid()
             .chunk_shape_u64(chunk_indices)?
@@ -47,7 +39,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
 
         if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
             // The subset spans the whole chunk, so store the bytes directly and skip decoding
-            self.store_chunk_opt(chunk_indices, chunk_subset_data, options)
+            self.store_chunk(chunk_indices, chunk_subset_data)
         } else {
             let chunk_subset_bytes = chunk_subset_data.into_array_bytes(self.data_type())?;
             chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
@@ -61,7 +53,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 && self.codecs.partial_encoder_capability().partial_encode
                 && self.storage.supports_set_partial()
             {
-                let partial_encoder = self.partial_encoder(chunk_indices, options)?;
+                let partial_encoder = self.partial_encoder(chunk_indices)?;
                 debug_assert!(
                     partial_encoder.supports_partial_encode(),
                     "partial encoder is misrepresenting its capabilities"
@@ -69,8 +61,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
             } else {
                 // Decode the entire chunk
-                let chunk_bytes_old: ArrayBytes<'static> =
-                    self.retrieve_chunk_opt(chunk_indices, options)?;
+                let chunk_bytes_old: ArrayBytes<'static> = self.retrieve_chunk(chunk_indices)?;
                 chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
 
                 // Update the chunk
@@ -83,26 +74,19 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 )?;
 
                 // Store the updated chunk
-                self.store_chunk_opt(chunk_indices, chunk_bytes_new, options)
+                self.store_chunk(chunk_indices, chunk_bytes_new)
             }
         }
     }
 
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    #[allow(clippy::too_many_lines)]
     pub fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    #[allow(clippy::too_many_lines)]
-    pub fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
@@ -126,14 +110,13 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_chunk_subset
-                self.store_chunk_opt(chunk_indices, subset_data, options)?;
+                self.store_chunk(chunk_indices, subset_data)?;
             } else {
                 // Store the chunk subset
-                self.store_chunk_subset_opt(
+                self.store_chunk_subset(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
-                    options,
                 )?;
             }
         } else {
@@ -149,6 +132,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 &codec_concurrency,
             );
 
+            // Per-chunk stores must use the concurrency-adjusted options, so operate through
+            // an array carrying them. Cloned once, outside the loop.
+            let tuned_array = self.with_codec_options(options);
+
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
@@ -159,11 +146,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                     self.data_type(),
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
-                self.store_chunk_subset_opt(
+                tuned_array.store_chunk_subset(
                     &chunk_indices,
                     &chunk_subset_in_chunk,
                     chunk_subset_bytes,
-                    &options,
                 )
             };
 
@@ -174,11 +160,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         Ok(())
     }
 
-    pub fn compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
+    pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let options = self.codec_options();
         let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
         if let Some(chunk_bytes) = chunk_bytes {
             if let Some(compacted_bytes) = self.codecs_bound.compact(
@@ -206,15 +189,11 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         self.with_storage(self.storage.clone().readable())
     }
 
-    /////////////////////////////////////////////////////////////////////////////
-    // Advanced methods
-    /////////////////////////////////////////////////////////////////////////////
-
     pub fn partial_encoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
         // Input/output

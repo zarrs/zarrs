@@ -99,7 +99,8 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
         cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
                 Ok(array
-                    .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)?
+                    .with_codec_options(*options)
+                    .retrieve_chunk_if_exists::<ArrayBytes<'static>>(chunk_indices)?
                     .map(Arc::new))
             })
             .map_err(cache_error)

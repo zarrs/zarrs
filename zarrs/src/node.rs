@@ -596,7 +596,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{ArrayBuilder, ArrayMetadataOptions};
+    use crate::array::ArrayBuilder;
     use crate::group::{GroupMetadata, GroupMetadataV3};
     use zarrs_storage::store::MemoryStore;
     use zarrs_storage::{StoreKey, WritableStorageTraits};
@@ -693,7 +693,7 @@ mod tests {
         .build(store.clone(), node_path)
         .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
+        let stored_metadata = array.metadata_to_store();
 
         let node = Node::open(&store, node_path).unwrap();
         assert_eq!(node.metadata, NodeMetadata::Array(stored_metadata));

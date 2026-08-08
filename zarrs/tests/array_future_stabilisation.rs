@@ -42,18 +42,22 @@ fn array_future_stabilisation_bz2() {
         ],
     );
 
-    // By default, metadata_opt() returns the original stored metadata, preserving
+    // By default, metadata_to_store() returns the original stored metadata, preserving
     // the original codec name from the file ("numcodecs.bz2").
     let mut options = ArrayMetadataOptions::default();
     assert!(
         array
-            .metadata_opt(&options)
+            .clone()
+            .with_metadata_options(options)
+            .metadata_to_store()
             .to_string()
             .contains(r#""numcodecs.bz2"#)
     );
     assert!(
         !array
-            .metadata_opt(&options)
+            .clone()
+            .with_metadata_options(options)
+            .metadata_to_store()
             .to_string()
             .contains(r#""stable.bz2"#)
     );
@@ -63,7 +67,9 @@ fn array_future_stabilisation_bz2() {
     options.set_convert_aliased_extension_names(true);
     assert!(
         array
-            .metadata_opt(&options)
+            .clone()
+            .with_metadata_options(options)
+            .metadata_to_store()
             .to_string()
             .contains(r#""stable.bz2"#)
     );
