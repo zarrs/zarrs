@@ -79,7 +79,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// ### Metadata Convert Version
 /// > default: [`MetadataConvertVersion::Default`] (keep existing version)
 ///
-/// Determines the Zarr version of metadata created with [`Array::metadata_to_store`](crate::array::Array::metadata_to_store) and [`Group::metadata_to_store`](crate::group::Group::metadata_to_store).
+/// Determines the Zarr version of metadata created with [`Array::metadata_opt`](crate::array::Array::metadata_opt) and [`Group::metadata_opt`](crate::group::Group::metadata_opt).
 /// These methods are used internally by the `store_metadata` methods of [`crate::array::Array`] and [`crate::group::Group`].
 ///
 /// ### Metadata Erase Version
@@ -93,7 +93,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 ///
 /// [`ArrayMetadataOptions::include_zarrs_metadata`](crate::array::ArrayMetadataOptions::include_zarrs_metadata) defaults to [`Config::include_zarrs_metadata`].
 ///
-/// If true, array metadata generated with [`Array::metadata_to_store`](crate::array::Array::metadata_to_store) (used internally by [`Array::store_metadata`](crate::array::Array::store_metadata)) includes the `zarrs` version and a link to its source code.
+/// If true, array metadata generated with [`Array::metadata_opt`](crate::array::Array::metadata_opt) (used internally by [`Array::store_metadata`](crate::array::Array::store_metadata)) includes the `zarrs` version and a link to its source code.
 /// For example:
 /// ```json
 /// "_zarrs": {

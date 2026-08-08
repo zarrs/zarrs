@@ -129,9 +129,10 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ## Array Metadata
 /// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) if an array is newly created or its metadata has been mutated.
 ///
-/// The underlying metadata of an [`Array`] can be accessed with [`metadata`](Array::metadata) or [`metadata_to_store`](Array::metadata_to_store).
-/// The latter accepts [`ArrayMetadataOptions`] that can be used to convert array metadata from Zarr V2 to V3, for example.
-/// [`metadata_to_store`](Array::metadata_to_store) is used internally by [`store_metadata`](Array::store_metadata).
+/// The underlying metadata of an [`Array`] can be accessed with [`metadata`](Array::metadata) or [`metadata_opt`](Array::metadata_opt).
+/// The latter applies the array's [`ArrayMetadataOptions`], which can convert array metadata from Zarr V2 to V3, for example.
+/// Use [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`] to control them.
+/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata).
 /// Use [`serde_json::to_string`] or [`serde_json::to_string_pretty`] on [`ArrayMetadata`] to convert it to a JSON string.
 ///
 /// ### Immutable Array Metadata / Properties
@@ -1176,7 +1177,7 @@ mod tests {
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_to_store();
+        let stored_metadata = array.metadata_opt();
 
         let array_other = Array::open(store, array_path).unwrap();
         assert_eq!(array_other.metadata(), &stored_metadata);
@@ -1547,7 +1548,7 @@ mod tests {
                     ArrayMetadataOptions::default()
                         .with_metadata_convert_version(MetadataConvertVersion::V3)
                 )
-                .metadata_to_store()
+                .metadata_opt()
         );
 
         println!("{array_in:?}");

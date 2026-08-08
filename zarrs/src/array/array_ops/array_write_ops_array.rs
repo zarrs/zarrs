@@ -21,7 +21,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             .create_writable_transformer(storage_handle)?;
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_to_store();
+        let metadata = self.metadata_opt();
 
         // Store the metadata
         let path = self.path();

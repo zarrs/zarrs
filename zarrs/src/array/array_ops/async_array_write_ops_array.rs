@@ -23,7 +23,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await?;
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_to_store();
+        let metadata = self.metadata_opt();
 
         // Store the metadata
         let path = self.path();

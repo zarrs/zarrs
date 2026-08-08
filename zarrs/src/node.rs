@@ -693,7 +693,7 @@ mod tests {
         .build(store.clone(), node_path)
         .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_to_store();
+        let stored_metadata = array.metadata_opt();
 
         let node = Node::open(&store, node_path).unwrap();
         assert_eq!(node.metadata, NodeMetadata::Array(stored_metadata));

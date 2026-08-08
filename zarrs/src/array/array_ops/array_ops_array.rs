@@ -120,7 +120,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-    pub fn metadata_to_store(&self) -> ArrayMetadata {
+    pub fn metadata_opt(&self) -> ArrayMetadata {
         let options = self.metadata_options();
         use ArrayMetadata as AM;
         use MetadataConvertVersion as V;

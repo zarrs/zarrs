@@ -8,7 +8,7 @@ use super::*;
 pub trait ArrayWriteOps: ArrayOps {
     /// Store the array metadata.
     ///
-    /// The metadata is created with [`ArrayOps::metadata_to_store`].
+    /// The metadata is created with [`ArrayOps::metadata_opt`].
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.

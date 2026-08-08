@@ -98,8 +98,8 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().metadata()
     }
 
-    pub fn metadata_to_store(&self) -> ArrayMetadata {
-        self.array().metadata_to_store()
+    pub fn metadata_opt(&self) -> ArrayMetadata {
+        self.array().metadata_opt()
     }
 
     pub fn builder(&self) -> ArrayBuilder {

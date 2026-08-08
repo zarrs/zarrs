@@ -70,8 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
-- **Breaking**: Rename `[Array,Group]::metadata_opt()` to `metadata_to_store()`, and drop its options parameter
-  - The name now says what it returns: the metadata in the form `store_metadata` writes, with the metadata options applied
+- **Breaking**: Drop the options parameter of `[Array,Group]::metadata_opt()`, which now applies the metadata options stored on the array or group
   - `metadata()` is unchanged and still borrows the metadata as stored or constructed
 - `Array::clone()` is now cheap: the metadata document is shared behind an `Arc` rather than deep cloned
   - This makes deriving an array with different options practical on a hot path

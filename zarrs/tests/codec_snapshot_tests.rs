@@ -861,7 +861,7 @@ pub fn generate_array_metadata(config: &TestConfig) -> Option<serde_json::Value>
         .build(store, "/")
         .ok()?
         .with_metadata_options(metadata_options);
-    let metadata = array.metadata_to_store();
+    let metadata = array.metadata_opt();
 
     serde_json::to_value(metadata).ok()
 }

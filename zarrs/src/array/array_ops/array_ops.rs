@@ -104,7 +104,7 @@ pub trait ArrayOps {
     /// constructed, this applies [`metadata_options`](ArrayOps::metadata_options): it may inject
     /// `zarrs` provenance attributes, convert between Zarr versions, and rewrite aliased
     /// extension names.
-    fn metadata_to_store(&self) -> ArrayMetadata;
+    fn metadata_opt(&self) -> ArrayMetadata;
 
     /// Create an array builder matching the parameters of this array.
     fn builder(&self) -> ArrayBuilder;

@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // println!(
     //     "The equivalent Zarr V3 group metadata is\n{}\n",
-    //     group.clone().with_metadata_options(convert_group_metadata_to_v3).metadata_to_store().to_string_pretty()
+    //     group.clone().with_metadata_options(convert_group_metadata_to_v3).metadata_opt().to_string_pretty()
     // );
 
     // Create a Zarr V2 array
@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // println!(
     //     "The equivalent Zarr V3 array metadata is\n{}\n",
-    //     array.clone().with_metadata_options(convert_array_metadata_to_v3).metadata_to_store().to_string_pretty()
+    //     array.clone().with_metadata_options(convert_array_metadata_to_v3).metadata_opt().to_string_pretty()
     // );
 
     array.store_chunk(&[0, 1], &[0.0f32; 5 * 5])?;

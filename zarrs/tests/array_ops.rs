@@ -73,7 +73,7 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
             .with_metadata_options(
                 ArrayMetadataOptions::default().with_include_zarrs_metadata(false)
             )
-            .metadata_to_store()
+            .metadata_opt()
     );
     let _ = array.builder().build_metadata()?;
     assert_eq!(

@@ -315,7 +315,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// constructed, this applies the group's [`GroupMetadataOptions`], which may convert
     /// between Zarr versions. Use [`Group::with_metadata_options`] to control them.
     #[must_use]
-    pub fn metadata_to_store(&self) -> GroupMetadata {
+    pub fn metadata_opt(&self) -> GroupMetadata {
         let options = self.metadata_options();
         use GroupMetadata as GM;
         use MetadataConvertVersion as V;
@@ -863,7 +863,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {}
 impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// Store the group metadata.
     ///
-    /// The metadata is created with [`Group::metadata_to_store`]. Use
+    /// The metadata is created with [`Group::metadata_opt`]. Use
     /// [`Group::with_metadata_options`] to control the options applied.
     ///
     /// # Errors
@@ -872,7 +872,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_to_store();
+        let metadata = self.metadata_opt();
 
         // Write the metadata
         let path = self.path();
@@ -946,7 +946,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
         let storage_handle = StorageHandle::new(self.storage.clone());
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_to_store();
+        let metadata = self.metadata_opt();
 
         // Write the metadata
         let path = self.path();
