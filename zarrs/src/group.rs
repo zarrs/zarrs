@@ -165,7 +165,7 @@ use zarrs_storage::{
 #[derive(Debug, Display)]
 #[display(
     "group at {path} with metadata {}",
-    "serde_json::to_string(metadata).unwrap_or_default()"
+    "serde_json::to_string(&**metadata).unwrap_or_default()"
 )]
 pub struct Group<TStorage: ?Sized> {
     /// The storage.
@@ -175,7 +175,11 @@ pub struct Group<TStorage: ?Sized> {
     #[allow(dead_code)]
     path: NodePath,
     /// The metadata.
-    metadata: GroupMetadata,
+    ///
+    /// Shared behind an [`Arc`] so that cloning a [`Group`] to override its operation options
+    /// does not deep clone the metadata document. Group metadata can contain unbounded user
+    /// attributes and consolidated metadata for an entire hierarchy.
+    metadata: Arc<GroupMetadata>,
     metadata_options: GroupMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
     use_consolidated_metadata: UseConsolidatedMetadata,
@@ -231,7 +235,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
         Ok(Self {
             storage,
             path,
-            metadata,
+            metadata: Arc::new(metadata),
             metadata_options: options.metadata_options(),
             metadata_erase_version: options.metadata_erase_version(),
             use_consolidated_metadata: options.use_consolidated_metadata(),
@@ -252,8 +256,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
 
     /// Get attributes.
     #[must_use]
-    pub const fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
-        match &self.metadata {
+    pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
+        match &*self.metadata {
             GroupMetadata::V3(metadata) => &metadata.attributes,
             GroupMetadata::V2(metadata) => &metadata.attributes,
         }
@@ -262,7 +266,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// Mutably borrow the group attributes.
     #[must_use]
     pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             GroupMetadata::V3(metadata) => &mut metadata.attributes,
             GroupMetadata::V2(metadata) => &mut metadata.attributes,
         }
@@ -315,7 +319,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
         let options = self.metadata_options();
         use GroupMetadata as GM;
         use MetadataConvertVersion as V;
-        let metadata = self.metadata.clone();
+        let metadata = (*self.metadata).clone();
 
         match (metadata, options.metadata_convert_version()) {
             (GM::V3(metadata), V::Default | V::V3) => GM::V3(metadata),
@@ -329,7 +333,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// Consolidated metadata is not currently supported for Zarr V2 groups.
     #[must_use]
     pub fn consolidated_metadata(&self) -> Option<ConsolidatedMetadata> {
-        if let GroupMetadata::V3(group_metadata) = &self.metadata {
+        if let GroupMetadata::V3(group_metadata) = &*self.metadata {
             if let Some(consolidated_metadata) = group_metadata
                 .additional_fields
                 .get("consolidated_metadata")
@@ -352,7 +356,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
         &mut self,
         consolidated_metadata: Option<ConsolidatedMetadata>,
     ) -> &mut Self {
-        if let GroupMetadata::V3(group_metadata) = &mut self.metadata {
+        if let GroupMetadata::V3(group_metadata) = Arc::make_mut(&mut self.metadata) {
             if let Some(consolidated_metadata) = consolidated_metadata {
                 group_metadata.additional_fields.insert(
                     "consolidated_metadata".to_string(),
@@ -372,15 +376,11 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// If the group is already Zarr V3, this is a no-op.
     #[must_use]
     pub fn to_v3(self) -> Self {
-        if let GroupMetadata::V2(metadata) = self.metadata {
-            let metadata: GroupMetadata = group_metadata_v2_to_v3(&metadata).into();
+        if let GroupMetadata::V2(metadata) = &*self.metadata {
+            let metadata: GroupMetadata = group_metadata_v2_to_v3(metadata).into();
             Self {
-                storage: self.storage,
-                path: self.path,
-                metadata,
-                metadata_options: self.metadata_options,
-                metadata_erase_version: self.metadata_erase_version,
-                use_consolidated_metadata: self.use_consolidated_metadata,
+                metadata: Arc::new(metadata),
+                ..self
             }
         } else {
             self
@@ -917,7 +917,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match *self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
                 GroupMetadata::V2(_) => {
                     storage_handle.erase(&meta_key_v2_group(self.path()))?;
@@ -987,7 +987,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match *self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
                 GroupMetadata::V2(_) => {
                     storage_handle
@@ -1149,6 +1149,32 @@ mod tests {
         //     group.to_string(),
         //     r#"group at /group with metadata {"node_type":"group","zarr_format":3}"#
         // );
+    }
+
+    #[test]
+    fn group_option_overrides_share_metadata_copy_on_write() {
+        let metadata = serde_json::from_str(JSON_VALID1).unwrap();
+        let group = Group::new_with_metadata(Arc::new(MemoryStore::new()), "/", metadata).unwrap();
+
+        let with_metadata_options = group.with_metadata_options(GroupMetadataOptions::default());
+        let mut with_erase_version = group.with_metadata_erase_version(MetadataEraseVersion::All);
+
+        assert!(Arc::ptr_eq(
+            &group.metadata,
+            &with_metadata_options.metadata
+        ));
+        assert!(Arc::ptr_eq(&group.metadata, &with_erase_version.metadata));
+
+        with_erase_version
+            .attributes_mut()
+            .insert("new".to_string(), serde_json::Value::Bool(true));
+
+        assert!(!Arc::ptr_eq(&group.metadata, &with_erase_version.metadata));
+        assert!(!group.attributes().contains_key("new"));
+        assert_eq!(
+            with_erase_version.attributes().get("new"),
+            Some(&serde_json::Value::Bool(true))
+        );
     }
 
     #[test]
