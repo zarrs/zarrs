@@ -538,9 +538,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })?;
 
         // Create bound codecs
-        let codecs_bound = codecs
-            .clone()
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
 
         // Create chunk grid
         let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
@@ -652,9 +650,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
-        let codecs_bound = codecs
-            .clone()
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator

@@ -260,13 +260,9 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        let inner_codecs = self
-            .inner_codecs
-            .clone()
-            .with_context(data_type, fill_value)?;
+        let inner_codecs = self.inner_codecs.with_context(data_type, fill_value)?;
         let index_codecs = self
             .index_codecs
-            .clone()
             .with_context(crate::array::data_type::uint64(), FillValue::from(u64::MAX))?;
         Ok(Arc::new(ShardingCodecBound {
             subchunk_shape: self.subchunk_shape.clone(),

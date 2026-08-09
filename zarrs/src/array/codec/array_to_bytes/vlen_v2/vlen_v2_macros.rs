@@ -132,7 +132,7 @@ macro_rules! vlen_v2_codec {
             ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
                 paste::paste! {
                     Ok(Arc::new([<$struct Bound>] {
-                        inner: self.inner.clone().with_context(data_type, fill_value)?,
+                        inner: self.inner.with_context(data_type, fill_value)?,
                     }))
                 }
             }

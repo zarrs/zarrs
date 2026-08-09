@@ -345,11 +345,9 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         Ok(Arc::new(OptionalCodecBound {
             mask_codecs: self
                 .mask_codecs
-                .clone()
                 .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?,
             data_codecs: self
                 .data_codecs
-                .clone()
                 .with_context(inner_type.data_type().clone(), inner_fill_value)?,
             data_type,
             fill_value,

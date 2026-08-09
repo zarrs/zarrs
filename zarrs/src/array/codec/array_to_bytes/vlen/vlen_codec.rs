@@ -179,16 +179,13 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
         let index_codecs = match self.index_data_type {
             VlenIndexDataType::UInt32 => self
                 .index_codecs
-                .clone()
                 .with_context(crate::array::data_type::uint32(), FillValue::from(0u32))?,
             VlenIndexDataType::UInt64 => self
                 .index_codecs
-                .clone()
                 .with_context(crate::array::data_type::uint64(), FillValue::from(0u64))?,
         };
         let data_codecs = self
             .data_codecs
-            .clone()
             .with_context(crate::array::data_type::uint8(), FillValue::from(0u8))?;
         Ok(Arc::new(VlenCodecBound {
             index_codecs,
