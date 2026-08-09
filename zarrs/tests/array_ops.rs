@@ -61,7 +61,7 @@ fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_array_ops<A: ArrayOps + Clone>(array: &A) -> TestResult {
+fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     assert_eq!(array.path().as_str(), "/array");
     assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0]);
@@ -920,6 +920,8 @@ fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
     assert!(store.get(&meta_key_v2_attributes(&path))?.is_some());
 
     array
+        .as_ref()
+        .clone()
         .with_metadata_erase_version(MetadataEraseVersion::All)
         .erase_metadata()?;
     assert!(store.get(&meta_key_v2_array(&path))?.is_none());
