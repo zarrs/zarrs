@@ -715,11 +715,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn with_codec_specific_options(
-        mut self,
+        &self,
         opts: &CodecSpecificOptions,
     ) -> Result<Self, CodecCreateError> {
-        self.set_codec_specific_options(opts)?;
-        Ok(self)
+        let mut array = self.clone();
+        array.set_codec_specific_options(opts)?;
+        Ok(array)
     }
 
     /// Set the array shape and chunk grid from chunk grid metadata.

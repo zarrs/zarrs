@@ -19,9 +19,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         opts: &CodecSpecificOptions,
     ) -> Result<&mut Self, CodecCreateError> {
         let codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts)?);
-        let codecs_bound = codecs
-            .clone()
-            .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        let codecs_bound = codecs.with_context(self.data_type.clone(), self.fill_value.clone())?;
         let subchunk_grids = codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())
             .map_err(|err| CodecCreateError::from(err.to_string()))?;

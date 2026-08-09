@@ -75,24 +75,27 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     #[allow(clippy::return_self_not_must_use)]
-    pub fn with_codec_options(mut self, codec_options: CodecOptions) -> Self {
-        self.codec_options = codec_options;
-        self
+    pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
+        let mut array = self.clone();
+        array.codec_options = codec_options;
+        array
     }
 
     #[allow(clippy::return_self_not_must_use)]
-    pub fn with_metadata_options(mut self, metadata_options: ArrayMetadataOptions) -> Self {
-        self.metadata_options = metadata_options;
-        self
+    pub fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self {
+        let mut array = self.clone();
+        array.metadata_options = metadata_options;
+        array
     }
 
     #[allow(clippy::return_self_not_must_use)]
     pub fn with_metadata_erase_version(
-        mut self,
+        &self,
         metadata_erase_version: MetadataEraseVersion,
     ) -> Self {
-        self.metadata_erase_version = metadata_erase_version;
-        self
+        let mut array = self.clone();
+        array.metadata_erase_version = metadata_erase_version;
+        array
     }
 
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {

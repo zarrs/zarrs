@@ -90,17 +90,19 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// # Errors
     /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
     pub fn with_codec_specific_options(
-        mut self,
+        &self,
         opts: &CodecSpecificOptions,
     ) -> Result<Self, CodecCreateError> {
-        Arc::make_mut(&mut self.array).set_codec_specific_options(opts)?;
-        Ok(self)
+        let mut array = self.clone();
+        Arc::make_mut(&mut array.array).set_codec_specific_options(opts)?;
+        Ok(array)
     }
 
     /// Transform the inner array while retaining the cache.
-    pub(crate) fn map_array(mut self, f: impl FnOnce(&mut Array<TStorage>)) -> Self {
-        f(Arc::make_mut(&mut self.array));
-        self
+    pub(crate) fn map_array(&self, f: impl FnOnce(&mut Array<TStorage>)) -> Self {
+        let mut array = self.clone();
+        f(Arc::make_mut(&mut array.array));
+        array
     }
 
     /// Split into the inner array and shared cache.

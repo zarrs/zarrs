@@ -51,19 +51,19 @@ pub trait ArrayOps {
     ///
     /// Prefer deriving once and reusing the result over deriving per operation.
     #[must_use]
-    fn with_codec_options(self, codec_options: CodecOptions) -> Self
+    fn with_codec_options(&self, codec_options: CodecOptions) -> Self
     where
         Self: Sized;
 
     /// Return this array configured to use `metadata_options` for its operations.
     #[must_use]
-    fn with_metadata_options(self, metadata_options: ArrayMetadataOptions) -> Self
+    fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self
     where
         Self: Sized;
 
     /// Return this array configured to use `metadata_erase_version` for its operations.
     #[must_use]
-    fn with_metadata_erase_version(self, metadata_erase_version: MetadataEraseVersion) -> Self
+    fn with_metadata_erase_version(&self, metadata_erase_version: MetadataEraseVersion) -> Self
     where
         Self: Sized;
 

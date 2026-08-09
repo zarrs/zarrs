@@ -63,21 +63,24 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
     }
 
     #[allow(clippy::return_self_not_must_use)]
-    pub fn with_codec_options(self, codec_options: CodecOptions) -> Self {
+    pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
         self.map_array(|array| {
             array.set_codec_options(codec_options);
         })
     }
 
     #[allow(clippy::return_self_not_must_use)]
-    pub fn with_metadata_options(self, metadata_options: ArrayMetadataOptions) -> Self {
+    pub fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self {
         self.map_array(|array| {
             array.set_metadata_options(metadata_options);
         })
     }
 
     #[allow(clippy::return_self_not_must_use)]
-    pub fn with_metadata_erase_version(self, metadata_erase_version: MetadataEraseVersion) -> Self {
+    pub fn with_metadata_erase_version(
+        &self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> Self {
         self.map_array(|array| {
             array.set_metadata_erase_version(metadata_erase_version);
         })

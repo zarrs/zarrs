@@ -890,9 +890,7 @@ fn array_cached_with_codec_options_preserves_cache() -> TestResult {
     let reads_after_miss = store.reads();
     assert!(reads_after_miss > 0);
 
-    let tuned = cached
-        .clone()
-        .with_codec_options(CodecOptions::default().with_concurrent_target(1));
+    let tuned = cached.with_codec_options(CodecOptions::default().with_concurrent_target(1));
     assert_eq!(tuned.retrieve_chunk::<Vec<u8>>(&[0, 0])?, expected);
     assert_eq!(store.reads(), reads_after_miss);
 
@@ -921,7 +919,6 @@ fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
 
     array
         .as_ref()
-        .clone()
         .with_metadata_erase_version(MetadataEraseVersion::All)
         .erase_metadata()?;
     assert!(store.get(&meta_key_v2_array(&path))?.is_none());

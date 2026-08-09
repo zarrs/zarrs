@@ -281,9 +281,10 @@ impl<TStorage: ?Sized> Group<TStorage> {
 
     /// Return this group configured to use `metadata_options` for its operations.
     #[must_use]
-    pub fn with_metadata_options(mut self, metadata_options: GroupMetadataOptions) -> Self {
-        self.metadata_options = metadata_options;
-        self
+    pub fn with_metadata_options(&self, metadata_options: GroupMetadataOptions) -> Self {
+        let mut group = self.clone();
+        group.metadata_options = metadata_options;
+        group
     }
 
     /// Get the metadata erase version used by the group operations.
@@ -295,11 +296,12 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// Return this group configured to use `metadata_erase_version` for its operations.
     #[must_use]
     pub fn with_metadata_erase_version(
-        mut self,
+        &self,
         metadata_erase_version: MetadataEraseVersion,
     ) -> Self {
-        self.metadata_erase_version = metadata_erase_version;
-        self
+        let mut group = self.clone();
+        group.metadata_erase_version = metadata_erase_version;
+        group
     }
 
     /// Return the group metadata in the form that [`Group::store_metadata`] writes.
