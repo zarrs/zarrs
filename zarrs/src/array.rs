@@ -157,9 +157,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// It is established when the array is created or opened, and the data type, codec chain, chunk grid, chunk keys and dimension names are all bound to it.
 ///
 /// An array can be resized within its dimensionality, but it cannot gain or lose dimensions:
-/// [`set_shape`](Array::set_shape) and [`set_shape_and_chunk_grid`](Array::set_shape_and_chunk_grid) return
-/// [`ArrayCreateError::ChangedDimensionality`] if the new shape has a different number of dimensions, and the array is left unmodified.
-/// Create a new array to change the dimensionality.
+/// [`set_shape`](Array::set_shape) and [`set_shape_and_chunk_grid`](Array::set_shape_and_chunk_grid) return [`ArrayCreateError::ChangedDimensionality`] if the new shape has a different number of dimensions.
 ///
 /// ### `zarrs` Metadata
 /// By default, the `zarrs` version and a link to its source code is written to the `_zarrs` attribute in array metadata when calling [`store_metadata`](Array::store_metadata).
@@ -823,7 +821,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             return Ok(self);
         };
         let mut v3 = array_metadata_v2_to_v3(v2)?;
-        // Zarr V2 metadata has no dimension names to convert, so take the array's
+        // Zarr V2 metadata has no dimension names to convert, so take the array's.
         v3.dimension_names.clone_from(&self.dimension_names);
         Ok(Self {
             metadata: Arc::new(ArrayMetadata::V3(v3)),

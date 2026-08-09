@@ -41,12 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
-- **Breaking behavioural change**: Changing the dimensionality of an array after it has been created or opened is now invalid - the dimensionality is fixed for the lifetime of an `Array`
-  - `ArrayMutOps::set_shape()` and `Array::set_shape_and_chunk_grid()` now return the new `ArrayCreateError::ChangedDimensionality` error if the new shape has a different number of dimensions, rather than applying it
-  - `set_shape_and_chunk_grid()` previously permitted this, which stranded the dimension names and produced array metadata that could not be reopened
-  - `set_shape()` previously failed only incidentally, when the chunk grid rejected the new shape, and with an error that did not identify the cause
-  - Both are now rejected before the array is modified. Resizing an array within the same dimensionality is unaffected
-  - Create a new array to change the dimensionality
+- **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
@@ -107,11 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 - Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
   - Only the outermost mask was allocated, so inner masks were also dropped
-- **Breaking**: `ArrayMutOps::set_dimension_names()` now writes through to the array metadata, and returns a `Result`
-  - It previously updated only the decoded dimension names, so `store_metadata()` silently wrote the old ones
-  - Returns `ArrayCreateError::InvalidDimensionNames` if the number of names does not match the array dimensionality
-- Dimension names set on a Zarr V2 array are now carried into the converted metadata by `Array::metadata_opt()` and `Array::to_v3()`
-  - Zarr V2 metadata has no dimension names field, so they were previously dropped even when the metadata was converted to Zarr V3
+- **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 
