@@ -39,7 +39,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let convert_group_metadata_to_v3 =
         GroupMetadataOptions::default().with_metadata_convert_version(MetadataConvertVersion::V3);
     group.store_metadata()?;
-    group.store_metadata_opt(&convert_group_metadata_to_v3)?;
+    group
+        .with_metadata_options(convert_group_metadata_to_v3)
+        .store_metadata()?;
     println!(
         "group/.zgroup (Zarr V2 group metadata):\n{}\n",
         key_to_str(&store, "group/.zgroup")?
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // println!(
     //     "The equivalent Zarr V3 group metadata is\n{}\n",
-    //     group.metadata_opt(&convert_group_metadata_to_v3).to_string_pretty()
+    //     group.with_metadata_options(convert_group_metadata_to_v3).metadata_opt().to_string_pretty()
     // );
 
     // Create a Zarr V2 array
