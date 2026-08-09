@@ -79,7 +79,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
-        match &self.metadata {
+        match &*self.metadata {
             ArrayMetadata::V3(metadata) => &metadata.attributes,
             ArrayMetadata::V2(metadata) => &metadata.attributes,
         }
@@ -93,7 +93,9 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
         use ArrayMetadata as AM;
         use MetadataConvertVersion as V;
-        let mut metadata = self.metadata.clone();
+        // Deliberately clone the metadata document, not only the `Arc` handle: the returned
+        // metadata has the requested options applied without changing the array.
+        let mut metadata = (*self.metadata).clone();
 
         // Attribute manipulation
         if options.include_zarrs_metadata() {
