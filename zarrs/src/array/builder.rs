@@ -591,12 +591,12 @@ impl ArrayBuilder {
         let path: NodePath = path.try_into()?;
         let codec_chain = Arc::new(self.build_codec_chain()?);
         let array_metadata_v3 = self.build_metadata_with_codec_chain(&codec_chain)?;
-        Ok(
-            Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?
-                .with_metadata_options(self.metadata_options)
-                .with_codec_options(self.codec_options)
-                .with_codec_specific_options(&self.codec_specific_options)?,
-        )
+        // The array is owned here, so set the options in place rather than deriving copies.
+        let mut array = Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?;
+        array.set_metadata_options(self.metadata_options);
+        array.set_codec_options(self.codec_options);
+        array.set_codec_specific_options(&self.codec_specific_options)?;
+        Ok(array)
     }
 
     /// Build into an [`Arc<Array>`].

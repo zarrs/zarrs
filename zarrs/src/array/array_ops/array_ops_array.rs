@@ -114,7 +114,8 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-    pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
+    pub fn metadata_opt(&self) -> ArrayMetadata {
+        let options = self.metadata_options();
         use ArrayMetadata as AM;
         use MetadataConvertVersion as V;
         // Deliberately clone the metadata document, not only the `Arc` handle: the returned

@@ -1,5 +1,5 @@
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArraySubset,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
     ArraySubsetTraits,
 };
 use crate::iter_concurrent_limit;
@@ -9,13 +9,16 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
 };
-use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::recommended_codec_concurrency;
 
-pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveChunkSubsetInto>(
-    array: &Array<TStorage>,
+/// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
+///
+pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(
+    array: &A,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
@@ -23,7 +26,7 @@ pub(super) fn retrieve_array_subset_into<TStorage, RetrieveChunkInto, RetrieveCh
     retrieve_chunk_subset_into: RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    A: ArrayOps + MaybeSync,
     RetrieveChunkInto:
         for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
@@ -85,7 +88,7 @@ where
         }
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
-            let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape)?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -105,8 +108,8 @@ where
     }
 }
 
-fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
-    array: &Array<TStorage>,
+fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
+    array: &A,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
@@ -115,7 +118,7 @@ fn retrieve_multi_chunk_fixed_into<TStorage, RetrieveChunkSubsetInto>(
     retrieve_chunk_subset_into: &RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    A: ArrayOps + MaybeSync,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
             &dyn ArraySubsetTraits,

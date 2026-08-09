@@ -81,7 +81,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let convert_array_metadata_to_v3 =
         ArrayMetadataOptions::default().with_metadata_convert_version(MetadataConvertVersion::V3);
     array.store_metadata()?;
-    array.store_metadata_opt(&convert_array_metadata_to_v3)?;
+    array
+        .with_metadata_options(convert_array_metadata_to_v3)
+        .store_metadata()?;
     println!(
         "group/array/.zarray (Zarr V2 array metadata):\n{}\n",
         key_to_str(&store, "group/array/.zarray")?

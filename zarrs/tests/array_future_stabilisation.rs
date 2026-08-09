@@ -47,13 +47,15 @@ fn array_future_stabilisation_bz2() {
     let mut options = ArrayMetadataOptions::default();
     assert!(
         array
-            .metadata_opt(&options)
+            .with_metadata_options(options)
+            .metadata_opt()
             .to_string()
             .contains(r#""numcodecs.bz2"#)
     );
     assert!(
         !array
-            .metadata_opt(&options)
+            .with_metadata_options(options)
+            .metadata_opt()
             .to_string()
             .contains(r#""stable.bz2"#)
     );
@@ -63,7 +65,8 @@ fn array_future_stabilisation_bz2() {
     options.set_convert_aliased_extension_names(true);
     assert!(
         array
-            .metadata_opt(&options)
+            .with_metadata_options(options)
+            .metadata_opt()
             .to_string()
             .contains(r#""stable.bz2"#)
     );
