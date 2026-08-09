@@ -725,12 +725,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         mut self,
         opts: &CodecSpecificOptions,
     ) -> Result<Self, CodecCreateError> {
-        self.codecs =
-            Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts)?);
-        self.codecs_bound = self
-            .codecs
-            .clone()
-            .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        self.set_codec_specific_options(opts)?;
         Ok(self)
     }
 

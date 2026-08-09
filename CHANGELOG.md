@@ -83,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
   - Only the outermost mask was allocated, so inner masks were also dropped
 - **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
+- `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 
