@@ -46,6 +46,15 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     }
 
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
+        // The dimensionality of an array is fixed once it exists. Most chunk grids would reject
+        // this anyway, but not with a consistent error. Checked before any mutation.
+        if array_shape.len() != self.dimensionality() {
+            return Err(ArrayCreateError::ChangedDimensionality(
+                array_shape.len(),
+                self.dimensionality(),
+            ));
+        }
+
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grids = self
@@ -62,12 +71,33 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         Ok(self)
     }
 
+    /// Set the dimension names.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayCreateError`] if `dimension_names` is `Some` and its length does not
+    /// match the array dimensionality.
     pub fn set_dimension_names(
         &mut self,
         dimension_names: Option<Vec<DimensionName>>,
-    ) -> &mut Self {
+    ) -> Result<&mut Self, ArrayCreateError> {
+        // Matches the validation performed when an array is created
+        if let Some(dimension_names) = &dimension_names
+            && dimension_names.len() != self.dimensionality()
+        {
+            return Err(ArrayCreateError::InvalidDimensionNames(
+                dimension_names.len(),
+                self.dimensionality(),
+            ));
+        }
+
+        // Write through to the metadata document, otherwise `store_metadata` would not see the
+        // change. Zarr V2 metadata has no dimension names field; they are carried into the
+        // converted metadata by `metadata_opt` when it converts to Zarr V3.
+        if let ArrayMetadata::V3(metadata) = Arc::make_mut(&mut self.metadata) {
+            metadata.dimension_names.clone_from(&dimension_names);
+        }
         self.dimension_names = dimension_names;
-        self
+        Ok(self)
     }
 
     pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {

@@ -154,8 +154,11 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             (AM::V3(metadata), V::Default | V::V3) => ArrayMetadata::V3(metadata),
             (AM::V2(metadata), V::Default) => ArrayMetadata::V2(metadata),
             (AM::V2(metadata), V::V3) => {
-                let metadata = array_metadata_v2_to_v3(&metadata)
+                let mut metadata = array_metadata_v2_to_v3(&metadata)
                     .expect("conversion succeeded on array creation");
+                // Zarr V2 metadata has no dimension names to convert, so take the array's. They
+                // are only representable once converted to Zarr V3.
+                metadata.dimension_names.clone_from(&self.dimension_names);
                 AM::V3(metadata)
             }
         };
