@@ -35,7 +35,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 storage_transformer.set(&key, json.into())
             }
             ArrayMetadata::V2(metadata) => {
-                let mut metadata = metadata.clone();
+                let mut metadata = metadata;
 
                 if !metadata.attributes.is_empty() {
                     // Store .zattrs

@@ -11,7 +11,7 @@ use zarrs_filesystem::FilesystemStore;
 
 /// Helper function to print binary representation table
 fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
-    println!("\n## Bitround float32 Encoding (keepbits={})", keepbits);
+    println!("\n## Bitround float32 Encoding (keepbits={keepbits})");
     println!(
         "| Original           | Rounded           | Original (0b)                      | Rounded (0b)                       |"
     );
@@ -33,8 +33,7 @@ fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
         let round_mant = round_bits & 0x7FFFFF;
 
         println!(
-            "| {:>18.6} | {:>17.6} | {:01b}_{:08b}_{:023b} | {:01b}_{:08b}_{:023b} |",
-            orig, round, orig_sign, orig_exp, orig_mant, round_sign, round_exp, round_mant
+            "| {orig:>18.6} | {round:>17.6} | {orig_sign:01b}_{orig_exp:08b}_{orig_mant:023b} | {round_sign:01b}_{round_exp:08b}_{round_mant:023b} |"
         );
     }
     println!();
@@ -81,7 +80,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure bitround codec with keepbits=3
     let codec_config: BitroundCodecConfiguration =
-        serde_json::from_str(&format!(r#"{{"keepbits": {}}}"#, keepbits))?;
+        serde_json::from_str(&format!(r#"{{"keepbits": {keepbits}}}"#))?;
     let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_config)?);
     builder.array_to_array_codecs(vec![codec]);
 
@@ -104,15 +103,13 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     // Verify that rounding occurred (data should be different but close)
     for (orig, rounded) in test_data.iter().zip(retrieved.iter()) {
         if orig.is_nan() {
-            assert!(rounded.is_nan(), "Expected NaN, got {}", rounded);
+            assert!(rounded.is_nan(), "Expected NaN, got {rounded}");
             continue;
         }
         if orig.is_infinite() {
             assert!(
                 rounded.is_infinite() && orig.signum() == rounded.signum(),
-                "Expected {}, got {}",
-                orig,
-                rounded
+                "Expected {orig}, got {rounded}"
             );
             continue;
         }
@@ -160,7 +157,7 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let codec_config: BitroundCodecConfiguration =
-        serde_json::from_str(&format!(r#"{{"keepbits": {}}}"#, keepbits))?;
+        serde_json::from_str(&format!(r#"{{"keepbits": {keepbits}}}"#))?;
     let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_config)?);
     builder.array_to_array_codecs(vec![codec]);
 
@@ -175,15 +172,12 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     array.store_array_subset(&subset, &test_data_u8)?;
     let retrieved: Vec<u8> = array.retrieve_array_subset(&subset)?;
 
-    println!("\n## Bitround uint8 Encoding (keepbits={})\n", keepbits);
+    println!("\n## Bitround uint8 Encoding (keepbits={keepbits})\n");
     println!("| Original | Rounded | Original (0b) | Rounded (0b) |");
     println!("|----------|---------|---------------|--------------|");
 
     for (orig, rounded) in test_data_u8.iter().zip(retrieved.iter()) {
-        println!(
-            "| {:>8} | {:>7} |      {:08b} |     {:08b} |",
-            orig, rounded, orig, rounded
-        );
+        println!("| {orig:>8} | {rounded:>7} |      {orig:08b} |     {rounded:08b} |");
     }
     println!();
 

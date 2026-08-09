@@ -384,7 +384,7 @@ fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
     array.store_chunk(&[0, 0], &chunk)?;
     assert_eq!(
         array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0])?,
-        chunk.clone().into_dyn()
+        chunk.into_dyn()
     );
 
     let subset = ndarray::array![
@@ -437,7 +437,7 @@ fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // check reshape is registered
-    let _array = Array::open(store.clone(), "/")?;
+    let _array = Array::open(store, "/")?;
 
     Ok(())
 }

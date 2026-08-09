@@ -93,7 +93,7 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
+                chunk_indices,
             ))
         }
     })?;
@@ -148,6 +148,6 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = rectilinear_array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

@@ -94,7 +94,7 @@ impl RectangularChunkGrid {
     ) -> Result<Self, RectangularChunkGridCreateError> {
         if array_shape.len() != chunk_shapes.len() {
             return Err(RectangularChunkGridCreateError(
-                array_shape.clone(),
+                array_shape,
                 chunk_shapes.to_vec(),
             ));
         }
@@ -542,7 +542,7 @@ mod tests {
             .into(),
             NonZeroU64::new(10).unwrap().into(),
         ];
-        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+        let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
 

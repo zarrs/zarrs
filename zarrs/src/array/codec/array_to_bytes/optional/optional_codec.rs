@@ -637,7 +637,7 @@ mod tests {
         ))
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration)?)
-            .with_context(data_type.clone(), fill_value.clone())?;
+            .with_context(data_type.clone(), fill_value)?;
 
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
@@ -831,7 +831,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -896,7 +896,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -989,7 +989,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -1058,7 +1058,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec

@@ -898,7 +898,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     }
 
     // Build the array
-    let array = match builder.build(store.clone(), "/") {
+    let array = match builder.build(store, "/") {
         Ok(a) => a,
         Err(e) => {
             let reason = if let zarrs::array::ArrayCreateError::CodecsCreateError(e) = e {

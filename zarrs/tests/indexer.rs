@@ -251,9 +251,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
-    let bound_codec = codec
-        .with_context(data_type.clone(), fill_value.clone())
-        .unwrap();
+    let bound_codec = codec.with_context(data_type.clone(), fill_value).unwrap();
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(
@@ -274,7 +272,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     } else {
         bound_codec
             .clone()
-            .partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
+            .partial_decoder(encoded_chunk, shape, &CodecOptions::default())
             .unwrap()
     };
 
@@ -302,9 +300,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
-    let bound_codec = codec
-        .with_context(data_type.clone(), fill_value.clone())
-        .unwrap();
+    let bound_codec = codec.with_context(data_type.clone(), fill_value).unwrap();
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(

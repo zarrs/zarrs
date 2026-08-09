@@ -76,7 +76,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     (0..2).into_par_iter().try_for_each(|i| {
         let chunk_indices: Vec<u64> = vec![0, i];
         let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
         })?;
         array.store_chunk(
             &chunk_indices,
@@ -160,13 +160,13 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
 
 fn main() {
     if let Err(err) = array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

@@ -256,11 +256,11 @@ where
     T: AsyncReadableStorageTraits + AsyncWritableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn writable(self: Arc<Self>) -> Arc<dyn AsyncWritableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -280,11 +280,11 @@ where
     T: AsyncReadableStorageTraits + AsyncListableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -307,15 +307,15 @@ where
     T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits + 'static,
 {
     fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 

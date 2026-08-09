@@ -64,9 +64,7 @@ mod tests {
         let shape = [NonZeroU64::new(4).unwrap()];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let elements = vec![0u8, 1, 127, 255];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
@@ -100,9 +98,7 @@ mod tests {
         let shape = [NonZeroU64::new(4).unwrap()];
         let data_type = data_type::int16();
         let fill_value = FillValue::from(0i16);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             127i16, 128, 129, -129,
         ]));
@@ -129,9 +125,7 @@ mod tests {
         let shape = [NonZeroU64::new(1).unwrap()];
         let data_type = data_type::uint64();
         let fill_value = FillValue::from(0u64);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![u64::MAX]));
 
         let encoded = codec
@@ -156,9 +150,7 @@ mod tests {
         let shape = [NonZeroU64::new(2).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![255.0f32, 256.0]));
 
         let encoded = codec
@@ -189,9 +181,7 @@ mod tests {
         let shape = [NonZeroU64::new(3).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             1.5f32,
             300.0,
@@ -222,9 +212,7 @@ mod tests {
         let shape = [NonZeroU64::new(1).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![1.0f32]));
 
         let encoded = codec

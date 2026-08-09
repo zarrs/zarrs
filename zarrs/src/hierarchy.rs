@@ -466,8 +466,9 @@ mod tests {
         let hierarchy = Hierarchy::try_from_async_group(&group).await;
         assert!(hierarchy.is_ok());
         let hierarchy = hierarchy.unwrap();
-        assert!(
-            "/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string()
+        assert_eq!(
+            "/\n  group\n    subgroup\n      array [10, 10] float32\n",
+            hierarchy.to_string()
         );
     }
 
@@ -558,7 +559,7 @@ mod tests {
         .expect("Unexpected issue when greating a Group for testing.");
 
         let arrayv2 = Array::new_with_metadata(
-            store.clone(),
+            store,
             "/groupv2/arrayv2",
             ArrayMetadata::V2(ArrayMetadataV2::new(
                 vec![1],
@@ -576,7 +577,10 @@ mod tests {
 
         let h = Hierarchy::try_from_group(&groupv2);
         assert!(h.is_ok());
-        assert!("/\n  groupv2\n    arrayv2 [1] Simple(\"<f8\")\n" == h.unwrap().tree());
+        assert_eq!(
+            "/\n  groupv2\n    arrayv2 [1] Simple(\"<f8\")\n",
+            h.unwrap().tree()
+        );
     }
 
     #[test]

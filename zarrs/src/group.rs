@@ -875,7 +875,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
                 storage_handle.set(&key, json.into())
             }
             GroupMetadata::V2(metadata) => {
-                let mut metadata = metadata.clone();
+                let mut metadata = metadata;
 
                 if !metadata.attributes.is_empty() {
                     // Store .zgroup
@@ -1099,7 +1099,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        assert!(group_metadata.additional_fields.len() == 1);
+        assert_eq!(group_metadata.additional_fields.len(), 1);
         assert!(
             group_metadata
                 .additional_fields
@@ -1110,8 +1110,7 @@ mod tests {
 
         // Permit manual creation of group with unsupported metadata
         let storage = Arc::new(MemoryStore::new());
-        let group =
-            Group::new_with_metadata(storage.clone(), "/", group_metadata.clone().into()).unwrap();
+        let group = Group::new_with_metadata(storage.clone(), "/", group_metadata.into()).unwrap();
         group.store_metadata().unwrap();
 
         // Group opening should fail with unsupported metadata
@@ -1244,7 +1243,7 @@ mod tests {
         );
         assert!(
             builder
-                .build(store.clone(), "/group/subgroup/leafgroup")
+                .build(store, "/group/subgroup/leafgroup")
                 .unwrap()
                 .store_metadata()
                 .is_ok()
@@ -1255,7 +1254,7 @@ mod tests {
 
         let nodes = nodes.unwrap();
 
-        assert!(nodes.len() == 3);
+        assert_eq!(nodes.len(), 3);
         assert_eq!(
             nodes
                 .iter()
@@ -1310,7 +1309,7 @@ mod tests {
 
         let nodes = nodes.unwrap();
 
-        assert!(nodes.len() == 3);
+        assert_eq!(nodes.len(), 3);
         assert_eq!(
             nodes
                 .iter()

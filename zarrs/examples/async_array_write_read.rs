@@ -74,7 +74,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         async move {
             let chunk_indices: Vec<u64> = vec![0, i];
             let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
             })?;
             array
                 .async_store_chunk(
@@ -164,7 +164,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::async_open(store, "/").await.unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
@@ -172,6 +172,6 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() {
     if let Err(err) = async_array_write_read().await {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

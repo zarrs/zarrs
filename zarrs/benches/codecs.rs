@@ -25,10 +25,8 @@ fn codec_bytes(c: &mut Criterion) {
     let codec = BytesCodec::new(Some(Endianness::Big));
 
     let fill_value = FillValue::from(0u16);
-    let codec = codec
-        .with_context(data_type::uint16(), fill_value.clone())
-        .unwrap();
-    for size in [32, 64, 128, 256, 512].iter() {
+    let codec = codec.with_context(data_type::uint16(), fill_value).unwrap();
+    for size in &[32, 64, 128, 256, 512] {
         let num_elements = size * size * size;
         let shape = [num_elements.try_into().unwrap(); 1];
         let data = vec![0u16; num_elements.try_into().unwrap()];
@@ -59,7 +57,7 @@ fn codec_blosc(c: &mut Criterion) {
     )
     .unwrap();
 
-    for size in [32, 64, 128, 256, 512].iter() {
+    for size in &[32, 64, 128, 256, 512] {
         let size3 = size * size * size;
         let rep = BytesRepresentation::FixedSize(size3);
 

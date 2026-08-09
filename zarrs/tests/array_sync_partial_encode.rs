@@ -498,7 +498,7 @@ fn test_codec_chain_sync_partial_encoding() {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
-    let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
+    let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store));
 
     let array_path = "/test_chain";
     let mut builder = ArrayBuilder::new(

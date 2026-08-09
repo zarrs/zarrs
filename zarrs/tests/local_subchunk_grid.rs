@@ -544,7 +544,7 @@ impl CodecTraits for TestSubchunkingCodec {
 
 impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self.clone()
+        self
     }
 
     fn with_codec_specific_options(

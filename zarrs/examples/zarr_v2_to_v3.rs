@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .with_dimension_separator(ChunkKeySeparator::Slash)
     .with_order(ArrayMetadataV2Order::F)
-    .with_attributes(attributes.clone());
+    .with_attributes(attributes);
     let array = zarrs::array::Array::new_with_metadata(
         store.clone(),
         "/group/array",
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Print the keys in the store
     println!("The store contains keys:");
     for key in store.list()? {
-        println!("  {}", key);
+        println!("  {key}");
     }
 
     Ok(())

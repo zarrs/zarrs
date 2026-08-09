@@ -59,7 +59,7 @@ impl From<DataType> for ArrayBuilderDataType {
 
 impl<T: DataTypeTraits + 'static> From<Arc<T>> for ArrayBuilderDataType {
     fn from(value: Arc<T>) -> Self {
-        Self(ArrayBuilderDataTypeImpl::DataType(value.clone().into()))
+        Self(ArrayBuilderDataTypeImpl::DataType(value.into()))
     }
 }
 

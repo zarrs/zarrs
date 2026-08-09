@@ -105,9 +105,9 @@ fn cities() -> Result<(), Box<dyn Error>> {
     println!("| encoding         | compression | size   |");
     println!("| ---------------- | ----------- | ------ |");
     println!("| vlen_utf8 |             | {} |", cities_impl(&cities, None, 1000, None, vlen_utf8.clone(), true)?);
-    println!("| vlen_utf8 | zstd 5      | {} |", cities_impl(&cities, Some(5), 1000, None, vlen_utf8.clone(), false)?);
-    println!("| vlen             |             | {} |", cities_impl(&cities, None, 1000, None, vlen.clone(), false)?);
-    println!("| vlen             | zstd 5      | {} |", cities_impl(&cities, None, 1000, None, vlen_compressed.clone(), false)?);
+    println!("| vlen_utf8 | zstd 5      | {} |", cities_impl(&cities, Some(5), 1000, None, vlen_utf8, false)?);
+    println!("| vlen             |             | {} |", cities_impl(&cities, None, 1000, None, vlen, false)?);
+    println!("| vlen             | zstd 5      | {} |", cities_impl(&cities, None, 1000, None, vlen_compressed, false)?);
     println!();
     // panic!();
 
@@ -126,7 +126,7 @@ fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/cities_v2.zarr",
     )?);
-    let array = zarrs::array::Array::open(store.clone(), "/")?;
+    let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
     let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
@@ -141,7 +141,7 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/cities_v3.zarr",
     )?);
-    let array = zarrs::array::Array::open(store.clone(), "/")?;
+    let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
     let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
