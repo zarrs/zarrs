@@ -59,7 +59,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match *self.metadata {
+            MetadataEraseVersion::Default => match &*self.metadata {
                 ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
                 ArrayMetadata::V2(_) => {
                     storage_handle.erase(&meta_key_v2_array(self.path()))?;

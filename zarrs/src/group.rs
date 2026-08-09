@@ -917,7 +917,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match *self.metadata {
+            MetadataEraseVersion::Default => match &*self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
                 GroupMetadata::V2(_) => {
                     storage_handle.erase(&meta_key_v2_group(self.path()))?;
@@ -987,7 +987,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match *self.metadata {
+            MetadataEraseVersion::Default => match &*self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
                 GroupMetadata::V2(_) => {
                     storage_handle
@@ -1173,6 +1173,26 @@ mod tests {
         assert!(!group.attributes().contains_key("new"));
         assert_eq!(
             with_erase_version.attributes().get("new"),
+            Some(&serde_json::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn group_clone_shares_metadata_copy_on_write() {
+        let metadata = serde_json::from_str(JSON_VALID1).unwrap();
+        let group = Group::new_with_metadata(Arc::new(MemoryStore::new()), "/", metadata).unwrap();
+        let mut clone = group.clone();
+
+        assert!(Arc::ptr_eq(&group.metadata, &clone.metadata));
+
+        clone
+            .attributes_mut()
+            .insert("new".to_string(), serde_json::Value::Bool(true));
+
+        assert!(!Arc::ptr_eq(&group.metadata, &clone.metadata));
+        assert!(!group.attributes().contains_key("new"));
+        assert_eq!(
+            clone.attributes().get("new"),
             Some(&serde_json::Value::Bool(true))
         );
     }

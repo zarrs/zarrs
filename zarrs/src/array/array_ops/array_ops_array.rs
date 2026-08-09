@@ -124,7 +124,8 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         let options = self.metadata_options();
         use ArrayMetadata as AM;
         use MetadataConvertVersion as V;
-        // NOTE: deliberately a deep clone of the metadata document, not of the `Arc` handle.
+        // Deliberately clone the metadata document, not only the `Arc` handle: the returned
+        // metadata has the requested options applied without changing the array.
         let mut metadata = (*self.metadata).clone();
 
         // Attribute manipulation

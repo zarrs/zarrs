@@ -817,14 +817,14 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Errors
     /// Returns a [`ArrayMetadataV2ToV3Error`] if the metadata is not compatible with Zarr V3 metadata.
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
-        let ArrayMetadata::V2(v2) = &*self.metadata else {
+        let ArrayMetadata::V2(metadata) = &*self.metadata else {
             return Ok(self);
         };
-        let mut v3 = array_metadata_v2_to_v3(v2)?;
+        let mut metadata = array_metadata_v2_to_v3(metadata)?;
         // Zarr V2 metadata has no dimension names to convert, so take the array's.
-        v3.dimension_names.clone_from(&self.dimension_names);
+        metadata.dimension_names.clone_from(&self.dimension_names);
         Ok(Self {
-            metadata: Arc::new(ArrayMetadata::V3(v3)),
+            metadata: Arc::new(ArrayMetadata::V3(metadata)),
             ..self
         })
     }
@@ -1235,6 +1235,27 @@ mod tests {
             }
             ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
         }
+    }
+
+    #[test]
+    fn array_clone_shares_metadata_copy_on_write() {
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+        let mut clone = array.clone();
+
+        assert!(Arc::ptr_eq(&array.metadata, &clone.metadata));
+
+        clone.set_shape(vec![16, 16]).unwrap();
+        clone
+            .attributes_mut()
+            .insert("test".to_string(), "apple".into());
+
+        assert!(!Arc::ptr_eq(&array.metadata, &clone.metadata));
+        assert_eq!(array.shape(), &[8, 8]);
+        assert!(array.attributes().is_empty());
+        assert_eq!(clone.shape(), &[16, 16]);
+        assert_eq!(clone.attributes().get("test"), Some(&"apple".into()));
     }
 
     #[test]
