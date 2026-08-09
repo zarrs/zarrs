@@ -61,7 +61,7 @@ fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
+fn exercise_array_ops<A: ArrayOps + Clone>(array: &A) -> TestResult {
     assert_eq!(array.path().as_str(), "/array");
     assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0]);
@@ -876,6 +876,60 @@ where
 fn array_cached_array_subset_into_uses_cache() -> TestResult {
     assert_cache_hits_for_array_subset_into(ChunkCacheEncodedLruChunkLimit::new(16))?;
     assert_cache_hits_for_array_subset_into(ChunkCacheDecodedLruChunkLimit::new(16))
+}
+
+#[test]
+fn array_cached_with_codec_options_preserves_cache() -> TestResult {
+    let (array, store) = fixture();
+    populate(array.as_ref())?;
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(16));
+
+    store.reset();
+    let expected = [1u8, 2, 3, 6, 7, 8, 11, 12, 13];
+    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, expected);
+    let reads_after_miss = store.reads();
+    assert!(reads_after_miss > 0);
+
+    let tuned = cached
+        .clone()
+        .with_codec_options(CodecOptions::default().with_concurrent_target(1));
+    assert_eq!(tuned.retrieve_chunk::<Vec<u8>>(&[0, 0])?, expected);
+    assert_eq!(store.reads(), reads_after_miss);
+
+    tuned.store_chunk(&[0, 0], &[7u8; 9])?;
+    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, [7u8; 9]);
+
+    Ok(())
+}
+
+#[test]
+fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
+    use zarrs::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
+    use zarrs::storage::WritableStorageTraits;
+
+    let path: zarrs::node::NodePath = "/array".try_into()?;
+    let (array, store) = fixture();
+    array.store_metadata()?;
+
+    store.set(&meta_key_v2_array(&path), b"{}".to_vec().into())?;
+    store.set(&meta_key_v2_attributes(&path), b"{}".to_vec().into())?;
+
+    array.erase_metadata()?;
+    assert!(store.get(&meta_key_v3(&path))?.is_none());
+    assert!(store.get(&meta_key_v2_array(&path))?.is_some());
+    assert!(store.get(&meta_key_v2_attributes(&path))?.is_some());
+
+    array
+        .with_metadata_erase_version(MetadataEraseVersion::All)
+        .erase_metadata()?;
+    assert!(store.get(&meta_key_v2_array(&path))?.is_none());
+    assert!(store.get(&meta_key_v2_attributes(&path))?.is_none());
+    assert!(matches!(
+        array.metadata_erase_version(),
+        MetadataEraseVersion::Default
+    ));
+
+    Ok(())
 }
 
 // TODO: ChunkCacheType could be adjusted so that ChunkCacheEncoded could handle caching of encoded chunks, but seems low value

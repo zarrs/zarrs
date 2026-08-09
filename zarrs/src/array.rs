@@ -692,13 +692,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })
     }
 
-    /// Set the codec options.
-    #[must_use]
-    pub fn with_codec_options(mut self, codec_options: CodecOptions) -> Self {
-        self.codec_options = codec_options;
-        self
-    }
-
     /// Reconfigure the codec chain with codec-specific options and return the updated array.
     ///
     /// Each codec in the chain may read its own options type from `opts` and return a
@@ -727,13 +720,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
     ) -> Result<Self, CodecCreateError> {
         self.set_codec_specific_options(opts)?;
         Ok(self)
-    }
-
-    /// Set the metadata options.
-    #[must_use]
-    pub fn with_metadata_options(mut self, metadata_options: ArrayMetadataOptions) -> Self {
-        self.metadata_options = metadata_options;
-        self
     }
 
     /// Set the array shape and chunk grid from chunk grid metadata.

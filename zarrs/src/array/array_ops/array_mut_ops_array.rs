@@ -36,6 +36,14 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self
     }
 
+    pub fn set_metadata_erase_version(
+        &mut self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> &mut Self {
+        self.metadata_erase_version = metadata_erase_version;
+        self
+    }
+
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         // The dimensionality of an array is fixed once it exists. Most chunk grids would reject
         // this anyway, but not with a consistent error. Checked before any mutation.

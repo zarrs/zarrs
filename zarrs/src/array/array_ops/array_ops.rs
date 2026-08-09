@@ -47,6 +47,26 @@ pub trait ArrayOps {
     /// Get the default metadata erase version for no-options methods.
     fn metadata_erase_version(&self) -> MetadataEraseVersion;
 
+    /// Return this array configured to use `codec_options` for its operations.
+    ///
+    /// Prefer deriving once and reusing the result over deriving per operation.
+    #[must_use]
+    fn with_codec_options(self, codec_options: CodecOptions) -> Self
+    where
+        Self: Sized;
+
+    /// Return this array configured to use `metadata_options` for its operations.
+    #[must_use]
+    fn with_metadata_options(self, metadata_options: ArrayMetadataOptions) -> Self
+    where
+        Self: Sized;
+
+    /// Return this array configured to use `metadata_erase_version` for its operations.
+    #[must_use]
+    fn with_metadata_erase_version(self, metadata_erase_version: MetadataEraseVersion) -> Self
+    where
+        Self: Sized;
+
     /// Get the dimension names.
     fn dimension_names(&self) -> &Option<Vec<DimensionName>>;
 

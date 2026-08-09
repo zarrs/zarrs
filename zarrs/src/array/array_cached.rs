@@ -97,6 +97,12 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
         Ok(self)
     }
 
+    /// Transform the inner array while retaining the cache.
+    pub(crate) fn map_array(mut self, f: impl FnOnce(&mut Array<TStorage>)) -> Self {
+        f(Arc::make_mut(&mut self.array));
+        self
+    }
+
     /// Split into the inner array and shared cache.
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
