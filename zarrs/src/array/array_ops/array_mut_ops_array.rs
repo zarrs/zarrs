@@ -51,7 +51,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self.subchunk_grids = self
             .codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())?;
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
             }
@@ -84,7 +84,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         // Write through to the metadata document, otherwise `store_metadata` would not see the
         // change. Zarr V2 metadata has no dimension names field; they are carried into the
         // converted metadata by `metadata_opt` when it converts to Zarr V3.
-        if let ArrayMetadata::V3(metadata) = &mut self.metadata {
+        if let ArrayMetadata::V3(metadata) = Arc::make_mut(&mut self.metadata) {
             metadata.dimension_names.clone_from(&dimension_names);
         }
         self.dimension_names = dimension_names;
@@ -92,7 +92,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     }
 
     pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => &mut metadata.attributes,
             ArrayMetadata::V2(metadata) => &mut metadata.attributes,
         }

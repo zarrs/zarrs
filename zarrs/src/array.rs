@@ -430,8 +430,8 @@ pub struct Array<TStorage: ?Sized> {
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
     dimension_names: Option<Vec<DimensionName>>,
-    /// Metadata used to create the array
-    metadata: ArrayMetadata,
+    /// Metadata used to create the array.
+    metadata: Arc<ArrayMetadata>,
     /// Options
     codec_options: CodecOptions,
     metadata_options: ArrayMetadataOptions,
@@ -593,7 +593,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             codecs_bound,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
-            metadata: ArrayMetadata::V3(v3),
+            metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
             metadata_options,
             metadata_erase_version,
@@ -686,7 +686,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers,
             dimension_names: None,
             codec_options,
-            metadata: ArrayMetadata::V2(v2),
+            metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,
         })
@@ -788,7 +788,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .decoded_subchunk_grids((&self.chunk_grid).into())?;
 
         // Update metadata based on version
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
                 metadata.chunk_grid = chunk_grid_metadata;
@@ -837,31 +837,16 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Errors
     /// Returns a [`ArrayMetadataV2ToV3Error`] if the metadata is not compatible with Zarr V3 metadata.
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
-        match self.metadata {
-            ArrayMetadata::V2(metadata) => {
-                let mut metadata = array_metadata_v2_to_v3(&metadata)?;
-                // Zarr V2 metadata has no dimension names to convert, so take the array's.
-                metadata.dimension_names.clone_from(&self.dimension_names);
-                Ok(Self {
-                    storage: self.storage,
-                    path: self.path,
-                    data_type: self.data_type,
-                    chunk_grid: self.chunk_grid,
-                    subchunk_grids: self.subchunk_grids,
-                    chunk_key_encoding: self.chunk_key_encoding,
-                    fill_value: self.fill_value,
-                    codecs: self.codecs,
-                    codecs_bound: self.codecs_bound,
-                    storage_transformers: self.storage_transformers,
-                    dimension_names: self.dimension_names,
-                    metadata: metadata.into(),
-                    codec_options: self.codec_options,
-                    metadata_options: self.metadata_options,
-                    metadata_erase_version: self.metadata_erase_version,
-                })
-            }
-            ArrayMetadata::V3(_) => Ok(self),
-        }
+        let ArrayMetadata::V2(metadata) = &*self.metadata else {
+            return Ok(self);
+        };
+        let mut metadata = array_metadata_v2_to_v3(metadata)?;
+        // Zarr V2 metadata has no dimension names to convert, so take the array's.
+        metadata.dimension_names.clone_from(&self.dimension_names);
+        Ok(Self {
+            metadata: Arc::new(ArrayMetadata::V3(metadata)),
+            ..self
+        })
     }
 
     /// Reject the array if it contains unsupported extensions or additional fields with `"must_understand": true`.
@@ -1237,6 +1222,27 @@ mod tests {
 
         let array_other = Array::open(store, array_path).unwrap();
         assert_eq!(array_other.metadata(), &stored_metadata);
+    }
+
+    #[test]
+    fn array_clone_shares_metadata_copy_on_write() {
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+        let mut clone = array.clone();
+
+        assert!(Arc::ptr_eq(&array.metadata, &clone.metadata));
+
+        clone.set_shape(vec![16, 16]).unwrap();
+        clone
+            .attributes_mut()
+            .insert("test".to_string(), "apple".into());
+
+        assert!(!Arc::ptr_eq(&array.metadata, &clone.metadata));
+        assert_eq!(array.shape(), &[8, 8]);
+        assert!(array.attributes().is_empty());
+        assert_eq!(clone.shape(), &[16, 16]);
+        assert_eq!(clone.attributes().get("test"), Some(&"apple".into()));
     }
 
     #[test]
