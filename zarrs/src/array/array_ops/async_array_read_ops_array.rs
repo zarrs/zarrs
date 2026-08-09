@@ -568,7 +568,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             };
 
             let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-                .map(|chunk_indices| retrieve_chunk(chunk_indices))
+                .map(retrieve_chunk)
                 .buffered(chunk_concurrent_limit)
                 .try_collect()
                 .await?;
@@ -598,7 +598,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             };
 
             let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-                .map(|chunk_indices| retrieve_chunk(chunk_indices))
+                .map(retrieve_chunk)
                 .buffered(chunk_concurrent_limit)
                 .try_collect()
                 .await?;
