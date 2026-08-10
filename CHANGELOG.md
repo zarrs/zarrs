@@ -69,12 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove warnings from now-stable `reshape` codec
 
 ### Removed
-- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous array read operations
-  - Configure a derived array with `ArrayOps::with_codec_options`, then call the read operation
-- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous array write, update, and metadata operations
-  - Configure a derived array with the corresponding `ArrayOps::with_*` method, then call the operation
-- **Breaking**: Remove the `_opt` variants of Group metadata store and erase operations
-  - Configure a derived group with `with_metadata_options` or `with_metadata_erase_version`, then call the operation
+- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
+  - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
   - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
