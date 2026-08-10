@@ -1,14 +1,14 @@
 use futures::{StreamExt, TryStreamExt};
 
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArraySubset,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
     ArraySubsetTraits,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
 };
-use zarrs_storage::AsyncReadableStorageTraits;
+use zarrs_storage::MaybeSync;
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
@@ -40,15 +40,15 @@ pub(super) trait AsyncRetrieveInto {
     ) -> Result<(), ArrayError>;
 }
 
-pub(super) async fn retrieve_array_subset_into<TStorage, R>(
-    array: &Array<TStorage>,
+pub(super) async fn retrieve_array_subset_into<A, R>(
+    array: &A,
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    A: ArrayOps + MaybeSync,
     R: AsyncRetrieveInto + ?Sized,
 {
     if array_subset.dimensionality() != array.dimensionality() {
@@ -126,8 +126,8 @@ where
     }
 }
 
-async fn retrieve_multi_chunk_fixed_into<TStorage, R>(
-    array: &Array<TStorage>,
+async fn retrieve_multi_chunk_fixed_into<A, R>(
+    array: &A,
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
@@ -136,7 +136,7 @@ async fn retrieve_multi_chunk_fixed_into<TStorage, R>(
     options: &CodecOptions,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    A: ArrayOps + MaybeSync,
     R: AsyncRetrieveInto + ?Sized,
 {
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);

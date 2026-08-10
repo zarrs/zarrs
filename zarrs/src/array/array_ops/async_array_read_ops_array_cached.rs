@@ -492,7 +492,7 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
-            self.array(),
+            self.array().as_ref(),
             self,
             array_subset,
             output_target,
