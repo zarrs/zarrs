@@ -79,7 +79,6 @@ mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
     use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type, transmute_to_bytes};
-    use zarrs_codec::CodecOptions;
     use zarrs_storage::store::MemoryStore;
 
     #[test]
@@ -92,10 +91,7 @@ mod tests {
             .store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])
             .unwrap();
         let tensor: Tensor = array
-            .retrieve_chunks_opt(
-                &ArraySubset::new_with_shape(vec![1, 2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunks(&ArraySubset::new_with_shape(vec![1, 2]))
             .unwrap();
 
         let managed_tensor = dlpark::versioned::SafeManagedTensorVersioned::new(tensor).unwrap();

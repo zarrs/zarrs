@@ -33,7 +33,7 @@ impl AsyncChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
         validate_chunk_indices(array, chunk_indices)?;
         async_try_get_or_insert_with(cache, chunk_indices.to_vec(), async || {
             array
-                .async_partial_decoder_opt(chunk_indices, options)
+                .async_partial_decoder_with_options(chunk_indices, options)
                 .await
         })
         .await

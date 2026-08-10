@@ -66,6 +66,9 @@ pub enum ArrayCreateError {
     /// The number of dimension names does not match the array dimensionality.
     #[error("the number of dimension names {0} does not match array dimensionality {1}")]
     InvalidDimensionNames(usize, usize),
+    /// The dimensionality of an array cannot be changed after it is created or opened.
+    #[error("cannot change the array dimensionality from {1} to {0}")]
+    ChangedDimensionality(usize, usize),
     /// Storage error.
     #[error(transparent)]
     StorageError(#[from] StorageError),

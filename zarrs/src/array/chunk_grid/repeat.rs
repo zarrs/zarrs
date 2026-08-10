@@ -54,9 +54,9 @@ impl From<RepeatChunkGridCreateError> for ChunkGridCreateError {
             RepeatChunkGridCreateError::IncompatibleDimension(got, expected) => {
                 IncompatibleDimensionError::new(got, expected).into()
             }
-            err @ RepeatChunkGridCreateError::ZeroRepeat(_)
-            | err @ RepeatChunkGridCreateError::ShapeOverflow
-            | err @ RepeatChunkGridCreateError::InnerChunkEdgeLengthsMismatch { .. } => {
+            err @ (RepeatChunkGridCreateError::ZeroRepeat(_)
+            | RepeatChunkGridCreateError::ShapeOverflow
+            | RepeatChunkGridCreateError::InnerChunkEdgeLengthsMismatch { .. }) => {
                 Self::Other(err.to_string())
             }
         }

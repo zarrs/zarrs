@@ -12,6 +12,7 @@ use zarrs_storage::AsyncReadableStorageTraits;
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::recommended_codec_concurrency;
 
 /// Chunk level `_into` retrieval, as used by [`retrieve_array_subset_into`].
 ///
@@ -104,7 +105,7 @@ where
         }
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
-            let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape)?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,

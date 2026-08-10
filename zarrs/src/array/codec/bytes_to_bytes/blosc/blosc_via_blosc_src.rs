@@ -111,6 +111,7 @@ pub fn blosc_compress_bytes(
 }
 
 /// Validate a blosc buffer and return the decompressed size, or `None` if invalid.
+#[must_use]
 pub fn blosc_validate(src: &[u8]) -> Option<usize> {
     let mut destsize: usize = 0;
     let valid = unsafe {
@@ -122,6 +123,7 @@ pub fn blosc_validate(src: &[u8]) -> Option<usize> {
 /// # Safety
 ///
 /// Validate first
+#[must_use]
 pub fn blosc_typesize(src: &[u8]) -> Option<usize> {
     let mut typesize: usize = 0;
     let mut flags: i32 = 0;
@@ -140,6 +142,7 @@ pub fn blosc_typesize(src: &[u8]) -> Option<usize> {
 /// # Safety
 ///
 /// Validate first
+#[must_use]
 pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
     let mut uncompressed_bytes: usize = 0;
     let mut cbytes: usize = 0;

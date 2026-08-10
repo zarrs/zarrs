@@ -169,9 +169,8 @@
 //!
 //! // Retrieve a subchunk
 // TODO: mention using a partial decoder cache
-//! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk_opt(
+//! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk(
 //!     &[0, 3], // subchunk index
-//!     &zarrs::array::CodecOptions::default(),
 //! )?;
 //! println!("{array_subchunk:4}");
 //! // [[ 0.3],

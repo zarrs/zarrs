@@ -7,7 +7,7 @@
 //! Use [`GroupBuilder`] to setup a new group, or use [`Group::open`] to read and/or write an existing group.
 //!
 //! ## Group Metadata
-//! Group metadata **must be explicitly stored** with [`store_metadata`](Group::store_metadata) or [`store_metadata_opt`](Group::store_metadata_opt) if a group is newly created or its metadata has been mutated.
+//! Group metadata **must be explicitly stored** with [`store_metadata`](Group::store_metadata) if a group is newly created or its metadata has been mutated.
 //! Support for implicit groups was removed from Zarr V3 after provisional acceptance.
 //!
 //! Below is an example of a `zarr.json` file for a group:
@@ -162,10 +162,10 @@ use zarrs_storage::{
 };
 
 /// A group.
-#[derive(Clone, Debug, Display)]
+#[derive(Debug, Display)]
 #[display(
     "group at {path} with metadata {}",
-    "serde_json::to_string(metadata).unwrap_or_default()"
+    "serde_json::to_string(&**metadata).unwrap_or_default()"
 )]
 pub struct Group<TStorage: ?Sized> {
     /// The storage.
@@ -175,10 +175,24 @@ pub struct Group<TStorage: ?Sized> {
     #[allow(dead_code)]
     path: NodePath,
     /// The metadata.
-    metadata: GroupMetadata,
+    metadata: Arc<GroupMetadata>,
     metadata_options: GroupMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
     use_consolidated_metadata: UseConsolidatedMetadata,
+}
+
+// A manual implementation avoids the spurious `TStorage: Clone` bound added by `derive(Clone)`.
+impl<TStorage: ?Sized> Clone for Group<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+            path: self.path.clone(),
+            metadata: self.metadata.clone(),
+            metadata_options: self.metadata_options,
+            metadata_erase_version: self.metadata_erase_version,
+            use_consolidated_metadata: self.use_consolidated_metadata,
+        }
+    }
 }
 
 impl<TStorage: ?Sized> Group<TStorage> {
@@ -216,7 +230,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
         Ok(Self {
             storage,
             path,
-            metadata,
+            metadata: Arc::new(metadata),
             metadata_options: options.metadata_options(),
             metadata_erase_version: options.metadata_erase_version(),
             use_consolidated_metadata: options.use_consolidated_metadata(),
@@ -237,8 +251,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
 
     /// Get attributes.
     #[must_use]
-    pub const fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
-        match &self.metadata {
+    pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
+        match &*self.metadata {
             GroupMetadata::V3(metadata) => &metadata.attributes,
             GroupMetadata::V2(metadata) => &metadata.attributes,
         }
@@ -247,7 +261,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// Mutably borrow the group attributes.
     #[must_use]
     pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             GroupMetadata::V3(metadata) => &mut metadata.attributes,
             GroupMetadata::V2(metadata) => &mut metadata.attributes,
         }
@@ -259,14 +273,47 @@ impl<TStorage: ?Sized> Group<TStorage> {
         &self.metadata
     }
 
-    /// Return a new [`GroupMetadata`] with [`GroupMetadataOptions`] applied.
-    ///
-    /// This method is used internally by [`Group::store_metadata`] and [`Group::store_metadata_opt`].
+    /// Get the metadata options used by the group operations.
     #[must_use]
-    pub fn metadata_opt(&self, options: &GroupMetadataOptions) -> GroupMetadata {
+    pub const fn metadata_options(&self) -> &GroupMetadataOptions {
+        &self.metadata_options
+    }
+
+    /// Return this group configured to use `metadata_options` for its operations.
+    #[must_use]
+    pub fn with_metadata_options(&self, metadata_options: GroupMetadataOptions) -> Self {
+        let mut group = self.clone();
+        group.metadata_options = metadata_options;
+        group
+    }
+
+    /// Get the metadata erase version used by the group operations.
+    #[must_use]
+    pub const fn metadata_erase_version(&self) -> MetadataEraseVersion {
+        self.metadata_erase_version
+    }
+
+    /// Return this group configured to use `metadata_erase_version` for its operations.
+    #[must_use]
+    pub fn with_metadata_erase_version(
+        &self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> Self {
+        let mut group = self.clone();
+        group.metadata_erase_version = metadata_erase_version;
+        group
+    }
+
+    /// Return the group metadata in the form that [`Group::store_metadata`] writes.
+    ///
+    /// Unlike [`metadata`](Group::metadata), this applies the group's metadata options. Use
+    /// [`Group::with_metadata_options`] to override them.
+    #[must_use]
+    pub fn metadata_opt(&self) -> GroupMetadata {
+        let options = self.metadata_options();
         use GroupMetadata as GM;
         use MetadataConvertVersion as V;
-        let metadata = self.metadata.clone();
+        let metadata = (*self.metadata).clone();
 
         match (metadata, options.metadata_convert_version()) {
             (GM::V3(metadata), V::Default | V::V3) => GM::V3(metadata),
@@ -280,7 +327,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// Consolidated metadata is not currently supported for Zarr V2 groups.
     #[must_use]
     pub fn consolidated_metadata(&self) -> Option<ConsolidatedMetadata> {
-        if let GroupMetadata::V3(group_metadata) = &self.metadata {
+        if let GroupMetadata::V3(group_metadata) = &*self.metadata {
             if let Some(consolidated_metadata) = group_metadata
                 .additional_fields
                 .get("consolidated_metadata")
@@ -303,7 +350,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
         &mut self,
         consolidated_metadata: Option<ConsolidatedMetadata>,
     ) -> &mut Self {
-        if let GroupMetadata::V3(group_metadata) = &mut self.metadata {
+        if let GroupMetadata::V3(group_metadata) = Arc::make_mut(&mut self.metadata) {
             if let Some(consolidated_metadata) = consolidated_metadata {
                 group_metadata.additional_fields.insert(
                     "consolidated_metadata".to_string(),
@@ -323,15 +370,11 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// If the group is already Zarr V3, this is a no-op.
     #[must_use]
     pub fn to_v3(self) -> Self {
-        if let GroupMetadata::V2(metadata) = self.metadata {
-            let metadata: GroupMetadata = group_metadata_v2_to_v3(&metadata).into();
+        if let GroupMetadata::V2(metadata) = &*self.metadata {
+            let metadata: GroupMetadata = group_metadata_v2_to_v3(metadata).into();
             Self {
-                storage: self.storage,
-                path: self.path,
-                metadata,
-                metadata_options: self.metadata_options,
-                metadata_erase_version: self.metadata_erase_version,
-                use_consolidated_metadata: self.use_consolidated_metadata,
+                metadata: Arc::new(metadata),
+                ..self
             }
         } else {
             self
@@ -812,23 +855,15 @@ pub enum GroupCreateError {
 impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {}
 
 impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
-    /// Store metadata with default [`GroupMetadataOptions`].
+    /// Store the group metadata.
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&self.metadata_options)
-    }
-
-    /// Store metadata with non-default [`GroupMetadataOptions`].
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if there is an underlying store error.
-    pub fn store_metadata_opt(&self, options: &GroupMetadataOptions) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_opt(options);
+        let metadata = self.metadata_opt();
 
         // Write the metadata
         let path = self.path();
@@ -840,7 +875,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
                 storage_handle.set(&key, json.into())
             }
             GroupMetadata::V2(metadata) => {
-                let mut metadata = metadata.clone();
+                let mut metadata = metadata;
 
                 if !metadata.attributes.is_empty() {
                     // Store .zgroup
@@ -863,26 +898,17 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
         }
     }
 
-    /// Erase the metadata with default [`MetadataEraseVersion`] options.
+    /// Erase the metadata.
     ///
     /// Succeeds if the metadata does not exist.
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.erase_metadata_opt(self.metadata_erase_version)
-    }
-
-    /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
+        let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match &*self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
                 GroupMetadata::V2(_) => {
                     storage_handle.erase(&meta_key_v2_group(self.path()))?;
@@ -908,19 +934,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`store_metadata`](Group::store_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&self.metadata_options).await
-    }
-
-    /// Async variant of [`store_metadata_opt`](Group::store_metadata_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_metadata_opt(
-        &self,
-        options: &GroupMetadataOptions,
-    ) -> Result<(), StorageError> {
         let storage_handle = StorageHandle::new(self.storage.clone());
 
         // Get the metadata with options applied and store
-        let metadata = self.metadata_opt(options);
+        let metadata = self.metadata_opt();
 
         // Write the metadata
         let path = self.path();
@@ -958,19 +975,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`erase_metadata`](Group::erase_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        self.async_erase_metadata_opt(self.metadata_erase_version)
-            .await
-    }
-
-    /// Async variant of [`erase_metadata_opt`](Group::erase_metadata_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_metadata_opt(
-        &self,
-        options: MetadataEraseVersion,
-    ) -> Result<(), StorageError> {
+        let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
-            MetadataEraseVersion::Default => match self.metadata {
+            MetadataEraseVersion::Default => match &*self.metadata {
                 GroupMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
                 GroupMetadata::V2(_) => {
                     storage_handle
@@ -1091,7 +1099,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        assert!(group_metadata.additional_fields.len() == 1);
+        assert_eq!(group_metadata.additional_fields.len(), 1);
         assert!(
             group_metadata
                 .additional_fields
@@ -1102,8 +1110,7 @@ mod tests {
 
         // Permit manual creation of group with unsupported metadata
         let storage = Arc::new(MemoryStore::new());
-        let group =
-            Group::new_with_metadata(storage.clone(), "/", group_metadata.clone().into()).unwrap();
+        let group = Group::new_with_metadata(storage.clone(), "/", group_metadata.into()).unwrap();
         group.store_metadata().unwrap();
 
         // Group opening should fail with unsupported metadata
@@ -1132,6 +1139,26 @@ mod tests {
         //     group.to_string(),
         //     r#"group at /group with metadata {"node_type":"group","zarr_format":3}"#
         // );
+    }
+
+    #[test]
+    fn group_clone_shares_metadata_copy_on_write() {
+        let metadata = serde_json::from_str(JSON_VALID1).unwrap();
+        let group = Group::new_with_metadata(Arc::new(MemoryStore::new()), "/", metadata).unwrap();
+        let mut clone = group.clone();
+
+        assert!(Arc::ptr_eq(&group.metadata, &clone.metadata));
+
+        clone
+            .attributes_mut()
+            .insert("new".to_string(), serde_json::Value::Bool(true));
+
+        assert!(!Arc::ptr_eq(&group.metadata, &clone.metadata));
+        assert!(!group.attributes().contains_key("new"));
+        assert_eq!(
+            clone.attributes().get("new"),
+            Some(&serde_json::Value::Bool(true))
+        );
     }
 
     #[test]
@@ -1216,7 +1243,7 @@ mod tests {
         );
         assert!(
             builder
-                .build(store.clone(), "/group/subgroup/leafgroup")
+                .build(store, "/group/subgroup/leafgroup")
                 .unwrap()
                 .store_metadata()
                 .is_ok()
@@ -1227,7 +1254,7 @@ mod tests {
 
         let nodes = nodes.unwrap();
 
-        assert!(nodes.len() == 3);
+        assert_eq!(nodes.len(), 3);
         assert_eq!(
             nodes
                 .iter()
@@ -1282,7 +1309,7 @@ mod tests {
 
         let nodes = nodes.unwrap();
 
-        assert!(nodes.len() == 3);
+        assert_eq!(nodes.len(), 3);
         assert_eq!(
             nodes
                 .iter()

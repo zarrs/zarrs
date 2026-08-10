@@ -596,7 +596,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{ArrayBuilder, ArrayMetadataOptions};
+    use crate::array::ArrayBuilder;
     use crate::group::{GroupMetadata, GroupMetadataV3};
     use zarrs_storage::store::MemoryStore;
     use zarrs_storage::{StoreKey, WritableStorageTraits};
@@ -693,7 +693,7 @@ mod tests {
         .build(store.clone(), node_path)
         .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
+        let stored_metadata = array.metadata_opt();
 
         let node = Node::open(&store, node_path).unwrap();
         assert_eq!(node.metadata, NodeMetadata::Array(stored_metadata));
@@ -825,7 +825,7 @@ mod tests {
         );
 
         // Tree from root.
-        let tree = super::build_node_tree(&NodePath::root(), entries.clone());
+        let tree = super::build_node_tree(&NodePath::root(), entries);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].path().as_str(), "/a");
         let mut child_names: Vec<_> = tree[0]
@@ -890,7 +890,7 @@ mod tests {
         assert!(
             super::resolve_consolidated_policy(
                 &path,
-                Some(some_md.clone()),
+                Some(some_md),
                 UseConsolidatedMetadata::Auto,
             )
             .unwrap()

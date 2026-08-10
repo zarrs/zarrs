@@ -124,7 +124,7 @@ mod tests {
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = Arc::new(codec.clone()).with_context(data_type.clone(), fill_value.clone())?;
+        let codec = Arc::new(codec.clone()).with_context(data_type, fill_value)?;
         let max_encoded_size = codec.encoded_representation(chunk_shape.as_slice())?;
         let encoded = codec.encode(
             bytes.clone(),
@@ -322,7 +322,7 @@ mod tests {
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
         )
-        .with_context(data_type.clone(), fill_value.clone())
+        .with_context(data_type, fill_value)
         .unwrap();
 
         let encoded = codec

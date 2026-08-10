@@ -63,7 +63,7 @@ where
             }
         }
         num_chunks => {
-            let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape0)?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape0)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -254,6 +254,42 @@ where
     Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
 }
 
+impl<TStorage, C> ArrayCached<TStorage, C>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
+    C::Value: AsyncChunkCacheType,
+{
+    pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
+        &self,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let bytes =
+            async_retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options).await?;
+        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+    }
+
+    pub(in crate::array) async fn async_retrieve_chunk_subset_into_with_options(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let bytes = C::Value::async_retrieve_chunk_subset_bytes(
+            self.cache(),
+            self.array(),
+            chunk_indices,
+            chunk_subset,
+            options,
+        )
+        .await?;
+        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+    }
+}
+
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage, C> AsyncRetrieveInto for ArrayCached<TStorage, C>
@@ -268,7 +304,7 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+        self.async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
             .await
     }
 
@@ -279,8 +315,13 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_subset_into(chunk_indices, chunk_subset, output_target, options)
-            .await
+        self.async_retrieve_chunk_subset_into_with_options(
+            chunk_indices,
+            chunk_subset,
+            output_target,
+            options,
+        )
+        .await
     }
 }
 
@@ -296,16 +337,7 @@ where
         &self,
         chunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
+        let options = self.codec_options();
         let bytes =
             async_retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options).await?;
         let shape = self.array().chunk_shape(chunk_indices)?;
@@ -321,27 +353,19 @@ where
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let bytes =
-            async_retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options).await?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        self.async_retrieve_chunk_into_with_options(
+            chunk_indices,
+            output_target,
+            self.codec_options(),
+        )
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunks_opt<T: FromArrayBytes>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -350,23 +374,12 @@ where
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_subset_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
         let bytes = C::Value::async_retrieve_chunk_subset_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
             chunk_subset,
-            options,
+            self.codec_options(),
         )
         .await?;
         T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
@@ -378,17 +391,14 @@ where
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::async_retrieve_chunk_subset_bytes(
-            self.cache(),
-            self.array(),
+        self.async_retrieve_chunk_subset_into_with_options(
             chunk_indices,
             chunk_subset,
-            options,
+            output_target,
+            self.codec_options(),
         )
-        .await?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -396,19 +406,13 @@ where
         &self,
         array_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_array_subset_opt<T: FromArrayBytes>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let bytes =
-            async_retrieve_array_subset_bytes(self.cache(), self.array(), array_subset, options)
-                .await?;
+        let bytes = async_retrieve_array_subset_bytes(
+            self.cache(),
+            self.array(),
+            array_subset,
+            self.codec_options(),
+        )
+        .await?;
         T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
     }
 
@@ -417,16 +421,7 @@ where
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<T>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<T>, ArrayError> {
+        let options = self.codec_options();
         let Some(bytes) = C::Value::async_retrieve_chunk_bytes_if_exists(
             self.cache(),
             self.array(),
@@ -450,16 +445,9 @@ where
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_encoded_chunk_opt(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<Bytes>, StorageError> {
         self.array()
-            .async_retrieve_encoded_chunk_opt(chunk_indices, options)
+            .async_retrieve_encoded_chunk(chunk_indices)
             .await
     }
 
@@ -467,47 +455,34 @@ where
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_encoded_chunks_opt(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<Vec<Option<Bytes>>, StorageError> {
-        self.array()
-            .async_retrieve_encoded_chunks_opt(chunks, options)
-            .await
+        self.array().async_retrieve_encoded_chunks(chunks).await
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunk_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunks_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -516,23 +491,12 @@ where
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_array_subset_into_opt(array_subset, output_target, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_array_subset_into_opt(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
             self.array(),
             self,
             array_subset,
             output_target,
-            options,
+            self.codec_options(),
         )
         .await
     }
@@ -542,18 +506,27 @@ where
         &self,
         chunk_indices: &[u64],
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        self.async_partial_decoder_opt(chunk_indices, self.codec_options())
-            .await
+        C::Value::async_partial_decoder(
+            self.cache(),
+            self.array(),
+            chunk_indices,
+            self.codec_options(),
+        )
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_partial_decoder_opt(
+    pub async fn async_local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        C::Value::async_partial_decoder(self.cache(), self.array(), chunk_indices, options).await
-    }
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkGrid>, ArrayError>;
 }
 
 #[cfg(test)]
@@ -664,18 +637,20 @@ mod tests {
             .await
             .unwrap();
 
-        let cached = ArrayCached::new(array, cache);
-        let options = CodecOptions::default().with_concurrent_target(1);
+        // Exercise the cached reads under a non-default concurrency target. The derived
+        // array shares the cache, so the assertions below still observe it.
+        let cached = ArrayCached::new(array, cache)
+            .with_codec_options(CodecOptions::default().with_concurrent_target(1));
         assert_eq!(
             cached
-                .async_retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &options)
+                .async_retrieve_subchunk::<Vec<u16>>(&[2, 3])
                 .await
                 .unwrap(),
             vec![38, 39, 46, 47]
         );
         assert_eq!(
             cached
-                .async_retrieve_subchunks_opt::<Vec<u16>>(&[1..3, 1..3], &options)
+                .async_retrieve_subchunks::<Vec<u16>>(&[1..3, 1..3])
                 .await
                 .unwrap(),
             vec![
@@ -684,13 +659,13 @@ mod tests {
         );
         assert!(
             cached
-                .async_retrieve_subchunk_opt::<Vec<u16>>(&[0], &options)
+                .async_retrieve_subchunk::<Vec<u16>>(&[0])
                 .await
                 .is_err()
         );
         assert!(
             cached
-                .async_retrieve_subchunks_opt::<Vec<u16>>(&[0..1], &options)
+                .async_retrieve_subchunks::<Vec<u16>>(&[0..1])
                 .await
                 .is_err()
         );

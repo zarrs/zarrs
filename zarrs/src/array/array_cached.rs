@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::Array;
+use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 
 /// A cached array wrapper.
 ///
@@ -122,6 +123,29 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     #[must_use]
     pub fn cache(&self) -> &C {
         self.cache.as_ref()
+    }
+
+    /// Reconfigure the codec chain with codec-specific options.
+    ///
+    /// Refer to [`Array::with_codec_specific_options`] for details. The chunk cache is shared
+    /// with the original.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    pub fn with_codec_specific_options(
+        &self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<Self, CodecCreateError> {
+        let mut array = self.clone();
+        Arc::make_mut(&mut array.array).set_codec_specific_options(opts)?;
+        Ok(array)
+    }
+
+    /// Transform the inner array while retaining the cache.
+    pub(crate) fn map_array(&self, f: impl FnOnce(&mut Array<TStorage>)) -> Self {
+        let mut array = self.clone();
+        f(Arc::make_mut(&mut array.array));
+        array
     }
 
     /// Split into the inner array and shared cache.

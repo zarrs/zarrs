@@ -44,7 +44,6 @@ pub mod storage_transformer;
 mod array_dlpack_ext;
 
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use self::array_cached::ArrayCached;
@@ -128,11 +127,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - the metadata is in invalid in some other way.
 ///
 /// ## Array Metadata
-/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) or [`store_metadata_opt`](Array::store_metadata_opt) if an array is newly created or its metadata has been mutated.
+/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) if an array is newly created or its metadata has been mutated.
 ///
 /// The underlying metadata of an [`Array`] can be accessed with [`metadata`](Array::metadata) or [`metadata_opt`](Array::metadata_opt).
-/// The latter accepts [`ArrayMetadataOptions`] that can be used to convert array metadata from Zarr V2 to V3, for example.
-/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata) / [`store_metadata_opt`](Array::store_metadata_opt).
+/// The latter applies the array's [`ArrayMetadataOptions`], which can convert array metadata from Zarr V2 to V3, for example.
+/// Use [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`] to control them.
+/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata).
 /// Use [`serde_json::to_string`] or [`serde_json::to_string_pretty`] on [`ArrayMetadata`] to convert it to a JSON string.
 ///
 /// ### Immutable Array Metadata / Properties
@@ -144,6 +144,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`codecs`](Array::codecs)
 ///  - [`storage_transformers`](Array::storage_transformers)
 ///  - [`path`](Array::path)
+///  - [`dimensionality`](Array::dimensionality), see [Array Dimensionality](#array-dimensionality) below
 ///
 /// ### Mutable Array Metadata
 /// Do not forget to store metadata after mutation.
@@ -151,9 +152,16 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`attributes`](Array::attributes) / [`attributes_mut`](Array::attributes_mut)
 ///  - [`dimension_names`](Array::dimension_names) / [`set_dimension_names`](Array::set_dimension_names)
 ///
+/// ### Array Dimensionality
+/// The dimensionality of an array is **fixed** for the lifetime of an [`Array`].
+/// It is established when the array is created or opened, and the data type, codec chain, chunk grid, chunk keys and dimension names are all bound to it.
+///
+/// An array can be resized within its dimensionality, but it cannot gain or lose dimensions:
+/// [`set_shape`](Array::set_shape) and [`set_shape_and_chunk_grid`](Array::set_shape_and_chunk_grid) return [`ArrayCreateError::ChangedDimensionality`] if the new shape has a different number of dimensions.
+///
 /// ### `zarrs` Metadata
 /// By default, the `zarrs` version and a link to its source code is written to the `_zarrs` attribute in array metadata when calling [`store_metadata`](Array::store_metadata).
-/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata) or call [`store_metadata_opt`](Array::store_metadata_opt) with an explicit [`ArrayMetadataOptions`].
+/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata), or per array with [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`].
 ///
 /// ## Array Data
 /// Array operations are divided into several categories based on the traits implemented for the backing [storage](crate::storage).
@@ -338,8 +346,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
 /// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk_opt`](ArrayReadOps::retrieve_subchunk_opt)
-///  - [`retrieve_subchunks_opt`](ArrayReadOps::retrieve_subchunks_opt)
+///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///
@@ -422,8 +430,8 @@ pub struct Array<TStorage: ?Sized> {
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
     dimension_names: Option<Vec<DimensionName>>,
-    /// Metadata used to create the array
-    metadata: ArrayMetadata,
+    /// Metadata used to create the array.
+    metadata: Arc<ArrayMetadata>,
     /// Options
     codec_options: CodecOptions,
     metadata_options: ArrayMetadataOptions,
@@ -530,9 +538,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })?;
 
         // Create bound codecs
-        let codecs_bound = codecs
-            .clone()
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
 
         // Create chunk grid
         let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
@@ -585,7 +591,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             codecs_bound,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
-            metadata: ArrayMetadata::V3(v3),
+            metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
             metadata_options,
             metadata_erase_version,
@@ -644,9 +650,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
-        let codecs_bound = codecs
-            .clone()
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator
@@ -678,17 +682,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers,
             dimension_names: None,
             codec_options,
-            metadata: ArrayMetadata::V2(v2),
+            metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,
         })
-    }
-
-    /// Set the codec options.
-    #[must_use]
-    pub fn with_codec_options(mut self, codec_options: CodecOptions) -> Self {
-        self.codec_options = codec_options;
-        self
     }
 
     /// Reconfigure the codec chain with codec-specific options and return the updated array.
@@ -714,23 +711,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn with_codec_specific_options(
-        mut self,
+        &self,
         opts: &CodecSpecificOptions,
     ) -> Result<Self, CodecCreateError> {
-        self.codecs =
-            Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts)?);
-        self.codecs_bound = self
-            .codecs
-            .clone()
-            .with_context(self.data_type.clone(), self.fill_value.clone())?;
-        Ok(self)
-    }
-
-    /// Set the metadata options.
-    #[must_use]
-    pub fn with_metadata_options(mut self, metadata_options: ArrayMetadataOptions) -> Self {
-        self.metadata_options = metadata_options;
-        self
+        let mut array = self.clone();
+        array.set_codec_specific_options(opts)?;
+        Ok(array)
     }
 
     /// Set the array shape and chunk grid from chunk grid metadata.
@@ -738,8 +724,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// This method allows setting both the array shape and chunk grid simultaneously.
     /// Some chunk grids depend on the array shape (e.g. `rectilinear`), so this method ensures that the chunk grid is correctly configured for the new array shape.
     ///
+    /// The dimensionality of an array is fixed once it has been created or opened, so
+    /// `array_shape` must have the same length as the current [`shape`](ArrayOps::shape).
+    ///
     /// # Errors
     /// Returns an [`ArrayCreateError`] if:
+    ///  - `array_shape` changes the array dimensionality,
     ///  - the chunk grid is not compatible with `array_shape`, or
     ///  - the chunk grid metadata is invalid.
     ///
@@ -759,6 +749,15 @@ impl<TStorage: ?Sized> Array<TStorage> {
             chunk_grid_metadata.into();
         let chunk_grid_metadata = chunk_grid_metadata.to_metadata()?;
 
+        // The dimensionality of an array is fixed once it exists: the codec chain, chunk keys and
+        // dimension names are all bound to it. Checked before any mutation.
+        if array_shape.len() != self.dimensionality() {
+            return Err(ArrayCreateError::ChangedDimensionality(
+                array_shape.len(),
+                self.dimensionality(),
+            ));
+        }
+
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
@@ -767,7 +766,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .decoded_subchunk_grids((&self.chunk_grid).into())?;
 
         // Update metadata based on version
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
                 metadata.chunk_grid = chunk_grid_metadata;
@@ -803,42 +802,21 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .expect("data type and fill value are compatible")
     }
 
-    /// Calculate the recommended codec concurrency.
-    fn recommended_codec_concurrency(
-        &self,
-        chunk_shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, ArrayError> {
-        Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
-    }
-
     /// Convert the array to Zarr V3.
     ///
     /// # Errors
     /// Returns a [`ArrayMetadataV2ToV3Error`] if the metadata is not compatible with Zarr V3 metadata.
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
-        match self.metadata {
-            ArrayMetadata::V2(metadata) => {
-                let metadata: ArrayMetadata = array_metadata_v2_to_v3(&metadata)?.into();
-                Ok(Self {
-                    storage: self.storage,
-                    path: self.path,
-                    data_type: self.data_type,
-                    chunk_grid: self.chunk_grid,
-                    subchunk_grids: self.subchunk_grids,
-                    chunk_key_encoding: self.chunk_key_encoding,
-                    fill_value: self.fill_value,
-                    codecs: self.codecs,
-                    codecs_bound: self.codecs_bound,
-                    storage_transformers: self.storage_transformers,
-                    dimension_names: self.dimension_names,
-                    metadata,
-                    codec_options: self.codec_options,
-                    metadata_options: self.metadata_options,
-                    metadata_erase_version: self.metadata_erase_version,
-                })
-            }
-            ArrayMetadata::V3(_) => Ok(self),
-        }
+        let ArrayMetadata::V2(metadata) = &*self.metadata else {
+            return Ok(self);
+        };
+        let mut metadata = array_metadata_v2_to_v3(metadata)?;
+        // Zarr V2 metadata has no dimension names to convert, so take the array's.
+        metadata.dimension_names.clone_from(&self.dimension_names);
+        Ok(Self {
+            metadata: Arc::new(ArrayMetadata::V3(metadata)),
+            ..self
+        })
     }
 
     /// Reject the array if it contains unsupported extensions or additional fields with `"must_understand": true`.
@@ -1194,6 +1172,8 @@ fn create_codec_chain_from_v2(
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
@@ -1210,10 +1190,31 @@ mod tests {
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
+        let stored_metadata = array.metadata_opt();
 
         let array_other = Array::open(store, array_path).unwrap();
         assert_eq!(array_other.metadata(), &stored_metadata);
+    }
+
+    #[test]
+    fn array_clone_shares_metadata_copy_on_write() {
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+        let mut clone = array.clone();
+
+        assert!(Arc::ptr_eq(&array.metadata, &clone.metadata));
+
+        clone.set_shape(vec![16, 16]).unwrap();
+        clone
+            .attributes_mut()
+            .insert("test".to_string(), "apple".into());
+
+        assert!(!Arc::ptr_eq(&array.metadata, &clone.metadata));
+        assert_eq!(array.shape(), &[8, 8]);
+        assert!(array.attributes().is_empty());
+        assert_eq!(clone.shape(), &[16, 16]);
+        assert_eq!(clone.attributes().get("test"), Some(&"apple".into()));
     }
 
     #[test]
@@ -1246,6 +1247,148 @@ mod tests {
                 &serde_json::Value::String("apple".to_string())
             ))
         );
+    }
+
+    /// Setting dimension names must reach the metadata document, otherwise `store_metadata`
+    /// would silently drop them.
+    #[test]
+    fn array_set_dimension_names_reaches_metadata() {
+        use zarrs_metadata::IntoDimensionName;
+
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        array
+            .set_dimension_names(Some(vec![
+                "y".into_dimension_name(),
+                "x".into_dimension_name(),
+            ]))
+            .unwrap();
+        assert_eq!(
+            array.dimension_names(),
+            &Some(vec!["y".into_dimension_name(), "x".into_dimension_name()])
+        );
+        match array.metadata() {
+            ArrayMetadata::V3(metadata) => {
+                assert_eq!(
+                    metadata.dimension_names,
+                    Some(vec!["y".into_dimension_name(), "x".into_dimension_name()])
+                );
+            }
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+
+        // Clearing them writes through too
+        array.set_dimension_names(None).unwrap();
+        match array.metadata() {
+            ArrayMetadata::V3(metadata) => assert_eq!(metadata.dimension_names, None),
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+    }
+
+    /// Dimension names that do not match the array dimensionality are rejected on creation, so
+    /// they must not be reachable through the mutators either.
+    #[test]
+    fn array_set_dimension_names_rejects_invalid() {
+        use zarrs_metadata::IntoDimensionName;
+
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .dimension_names(["y", "x"].into())
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        // Wrong number of names
+        assert_eq!(
+            array
+                .set_dimension_names(Some(vec![
+                    "z".into_dimension_name(),
+                    "y".into_dimension_name(),
+                    "x".into_dimension_name(),
+                ]))
+                .unwrap_err()
+                .to_string(),
+            "the number of dimension names 3 does not match array dimensionality 2"
+        );
+    }
+
+    /// The dimensionality of an array is fixed once it has been created or opened.
+    #[test]
+    fn array_dimensionality_is_fixed() {
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .dimension_names(["y", "x"].into())
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        assert_eq!(
+            array.set_shape(vec![4, 4, 4]).unwrap_err().to_string(),
+            "cannot change the array dimensionality from 2 to 3"
+        );
+        assert_eq!(
+            unsafe { array.set_shape_and_chunk_grid(vec![4, 4, 4], vec![2, 2, 2]) }
+                .unwrap_err()
+                .to_string(),
+            "cannot change the array dimensionality from 2 to 3"
+        );
+
+        // Rejected before the array is modified
+        assert_eq!(array.shape(), &[8, 8]);
+        assert_eq!(array.dimensionality(), 2);
+        assert_eq!(array.chunk_grid_shape(), &[2, 2]);
+
+        // Resizing within the same dimensionality is still permitted
+        array.set_shape(vec![16, 16]).unwrap();
+        assert_eq!(array.shape(), &[16, 16]);
+        unsafe { array.set_shape_and_chunk_grid(vec![4, 4], vec![2, 2]) }.unwrap();
+        assert_eq!(array.shape(), &[4, 4]);
+    }
+
+    /// Zarr V2 metadata has no dimension names field, but a Zarr V2 array may still be written as
+    /// Zarr V3, so setting them must be permitted and must survive the conversion.
+    #[test]
+    fn array_v2_set_dimension_names_survives_v3_conversion() {
+        use zarrs_metadata::IntoDimensionName;
+        use zarrs_metadata::v2::{ArrayMetadataV2, DataTypeMetadataV2};
+
+        let metadata = ArrayMetadataV2::new(
+            vec![10, 10],
+            vec![std::num::NonZeroU64::new(5).unwrap(); 2],
+            DataTypeMetadataV2::Simple("<i4".to_string()),
+            FillValueMetadata::from(0),
+            None, // compressor
+            None, // filters
+        );
+        let mut array = Array::new_with_metadata(
+            Arc::new(MemoryStore::new()),
+            "/",
+            ArrayMetadata::V2(metadata),
+        )
+        .unwrap();
+
+        let names = vec!["y".into_dimension_name(), "x".into_dimension_name()];
+        array.set_dimension_names(Some(names.clone())).unwrap();
+        assert_eq!(array.dimension_names(), &Some(names.clone()));
+
+        // Written as Zarr V3, the names are carried into the converted metadata
+        let converted = array
+            .with_metadata_options(
+                ArrayMetadataOptions::default()
+                    .with_metadata_convert_version(MetadataConvertVersion::V3),
+            )
+            .metadata_opt();
+        match converted {
+            ArrayMetadata::V3(metadata) => {
+                assert_eq!(metadata.dimension_names, Some(names.clone()));
+            }
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+
+        // As does `to_v3`
+        let array_v3 = array.to_v3().unwrap();
+        match array_v3.metadata() {
+            ArrayMetadata::V3(metadata) => assert_eq!(metadata.dimension_names, Some(names)),
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
     }
 
     #[test]
@@ -1412,12 +1555,13 @@ mod tests {
         // Store V2 and V3 metadata
         for version in [MetadataConvertVersion::Default, MetadataConvertVersion::V3] {
             array_out
-                .store_metadata_opt(
-                    &ArrayMetadataOptions::default()
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
                         .with_metadata_convert_version(version)
                         .with_include_zarrs_metadata(false)
                         .with_convert_aliased_extension_names(true),
                 )
+                .store_metadata()
                 .unwrap();
         }
     }
@@ -1542,10 +1686,12 @@ mod tests {
 
         println!(
             "{:?}",
-            array_in.metadata_opt(
-                &ArrayMetadataOptions::default()
-                    .with_metadata_convert_version(MetadataConvertVersion::V3)
-            )
+            array_in
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
+                        .with_metadata_convert_version(MetadataConvertVersion::V3)
+                )
+                .metadata_opt()
         );
 
         println!("{array_in:?}");

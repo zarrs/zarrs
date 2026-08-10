@@ -100,22 +100,9 @@ where
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.array().store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_data,
-            options,
-        )?;
+        self.array()
+            .store_chunk_subset(chunk_indices, chunk_subset, chunk_subset_data)?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
@@ -125,17 +112,8 @@ where
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.array()
-            .store_array_subset_opt(array_subset, subset_data, options)?;
+        self.array().store_array_subset(array_subset, subset_data)?;
         if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
             self.cache().invalidate_chunks(&chunks);
         } else {
@@ -145,12 +123,8 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
-        let compacted = self.array().compact_chunk(chunk_indices, options)?;
+    pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let compacted = self.array().compact_chunk(chunk_indices)?;
         if compacted {
             self.cache().invalidate_chunk(chunk_indices);
         }
@@ -165,9 +139,8 @@ where
     pub fn partial_encoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        let encoder = self.array().partial_encoder(chunk_indices, options)?;
+        let encoder = self.array().partial_encoder(chunk_indices)?;
         Ok(Arc::new(CachedArrayPartialEncoder {
             encoder,
             cache: self.cache_arc(),
@@ -202,13 +175,12 @@ mod tests {
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
         assert_eq!(cached.cache().len(), 1);
 
-        let options = CodecOptions::default();
-        let encoder = cached.partial_encoder(&[0], &options).unwrap();
+        let encoder = cached.partial_encoder(&[0]).unwrap();
         encoder
             .partial_encode(
                 &ArraySubset::new_with_ranges(&[1..2]),
                 &vec![3u8].into(),
-                &options,
+                &CodecOptions::default(),
             )
             .unwrap();
         assert!(cached.cache().is_empty());
@@ -236,14 +208,13 @@ mod tests {
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
         assert_eq!(cached.cache().len(), 1);
 
-        let options = CodecOptions::default();
-        let encoder = cached.partial_encoder(&[0], &options).unwrap();
+        let encoder = cached.partial_encoder(&[0]).unwrap();
         assert!(
             encoder
                 .partial_encode(
                     &ArraySubset::new_with_ranges(&[2..3]),
                     &vec![3u8].into(),
-                    &options,
+                    &CodecOptions::default(),
                 )
                 .is_err()
         );

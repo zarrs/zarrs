@@ -142,7 +142,7 @@ impl CustomDataTypeUInt12Element {
     }
 }
 
-/// This defines how an in-memory CustomDataTypeUInt12Element is converted into ArrayBytes before encoding via the codec pipeline.
+/// This defines how an in-memory `CustomDataTypeUInt12Element` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt12Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // Check if the data type matches our custom data type
@@ -172,7 +172,7 @@ impl Element for CustomDataTypeUInt12Element {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeUInt12Element after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeUInt12Element` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeUInt12Element {
     fn from_array_bytes(
         data_type: &DataType,
@@ -183,7 +183,7 @@ impl ElementOwned for CustomDataTypeUInt12Element {
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt12Element>());
         for chunk in bytes.as_chunks::<2>().0 {
-            elements.push(CustomDataTypeUInt12Element::from_le_bytes(*chunk))
+            elements.push(CustomDataTypeUInt12Element::from_le_bytes(*chunk));
         }
         Ok(elements)
     }

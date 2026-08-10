@@ -364,8 +364,7 @@ mod tests {
         ];
 
         {
-            let chunk_grid =
-                RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
+            let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
             assert_eq!(chunk_grid.dimensionality(), 3);
             assert_eq!(chunk_grid.chunk_shape(), chunk_shape.as_slice());
             assert_eq!(
@@ -400,7 +399,7 @@ mod tests {
             );
         }
 
-        assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());
+        assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape).is_err());
     }
 
     #[test]
@@ -433,7 +432,7 @@ mod tests {
         let array_shape: ArrayShape = vec![10, 12];
         let chunk_shape: ChunkShape =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
-        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
+        let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
         let chunk_grid: ChunkGrid = chunk_grid.into();
 
         assert_eq!(chunk_grid.grid_shape(), &[4, 3]);
@@ -454,10 +453,7 @@ mod tests {
 
         // Interior chunk [2, 1]: origin [6, 5], fully within array
         assert_eq!(chunk_grid.chunk_origin(&[2, 1]).unwrap(), Some(vec![6, 5]));
-        assert_eq!(
-            chunk_grid.chunk_shape(&[2, 1]).unwrap(),
-            Some(chunk_shape.clone())
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[2, 1]).unwrap(), Some(chunk_shape));
 
         // Array indices at exact array boundary → map to chunk at grid boundary
         assert_eq!(

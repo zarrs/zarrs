@@ -109,17 +109,12 @@ impl CodecChain {
     ) -> Result<Arc<CodecChainBound>, CodecCreateError> {
         let mut array_to_array = Vec::with_capacity(self.array_to_array.len());
         for codec in &self.array_to_array {
-            let bound = codec
-                .clone()
-                .with_context(data_type.clone(), fill_value.clone())?;
+            let bound = codec.with_context(data_type.clone(), fill_value.clone())?;
             data_type = bound.encoded_data_type().clone();
             fill_value = bound.encoded_fill_value().clone();
             array_to_array.push(bound);
         }
-        let array_to_bytes = self
-            .array_to_bytes
-            .clone()
-            .with_context(data_type, fill_value)?;
+        let array_to_bytes = self.array_to_bytes.with_context(data_type, fill_value)?;
 
         let mut cache_index_must = None;
         let mut cache_index_should = None;

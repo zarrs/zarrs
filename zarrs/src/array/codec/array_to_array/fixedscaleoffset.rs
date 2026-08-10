@@ -125,7 +125,7 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())
+                .with_context(data_type, fill_value)
                 .unwrap();
 
         let encoded = codec

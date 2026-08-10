@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
-  - Add `ArrayReadOps::{retrieve_subchunk_opt,retrieve_subchunks_opt}` and `_at_level` variants for interacting with nested subchunk grids
+  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 - Implement the asynchronous operation traits for `ArrayCached`, so that chunk caches can be used with asynchronous stores
   - `ArrayCached` now implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`
@@ -32,8 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
+- Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
+- Add `ArrayMutOps::set_metadata_erase_version()`
+- Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
+- **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
@@ -41,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
+- **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
@@ -81,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove warnings from now-stable `reshape` codec
 
 ### Removed
+- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
+  - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
   - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
@@ -98,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 - Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
   - Only the outermost mask was allocated, so inner masks were also dropped
+- **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
+- `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 

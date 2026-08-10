@@ -217,7 +217,7 @@ mod tests {
 
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
         let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?)
-            .with_context(data_type.clone(), fill_value.clone())?;
+            .with_context(data_type, fill_value)?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
         let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
@@ -427,9 +427,8 @@ mod tests {
             .into_iter()
             .map(NonZeroU64::get)
             .collect();
-        let chunk_grid = ChunkGrid::new(
-            RegularChunkGrid::new(decoded_shape.clone(), decoded_shape_nonzero).unwrap(),
-        );
+        let chunk_grid =
+            ChunkGrid::new(RegularChunkGrid::new(decoded_shape, decoded_shape_nonzero).unwrap());
         let encoded_subchunk_grid =
             ChunkGrid::new(RegularChunkGrid::new(encoded_shape, encoded_subchunk_shape).unwrap());
         let subchunk_grid = codec
@@ -887,9 +886,7 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
@@ -899,7 +896,7 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
+            .with_context(encoded_data_type, encoded_fill_value)
             .unwrap();
         let input_handle = bytes_codec
             .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
@@ -917,7 +914,6 @@ mod tests {
             .partial_decode(indexer, &CodecOptions::default())
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded_partial_chunk.into_fixed().unwrap())
-            .to_vec()
     }
 
     fn partial_encode_u16(
@@ -931,9 +927,7 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
@@ -943,7 +937,7 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
+            .with_context(encoded_data_type, encoded_fill_value)
             .unwrap();
         let encoded_chunk = bytes_codec
             .encode(encoded, &encoded_shape, &CodecOptions::default())
@@ -972,7 +966,7 @@ mod tests {
         let decoded = codec
             .decode(decoded_encoded, shape, &CodecOptions::default())
             .unwrap();
-        crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap()).to_vec()
+        crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap())
     }
 
     #[test]

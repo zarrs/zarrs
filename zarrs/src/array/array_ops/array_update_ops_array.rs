@@ -15,94 +15,29 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     for Array<TStorage>
 {
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_shape = self
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
-            .any(|(end_exc, shape)| end_exc > *shape)
-        {
-            return Err(ArrayError::InvalidChunkSubset(
-                chunk_subset.to_array_subset(),
-                chunk_indices.to_vec(),
-                chunk_shape,
-            ));
-        }
-
-        if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
-            // The subset spans the whole chunk, so store the bytes directly and skip decoding
-            self.store_chunk_opt(chunk_indices, chunk_subset_data, options)
-        } else {
-            let chunk_subset_bytes = chunk_subset_data.into_array_bytes(self.data_type())?;
-            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
-
-            // Lock the chunk
-            // let key = self.chunk_key(chunk_indices);
-            // let mutex = self.storage.mutex(&key)?;
-            // let _lock = mutex.lock();
-
-            if options.experimental_partial_encoding()
-                && self.codecs.partial_encoder_capability().partial_encode
-                && self.storage.supports_set_partial()
-            {
-                let partial_encoder = self.partial_encoder(chunk_indices, options)?;
-                debug_assert!(
-                    partial_encoder.supports_partial_encode(),
-                    "partial encoder is misrepresenting its capabilities"
-                );
-                Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
-            } else {
-                // Decode the entire chunk
-                let chunk_bytes_old: ArrayBytes<'static> =
-                    self.retrieve_chunk_opt(chunk_indices, options)?;
-                chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
-
-                // Update the chunk
-                let chunk_bytes_new = update_array_bytes(
-                    chunk_bytes_old,
-                    &chunk_shape,
-                    chunk_subset,
-                    &chunk_subset_bytes,
-                    self.data_type().size(),
-                )?;
-
-                // Store the updated chunk
-                self.store_chunk_opt(chunk_indices, chunk_bytes_new, options)
-            }
-        }
+        self.store_chunk_subset_with_options(
+            chunk_indices,
+            chunk_subset,
+            chunk_subset_data,
+            self.codec_options(),
+        )
     }
 
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::too_many_lines)]
     pub fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    #[allow(clippy::too_many_lines)]
-    pub fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
@@ -126,10 +61,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_chunk_subset
-                self.store_chunk_opt(chunk_indices, subset_data, options)?;
+                self.store_chunk_with_options(chunk_indices, subset_data, options)?;
             } else {
                 // Store the chunk subset
-                self.store_chunk_subset_opt(
+                self.store_chunk_subset_with_options(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
@@ -141,7 +76,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-            let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
+            let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -159,7 +94,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                     self.data_type(),
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
-                self.store_chunk_subset_opt(
+                self.store_chunk_subset_with_options(
                     &chunk_indices,
                     &chunk_subset_in_chunk,
                     chunk_subset_bytes,
@@ -174,11 +109,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         Ok(())
     }
 
-    pub fn compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
+    pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let options = self.codec_options();
         let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
         if let Some(chunk_bytes) = chunk_bytes {
             if let Some(compacted_bytes) = self.codecs_bound.compact(
@@ -206,11 +138,76 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         self.with_storage(self.storage.clone().readable())
     }
 
-    /////////////////////////////////////////////////////////////////////////////
-    // Advanced methods
-    /////////////////////////////////////////////////////////////////////////////
-
     pub fn partial_encoder(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+        self.partial_encoder_with_options(chunk_indices, self.codec_options())
+    }
+}
+
+impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+    pub(in crate::array) fn store_chunk_subset_with_options<'a, T: IntoArrayBytes<'a>>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        chunk_subset_data: T,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let chunk_shape = self
+            .chunk_grid()
+            .chunk_shape_u64(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
+            .any(|(end_exc, shape)| end_exc > *shape)
+        {
+            return Err(ArrayError::InvalidChunkSubset(
+                chunk_subset.to_array_subset(),
+                chunk_indices.to_vec(),
+                chunk_shape,
+            ));
+        }
+
+        if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
+            self.store_chunk_with_options(chunk_indices, chunk_subset_data, options)
+        } else {
+            let chunk_subset_bytes = chunk_subset_data.into_array_bytes(self.data_type())?;
+            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
+
+            // Lock the chunk
+            // let key = self.chunk_key(chunk_indices);
+            // let mutex = self.storage.mutex(&key)?;
+            // let _lock = mutex.lock();
+
+            if options.experimental_partial_encoding()
+                && self.codecs.partial_encoder_capability().partial_encode
+                && self.storage.supports_set_partial()
+            {
+                let partial_encoder = self.partial_encoder_with_options(chunk_indices, options)?;
+                debug_assert!(
+                    partial_encoder.supports_partial_encode(),
+                    "partial encoder is misrepresenting its capabilities"
+                );
+                Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
+            } else {
+                let chunk_bytes_old: ArrayBytes<'static> =
+                    self.retrieve_chunk_with_options(chunk_indices, options)?;
+                chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
+
+                let chunk_bytes_new = update_array_bytes(
+                    chunk_bytes_old,
+                    &chunk_shape,
+                    chunk_subset,
+                    &chunk_subset_bytes,
+                    self.data_type().size(),
+                )?;
+
+                self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options)
+            }
+        }
+    }
+
+    pub(in crate::array) fn partial_encoder_with_options(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,

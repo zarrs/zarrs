@@ -335,7 +335,7 @@ mod tests {
             ]
         );
 
-        let unlimited = RegularBoundedChunkGrid::new(vec![0, 20], chunk_shape.clone()).unwrap();
+        let unlimited = RegularBoundedChunkGrid::new(vec![0, 20], chunk_shape).unwrap();
         assert_eq!(
             unlimited.chunk_edge_lengths(0).unwrap(),
             Vec::<NonZeroU64>::new()
@@ -429,7 +429,7 @@ mod tests {
             );
         }
 
-        assert!(RegularBoundedChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());
+        assert!(RegularBoundedChunkGrid::new(vec![0; 1], chunk_shape).is_err());
     }
 
     #[test]
@@ -456,8 +456,7 @@ mod tests {
         let array_shape: ArrayShape = vec![10, 12];
         let chunk_shape: ChunkShape =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
-        let chunk_grid =
-            RegularBoundedChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
+        let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         assert_eq!(chunk_grid.grid_shape(), &[4, 3]);
 

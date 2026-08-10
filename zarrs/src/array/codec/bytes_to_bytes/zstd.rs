@@ -143,7 +143,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -192,7 +191,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

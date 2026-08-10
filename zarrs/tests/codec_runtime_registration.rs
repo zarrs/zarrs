@@ -175,7 +175,7 @@ fn codec_runtime_registration_array_roundtrip() {
     assert!(unregister_codec_v3(&handle));
 
     // Opening the array after unregistering should fail because the codec is no longer available
-    let open_result: Result<Array<MemoryStore>, _> = Array::open(store.clone(), array_path);
+    let open_result: Result<Array<MemoryStore>, _> = Array::open(store, array_path);
     assert!(
         open_result.is_err(),
         "Opening array should fail after codec is unregistered"

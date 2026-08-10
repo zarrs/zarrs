@@ -74,12 +74,36 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.metadata_erase_version
     }
 
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
+        let mut array = self.clone();
+        array.codec_options = codec_options;
+        array
+    }
+
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self {
+        let mut array = self.clone();
+        array.metadata_options = metadata_options;
+        array
+    }
+
+    #[allow(clippy::return_self_not_must_use)]
+    pub fn with_metadata_erase_version(
+        &self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> Self {
+        let mut array = self.clone();
+        array.metadata_erase_version = metadata_erase_version;
+        array
+    }
+
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {
         &self.dimension_names
     }
 
     pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
-        match &self.metadata {
+        match &*self.metadata {
             ArrayMetadata::V3(metadata) => &metadata.attributes,
             ArrayMetadata::V2(metadata) => &metadata.attributes,
         }
@@ -89,11 +113,14 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         &self.metadata
     }
 
-    #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-    pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
+    #[allow(clippy::too_many_lines)]
+    pub fn metadata_opt(&self) -> ArrayMetadata {
+        let options = self.metadata_options();
         use ArrayMetadata as AM;
         use MetadataConvertVersion as V;
-        let mut metadata = self.metadata.clone();
+        // Deliberately clone the metadata document, not only the `Arc` handle: the returned
+        // metadata has the requested options applied without changing the array.
+        let mut metadata = (*self.metadata).clone();
 
         // Attribute manipulation
         if options.include_zarrs_metadata() {
@@ -122,8 +149,11 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             (AM::V3(metadata), V::Default | V::V3) => ArrayMetadata::V3(metadata),
             (AM::V2(metadata), V::Default) => ArrayMetadata::V2(metadata),
             (AM::V2(metadata), V::V3) => {
-                let metadata = array_metadata_v2_to_v3(&metadata)
+                let mut metadata = array_metadata_v2_to_v3(&metadata)
                     .expect("conversion succeeded on array creation");
+                // Zarr V2 metadata has no dimension names to convert, so take the array's. They
+                // are only representable once converted to Zarr V3.
+                metadata.dimension_names.clone_from(&self.dimension_names);
                 AM::V3(metadata)
             }
         };

@@ -856,9 +856,12 @@ pub fn generate_array_metadata(config: &TestConfig) -> Option<serde_json::Value>
         builder.bytes_to_bytes_codecs(config.bytes_to_bytes_codecs.clone());
     }
 
-    let array = builder.build(store, "/").ok()?;
     let metadata_options = ArrayMetadataOptions::default().with_include_zarrs_metadata(false);
-    let metadata = array.metadata_opt(&metadata_options);
+    let array = builder
+        .build(store, "/")
+        .ok()?
+        .with_metadata_options(metadata_options);
+    let metadata = array.metadata_opt();
 
     serde_json::to_value(metadata).ok()
 }
@@ -898,7 +901,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     }
 
     // Build the array
-    let array = match builder.build(store.clone(), "/") {
+    let array = match builder.build(store, "/") {
         Ok(a) => a,
         Err(e) => {
             let reason = if let zarrs::array::ArrayCreateError::CodecsCreateError(e) = e {
@@ -912,7 +915,8 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
 
     // Store metadata (without zarrs-specific metadata for cleaner snapshots)
     let metadata_options = ArrayMetadataOptions::default().with_include_zarrs_metadata(false);
-    if let Err(e) = array.store_metadata_opt(&metadata_options) {
+    let array = array.with_metadata_options(metadata_options);
+    if let Err(e) = array.store_metadata() {
         return CodecTestResult::Unsupported {
             reason: format!("Metadata storage failed: {e}"),
         };

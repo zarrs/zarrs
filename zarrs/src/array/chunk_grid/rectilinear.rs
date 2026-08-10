@@ -127,7 +127,7 @@ impl RectilinearChunkGrid {
     ) -> Result<Self, RectilinearChunkGridCreateError> {
         if array_shape.len() != chunk_shapes.len() {
             return Err(RectilinearChunkGridCreateError(
-                array_shape.clone(),
+                array_shape,
                 chunk_shapes.to_vec(),
             ));
         }
@@ -591,7 +591,7 @@ mod tests {
         // The RLE [[5, 3], [15, 2], 20, 35] should expand to [5, 5, 5, 15, 15, 20, 35]
         // Total = 5+5+5+15+15+20+35 = 100
         let array_shape: ArrayShape = vec![100, 100];
-        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), chunk_shapes).unwrap();
+        let chunk_grid = RectilinearChunkGrid::new(array_shape, chunk_shapes).unwrap();
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
 
@@ -655,7 +655,7 @@ mod tests {
             ChunkEdgeLengths::Scalar(NonZeroU64::new(10).unwrap()),
             ChunkEdgeLengths::Varying(from_slice_u64(&[10, 15, 20, 15]).unwrap()),
         ];
-        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+        let chunk_grid = RectilinearChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
         assert_eq!(chunk_grid.grid_shape(), &[5, 4]);
 

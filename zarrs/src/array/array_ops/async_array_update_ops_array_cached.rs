@@ -107,25 +107,8 @@ where
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_data,
-            self.codec_options(),
-        )
-        .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_chunk_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_chunk_subset_opt(chunk_indices, chunk_subset, chunk_subset_data, options)
+            .async_store_chunk_subset(chunk_indices, chunk_subset, chunk_subset_data)
             .await?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
@@ -137,19 +120,8 @@ where
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_data, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_array_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_array_subset_opt(array_subset, subset_data, options)
+            .async_store_array_subset(array_subset, subset_data)
             .await?;
         if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
             self.cache().invalidate_chunks(&chunks);
@@ -160,15 +132,8 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
-        let compacted = self
-            .array()
-            .async_compact_chunk(chunk_indices, options)
-            .await?;
+    pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let compacted = self.array().async_compact_chunk(chunk_indices).await?;
         if compacted {
             self.cache().invalidate_chunk(chunk_indices);
         }
@@ -183,12 +148,8 @@ where
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        let encoder = self
-            .array()
-            .async_partial_encoder(chunk_indices, options)
-            .await?;
+        let encoder = self.array().async_partial_encoder(chunk_indices).await?;
         Ok(Arc::new(CachedAsyncArrayPartialEncoder {
             encoder,
             cache: self.cache_arc(),
@@ -227,7 +188,7 @@ mod tests {
         assert_eq!(cached.cache().len(), 1);
 
         let options = CodecOptions::default();
-        let encoder = cached.async_partial_encoder(&[0], &options).await.unwrap();
+        let encoder = cached.async_partial_encoder(&[0]).await.unwrap();
         encoder
             .partial_encode(
                 &ArraySubset::new_with_ranges(&[1..2]),

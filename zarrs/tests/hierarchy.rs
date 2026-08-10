@@ -118,7 +118,7 @@ fn child_arrays() {
     assert_eq!(array_paths, ["/a/baz", "/a/foo"]);
 
     // At root, there are no arrays
-    let group = Group::open(store.clone(), "/").unwrap();
+    let group = Group::open(store, "/").unwrap();
     let arrays = group.child_arrays().unwrap();
     assert!(arrays.is_empty());
 }
@@ -136,7 +136,7 @@ fn child_groups() {
     assert_eq!(group_paths, ["/a", "/b"]);
 
     // In /a, there are no child groups (only arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
+    let group = Group::open(store, "/a").unwrap();
     let groups = group.child_groups().unwrap();
     assert!(groups.is_empty());
 }
@@ -157,7 +157,7 @@ fn child_paths() {
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are two child paths: baz and foo (both arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
+    let group = Group::open(store, "/a").unwrap();
     let paths = group.child_paths().unwrap();
     let path_strings: Vec<_> = paths
         .iter()
@@ -182,7 +182,7 @@ fn child_group_paths() {
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are no child group paths (only arrays)
-    let group = Group::open(store.clone(), "/a").unwrap();
+    let group = Group::open(store, "/a").unwrap();
     let paths = group.child_group_paths().unwrap();
     assert!(paths.is_empty());
 }
@@ -199,7 +199,7 @@ fn child_array_paths() {
     assert!(paths.is_empty());
 
     // In /a, there are two array paths: baz and foo
-    let group = Group::open(store.clone(), "/a").unwrap();
+    let group = Group::open(store, "/a").unwrap();
     let paths = group.child_array_paths().unwrap();
     let path_strings: Vec<_> = paths
         .iter()
@@ -633,7 +633,7 @@ mod consolidated_open {
 
         // Group::child_arrays must surface the phantom array purely from
         // consolidated metadata — there is no /phantom/zarr.json in storage.
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
         let arrays = group.child_arrays().unwrap();
         let names: Vec<_> = arrays
             .iter()
@@ -659,7 +659,7 @@ mod consolidated_open {
         let store = build_store_with_phantom();
         global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Never);
 
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
         let arrays = group.child_arrays().unwrap();
         let names: Vec<_> = arrays
             .iter()
@@ -677,7 +677,7 @@ mod consolidated_open {
         reset_config();
         let store = build_store_with_phantom();
 
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
         let nodes = group.traverse().unwrap();
         let paths: Vec<_> = nodes.iter().map(|(p, _)| p.as_str().to_string()).collect();
         assert!(paths.contains(&"/phantom".to_string()), "paths: {paths:?}");
@@ -730,7 +730,7 @@ mod consolidated_open {
             .set(&StoreKey::new("zarr.json").unwrap(), serialized.into())
             .unwrap();
 
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
 
         // recursive=false: only direct children (/sub).
         let direct = group.children(false).unwrap();
@@ -981,7 +981,7 @@ mod consolidated_open {
         // Node::open same.
         assert!(Node::open(&store, "/").is_err());
         // Group::children same (covers Group::children's `?`).
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
         assert!(group.children(false).is_err());
         assert!(group.traverse().is_err());
 
@@ -1060,7 +1060,7 @@ mod consolidated_open {
 
         global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
 
-        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let group = zarrs::group::Group::open(store, "/").unwrap();
         let err = group
             .children(false)
             .expect_err("children should fail under Must when consolidated absent");

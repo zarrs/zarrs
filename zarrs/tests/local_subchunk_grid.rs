@@ -9,7 +9,7 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits, ArrayReadOps,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
     ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
@@ -305,12 +305,8 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
         ChunkGridDecodedRef::ChunkLocal
     ));
 
-    let first = reopened
-        .local_subchunk_grid_at_level(0, &[0, 0], &CodecOptions::default())?
-        .unwrap();
-    let second = reopened
-        .local_subchunk_grid(&[1, 0], &CodecOptions::default())?
-        .unwrap();
+    let first = reopened.local_subchunk_grid_at_level(0, &[0, 0])?.unwrap();
+    let second = reopened.local_subchunk_grid(&[1, 0])?.unwrap();
     assert_ne!(
         first.chunk_shape(&[0, 0])?.unwrap(),
         second.chunk_shape(&[0, 0])?.unwrap()
@@ -346,9 +342,7 @@ fn dynamic_local_subchunk_grid_transforms_through_transpose()
     array.store_array_subset(&array.subset_all(), &data)?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
-    let local_grid = reopened
-        .local_subchunk_grid(&[0, 0], &CodecOptions::default())?
-        .unwrap();
+    let local_grid = reopened.local_subchunk_grid(&[0, 0])?.unwrap();
     assert_eq!(local_grid.array_shape(), &[4, 7]);
     assert_eq!(
         local_grid.chunk_shape(&[0, 0])?.unwrap(),
@@ -544,7 +538,7 @@ impl CodecTraits for TestSubchunkingCodec {
 
 impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self.clone()
+        self
     }
 
     fn with_codec_specific_options(

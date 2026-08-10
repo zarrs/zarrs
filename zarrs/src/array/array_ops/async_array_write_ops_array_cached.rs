@@ -11,31 +11,14 @@ where
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(self.metadata_options()).await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_metadata_opt(
-        &self,
-        options: &ArrayMetadataOptions,
-    ) -> Result<(), StorageError> {
-        self.array().async_store_metadata_opt(options).await?;
+        self.array().async_store_metadata().await?;
         self.cache().invalidate();
         Ok(())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        self.async_erase_metadata_opt(self.metadata_erase_version())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_metadata_opt(
-        &self,
-        options: MetadataEraseVersion,
-    ) -> Result<(), StorageError> {
-        self.array().async_erase_metadata_opt(options).await?;
+        self.array().async_erase_metadata().await?;
         self.cache().invalidate();
         Ok(())
     }
@@ -46,19 +29,8 @@ where
         chunk_indices: &[u64],
         chunk_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_chunk_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_chunk_opt(chunk_indices, chunk_data, options)
+            .async_store_chunk(chunk_indices, chunk_data)
             .await?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
@@ -70,20 +42,7 @@ where
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
-            .await
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_chunks_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.array()
-            .async_store_chunks_opt(chunks, chunks_data, options)
-            .await?;
+        self.array().async_store_chunks(chunks, chunks_data).await?;
         self.cache().invalidate_chunks(chunks);
         Ok(())
     }
