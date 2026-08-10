@@ -1,6 +1,7 @@
 //! Internal utilities for handling array bytes.
 
 use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use itertools::Itertools;
 
@@ -216,6 +217,56 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
     }
 
     Ok(result.into_optional()?)
+}
+
+/// Merge cached variable-length chunk bytes into an array subset.
+///
+/// Dispatches to [`merge_chunks_vlen_optional`] or [`merge_chunks_vlen`] depending on the optional
+/// nesting depth of `data_type`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the chunks don't have the optional structure implied by `data_type`.
+///
+/// # Panics
+/// Panics if a chunk does not hold variable-length bytes, or if `array_shape` exceeds `usize::MAX`
+/// elements.
+pub(crate) fn merge_cached_chunks_vlen(
+    chunk_bytes_and_subsets: Vec<(Arc<ArrayBytes<'static>>, ArraySubset)>,
+    array_shape: &[u64],
+    data_type: &DataType,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let nesting_depth = optional_nesting_depth(data_type);
+    if nesting_depth > 0 {
+        let chunks = chunk_bytes_and_subsets
+            .into_iter()
+            .map(|(bytes, subset)| {
+                (
+                    Arc::unwrap_or_clone(bytes)
+                        .into_optional()
+                        .expect("run on vlen data"),
+                    subset,
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
+            chunks,
+            array_shape,
+            nesting_depth,
+        )?))
+    } else {
+        let chunks = chunk_bytes_and_subsets
+            .into_iter()
+            .map(|(bytes, subset)| {
+                (
+                    Arc::unwrap_or_clone(bytes)
+                        .into_variable()
+                        .expect("run on vlen data"),
+                    subset,
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, array_shape)))
+    }
 }
 
 /// Extract decoded variable-length regions from bytes and offsets using an indexer.

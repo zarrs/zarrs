@@ -19,23 +19,30 @@
 //!  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
 //!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
-//!  - `ChunkCacheAsyncPartialDecoderLruChunkLimit` (with the `async` feature): an asynchronous partial decoder chunk cache with a fixed chunk capacity.
-//!  - `ChunkCacheAsyncPartialDecoderLruSizeLimit` (with the `async` feature): an asynchronous partial decoder chunk cache with a fixed size in bytes.
 //!
-//! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache,
-//! except for the asynchronous partial decoder caches (see the locality requirement below).
+//! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
 //! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
 //!
 //! With the `async` feature, [`ArrayCached`](super::ArrayCached) also supports asynchronous array
-//! operations with caches holding [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or
-//! `ChunkCacheTypeAsyncPartialDecoder` values (see `AsyncChunkCacheType`).
-//! [`ChunkCacheTypePartialDecoder`] caches only support synchronous retrieval and
-//! `ChunkCacheTypeAsyncPartialDecoder` caches only support asynchronous retrieval (see [`SyncChunkCacheType`]).
+//! operations, which need an `AsyncChunkCache` rather than a [`ChunkCache`].
+//! The `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` caches are the asynchronous counterparts of the
+//! caches above, with an `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}`
+//! alias per chunk type.
 //!
-//! Asynchronous operations additionally require a cache with [`ChunkCacheLocalityShared`] locality.
-//! `ThreadLocal` caches have [`ChunkCacheLocalityPerThread`] locality and are rejected at compile time, since a
-//! task may cache a chunk on one thread and invalidate it on another (see [`ChunkCacheLocality`]).
+//! All of the above caches coalesce concurrent retrievals of an uncached chunk where the backing
+//! cache implementation supports it, so that a chunk is usually fetched once no matter how many
+//! callers request it. This is best effort: the `wasm32` asynchronous caches do not coalesce, and
+//! each caller awaits its own retrieval. See [`ChunkCache::try_get_or_insert_with`] and
+//! `AsyncChunkCache::try_get_or_insert_with`.
+//!
+//! A cache implements one of the two traits, not both, so a cache is used with either the
+//! synchronous or the asynchronous operations. This follows from how each is implemented:
+//! an asynchronous cache is backed by storage whose own operations are asynchronous.
+//!
+//! [`ChunkCacheTypePartialDecoder`] caches only support synchronous retrieval and
+//! `ChunkCacheTypeAsyncPartialDecoder` caches only support asynchronous retrieval (see
+//! [`SyncChunkCacheType`] and `AsyncChunkCacheType`).
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
@@ -46,6 +53,8 @@
 //! For many access patterns, chunk caching may reduce performance.
 //! **Benchmark your algorithm/data.**
 
+#[cfg(feature = "async")]
+use std::future::Future;
 use std::sync::Arc;
 
 use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
@@ -150,7 +159,7 @@ pub trait AsyncChunkCacheType: ChunkCacheType {
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
+        C: AsyncChunkCache<Value = Self> + ?Sized;
 
     #[doc(hidden)]
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -161,7 +170,7 @@ pub trait AsyncChunkCacheType: ChunkCacheType {
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
+        C: AsyncChunkCache<Value = Self> + ?Sized;
 
     #[doc(hidden)]
     async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
@@ -173,7 +182,7 @@ pub trait AsyncChunkCacheType: ChunkCacheType {
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
+        C: AsyncChunkCache<Value = Self> + ?Sized;
 }
 
 mod chunk_cache_type_sealed {
@@ -190,31 +199,6 @@ mod chunk_cache_type_sealed {
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
 }
 
-mod chunk_cache_locality_sealed {
-    pub trait Sealed {}
-
-    impl Sealed for super::ChunkCacheLocalityShared {}
-    impl Sealed for super::ChunkCacheLocalityPerThread {}
-}
-
-/// Whether a chunk cache is shared between threads ([`ChunkCacheLocalityShared`]) or per-thread ([`ChunkCacheLocalityPerThread`]).
-///
-/// This is a sealed trait implemented only by [`ChunkCacheLocalityShared`] and [`ChunkCacheLocalityPerThread`].
-pub trait ChunkCacheLocality: chunk_cache_locality_sealed::Sealed {}
-
-/// A [`ChunkCacheLocality`] marker for a cache shared by all threads.
-#[derive(Debug)]
-pub struct ChunkCacheLocalityShared;
-
-/// A [`ChunkCacheLocality`] marker for a per-thread cache.
-///
-/// Caches with this locality only support synchronous operations, see [`ChunkCacheLocality`].
-#[derive(Debug)]
-pub struct ChunkCacheLocalityPerThread;
-
-impl ChunkCacheLocality for ChunkCacheLocalityShared {}
-impl ChunkCacheLocality for ChunkCacheLocalityPerThread {}
-
 /// A chunk cache.
 ///
 /// A chunk cache stores values by chunk indices. It is intentionally unaware of
@@ -222,20 +206,12 @@ impl ChunkCacheLocality for ChunkCacheLocalityPerThread {}
 /// array operations.
 pub trait ChunkCache: MaybeSend + MaybeSync {
     /// The value stored for each chunk.
-    type Value: ChunkCacheType;
-
-    /// Whether the cache is shared between threads ([`ChunkCacheLocalityShared`]) or per-thread ([`ChunkCacheLocalityPerThread`]).
     ///
-    /// Asynchronous operations require [`ChunkCacheLocalityShared`], because an asynchronous task may resume on
-    /// a different thread after each `await`, and a per-thread cache would then be able to
-    /// retain an entry that a write invalidated on another thread.
-    type Locality: ChunkCacheLocality;
-
-    /// Return the cached value for a chunk without inserting, if it is cached.
-    ///
-    /// For a thread-local cache, queries only the current thread's cache.
-    #[must_use]
-    fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value>;
+    /// The [`SyncChunkCacheType`] bound is what confines this trait to chunk types that support
+    /// synchronous retrieval, so an unusable combination such as a
+    /// [`ChunkCacheLruChunkLimit`]`<ChunkCacheTypeAsyncPartialDecoder>` is rejected where it is
+    /// written rather than at an unrelated retrieval call site.
+    type Value: SyncChunkCacheType;
 
     /// Return a cached value or insert the value returned by `f`.
     ///
@@ -280,5 +256,69 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     #[must_use]
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+/// An asynchronous chunk cache.
+///
+/// This is the asynchronous counterpart of [`ChunkCache`], and is what
+/// [`ArrayCached`](super::ArrayCached) asynchronous operations require. It is a separate trait
+/// rather than a [`ChunkCache`] extension because an asynchronous cache is backed by storage
+/// whose own operations are asynchronous, and so cannot implement the synchronous [`ChunkCache`]
+/// methods.
+///
+/// A chunk cache stores values by chunk indices. It is intentionally unaware of
+/// arrays; [`ArrayCached`](super::ArrayCached) is the entry point for cached
+/// array operations.
+#[cfg(feature = "async")]
+pub trait AsyncChunkCache: MaybeSend + MaybeSync {
+    /// The value stored for each chunk.
+    ///
+    /// The [`AsyncChunkCacheType`] bound is what confines this trait to chunk types that support
+    /// asynchronous retrieval, so an unusable combination such as an
+    /// [`AsyncChunkCacheLruChunkLimit`]`<`[`ChunkCacheTypePartialDecoder`]`>` is rejected where it
+    /// is written rather than at an unrelated retrieval call site.
+    type Value: AsyncChunkCacheType;
+
+    /// Return a cached value or insert the value awaited from `init`.
+    ///
+    /// `init` is awaited only if the chunk is not cached. Implementations should await it at most
+    /// once per uncached chunk where possible, so that concurrent retrievals of the same uncached
+    /// chunk do not each fetch it.
+    ///
+    /// # Errors
+    /// Returns the [`ArrayError`] returned by `init`, which may be shared with the other callers
+    /// awaiting the same value.
+    fn try_get_or_insert_with<F>(
+        &self,
+        chunk_indices: Vec<u64>,
+        init: F,
+    ) -> impl Future<Output = Result<Self::Value, Arc<ArrayError>>> + MaybeSend
+    where
+        F: Future<Output = Result<Self::Value, ArrayError>> + MaybeSend;
+
+    /// Invalidate all cached chunks, returning the number of chunks invalidated.
+    fn invalidate(&self) -> impl Future<Output = usize> + MaybeSend;
+
+    /// Invalidate a cached chunk, returning true if the chunk was cached.
+    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> impl Future<Output = bool> + MaybeSend;
+
+    /// Invalidate cached chunks, returning the number of chunks invalidated.
+    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> impl Future<Output = usize> + MaybeSend {
+        async move {
+            let mut invalidated = 0;
+            for chunk_indices in chunks.iter_indices() {
+                invalidated += usize::from(self.invalidate_chunk(&chunk_indices).await);
+            }
+            invalidated
+        }
+    }
+
+    /// Return the number of chunks in the cache.
+    fn len(&self) -> impl Future<Output = usize> + MaybeSend;
+
+    /// Returns true if the cache is empty.
+    fn is_empty(&self) -> impl Future<Output = bool> + MaybeSend {
+        async move { self.len().await == 0 }
     }
 }

@@ -7,8 +7,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{ArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
-    optional_nesting_depth, wrap_optional_masks,
+    build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
+    wrap_optional_masks,
 };
 use crate::array::chunk_cache::{SyncChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
@@ -18,7 +18,6 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
 
-#[allow(clippy::too_many_lines)]
 fn retrieve_array_subset_bytes<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
@@ -28,7 +27,6 @@ fn retrieve_array_subset_bytes<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
-    C::Value: SyncChunkCacheType,
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
@@ -42,7 +40,6 @@ where
             array.shape().to_vec(),
         ));
     };
-    let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
     match chunks.num_elements_usize() {
         0 => fill_value_bytes(array, array_subset.num_elements()),
         1 => {
@@ -61,7 +58,8 @@ where
             }
         }
         num_chunks => {
-            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape0)?;
+            let chunk_shape = array.chunk_shape(chunks.start())?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -102,7 +100,6 @@ fn retrieve_multi_chunk_variable<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
-    C::Value: SyncChunkCacheType,
 {
     let indices = chunks.indices();
     let chunk_bytes_and_subsets =
@@ -123,39 +120,12 @@ where
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
 
-    let nesting_depth = optional_nesting_depth(array.data_type());
-    if nesting_depth > 0 {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_optional()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-            chunks,
-            &array_subset.shape(),
-            nesting_depth,
-        )?)
-        .into())
-    } else {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_variable()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, &array_subset.shape())).into())
-    }
+    Ok(merge_cached_chunks_vlen(
+        chunk_bytes_and_subsets,
+        &array_subset.shape(),
+        array.data_type(),
+    )?
+    .into())
 }
 
 fn retrieve_multi_chunk_fixed<TStorage, C>(
@@ -169,7 +139,6 @@ fn retrieve_multi_chunk_fixed<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
-    C::Value: SyncChunkCacheType,
 {
     let data_type_size = array.data_type().fixed_size().expect("fixed data type");
     let num_elements = array_subset.num_elements_usize();
@@ -246,7 +215,6 @@ impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache,
-    C::Value: SyncChunkCacheType,
 {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
@@ -281,7 +249,6 @@ impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache,
-    C::Value: SyncChunkCacheType,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
@@ -478,9 +445,9 @@ mod tests {
         ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimitThreadLocal,
         ChunkCacheEncodedLruSizeLimit, ChunkCacheEncodedLruSizeLimitThreadLocal,
-        ChunkCacheLocalityShared, ChunkCachePartialDecoderLruChunkLimit,
-        ChunkCachePartialDecoderLruChunkLimitThreadLocal, ChunkCachePartialDecoderLruSizeLimit,
-        ChunkCachePartialDecoderLruSizeLimitThreadLocal, ChunkCacheTypeDecoded,
+        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruChunkLimitThreadLocal,
+        ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
+        ChunkCacheTypeDecoded,
     };
     use crate::array::{ArrayBuilder, ArrayError, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -489,7 +456,6 @@ mod tests {
     fn test_cache<C>(cache: C)
     where
         C: ChunkCache,
-        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -545,7 +511,6 @@ mod tests {
     fn test_cache_sharded<C>(cache: C)
     where
         C: ChunkCache,
-        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
@@ -582,7 +547,6 @@ mod tests {
     fn test_cache_nested_optional<C>(cache: C)
     where
         C: ChunkCache,
-        C::Value: SyncChunkCacheType,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(
@@ -665,11 +629,6 @@ mod tests {
 
     impl ChunkCache for CustomDecodedCache {
         type Value = ChunkCacheTypeDecoded;
-        type Locality = ChunkCacheLocalityShared;
-
-        fn get(&self, chunk_indices: &[u64]) -> Option<Self::Value> {
-            self.values.lock().unwrap().get(chunk_indices).cloned()
-        }
 
         fn try_get_or_insert_with<F>(
             &self,

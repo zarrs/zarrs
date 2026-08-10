@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use super::{async_try_get_or_insert_with, cache_error, validate_chunk_indices};
+use super::{cache_error, validate_chunk_indices};
 use crate::array::chunk_cache::{
-    AsyncChunkCacheType, ChunkCache, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
+    AsyncChunkCache, AsyncChunkCacheType, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
 };
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions,
@@ -28,16 +28,17 @@ impl AsyncChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        async_try_get_or_insert_with(cache, chunk_indices.to_vec(), async || {
-            array
-                .async_partial_decoder_with_options(chunk_indices, options)
-                .await
-        })
-        .await
-        .map_err(cache_error)
+        cache
+            .try_get_or_insert_with(chunk_indices.to_vec(), async move {
+                array
+                    .async_partial_decoder_with_options(chunk_indices, options)
+                    .await
+            })
+            .await
+            .map_err(cache_error)
     }
 
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -48,7 +49,7 @@ impl AsyncChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
         let decoder = Self::async_partial_decoder(cache, array, chunk_indices, options).await?;
@@ -74,7 +75,7 @@ impl AsyncChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         Ok(
             Self::async_partial_decoder(cache, array, chunk_indices, options)

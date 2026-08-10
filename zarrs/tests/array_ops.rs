@@ -923,8 +923,8 @@ mod async_cached {
     use std::sync::Arc;
 
     use zarrs::array::chunk_cache::{
-        AsyncChunkCacheType, ChunkCache, ChunkCacheAsyncPartialDecoderLruChunkLimit,
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit, ChunkCacheLocalityShared,
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit,
     };
     use zarrs::array::{
         Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
@@ -998,8 +998,7 @@ mod async_cached {
         caches_full_chunk_reads: bool,
     ) -> TestResult
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let (array, store) = fixture();
         array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
@@ -1027,9 +1026,9 @@ mod async_cached {
             cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await?,
             [2u8; 9]
         );
-        assert_eq!(cached.cache().len(), 2);
+        assert_eq!(cached.cache().len().await, 2);
         cached.async_store_chunk(&[0, 0], &[3u8; 9]).await?;
-        assert_eq!(cached.cache().len(), 1);
+        assert_eq!(cached.cache().len().await, 1);
         assert_eq!(
             cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
             [3u8; 9]
@@ -1038,18 +1037,17 @@ mod async_cached {
         cached
             .async_store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 3..4]), &[4u8])
             .await?;
-        assert_eq!(cached.cache().len(), 1);
+        assert_eq!(cached.cache().len().await, 1);
         assert_eq!(cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await?[0], 4);
 
         cached.async_store_metadata().await?;
-        assert!(cached.cache().is_empty());
+        assert!(cached.cache().is_empty().await);
         Ok(())
     }
 
     async fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let (array, store) = fixture();
         populate(array.as_ref()).await?;
@@ -1072,10 +1070,11 @@ mod async_cached {
     }
 
     /// A cached asynchronous partial decoder must retain the shard index across retrievals.
-    async fn assert_subchunk_reads_reuse_shard_index() -> TestResult {
+    #[tokio::test]
+    async fn array_cached_async_partial_decoder_caches_shard_index() -> TestResult {
         let (array, store) = fixture();
         populate(array.as_ref()).await?;
-        let cached = ArrayCached::new(array, ChunkCacheAsyncPartialDecoderLruChunkLimit::new(16));
+        let cached = ArrayCached::new(array, AsyncChunkCachePartialDecoderLruChunkLimit::new(16));
 
         store.reset();
         cached.async_retrieve_subchunk::<Vec<u8>>(&[0, 0]).await?;
@@ -1089,10 +1088,12 @@ mod async_cached {
 
     #[tokio::test]
     async fn array_cached_async_cache_hits_and_invalidation_cover_all_value_types() -> TestResult {
-        assert_cache_hits_and_invalidation(ChunkCacheEncodedLruChunkLimit::new(16), true).await?;
-        assert_cache_hits_and_invalidation(ChunkCacheDecodedLruChunkLimit::new(16), true).await?;
+        assert_cache_hits_and_invalidation(AsyncChunkCacheEncodedLruChunkLimit::new(16), true)
+            .await?;
+        assert_cache_hits_and_invalidation(AsyncChunkCacheDecodedLruChunkLimit::new(16), true)
+            .await?;
         assert_cache_hits_and_invalidation(
-            ChunkCacheAsyncPartialDecoderLruChunkLimit::new(16),
+            AsyncChunkCachePartialDecoderLruChunkLimit::new(16),
             false,
         )
         .await
@@ -1100,20 +1101,62 @@ mod async_cached {
 
     #[tokio::test]
     async fn array_cached_async_array_subset_into_uses_cache() -> TestResult {
-        assert_cache_hits_for_array_subset_into(ChunkCacheEncodedLruChunkLimit::new(16)).await?;
-        assert_cache_hits_for_array_subset_into(ChunkCacheDecodedLruChunkLimit::new(16)).await
+        assert_cache_hits_for_array_subset_into(AsyncChunkCacheEncodedLruChunkLimit::new(16))
+            .await?;
+        assert_cache_hits_for_array_subset_into(AsyncChunkCacheDecodedLruChunkLimit::new(16)).await
     }
 
+    /// Concurrent retrievals of the same uncached chunk must fetch it once.
+    ///
+    /// The asynchronous caches are backed by a `moka::future::Cache`, whose `try_get_with`
+    /// coalesces: the first caller fetches and the rest await its value. Without coalescing every
+    /// task would issue its own store reads, which is what this counts.
+    async fn assert_concurrent_retrievals_are_coalesced<C>(cache: C) -> TestResult
+    where
+        C: AsyncChunkCache + 'static,
+    {
+        let (array, store) = fixture();
+        array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
+        array.async_store_chunk(&[0, 1], &[2u8; 9]).await?;
+        let cached = ArrayCached::new(array, cache);
+
+        // Establish the read count of a single uncontended miss on an equivalent chunk. A second
+        // chunk is used rather than invalidating this one, since `moka` invalidation is lazy.
+        store.reset();
+        assert_eq!(
+            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+            [1u8; 9]
+        );
+        let reads_for_one_miss = store.reads();
+        assert!(reads_for_one_miss > 0);
+
+        store.reset();
+        let retrievals = (0..8).map(|_| {
+            let cached = cached.clone();
+            async move { cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await }
+        });
+        for retrieved in futures::future::join_all(retrievals).await {
+            assert_eq!(retrieved?, [2u8; 9]);
+        }
+        assert_eq!(store.reads(), reads_for_one_miss);
+        Ok(())
+    }
+
+    /// The partial decoder caches are excluded: they cache the decoder rather than the chunk, so
+    /// only its construction is coalesced and each retrieval still decodes from the store.
     #[tokio::test]
-    async fn array_cached_async_partial_decoder_caches_shard_index() -> TestResult {
-        assert_subchunk_reads_reuse_shard_index().await
+    async fn array_cached_async_concurrent_retrievals_are_coalesced() -> TestResult {
+        assert_concurrent_retrievals_are_coalesced(AsyncChunkCacheEncodedLruChunkLimit::new(16))
+            .await?;
+        assert_concurrent_retrievals_are_coalesced(AsyncChunkCacheDecodedLruChunkLimit::new(16))
+            .await
     }
 
     #[tokio::test]
     async fn array_cached_async_encoded_reads_bypass_cache() -> TestResult {
         let (array, store) = fixture();
         array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
-        let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
+        let cached = ArrayCached::new(array, AsyncChunkCacheDecodedLruChunkLimit::new(4));
 
         store.reset();
         assert!(
@@ -1124,7 +1167,7 @@ mod async_cached {
         );
         let reads = store.reads();
         assert!(reads > 0);
-        assert!(cached.cache().is_empty());
+        assert!(cached.cache().is_empty().await);
         assert!(
             cached
                 .async_retrieve_encoded_chunk(&[0, 0])
@@ -1132,7 +1175,7 @@ mod async_cached {
                 .is_some()
         );
         assert!(store.reads() > reads);
-        assert!(cached.cache().is_empty());
+        assert!(cached.cache().is_empty().await);
         Ok(())
     }
 }

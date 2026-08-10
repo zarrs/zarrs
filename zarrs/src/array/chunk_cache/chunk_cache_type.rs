@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use super::AsyncChunkCacheType;
+use super::{AsyncChunkCache, AsyncChunkCacheType};
 use super::{ChunkCache, SyncChunkCacheType};
 use crate::array::{Array, ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions};
 use zarrs_codec::CodecError;
@@ -58,7 +58,6 @@ pub(crate) fn retrieve_chunk_bytes<TStorage, C>(
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
-    C::Value: SyncChunkCacheType,
 {
     if let Some(bytes) =
         C::Value::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?
@@ -79,8 +78,7 @@ pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache + ?Sized,
 {
     if let Some(bytes) =
         C::Value::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options).await?
@@ -90,27 +88,6 @@ where
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         fill_value_bytes(array, chunk_shape.num_elements_u64())
     }
-}
-
-/// Return a cached value or insert the value returned by the asynchronous `f`.
-///
-/// Unlike [`ChunkCache::try_get_or_insert_with`], concurrent calls for an uncached chunk may
-/// each invoke `f`; only one of the returned values is retained by the cache.
-#[cfg(feature = "async")]
-pub(super) async fn async_try_get_or_insert_with<C, F>(
-    cache: &C,
-    chunk_indices: Vec<u64>,
-    f: F,
-) -> Result<C::Value, Arc<ArrayError>>
-where
-    C: ChunkCache + ?Sized,
-    F: AsyncFnOnce() -> Result<C::Value, ArrayError>,
-{
-    if let Some(value) = cache.get(&chunk_indices) {
-        return Ok(value);
-    }
-    let value = f().await.map_err(Arc::new)?;
-    cache.try_get_or_insert_with(chunk_indices, move || Ok(value))
 }
 
 /// Expose an in-memory synchronous partial decoder as an asynchronous partial decoder.

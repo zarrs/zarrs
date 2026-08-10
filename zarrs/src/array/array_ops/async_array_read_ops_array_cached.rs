@@ -7,11 +7,11 @@ use futures::{StreamExt, TryStreamExt};
 use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
-    optional_nesting_depth, wrap_optional_masks,
+    build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
+    wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCacheType, ChunkCacheLocalityShared, async_retrieve_chunk_bytes, fill_value_bytes,
+    AsyncChunkCache, AsyncChunkCacheType, async_retrieve_chunk_bytes, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -28,8 +28,7 @@ async fn async_retrieve_array_subset_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache + ?Sized,
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
@@ -43,7 +42,6 @@ where
             array.shape().to_vec(),
         ));
     };
-    let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
     match chunks.num_elements_usize() {
         0 => fill_value_bytes(array, array_subset.num_elements()),
         1 => {
@@ -63,7 +61,8 @@ where
             }
         }
         num_chunks => {
-            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape0)?;
+            let chunk_shape = array.chunk_shape(chunks.start())?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -105,8 +104,7 @@ async fn async_retrieve_multi_chunk_variable<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache + ?Sized,
 {
     let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
@@ -126,44 +124,17 @@ where
     };
 
     let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-        .map(|chunk_indices| retrieve_chunk(chunk_indices.clone()))
+        .map(retrieve_chunk)
         .buffered(chunk_concurrent_limit)
         .try_collect()
         .await?;
 
-    let nesting_depth = optional_nesting_depth(array.data_type());
-    if nesting_depth > 0 {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_optional()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-            chunks,
-            &array_subset.shape(),
-            nesting_depth,
-        )?)
-        .into())
-    } else {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_variable()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, &array_subset.shape())).into())
-    }
+    Ok(merge_cached_chunks_vlen(
+        chunk_bytes_and_subsets,
+        &array_subset.shape(),
+        array.data_type(),
+    )?
+    .into())
 }
 
 async fn async_retrieve_multi_chunk_fixed<TStorage, C>(
@@ -176,8 +147,7 @@ async fn async_retrieve_multi_chunk_fixed<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache + ?Sized,
 {
     let data_type_size = array.data_type().fixed_size().expect("fixed data type");
     let num_elements = array_subset.num_elements_usize();
@@ -257,8 +227,7 @@ where
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache,
 {
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
@@ -295,8 +264,7 @@ where
 impl<TStorage, C> AsyncRetrieveInto for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache,
 {
     async fn retrieve_chunk_into(
         &self,
@@ -329,8 +297,7 @@ where
 impl<TStorage, C> AsyncArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: ChunkCache<Locality = ChunkCacheLocalityShared>,
-    C::Value: AsyncChunkCacheType,
+    C: AsyncChunkCache,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
@@ -533,9 +500,9 @@ where
 mod tests {
     use super::*;
     use crate::array::chunk_cache::{
-        ChunkCacheAsyncPartialDecoderLruChunkLimit, ChunkCacheAsyncPartialDecoderLruSizeLimit,
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+        AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
     };
     use crate::array::{ArrayBuilder, FillValue, data_type};
     use zarrs_storage::store::AsyncMemoryStore;
@@ -543,8 +510,7 @@ mod tests {
     #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_async<C>(cache: C)
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -592,7 +558,7 @@ mod tests {
             vec![2, 0]
         );
         assert!(cached.async_retrieve_chunk::<Vec<u8>>(&[2]).await.is_err());
-        assert!(!cached.cache().is_empty());
+        assert!(!cached.cache().is_empty().await);
 
         // Write operations invalidate affected cached chunks
         cached.async_store_chunk(&[0], &[3u8, 4]).await.unwrap();
@@ -617,15 +583,14 @@ mod tests {
             vec![0, 0]
         );
 
-        cached.cache().invalidate();
-        assert!(cached.cache().is_empty());
+        cached.cache().invalidate().await;
+        assert!(cached.cache().is_empty().await);
     }
 
     #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_sharded_async<C>(cache: C)
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
@@ -669,13 +634,12 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert!(!cached.cache().is_empty());
+        assert!(!cached.cache().is_empty().await);
     }
 
     async fn test_cache_into_async<C>(cache: C)
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
@@ -710,15 +674,14 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(buf, vec![5, 6, 9, 10]);
-        assert!(!cached.cache().is_empty());
+        assert!(!cached.cache().is_empty().await);
     }
 
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
     #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_nested_optional_async<C>(cache: C)
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(
@@ -760,29 +723,29 @@ mod tests {
 
     #[tokio::test]
     async fn async_lru_caches_support_encoded_values() {
-        test_cache_async(ChunkCacheEncodedLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheEncodedLruSizeLimit::new(1024)).await;
-        test_cache_sharded_async(ChunkCacheEncodedLruChunkLimit::new(4)).await;
-        test_cache_into_async(ChunkCacheEncodedLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(ChunkCacheEncodedLruChunkLimit::new(4)).await;
+        test_cache_async(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await;
+        test_cache_async(AsyncChunkCacheEncodedLruSizeLimit::new(1024)).await;
+        test_cache_sharded_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
+        test_cache_into_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
     }
 
     #[tokio::test]
     async fn async_lru_caches_support_decoded_values() {
-        test_cache_async(ChunkCacheDecodedLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheDecodedLruSizeLimit::new(1024)).await;
-        test_cache_sharded_async(ChunkCacheDecodedLruChunkLimit::new(4)).await;
-        test_cache_into_async(ChunkCacheDecodedLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(ChunkCacheDecodedLruChunkLimit::new(4)).await;
+        test_cache_async(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await;
+        test_cache_async(AsyncChunkCacheDecodedLruSizeLimit::new(1024)).await;
+        test_cache_sharded_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
+        test_cache_into_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
     }
 
     #[tokio::test]
     async fn async_lru_caches_support_async_partial_decoder_values() {
-        test_cache_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(2)).await;
-        test_cache_async(ChunkCacheAsyncPartialDecoderLruSizeLimit::new(1024)).await;
-        test_cache_sharded_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
-        test_cache_into_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(4)).await;
+        test_cache_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(2)).await;
+        test_cache_async(AsyncChunkCachePartialDecoderLruSizeLimit::new(1024)).await;
+        test_cache_sharded_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
+        test_cache_into_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
     }
 
     /// Cached async retrievals must be `Send` so that they can be used with
@@ -790,8 +753,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     async fn test_cache_spawn_async<C>(cache: C)
     where
-        C: ChunkCache<Locality = ChunkCacheLocalityShared> + 'static,
-        C::Value: AsyncChunkCacheType,
+        C: AsyncChunkCache + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -812,8 +774,8 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn async_lru_caches_are_send() {
-        test_cache_spawn_async(ChunkCacheEncodedLruChunkLimit::new(2)).await;
-        test_cache_spawn_async(ChunkCacheDecodedLruChunkLimit::new(2)).await;
-        test_cache_spawn_async(ChunkCacheAsyncPartialDecoderLruChunkLimit::new(2)).await;
+        test_cache_spawn_async(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await;
+        test_cache_spawn_async(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await;
+        test_cache_spawn_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(2)).await;
     }
 }

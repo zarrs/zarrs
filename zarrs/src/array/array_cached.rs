@@ -56,38 +56,32 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// ## Asynchronous Operations
 ///
 /// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
-/// operations for caches holding encoded chunks, decoded chunks, or asynchronous
-/// partial decoders.
-/// Caches of synchronous partial decoders only support synchronous operations, and
-/// caches of asynchronous partial decoders only support asynchronous operations
-/// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
-/// [`chunk_cache`](super::chunk_cache)).
-///
-/// Unlike synchronous operations, concurrent asynchronous retrievals of an uncached
-/// chunk may each fetch the chunk; only one of the retrieved values is retained by the
-/// cache.
-///
-/// Asynchronous operations require a cache with
-/// [`ChunkCacheLocalityShared`](super::chunk_cache::ChunkCacheLocalityShared) locality, since an asynchronous task may resume
-/// on a different thread after each `await`.
-/// `ThreadLocal` caches have [`ChunkCacheLocalityPerThread`](super::chunk_cache::ChunkCacheLocalityPerThread) locality and are
-/// rejected at compile time (see [`ChunkCacheLocality`](super::chunk_cache::ChunkCacheLocality)):
+/// operations, which require an `AsyncChunkCache` — one of the
+/// `AsyncChunkCache*Lru*` caches, or a custom implementation.
+/// A cache implements either `ChunkCache` or `AsyncChunkCache`, so a given `ArrayCached`
+/// supports one flavour of operation; a synchronous cache passed to an `async_` operation
+/// is rejected at compile time:
 ///
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
-/// # use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimitThreadLocal;
+/// # use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
 /// # use zarrs_storage::store::AsyncMemoryStore;
 /// # async fn f() {
 /// let store = Arc::new(AsyncMemoryStore::new());
 /// let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
 ///     .build_arc(store, "/")
 ///     .unwrap();
-/// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimitThreadLocal::new(2));
-/// // error: `Locality = ChunkCacheLocalityShared` is not satisfied
+/// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimit::new(2));
+/// // error: the trait bound `ChunkCacheEncodedLruChunkLimit: AsyncChunkCache` is not satisfied
 /// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
 /// # }
 /// ```
+///
+/// Caches of synchronous partial decoders only support synchronous operations, and
+/// caches of asynchronous partial decoders only support asynchronous operations
+/// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
+/// [`chunk_cache`](super::chunk_cache)).
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,
