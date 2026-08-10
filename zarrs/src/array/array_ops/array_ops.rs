@@ -38,13 +38,23 @@ pub trait ArrayOps {
     /// Get the storage transformers.
     fn storage_transformers(&self) -> &StorageTransformerChain;
 
-    /// Get the default codec options for no-options methods.
+    /// Get the codec options used by the array operations.
+    ///
+    /// Override them with [`with_codec_options`](ArrayOps::with_codec_options), or
+    /// [`ArrayMutOps::set_codec_options`] where the array is owned.
     fn codec_options(&self) -> &CodecOptions;
 
-    /// Get the default array metadata options for no-options methods.
+    /// Get the array metadata options used by the array operations.
+    ///
+    /// Override them with [`with_metadata_options`](ArrayOps::with_metadata_options), or
+    /// [`ArrayMutOps::set_metadata_options`] where the array is owned.
     fn metadata_options(&self) -> &ArrayMetadataOptions;
 
-    /// Get the default metadata erase version for no-options methods.
+    /// Get the metadata erase version used by the array operations.
+    ///
+    /// Override it with
+    /// [`with_metadata_erase_version`](ArrayOps::with_metadata_erase_version), or
+    /// [`ArrayMutOps::set_metadata_erase_version`] where the array is owned.
     fn metadata_erase_version(&self) -> MetadataEraseVersion;
 
     /// Return this array configured to use `codec_options` for its operations.
@@ -76,10 +86,13 @@ pub trait ArrayOps {
     /// Return the underlying array metadata.
     fn metadata(&self) -> &ArrayMetadata;
 
-    /// Return a new [`ArrayMetadata`] with [`ArrayMetadataOptions`] applied.
+    /// Return the array metadata in the form that [`Array::store_metadata`] writes.
     ///
-    /// This method is used internally by [`Array::store_metadata`] and [`Array::store_metadata_opt`].
-    fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata;
+    /// Unlike [`metadata`](ArrayOps::metadata), which borrows the metadata as it was stored or
+    /// constructed, this applies [`metadata_options`](ArrayOps::metadata_options): it may inject
+    /// `zarrs` provenance attributes, convert between Zarr versions, and rewrite aliased
+    /// extension names.
+    fn metadata_opt(&self) -> ArrayMetadata;
 
     /// Create an array builder matching the parameters of this array.
     fn builder(&self) -> ArrayBuilder;

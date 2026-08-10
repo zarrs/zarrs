@@ -52,7 +52,10 @@ async fn test_array_to_array_codec_async_partial_encoding<
     // Set the codec being tested
     builder.array_to_array_codecs(vec![codec]);
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
 
@@ -65,7 +68,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10.0f32, 20.0, 30.0, 40.0];
     array
-        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset(&subset, &elements)
         .await
         .unwrap();
 
@@ -100,7 +103,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     let elements2 = vec![100f32, 200.0, 300.0, 400.0];
 
     array
-        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset(&subset2, &elements2)
         .await
         .unwrap();
 
@@ -147,7 +150,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    let partial_encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
     assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
@@ -184,7 +187,10 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     // Set the codec being tested
     builder.bytes_to_bytes_codecs(vec![codec]);
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
 
@@ -199,7 +205,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     let initial_bytes_read = store_perf.bytes_read();
 
     array
-        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset(&subset, &elements)
         .await
         .unwrap();
 
@@ -233,7 +239,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset(&subset2, &elements2)
         .await
         .unwrap();
 
@@ -301,7 +307,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    let partial_encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
     assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
@@ -596,14 +602,17 @@ async fn test_codec_chain_async_partial_encoding() {
         builder.bytes_to_bytes_codecs(vec![gzip_codec]);
     }
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     // Test storing data with the codec chain
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10f32, 20f32, 30f32, 40f32];
 
     array
-        .async_store_array_subset_opt(&subset, &elements, &opt)
+        .async_store_array_subset(&subset, &elements)
         .await
         .unwrap();
 
@@ -633,7 +642,7 @@ async fn test_codec_chain_async_partial_encoding() {
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .async_store_array_subset_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset(&subset2, &elements2)
         .await
         .unwrap();
 
@@ -662,7 +671,7 @@ async fn test_codec_chain_async_partial_encoding() {
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    let partial_encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
     assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec chain partial encoder size_held(): {encoder_size_held}");

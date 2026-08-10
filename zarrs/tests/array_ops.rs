@@ -47,11 +47,7 @@ fn fixture() -> (Arc<Array<TestStore>>, Arc<TestStore>) {
 
 fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
     array.store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])?;
-    array.store_chunk_opt(
-        &[0, 1],
-        &[4u8, 5, 0, 9, 10, 0, 14, 15, 0],
-        &CodecOptions::default(),
-    )?;
+    array.store_chunk(&[0, 1], &[4u8, 5, 0, 9, 10, 0, 14, 15, 0])?;
     array.store_chunks(
         &ArraySubset::new_with_ranges(&[1..2, 0..2]),
         &[
@@ -70,9 +66,14 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
     assert_eq!(array.dimension_names().as_ref().unwrap().len(), 2);
     assert_eq!(array.attributes()["purpose"], "array_ops_test");
+    // Without the zarrs provenance attributes, the stored form matches the raw metadata.
     assert_eq!(
         array.metadata(),
-        &array.metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))
+        &array
+            .with_metadata_options(
+                ArrayMetadataOptions::default().with_include_zarrs_metadata(false)
+            )
+            .metadata_opt()
     );
     let _ = array.builder().build_metadata()?;
     assert_eq!(
@@ -132,7 +133,6 @@ fn retrieve_into<A: ArrayReadOps>(
     array: &A,
     subset: &ArraySubset,
     chunk_indices: Option<&[u64]>,
-    explicit_options: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let shape = subset.shape().to_vec();
     let mut output = vec![0; subset.num_elements_usize()];
@@ -145,14 +145,7 @@ fn retrieve_into<A: ArrayReadOps>(
         };
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
         if let Some(chunk_indices) = chunk_indices {
-            array.retrieve_chunk_subset_into(
-                chunk_indices,
-                subset,
-                target,
-                &CodecOptions::default(),
-            )?;
-        } else if explicit_options {
-            array.retrieve_array_subset_into_opt(subset, target, &CodecOptions::default())?;
+            array.retrieve_chunk_subset_into(chunk_indices, subset, target)?;
         } else {
             array.retrieve_array_subset_into(subset, target)?;
         }
@@ -174,18 +167,13 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        array.retrieve_chunk_into(
-            chunk_indices,
-            ArrayBytesDecodeIntoTarget::Fixed(&mut view),
-            &CodecOptions::default(),
-        )?;
+        array.retrieve_chunk_into(chunk_indices, ArrayBytesDecodeIntoTarget::Fixed(&mut view))?;
     }
     Ok(output)
 }
 
 fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestResult {
     populate(array)?;
-    let options = CodecOptions::default();
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let chunks = ArraySubset::new_with_ranges(&[0..1, 0..2]);
     let array_subset = ArraySubset::new_with_ranges(&[1..4, 1..4]);
@@ -195,7 +183,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         [1, 2, 3, 6, 7, 8, 11, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunk_opt::<Vec<u8>>(&[0, 1], &options)?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 1])?,
         [4, 5, 0, 9, 10, 0, 14, 15, 0]
     );
     assert_eq!(
@@ -207,20 +195,17 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         Some(vec![16, 17, 18, 21, 22, 23, 0, 0, 0])
     );
     array.erase_chunk(&[1, 1])?;
+    assert_eq!(array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1])?, None);
     assert_eq!(
-        array.retrieve_chunk_if_exists_opt::<Vec<u8>>(&[1, 1], &options)?,
-        None
+        array.retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)?,
+        [7, 8, 12, 13]
     );
     assert_eq!(
         array.retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)?,
         [7, 8, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunk_subset_opt::<Vec<u8>>(&[0, 0], &chunk_subset, &options)?,
-        [7, 8, 12, 13]
-    );
-    assert_eq!(
-        retrieve_into(array, &chunk_subset, Some(&[0, 0]), true)?,
+        retrieve_into(array, &chunk_subset, Some(&[0, 0]))?,
         [7, 8, 12, 13]
     );
     assert_eq!(
@@ -228,7 +213,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
     assert_eq!(
-        array.retrieve_chunks_opt::<Vec<u8>>(&chunks, &options)?,
+        array.retrieve_chunks::<Vec<u8>>(&chunks)?,
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
     assert_eq!(
@@ -236,43 +221,37 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        array.retrieve_array_subset_opt::<Vec<u8>>(&array_subset, &options)?,
+        array.retrieve_array_subset::<Vec<u8>>(&array_subset)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        retrieve_into(array, &array_subset, None, false)?,
+        retrieve_into(array, &array_subset, None)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        retrieve_into(array, &array_subset, None, true)?,
+        retrieve_into(array, &array_subset, None)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
+    assert_eq!(array.retrieve_subchunk::<Vec<u8>>(&[1, 1])?, [7]);
     assert_eq!(
-        array.retrieve_subchunk_opt::<Vec<u8>>(&[1, 1], &options)?,
-        [7]
-    );
-    assert_eq!(
-        array.retrieve_subchunks_opt::<Vec<u8>>(
-            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
-            &options,
-        )?,
+        array.retrieve_subchunks::<Vec<u8>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]),)?,
         [7, 8, 12, 13]
     );
     assert!(array.retrieve_encoded_chunk(&[0, 0])?.is_some());
     assert_eq!(
-        array.retrieve_encoded_chunks_opt(&chunks, &options)?.len(),
+        array.retrieve_encoded_chunks(&chunks)?.len(),
         chunks.num_elements_usize()
     );
     let decoder = array.partial_decoder(&[0, 0])?;
     assert!(decoder.exists()?);
     assert_eq!(
         decoder
-            .partial_decode(&chunk_subset, &options)?
+            .partial_decode(&chunk_subset, &CodecOptions::default())?
             .into_fixed()?
             .as_ref(),
         &[7, 8, 12, 13]
     );
-    assert!(array.partial_decoder_opt(&[0, 0], &options)?.exists()?);
+    assert!(array.partial_decoder(&[0, 0])?.exists()?);
     Ok(())
 }
 
@@ -357,14 +336,13 @@ fn array_ops_subchunks_with_reshape_codec() -> TestResult {
         &[4, 2]
     );
 
-    let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[2, 1], &CodecOptions::default())?;
+    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[2, 1])?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[2..3, 3..6])?;
     assert_eq!(subchunk, compare);
     assert_eq!(subchunk, [15, 16, 17]);
 
     let subchunks = ArraySubset::new_with_ranges(&[1..3, 0..2]);
-    let subchunk_range =
-        array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
+    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks)?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..3, 0..6])?;
     assert_eq!(subchunk_range, compare);
 
@@ -394,14 +372,13 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
         &[2, 2]
     );
 
-    let subchunk = array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())?;
+    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[1, 1])?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..2, 2..4])?;
     assert_eq!(subchunk, compare);
     assert_eq!(subchunk, [6, 7]);
 
     let subchunks = ArraySubset::new_with_ranges(&[0..2, 1..2]);
-    let subchunk_range =
-        array.retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())?;
+    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks)?;
     let compare = array.retrieve_array_subset::<Vec<u16>>(&[0..2, 2..4])?;
     assert_eq!(subchunk_range, compare);
 
@@ -447,20 +424,18 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
         ChunkGridDecodedRef::None
     ));
 
-    let options = CodecOptions::default();
     assert_eq!(
-        array.retrieve_subchunk_opt::<Vec<u16>>(&[1, 0], &options)?,
-        array.retrieve_subchunk_at_level_opt::<Vec<u16>>(0, &[1, 0], &options)?
+        array.retrieve_subchunk::<Vec<u16>>(&[1, 0])?,
+        array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 0])?
     );
     assert_eq!(
-        array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)?,
+        array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
         [38, 39, 46, 47]
     );
     assert_eq!(
-        array.retrieve_subchunks_at_level_opt::<Vec<u16>>(
+        array.retrieve_subchunks_at_level::<Vec<u16>>(
             1,
             &ArraySubset::new_with_ranges(&[1..3, 1..3]),
-            &options,
         )?,
         [
             18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45
@@ -468,20 +443,20 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     );
     assert!(
         array
-            .retrieve_subchunk_at_level_opt::<Vec<u16>>(2, &[0, 0], &options)
+            .retrieve_subchunk_at_level::<Vec<u16>>(2, &[0, 0])
             .is_err()
     );
 
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(0, &[0, 0], &options)?
+            .local_subchunk_grid_at_level(0, &[0, 0])?
             .unwrap()
             .grid_shape(),
         &[2, 2]
     );
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(1, &[0, 0], &options)?
+            .local_subchunk_grid_at_level(1, &[0, 0])?
             .unwrap()
             .grid_shape(),
         &[4, 4]
@@ -490,7 +465,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(2));
     assert_eq!(cached.subchunk_grids().len(), 2);
     assert_eq!(
-        cached.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)?,
+        cached.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
         [38, 39, 46, 47]
     );
 
@@ -530,7 +505,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     edge.store_array_subset(&edge.subset_all(), (0..100).collect::<Vec<u16>>())?;
     assert_eq!(edge.subchunk_grids().len(), 2);
     assert_eq!(
-        edge.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[4, 4], &options)?,
+        edge.retrieve_subchunk_at_level::<Vec<u16>>(1, &[4, 4])?,
         [88, 89, 98, 99]
     );
 
@@ -548,8 +523,6 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
 
 #[test]
 fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
-    let options = CodecOptions::default();
-
     {
         let data_type = data_type::uint16();
         let inner = ShardingCodecBuilder::new(vec![nz(4)], &data_type).build_arc();
@@ -567,7 +540,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(8)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(4)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[2, 1], &options)?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 1])?,
             [20, 21, 22, 23]
         );
     }
@@ -586,7 +559,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(2)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[0, 2], &options)?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[0, 2])?,
             [4, 5]
         );
     }
@@ -607,7 +580,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level_opt::<Vec<u16>>(1, &[1, 3], &options)?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[1, 3])?,
             [22, 23, 30, 31]
         );
     }
@@ -616,21 +589,20 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
 }
 
 fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
-    let options = CodecOptions::default();
     array.store_metadata()?;
-    array.store_metadata_opt(&ArrayMetadataOptions::default())?;
+    array
+        .with_metadata_options(ArrayMetadataOptions::default())
+        .store_metadata()?;
     array.erase_metadata()?;
     array.store_metadata()?;
-    array.erase_metadata_opt(MetadataEraseVersion::All)?;
+    array
+        .with_metadata_erase_version(MetadataEraseVersion::All)
+        .erase_metadata()?;
     array.store_metadata()?;
 
     array.store_chunk(&[0, 0], &[1u8; 9])?;
-    array.store_chunk_opt(&[0, 1], &[2u8; 9], &options)?;
-    array.store_chunks_opt(
-        &ArraySubset::new_with_ranges(&[1..2, 0..2]),
-        &[3u8; 18],
-        &options,
-    )?;
+    array.store_chunk(&[0, 1], &[2u8; 9])?;
+    array.store_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]), &[3u8; 18])?;
     assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[1, 1])?, [3u8; 9]);
 
     array.store_chunk_subset(
@@ -638,18 +610,13 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
         &ArraySubset::new_with_ranges(&[1..2, 1..3]),
         &[4u8, 5],
     )?;
-    array.store_chunk_subset_opt(
+    array.store_chunk_subset(
         &[0, 0],
         &ArraySubset::new_with_ranges(&[2..3, 0..1]),
         &[6u8],
-        &options,
     )?;
     array.store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &[7u8, 8])?;
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[4..5, 4..5]),
-        &[9u8],
-        &options,
-    )?;
+    array.store_array_subset(&ArraySubset::new_with_ranges(&[4..5, 4..5]), &[9u8])?;
     assert_eq!(
         array.retrieve_chunk::<Vec<u8>>(&[0, 0])?,
         [7, 8, 1, 1, 4, 5, 6, 1, 1]
@@ -659,12 +626,12 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
         [3, 3, 3, 3, 9, 3, 3, 3, 3]
     );
 
-    let encoder = array.partial_encoder(&[0, 0], &options)?;
+    let encoder = array.partial_encoder(&[0, 0])?;
     assert!(encoder.supports_partial_encode());
     encoder.partial_encode(
         &ArraySubset::new_with_ranges(&[0..1, 2..3]),
         &vec![10u8].into(),
-        &options,
+        &CodecOptions::default(),
     )?;
     assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[0, 0])?[2], 10);
 
@@ -678,7 +645,7 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
         [7, 8, 10, 1, 4, 5, 6, 1, 1]
     );
 
-    let _ = array.compact_chunk(&[0, 0], &options)?;
+    let _ = array.compact_chunk(&[0, 0])?;
     array.erase_chunk(&[0, 1])?;
     assert!(
         array
@@ -859,13 +826,13 @@ where
 
     store.reset();
     assert_eq!(
-        retrieve_into(&cached, &subset, None, true)?,
+        retrieve_into(&cached, &subset, None)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 19]
     );
     let reads_after_miss = store.reads();
     assert!(reads_after_miss > 0);
     assert_eq!(
-        retrieve_into(&cached, &subset, None, true)?,
+        retrieve_into(&cached, &subset, None)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 19]
     );
     assert_eq!(store.reads(), reads_after_miss);

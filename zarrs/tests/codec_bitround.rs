@@ -84,11 +84,12 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_config)?);
     builder.array_to_array_codecs(vec![codec]);
 
-    let array = builder.build(store, array_path)?;
+    let array = builder
+        .build(store, array_path)?
+        .with_metadata_options(ArrayMetadataOptions::default().with_include_zarrs_metadata(false));
 
     // Write metadata to store
-    array
-        .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
+    array.store_metadata()?;
 
     // Store the test data
     let subset = ArraySubset::new_with_ranges(&[0..test_data.len() as u64]);
@@ -161,11 +162,12 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_config)?);
     builder.array_to_array_codecs(vec![codec]);
 
-    let array = builder.build(store, array_path)?;
+    let array = builder
+        .build(store, array_path)?
+        .with_metadata_options(ArrayMetadataOptions::default().with_include_zarrs_metadata(false));
 
     // Write metadata to store
-    array
-        .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
+    array.store_metadata()?;
 
     // Store and retrieve
     let subset = ArraySubset::new_with_ranges(&[0..test_data_u8.len() as u64]);

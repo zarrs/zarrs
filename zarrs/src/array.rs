@@ -44,7 +44,6 @@ pub mod storage_transformer;
 mod array_dlpack_ext;
 
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use self::array_cached::ArrayCached;
@@ -128,11 +127,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - the metadata is in invalid in some other way.
 ///
 /// ## Array Metadata
-/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) or [`store_metadata_opt`](Array::store_metadata_opt) if an array is newly created or its metadata has been mutated.
+/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) if an array is newly created or its metadata has been mutated.
 ///
 /// The underlying metadata of an [`Array`] can be accessed with [`metadata`](Array::metadata) or [`metadata_opt`](Array::metadata_opt).
-/// The latter accepts [`ArrayMetadataOptions`] that can be used to convert array metadata from Zarr V2 to V3, for example.
-/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata) / [`store_metadata_opt`](Array::store_metadata_opt).
+/// The latter applies the array's [`ArrayMetadataOptions`], which can convert array metadata from Zarr V2 to V3, for example.
+/// Use [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`] to control them.
+/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata).
 /// Use [`serde_json::to_string`] or [`serde_json::to_string_pretty`] on [`ArrayMetadata`] to convert it to a JSON string.
 ///
 /// ### Immutable Array Metadata / Properties
@@ -161,7 +161,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ### `zarrs` Metadata
 /// By default, the `zarrs` version and a link to its source code is written to the `_zarrs` attribute in array metadata when calling [`store_metadata`](Array::store_metadata).
-/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata) or call [`store_metadata_opt`](Array::store_metadata_opt) with an explicit [`ArrayMetadataOptions`].
+/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata), or per array with [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`].
 ///
 /// ## Array Data
 /// Array operations are divided into several categories based on the traits implemented for the backing [storage](crate::storage).
@@ -346,8 +346,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
 /// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk_opt`](ArrayReadOps::retrieve_subchunk_opt)
-///  - [`retrieve_subchunks_opt`](ArrayReadOps::retrieve_subchunks_opt)
+///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///
@@ -802,14 +802,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .expect("data type and fill value are compatible")
     }
 
-    /// Calculate the recommended codec concurrency.
-    fn recommended_codec_concurrency(
-        &self,
-        chunk_shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, ArrayError> {
-        Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
-    }
-
     /// Convert the array to Zarr V3.
     ///
     /// # Errors
@@ -1180,6 +1172,8 @@ fn create_codec_chain_from_v2(
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
@@ -1196,7 +1190,7 @@ mod tests {
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
+        let stored_metadata = array.metadata_opt();
 
         let array_other = Array::open(store, array_path).unwrap();
         assert_eq!(array_other.metadata(), &stored_metadata);
@@ -1376,10 +1370,12 @@ mod tests {
         assert_eq!(array.dimension_names(), &Some(names.clone()));
 
         // Written as Zarr V3, the names are carried into the converted metadata
-        let converted = array.metadata_opt(
-            &ArrayMetadataOptions::default()
-                .with_metadata_convert_version(MetadataConvertVersion::V3),
-        );
+        let converted = array
+            .with_metadata_options(
+                ArrayMetadataOptions::default()
+                    .with_metadata_convert_version(MetadataConvertVersion::V3),
+            )
+            .metadata_opt();
         match converted {
             ArrayMetadata::V3(metadata) => {
                 assert_eq!(metadata.dimension_names, Some(names.clone()));
@@ -1559,12 +1555,13 @@ mod tests {
         // Store V2 and V3 metadata
         for version in [MetadataConvertVersion::Default, MetadataConvertVersion::V3] {
             array_out
-                .store_metadata_opt(
-                    &ArrayMetadataOptions::default()
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
                         .with_metadata_convert_version(version)
                         .with_include_zarrs_metadata(false)
                         .with_convert_aliased_extension_names(true),
                 )
+                .store_metadata()
                 .unwrap();
         }
     }
@@ -1689,10 +1686,12 @@ mod tests {
 
         println!(
             "{:?}",
-            array_in.metadata_opt(
-                &ArrayMetadataOptions::default()
-                    .with_metadata_convert_version(MetadataConvertVersion::V3)
-            )
+            array_in
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
+                        .with_metadata_convert_version(MetadataConvertVersion::V3)
+                )
+                .metadata_opt()
         );
 
         println!("{array_in:?}");
