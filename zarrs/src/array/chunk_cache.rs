@@ -116,7 +116,13 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     type Value: ChunkCacheType;
 
     /// Return a cached value or insert the value returned by `f`.
-    #[doc(hidden)]
+    ///
+    /// Implementations should evaluate `f` at most once per uncached chunk where possible, so
+    /// that concurrent retrievals of the same uncached chunk do not each decode it.
+    ///
+    /// # Errors
+    /// Returns the [`ArrayError`] returned by `f`, which may be shared with the other callers
+    /// awaiting the same value.
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
