@@ -15,7 +15,7 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     for Array<TStorage>
 {
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -30,7 +30,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         )
     }
 
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::too_many_lines)]
     pub fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
         &self,

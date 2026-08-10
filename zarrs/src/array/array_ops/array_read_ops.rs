@@ -107,7 +107,6 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Panics
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
-    #[allow(clippy::missing_panics_doc)]
     fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
@@ -132,7 +131,6 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Errors
     /// Returns an [`StorageError`] if there is an underlying store error.
-    #[allow(clippy::missing_panics_doc)]
     fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
@@ -241,7 +239,9 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match `array_subset`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
-    #[allow(clippy::missing_panics_doc)]
+    ///
+    /// # Panics
+    /// Panics if the number of chunks intersecting `array_subset` exceeds `usize::MAX`.
     fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,

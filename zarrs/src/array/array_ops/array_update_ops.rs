@@ -35,6 +35,10 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///  - the length of `subset_data` does not match the expected length governed by the shape of the array subset and the data type size,
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of chunks intersecting `array_subset` exceeds `usize::MAX`, or if
+    /// attempting to reference a byte beyond `usize::MAX`.
     fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
