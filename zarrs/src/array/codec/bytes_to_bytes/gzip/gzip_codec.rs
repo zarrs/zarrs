@@ -126,12 +126,12 @@ impl BytesToBytesCodecTraits for GzipCodec {
         decoded_representation
             .size()
             .map_or(BytesRepresentation::UnboundedSize, |size| {
-                // https://www.gnu.org/software/gzip/manual/gzip.pdf
+                // Conservative worst case matching zlib's `deflateBound()`.
+                // DEFLATE block boundaries are an encoder implementation detail, so the bound
+                // cannot assume a minimum block size (https://github.com/zarrs/zarrs/issues/444).
                 const HEADER_TRAILER_OVERHEAD: u64 = 10 + 8; // TODO: validate that extra headers are not populated
-                const BLOCK_SIZE: u64 = 32768;
-                const BLOCK_OVERHEAD: u64 = 5;
-                let blocks_overhead = BLOCK_OVERHEAD * size.div_ceil(BLOCK_SIZE);
-                BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + blocks_overhead)
+                let deflate_overhead = size.div_ceil(8) + size.div_ceil(64) + 5;
+                BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + deflate_overhead)
             })
     }
 }

@@ -84,6 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- Fixed `GzipCodec::encoded_representation()` under-estimating the worst-case encoded size, which could cause an out-of-bounds panic or a `CodecError` when `gzip` was an inner codec of `sharding_indexed` ([#444](https://github.com/zarrs/zarrs/issues/444))
+  - The bound now matches zlib's `deflateBound()`
+- The `sharding_indexed` codec now returns a `CodecError` instead of panicking if an inner codec exceeds its reported bounded encoded size
 - `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
