@@ -903,6 +903,12 @@ impl ShardingCodec {
                         acc + chunk_len_usize
                     },
                 );
+                if total_offset > shard_size_bounded {
+                    // This is a dev error, indicates the codec bounded size is not correct
+                    return Err(CodecError::from(
+                        "Sharding did not allocate a large enough buffer",
+                    ));
+                }
                 crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     encoded_chunk_ids_and_chunks,
@@ -930,6 +936,14 @@ impl ShardingCodec {
                 ShardingIndexLocation::Start => 0,
                 ShardingIndexLocation::End => index_encoded_size,
             };
+        if shard_length > shard_size_bounded {
+            // This is a dev error, indicates the codec bounded size is not correct.
+            // The chunks may individually fit within the bounded size while the
+            // chunks plus the shard index do not.
+            return Err(CodecError::from(
+                "Sharding did not allocate a large enough buffer",
+            ));
+        }
 
         // Encode and write array index
         let shard_index_bytes: ArrayBytesRaw = transmute_to_bytes_vec(shard_index).into();
