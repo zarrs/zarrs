@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
 
+### Fixed
+- Zarr V2 arrays with a `zstd` compressor configuration that includes a `checksum` field (as written by recent `numcodecs`/`zarr-python` releases) failed to open with an `unknown field checksum` error
+
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 
 ### Added
