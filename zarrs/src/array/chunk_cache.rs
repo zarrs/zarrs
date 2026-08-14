@@ -5,12 +5,10 @@
 //!   - Preferred where decoding is expensive and memory is abundant.
 //! - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
 //!   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
-//! - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+//! - [Async][`ChunkCacheTypePartialDecoder`]: caches partial decoders.
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
-//! - `ChunkCacheTypeAsyncPartialDecoder` (with the `async` feature): caches asynchronous partial decoders.
-//!   - The asynchronous counterpart of [`ChunkCacheTypePartialDecoder`].
 //!
 //! `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 //!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
@@ -33,16 +31,7 @@
 //! All of the above caches coalesce concurrent retrievals of an uncached chunk where the backing
 //! cache implementation supports it, so that a chunk is usually fetched once no matter how many
 //! callers request it. This is best effort: the `wasm32` asynchronous caches do not coalesce, and
-//! each caller awaits its own retrieval. See [`ChunkCache::try_get_or_insert_with`] and
-//! `AsyncChunkCache::try_get_or_insert_with`.
-//!
-//! A cache implements one of the two traits, not both, so a cache is used with either the
-//! synchronous or the asynchronous operations. This follows from how each is implemented:
-//! an asynchronous cache is backed by storage whose own operations are asynchronous.
-//!
-//! [`ChunkCacheTypePartialDecoder`] caches only support synchronous retrieval and
-//! `ChunkCacheTypeAsyncPartialDecoder` caches only support asynchronous retrieval (see
-//! [`SyncChunkCacheType`] and `AsyncChunkCacheType`).
+//! each caller awaits its own retrieval.
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
