@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
 - Add the `cast_value` array-to-array codec
@@ -84,18 +84,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
-- Fixed `GzipCodec::encoded_representation()` under-estimating the worst-case encoded size, which could cause an out-of-bounds panic or a `CodecError` when `gzip` was an inner codec of `sharding_indexed` ([#444](https://github.com/zarrs/zarrs/issues/444))
-  - The bound now matches zlib's `deflateBound()`
-- The `sharding_indexed` codec now returns a `CodecError` instead of panicking if an inner codec exceeds its reported bounded encoded size
-- `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
-- Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
-  - Only the outermost mask was allocated, so inner masks were also dropped
 - **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
 - `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+
+## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
+
+### Fixed
+- Fixed `GzipCodec::encoded_representation()` under-estimating the worst-case encoded size, which could cause an out-of-bounds panic or a `CodecError` when `gzip` was an inner codec of `sharding_indexed` ([#444](https://github.com/zarrs/zarrs/issues/444))
+  - The bound now matches zlib's `deflateBound()`
+- The `sharding_indexed` codec now returns a `CodecError` instead of panicking if an inner codec exceeds its reported bounded encoded size
 - Zarr V2 arrays with a `zstd` compressor configuration that includes a `checksum` field (as written by recent `numcodecs`/`zarr-python` releases) failed to open with an `unknown field checksum` error
+- `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
+- Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
+  - Only the outermost mask was allocated, so inner masks were also dropped
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 
