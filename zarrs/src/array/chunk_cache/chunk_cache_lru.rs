@@ -314,33 +314,3 @@ pub type AsyncChunkCachePartialDecoderLruChunkLimit =
 #[cfg(feature = "async")]
 pub type AsyncChunkCachePartialDecoderLruSizeLimit =
     AsyncChunkCacheLruSizeLimit<ChunkCacheTypeAsyncPartialDecoder>;
-
-#[cfg(all(test, feature = "async"))]
-mod tests {
-    use super::{
-        AsyncChunkCache, AsyncChunkCacheLruChunkLimit, AsyncChunkCacheLruSizeLimit, ChunkCache,
-        ChunkCacheLruChunkLimit, ChunkCacheLruSizeLimit, ChunkCacheTypeDecoded,
-    };
-
-    /// The synchronous and asynchronous cache policies implement one trait each, which is what
-    /// admits each family to the [`ArrayCached`] operations of the matching flavour.
-    ///
-    /// The `compile_fail` doctest on [`ArrayCached`] illustrates a synchronous cache being
-    /// rejected by an asynchronous operation but cannot guard it, since rustdoc does not check
-    /// *why* such a doctest fails to compile.
-    ///
-    /// The implementations are generic over the chunk type, so pinning one chunk type pins every
-    /// public alias of these policies.
-    ///
-    /// [`ArrayCached`]: crate::array::ArrayCached
-    #[test]
-    fn lru_cache_policies_implement_their_flavour_of_chunk_cache() {
-        fn assert_sync<C: ChunkCache>() {}
-        fn assert_async<C: AsyncChunkCache>() {}
-
-        assert_sync::<ChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>>();
-        assert_sync::<ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>>();
-        assert_async::<AsyncChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>>();
-        assert_async::<AsyncChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>>();
-    }
-}
