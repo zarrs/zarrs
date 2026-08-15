@@ -10,7 +10,7 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
     wrap_optional_masks,
 };
-use crate::array::chunk_cache::{SyncChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
+use crate::array::chunk_cache::{SealedSync, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use crate::iter_concurrent_limit;

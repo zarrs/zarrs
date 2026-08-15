@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{cache_error, validate_chunk_indices};
 use crate::array::chunk_cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SyncChunkCacheType,
+    ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
 };
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions,
@@ -17,7 +17,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     }
 }
 
-impl SyncChunkCacheType for ChunkCacheTypePartialDecoder {
+impl SealedSync for ChunkCacheTypePartialDecoder {
     fn partial_decoder<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,

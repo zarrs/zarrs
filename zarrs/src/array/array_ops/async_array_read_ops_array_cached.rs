@@ -11,7 +11,7 @@ use crate::array::array_bytes_internal::{
     wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCache, AsyncChunkCacheType, async_retrieve_chunk_bytes, fill_value_bytes,
+    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};

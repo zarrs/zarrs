@@ -93,41 +93,11 @@ pub trait ChunkCacheType:
 /// [`ChunkCacheTypePartialDecoder`].
 /// It is not implemented for `ChunkCacheTypeAsyncPartialDecoder`, which caches asynchronous
 /// partial decoders that cannot operate over synchronous storage.
-pub trait SyncChunkCacheType: ChunkCacheType {
-    #[doc(hidden)]
-    fn partial_decoder<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
+///
+/// The retrieval operations themselves live on a sealed supertrait, and are internal to `zarrs`.
+pub trait SyncChunkCacheType: ChunkCacheType + chunk_cache_type_sealed::SealedSync {}
 
-    #[doc(hidden)]
-    fn retrieve_chunk_bytes_if_exists<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
-
-    #[doc(hidden)]
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-    where
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
-        C: ChunkCache<Value = Self> + ?Sized;
-}
+impl<T: ChunkCacheType + chunk_cache_type_sealed::SealedSync> SyncChunkCacheType for T {}
 
 /// A chunk cache type supporting asynchronous retrieval.
 ///
@@ -135,49 +105,27 @@ pub trait SyncChunkCacheType: ChunkCacheType {
 /// [`ChunkCacheTypeAsyncPartialDecoder`].
 /// It is not implemented for [`ChunkCacheTypePartialDecoder`], which caches synchronous
 /// partial decoders that cannot be created from asynchronous storage.
+///
+/// The retrieval operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 #[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait AsyncChunkCacheType: ChunkCacheType {
-    #[doc(hidden)]
-    async fn async_partial_decoder<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
-    where
-        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: AsyncChunkCache<Value = Self> + ?Sized;
+pub trait AsyncChunkCacheType: ChunkCacheType + chunk_cache_type_sealed::SealedAsync {}
 
-    #[doc(hidden)]
-    async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
-    where
-        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: AsyncChunkCache<Value = Self> + ?Sized;
-
-    #[doc(hidden)]
-    async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
-        cache: &C,
-        array: &Array<TStorage>,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-    where
-        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-        C: AsyncChunkCache<Value = Self> + ?Sized;
-}
+#[cfg(feature = "async")]
+impl<T: ChunkCacheType + chunk_cache_type_sealed::SealedAsync> AsyncChunkCacheType for T {}
 
 mod chunk_cache_type_sealed {
+    use std::sync::Arc;
+
     #[cfg(feature = "async")]
-    use super::ChunkCacheTypeAsyncPartialDecoder;
-    use super::{ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder};
+    use super::{
+        AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
+        ChunkCacheTypeAsyncPartialDecoder,
+    };
+    use super::{
+        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ArraySubsetTraits, ChunkCache,
+        ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
+        CodecOptions, ReadableStorageTraits,
+    };
 
     pub trait Sealed {}
 
@@ -186,7 +134,89 @@ mod chunk_cache_type_sealed {
     impl Sealed for ChunkCacheTypePartialDecoder {}
     #[cfg(feature = "async")]
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
+
+    /// The synchronous retrieval operations of [`SyncChunkCacheType`](super::SyncChunkCacheType).
+    ///
+    /// This trait cannot be named outside of `zarrs`, which keeps its operations out of the public
+    /// API while [`SyncChunkCacheType`](super::SyncChunkCacheType) remains usable as a public bound.
+    pub trait SealedSync: ChunkCacheType {
+        fn partial_decoder<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
+
+        fn retrieve_chunk_bytes_if_exists<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
+
+        fn retrieve_chunk_subset_bytes<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            chunk_subset: &dyn ArraySubsetTraits,
+            options: &CodecOptions,
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
+    }
+
+    /// The asynchronous retrieval operations of [`AsyncChunkCacheType`](super::AsyncChunkCacheType).
+    ///
+    /// This trait cannot be named outside of `zarrs`, which keeps its operations out of the public
+    /// API while [`AsyncChunkCacheType`](super::AsyncChunkCacheType) remains usable as a public
+    /// bound.
+    #[cfg(feature = "async")]
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    pub trait SealedAsync: ChunkCacheType {
+        async fn async_partial_decoder<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+
+        async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+
+        async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            chunk_subset: &dyn ArraySubsetTraits,
+            options: &CodecOptions,
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+    }
 }
+
+#[cfg(feature = "async")]
+pub(crate) use chunk_cache_type_sealed::SealedAsync;
+pub(crate) use chunk_cache_type_sealed::SealedSync;
 
 /// A chunk cache.
 ///

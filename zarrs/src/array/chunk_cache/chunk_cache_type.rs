@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use super::{AsyncChunkCache, AsyncChunkCacheType};
-use super::{ChunkCache, SyncChunkCacheType};
+use super::{AsyncChunkCache, SealedAsync};
+use super::{ChunkCache, SealedSync};
 use crate::array::{Array, ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions};
 use zarrs_codec::CodecError;
 #[cfg(feature = "async")]

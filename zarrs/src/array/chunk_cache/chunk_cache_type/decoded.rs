@@ -4,9 +4,9 @@ use std::sync::Arc;
 use super::SyncPartialDecoderAsAsync;
 use super::{cache_error, fill_value_bytes, validate_chunk_indices};
 #[cfg(feature = "async")]
-use crate::array::chunk_cache::{AsyncChunkCache, AsyncChunkCacheType};
+use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
 use crate::array::chunk_cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SyncChunkCacheType,
+    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync,
 };
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, CodecOptions, DataType,
@@ -119,7 +119,7 @@ where
     }
 }
 
-impl SyncChunkCacheType for ChunkCacheTypeDecoded {
+impl SealedSync for ChunkCacheTypeDecoded {
     fn partial_decoder<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
@@ -180,7 +180,7 @@ impl SyncChunkCacheType for ChunkCacheTypeDecoded {
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncChunkCacheType for ChunkCacheTypeDecoded {
+impl SealedAsync for ChunkCacheTypeDecoded {
     async fn async_partial_decoder<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
