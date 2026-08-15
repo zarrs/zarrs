@@ -7,10 +7,10 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{ArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
-    optional_nesting_depth, wrap_optional_masks,
+    build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
+    wrap_optional_masks,
 };
-use crate::array::chunk_cache::{ChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
+use crate::array::chunk_cache::{SealedSync, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use crate::iter_concurrent_limit;
@@ -18,7 +18,6 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
 
-#[allow(clippy::too_many_lines)]
 fn retrieve_array_subset_bytes<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
@@ -41,7 +40,6 @@ where
             array.shape().to_vec(),
         ));
     };
-    let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
     match chunks.num_elements_usize() {
         0 => fill_value_bytes(array, array_subset.num_elements()),
         1 => {
@@ -60,7 +58,8 @@ where
             }
         }
         num_chunks => {
-            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape0)?;
+            let chunk_shape = array.chunk_shape(chunks.start())?;
+            let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -121,39 +120,12 @@ where
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
 
-    let nesting_depth = optional_nesting_depth(array.data_type());
-    if nesting_depth > 0 {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_optional()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-            chunks,
-            &array_subset.shape(),
-            nesting_depth,
-        )?)
-        .into())
-    } else {
-        let chunks = chunk_bytes_and_subsets
-            .iter()
-            .map(|(bytes, subset)| {
-                (
-                    ArrayBytes::clone(bytes)
-                        .into_variable()
-                        .expect("run on vlen data"),
-                    subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, &array_subset.shape())).into())
-    }
+    Ok(merge_cached_chunks_vlen(
+        chunk_bytes_and_subsets,
+        &array_subset.shape(),
+        array.data_type(),
+    )?
+    .into())
 }
 
 fn retrieve_multi_chunk_fixed<TStorage, C>(

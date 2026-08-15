@@ -1,19 +1,75 @@
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "async")]
+use super::SyncPartialDecoderAsAsync;
 use super::{cache_error, validate_chunk_indices};
-use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded};
+#[cfg(feature = "async")]
+use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
+use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded, SealedSync};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShapeTraits, CodecOptions,
+    Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, CodecOptions,
 };
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayToBytesCodecTraits};
+#[cfg(feature = "async")]
+use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::ReadableStorageTraits;
 
 impl ChunkCacheType for ChunkCacheTypeEncoded {
     fn size(&self) -> usize {
         self.as_ref().map_or(0, |value| value.len())
     }
+}
 
+/// Create a partial decoder over an in-memory encoded chunk, or over the fill value if absent.
+fn partial_decoder_over_encoded<TStorage>(
+    array: &Array<TStorage>,
+    encoded: ChunkCacheTypeEncoded,
+    chunk_indices: &[u64],
+    options: &CodecOptions,
+) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+where
+    TStorage: ?Sized + 'static,
+{
+    let input: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> = match encoded {
+        Some(encoded) => encoded,
+        None => Arc::new(Mutex::new(None)),
+    };
+    let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+    Ok(array
+        .codecs_bound()
+        .partial_decoder(input, &chunk_shape, options)?)
+}
+
+/// Decode an in-memory encoded chunk, or return [`None`] if it is absent.
+///
+/// `chunk_shape` must come from [`validate_chunk_indices`], which callers run *before* populating
+/// the cache so that an out-of-bounds chunk is never inserted.
+fn decode_encoded<TStorage>(
+    array: &Array<TStorage>,
+    encoded: &ChunkCacheTypeEncoded,
+    chunk_shape: &ChunkShape,
+    options: &CodecOptions,
+) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+where
+    TStorage: ?Sized + 'static,
+{
+    encoded
+        .as_ref()
+        .map(|encoded| {
+            let bytes = array
+                .codecs_bound()
+                .decode(Cow::Borrowed(encoded), chunk_shape, options)
+                .map_err(ArrayError::CodecError)?;
+            bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
+            Ok(Arc::new(bytes.into_owned()))
+        })
+        .transpose()
+}
+
+impl SealedSync for ChunkCacheTypeEncoded {
     fn partial_decoder<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
@@ -31,14 +87,7 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
                     .map(|chunk| Arc::new(Cow::Owned(chunk))))
             })
             .map_err(cache_error)?;
-        let input: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> = match encoded {
-            Some(encoded) => encoded,
-            None => Arc::new(Mutex::new(None)),
-        };
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        Ok(array
-            .codecs_bound()
-            .partial_decoder(input, &chunk_shape, options)?)
+        partial_decoder_over_encoded(array, encoded, chunk_indices, options)
     }
 
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -59,17 +108,7 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
                     .map(|chunk| Arc::new(Cow::Owned(chunk))))
             })
             .map_err(cache_error)?;
-        encoded
-            .as_ref()
-            .map(|encoded| {
-                let bytes = array
-                    .codecs_bound()
-                    .decode(Cow::Borrowed(encoded), &chunk_shape, options)
-                    .map_err(ArrayError::CodecError)?;
-                bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
-                Ok(Arc::new(bytes.into_owned()))
-            })
-            .transpose()
+        decode_encoded(array, &encoded, &chunk_shape, options)
     }
 
     fn retrieve_chunk_subset_bytes<TStorage, C>(
@@ -84,6 +123,98 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         Self::partial_decoder(cache, array, chunk_indices, options)?
+            .partial_decode(chunk_subset, options)
+            .map(|bytes| bytes.into_owned().into())
+            .map_err(ArrayError::from)
+    }
+}
+
+/// Retrieve the encoded chunk from the cache, or fetch it asynchronously on a miss.
+#[cfg(feature = "async")]
+async fn async_retrieve_encoded<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+) -> Result<ChunkCacheTypeEncoded, ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache<Value = ChunkCacheTypeEncoded> + ?Sized,
+{
+    cache
+        .try_get_or_insert_with(chunk_indices.to_vec(), async move {
+            Ok(array
+                .async_retrieve_encoded_chunk(chunk_indices)
+                .await?
+                .map(|chunk| Arc::new(Cow::Owned(chunk.into()))))
+        })
+        .await
+        .map_err(cache_error)
+}
+
+/// Create a synchronous partial decoder over the in-memory encoded chunk.
+#[cfg(feature = "async")]
+async fn async_partial_decoder_sync<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    options: &CodecOptions,
+) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache<Value = ChunkCacheTypeEncoded> + ?Sized,
+{
+    let encoded = async_retrieve_encoded(cache, array, chunk_indices).await?;
+    partial_decoder_over_encoded(array, encoded, chunk_indices, options)
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl SealedAsync for ChunkCacheTypeEncoded {
+    async fn async_partial_decoder<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        let decoder = SyncPartialDecoderAsAsync(
+            async_partial_decoder_sync(cache, array, chunk_indices, options).await?,
+        );
+        Ok(Arc::new(decoder) as Arc<dyn AsyncArrayPartialDecoderTraits>)
+    }
+
+    async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        let encoded = async_retrieve_encoded(cache, array, chunk_indices).await?;
+        decode_encoded(array, &encoded, &chunk_shape, options)
+    }
+
+    async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        async_partial_decoder_sync(cache, array, chunk_indices, options)
+            .await?
             .partial_decode(chunk_subset, options)
             .map(|bytes| bytes.into_owned().into())
             .map_err(ArrayError::from)

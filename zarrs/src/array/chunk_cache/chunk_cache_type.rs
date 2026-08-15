@@ -1,13 +1,19 @@
 use std::sync::Arc;
 
-use super::{ChunkCache, ChunkCacheType};
+#[cfg(feature = "async")]
+use super::{AsyncChunkCache, SealedAsync};
+use super::{ChunkCache, SealedSync};
 use crate::array::{Array, ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions};
 use zarrs_codec::CodecError;
+#[cfg(feature = "async")]
+use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::{ReadableStorageTraits, StorageError};
 
 mod decoded;
 mod encoded;
 mod partial_decoder;
+#[cfg(feature = "async")]
+mod partial_decoder_async;
 
 pub(super) fn cache_error(error: Arc<ArrayError>) -> ArrayError {
     Arc::try_unwrap(error)
@@ -60,5 +66,78 @@ where
     } else {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         fill_value_bytes(array, chunk_shape.num_elements_u64())
+    }
+}
+
+#[cfg(feature = "async")]
+pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    options: &CodecOptions,
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache + ?Sized,
+{
+    if let Some(bytes) =
+        C::Value::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options).await?
+    {
+        Ok(bytes)
+    } else {
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        fill_value_bytes(array, chunk_shape.num_elements_u64())
+    }
+}
+
+/// Expose an in-memory synchronous partial decoder as an asynchronous partial decoder.
+///
+/// The wrapped decoder must not perform storage operations (i.e. it must be backed by
+/// in-memory chunk data), since its methods are called directly from an asynchronous context.
+#[cfg(feature = "async")]
+pub(super) struct SyncPartialDecoderAsAsync(Arc<dyn zarrs_codec::ArrayPartialDecoderTraits>);
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl zarrs_codec::AsyncArrayPartialDecoderTraits for SyncPartialDecoderAsAsync {
+    fn data_type(&self) -> &zarrs_data_type::DataType {
+        self.0.data_type()
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.0.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.0.size_held()
+    }
+
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.0.local_subchunk_grids(options)
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
+        indexer: &dyn crate::array::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        self.0.partial_decode(indexer, options)
+    }
+
+    async fn partial_decode_into(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        output_target: zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.0.partial_decode_into(indexer, output_target, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.0.supports_partial_decode()
     }
 }
