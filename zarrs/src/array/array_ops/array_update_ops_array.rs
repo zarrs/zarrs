@@ -2,12 +2,12 @@ use inherent::inherent;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayUpdateOps, *};
+use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec, ArraySubsetTraits, update_array_bytes};
-use crate::iter_concurrent_limit;
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
@@ -103,7 +103,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             };
 
             let indices = chunks.indices();
-            iter_concurrent_limit!(chunk_concurrent_limit, indices, try_for_each, store_chunk)?;
+            indices
+                .concurrent_limit(chunk_concurrent_limit)
+                .try_for_each(store_chunk)?;
         }
 
         Ok(())

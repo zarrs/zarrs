@@ -9,10 +9,10 @@ use super::super::array_bytes_internal::{
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::{ArrayReadOps, *};
+use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ChunkShapeTraits};
-use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
@@ -454,9 +454,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
                 ))
             };
-            let chunk_bytes_and_subsets =
-                iter_concurrent_limit!(chunk_concurrent_limit, chunk_indices, map, retrieve_chunk)
-                    .collect::<Result<Vec<_>, _>>()?;
+            let chunk_bytes_and_subsets = chunk_indices
+                .concurrent_limit(chunk_concurrent_limit)
+                .map(retrieve_chunk)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
                 chunk_bytes_and_subsets,
                 &array_subset.shape(),
@@ -479,9 +480,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_subset_overlap.relative_to(&array_subset.start())?,
                 ))
             };
-            let chunk_bytes_and_subsets =
-                iter_concurrent_limit!(chunk_concurrent_limit, chunk_indices, map, retrieve_chunk)
-                    .collect::<Result<Vec<_>, _>>()?;
+            let chunk_bytes_and_subsets = chunk_indices
+                .concurrent_limit(chunk_concurrent_limit)
+                .map(retrieve_chunk)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(ArrayBytes::Variable(merge_chunks_vlen(
                 chunk_bytes_and_subsets,
                 &array_subset.shape(),
@@ -561,12 +563,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             };
 
             let indices = chunks.indices();
-            iter_concurrent_limit!(
-                chunk_concurrent_limit,
-                indices,
-                try_for_each,
-                retrieve_chunk
-            )?;
+            indices
+                .concurrent_limit(chunk_concurrent_limit)
+                .try_for_each(retrieve_chunk)?;
         }
 
         unsafe { data_output.set_len(size_output) };

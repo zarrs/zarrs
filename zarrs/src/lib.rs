@@ -284,14 +284,47 @@ pub(crate) fn warn_deprecated_extension(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
+mod concurrent_limit {
+    use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
+    use rayon_iter_concurrent_limit::{ConcurrencyLimited, ConcurrentLimit};
+
+    /// Convert into a [`rayon`] parallel iterator with a limited concurrency.
+    ///
+    /// This is a thin wrapper over [`rayon_iter_concurrent_limit::ConcurrentLimit`] which also
+    /// performs the [`IntoParallelIterator`] conversion. A serial equivalent is used on WASM.
+    pub(crate) trait IntoConcurrentLimitIterator: IntoParallelIterator
+    where
+        Self::Iter: IndexedParallelIterator,
+    {
+        /// Limit the concurrency of every subsequent method in the iterator chain.
+        fn concurrent_limit(self, concurrent_limit: usize) -> ConcurrencyLimited<Self::Iter>
+        where
+            Self: Sized,
+        {
+            ConcurrentLimit::concurrent_limit(self.into_par_iter(), concurrent_limit)
+        }
+    }
+
+    impl<I: IntoParallelIterator> IntoConcurrentLimitIterator for I where
+        I::Iter: IndexedParallelIterator
+    {
+    }
+}
 
 #[cfg(target_arch = "wasm32")]
-/// A serial equivalent of [`rayon_iter_concurrent_limit::iter_concurrent_limit`] for WASM compatibility.
-#[macro_export]
-macro_rules! iter_concurrent_limit {
-    ( $concurrent_limit:expr, $iterator:expr, $fn:tt, $op:expr ) => {{
-        let _concurrent_limit = $concurrent_limit; // fixes unused lint
-        $iterator.into_iter().$fn($op)
-    }};
+mod concurrent_limit {
+    /// A serial equivalent of the non-WASM [`IntoConcurrentLimitIterator`] for WASM compatibility.
+    pub(crate) trait IntoConcurrentLimitIterator: IntoIterator {
+        /// Ignore the concurrent limit and iterate serially.
+        fn concurrent_limit(self, _concurrent_limit: usize) -> Self::IntoIter
+        where
+            Self: Sized,
+        {
+            self.into_iter()
+        }
+    }
+
+    impl<I: IntoIterator> IntoConcurrentLimitIterator for I {}
 }
+
+pub(crate) use concurrent_limit::IntoConcurrentLimitIterator;

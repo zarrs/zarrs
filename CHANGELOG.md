@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
+- **Breaking**: Bump `rayon_iter_concurrent_limit` to 0.3.0
+  - Chunk/subchunk concurrency limits are now applied with the `concurrent_limit` iterator method instead of the removed `iter_concurrent_limit!` macro, which splits the iterator into exactly the requested number of work items without allocating
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
@@ -71,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove warnings from now-stable `reshape` codec
 
 ### Removed
+- **Breaking**: Remove the WASM-only `iter_concurrent_limit!` macro, superseded by the `concurrent_limit` iterator method of `rayon_iter_concurrent_limit` 0.3.0
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
   - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
