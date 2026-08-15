@@ -5,7 +5,11 @@
 //!   - Preferred where decoding is expensive and memory is abundant.
 //! - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
 //!   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
-//! - [Async][`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+//! - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+#![cfg_attr(
+    feature = "async",
+    doc = "  - The asynchronous counterpart is [`ChunkCacheTypeAsyncPartialDecoder`]."
+)]
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
