@@ -6,9 +6,7 @@ use super::SyncPartialDecoderAsAsync;
 use super::{cache_error, validate_chunk_indices};
 #[cfg(feature = "async")]
 use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
-use crate::array::chunk_cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded, SealedSync,
-};
+use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded, SealedSync};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, CodecOptions,
 };

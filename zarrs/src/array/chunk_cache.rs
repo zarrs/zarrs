@@ -120,15 +120,15 @@ impl<T: ChunkCacheType + chunk_cache_type_sealed::SealedAsync> AsyncChunkCacheTy
 mod chunk_cache_type_sealed {
     use std::sync::Arc;
 
-    #[cfg(feature = "async")]
-    use super::{
-        AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
-        ChunkCacheTypeAsyncPartialDecoder,
-    };
     use super::{
         Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ArraySubsetTraits, ChunkCache,
         ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
         CodecOptions, ReadableStorageTraits,
+    };
+    #[cfg(feature = "async")]
+    use super::{
+        AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
+        ChunkCacheTypeAsyncPartialDecoder,
     };
 
     pub trait Sealed {}
