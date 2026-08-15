@@ -95,7 +95,7 @@ where
 /// The wrapped decoder must not perform storage operations (i.e. it must be backed by
 /// in-memory chunk data), since its methods are called directly from an asynchronous context.
 #[cfg(feature = "async")]
-pub(super) struct SyncPartialDecoderAsAsync(pub Arc<dyn zarrs_codec::ArrayPartialDecoderTraits>);
+pub(super) struct SyncPartialDecoderAsAsync(Arc<dyn zarrs_codec::ArrayPartialDecoderTraits>);
 
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
