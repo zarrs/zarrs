@@ -152,7 +152,7 @@ mod tests {
 
         let configuration: SqueezeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
         assert_eq!(
             codec.encoded_shape(&shape).unwrap(),
@@ -188,8 +188,7 @@ mod tests {
         let codec = Arc::new(SqueezeCodec::new())
             .with_context(data_type::uint8(), FillValue::from(0u8))
             .unwrap();
-        let chunk_grid =
-            ChunkGrid::new(RegularChunkGrid::new(array_shape.clone(), chunk_shape).unwrap());
+        let chunk_grid = ChunkGrid::new(RegularChunkGrid::new(array_shape, chunk_shape).unwrap());
         let inner_subchunk_grid =
             ChunkGrid::new(RegularChunkGrid::new(inner_array_shape, inner_subchunk_shape).unwrap());
         let subchunk_grid = codec
@@ -244,9 +243,7 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
@@ -256,7 +253,7 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
+            .with_context(encoded_data_type, encoded_fill_value)
             .unwrap();
         let input_handle = bytes_codec
             .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())

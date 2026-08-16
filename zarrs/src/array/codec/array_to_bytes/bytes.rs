@@ -173,8 +173,7 @@ mod tests {
         let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
-        let codec = Arc::new(BytesCodec::new(endianness))
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let codec = Arc::new(BytesCodec::new(endianness)).with_context(data_type, fill_value)?;
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
         let decoded = codec
@@ -263,7 +262,7 @@ mod tests {
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec

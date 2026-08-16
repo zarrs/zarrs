@@ -55,7 +55,7 @@ fn zarr_python_v2_compat_str_fv_0() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/str_v2_fv_0.zarr",
     )?);
-    let array = zarrs::array::Array::open(store.clone(), "/")?;
+    let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
     let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
@@ -69,7 +69,7 @@ fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/str_v2_fv_null.zarr",
     )?);
-    let array = zarrs::array::Array::open(store.clone(), "/")?;
+    let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
     let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
@@ -132,7 +132,7 @@ fn zarr_python_v3_consolidated_metadata_null() -> Result<(), Box<dyn Error>> {
     assert_eq!(group.path().as_str(), "/");
 
     // Should be able to open the meta subgroup
-    let meta_group = Group::open(store.clone(), "/meta")?;
+    let meta_group = Group::open(store, "/meta")?;
     assert_eq!(meta_group.path().as_str(), "/meta");
 
     Ok(())

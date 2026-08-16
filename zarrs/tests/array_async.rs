@@ -427,9 +427,7 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
         let compare = array
             .async_retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])
             .await?;
-        let test = array
-            .async_retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &CodecOptions::default())
-            .await?;
+        let test = array.async_retrieve_subchunk::<Vec<u16>>(&[2, 3]).await?;
         assert_eq!(compare, test);
 
         let subset = ArraySubset::new_with_ranges(&[2..6, 2..6]);
@@ -438,35 +436,31 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
             .async_retrieve_array_subset::<Vec<u16>>(&subset)
             .await?;
         let test = array
-            .async_retrieve_subchunks_opt::<Vec<u16>>(&subchunks, &CodecOptions::default())
+            .async_retrieve_subchunks::<Vec<u16>>(&subchunks)
             .await?;
         assert_eq!(compare, test);
     } else {
         assert!(matches!(array.subchunk_grid(), ChunkGridDecodedRef::None));
         let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
         assert!(matches!(
-            array
-                .async_retrieve_subchunk_opt::<Vec<u16>>(&[1, 1], &CodecOptions::default())
-                .await,
+            array.async_retrieve_subchunk::<Vec<u16>>(&[1, 1]).await,
             Err(ArrayError::MissingSubchunkGrid)
         ));
         assert!(matches!(
-            array
-                .async_retrieve_subchunks_opt::<Vec<u16>>(&chunks, &CodecOptions::default())
-                .await,
+            array.async_retrieve_subchunks::<Vec<u16>>(&chunks).await,
             Err(ArrayError::MissingSubchunkGrid)
         ));
     }
 
     assert!(
         array
-            .async_retrieve_subchunk_opt::<Vec<u16>>(&[0], &CodecOptions::default())
+            .async_retrieve_subchunk::<Vec<u16>>(&[0])
             .await
             .is_err()
     );
     assert!(
         array
-            .async_retrieve_subchunks_opt::<Vec<u16>>(&[0..1], &CodecOptions::default())
+            .async_retrieve_subchunks::<Vec<u16>>(&[0..1])
             .await
             .is_err()
     );

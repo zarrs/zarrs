@@ -10,7 +10,7 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/v3_bytes.zarr",
     )?);
-    let array = zarrs::array::Array::open(store.clone(), "/")?;
+    let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
     let cities_out: Vec<Vec<u8>> = array.retrieve_array_subset(&subset_all)?;
 

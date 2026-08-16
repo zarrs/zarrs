@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
 - Add the `cast_value` array-to-array codec
@@ -15,20 +15,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`, `async_retrieve_chunk_into`, `async_retrieve_chunk_subset_into`
-  - Add `ArrayReadOps::retrieve_subchunk[s][_at_level][_opt]` for interacting with nested subchunk grids
+  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+- Implement the asynchronous operation traits for `ArrayCached`, so that chunk caches can be used with asynchronous stores
+  - `ArrayCached` now implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`
+- Add support for async caching
+  - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
+  - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
+  - Add the `AsyncChunkCache` trait and  `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
 - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
 - Implement `Clone` for `ArrayBuilder`
-- Add `ArrayReadOps::local_subchunk_grid[_at_level][_opt]` for chunk-local subchunk grids
+- Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
-- Add `ArrayReadOps::retrieve_encoded_subchunk[_at_level][_opt]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
+- Add `ArrayReadOps::retrieve_encoded_subchunk[_at_level]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
   - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`, but not through array-to-array codecs
   - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
+- Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
+- Add `ArrayMutOps::set_metadata_erase_version()`
+- Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
@@ -36,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
+- **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
@@ -51,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
   - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
+  - `try_get_or_insert_with` is no longer `#[doc(hidden)]`
   - Add `invalidate` methods
 - Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently
   - This has always been the case, but was only explicitly stated for concurrent writes
@@ -67,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove warnings from now-stable `reshape` codec
 
 ### Removed
+- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
+  - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
   - `[async_]retrieve_encoded_subchunk` is now part of `ArrayReadOps` / `AsyncArrayReadOps`; use `[Async]ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk` for low-level encoded subchunk access
@@ -78,10 +93,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
-- `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
+- **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
+- `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+
+## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
+
+### Fixed
+- Fixed `GzipCodec::encoded_representation()` under-estimating the worst-case encoded size, which could cause an out-of-bounds panic or a `CodecError` when `gzip` was an inner codec of `sharding_indexed` ([#444](https://github.com/zarrs/zarrs/issues/444))
+  - The bound now matches zlib's `deflateBound()`
+- The `sharding_indexed` codec now returns a `CodecError` instead of panicking if an inner codec exceeds its reported bounded encoded size
+- Zarr V2 arrays with a `zstd` compressor configuration that includes a `checksum` field (as written by recent `numcodecs`/`zarr-python` releases) failed to open with an `unknown field checksum` error
+- `async_get_child_nodes_opt` now ignores unrecognised listed prefixes consistently with sync discovery
 - Fixed a panic when retrieving an array subset spanning multiple chunks through a chunk cache with a nested optional data type (e.g. `Option<Option<u8>>`)
   - Only the outermost mask was allocated, so inner masks were also dropped
 

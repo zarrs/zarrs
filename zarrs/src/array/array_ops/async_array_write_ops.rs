@@ -1,6 +1,10 @@
 use super::*;
 
 /// Asynchronous array write operations.
+///
+/// These operations encode with the array's [`codec_options`](ArrayOps::codec_options) and write
+/// metadata according to its [`metadata_options`](ArrayOps::metadata_options) and
+/// [`metadata_erase_version`](ArrayOps::metadata_erase_version).
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncArrayWriteOps: ArrayOps {
@@ -8,23 +12,9 @@ pub trait AsyncArrayWriteOps: ArrayOps {
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_metadata(&self) -> Result<(), StorageError>;
 
-    /// Async variant of [`ArrayWriteOps::store_metadata_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_store_metadata_opt(
-        &self,
-        options: &ArrayMetadataOptions,
-    ) -> Result<(), StorageError>;
-
     /// Async variant of [`ArrayWriteOps::erase_metadata`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_erase_metadata(&self) -> Result<(), StorageError>;
-
-    /// Async variant of [`ArrayWriteOps::erase_metadata_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_erase_metadata_opt(
-        &self,
-        options: MetadataEraseVersion,
-    ) -> Result<(), StorageError>;
 
     /// Async variant of [`ArrayWriteOps::store_chunk`].
     #[allow(clippy::missing_errors_doc)]
@@ -34,30 +24,12 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         chunk_data: T,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayWriteOps::store_chunk_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_store_chunk_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: T,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError>;
-
     /// Async variant of [`ArrayWriteOps::store_chunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_chunks<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError>;
-
-    /// Async variant of [`ArrayWriteOps::store_chunks_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_store_chunks_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::erase_chunk`].

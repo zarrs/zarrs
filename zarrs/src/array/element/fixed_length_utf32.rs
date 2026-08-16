@@ -267,8 +267,10 @@ mod tests {
 
     fn make_data_type(length_bytes: u32) -> DataType {
         Arc::new(
-            data_type::FixedLengthUTF32DataType::new(NonZeroU64::new(length_bytes as u64).unwrap())
-                .unwrap(),
+            data_type::FixedLengthUTF32DataType::new(
+                NonZeroU64::new(u64::from(length_bytes)).unwrap(),
+            )
+            .unwrap(),
         )
         .into()
     }

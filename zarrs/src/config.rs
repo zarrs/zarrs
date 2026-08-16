@@ -80,7 +80,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// > default: [`MetadataConvertVersion::Default`] (keep existing version)
 ///
 /// Determines the Zarr version of metadata created with [`Array::metadata_opt`](crate::array::Array::metadata_opt) and [`Group::metadata_opt`](crate::group::Group::metadata_opt).
-/// These methods are used internally by the `store_metadata` and `store_metadata_opt` methods of [`crate::array::Array`] and [`crate::group::Group`].
+/// These methods are used internally by the `store_metadata` methods of [`crate::array::Array`] and [`crate::group::Group`].
 ///
 /// ### Metadata Erase Version
 /// > default: [`MetadataEraseVersion::Default`] (erase existing version)

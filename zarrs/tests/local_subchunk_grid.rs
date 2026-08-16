@@ -9,7 +9,7 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits, ArrayReadOps,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
     ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
@@ -540,7 +540,7 @@ impl CodecTraits for TestSubchunkingCodec {
 
 impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self.clone()
+        self
     }
 
     fn with_codec_specific_options(

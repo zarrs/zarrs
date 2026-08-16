@@ -343,13 +343,13 @@ pub fn data_type_metadata_v2_to_v3(
                 {
                     format!("r{}", size_bytes * 8)
                 } else {
-                    name.to_string()
+                    name.clone()
                 };
                 return Ok(MetadataV3::new(v3_name));
             }
 
             // Look up the V3 name and configuration using the built-in data type registry
-            let metadata = DataTypeMetadataV2::Simple(name.to_string());
+            let metadata = DataTypeMetadataV2::Simple(name.clone());
             for plugin in inventory::iter::<zarrs_data_type::DataTypePluginV2> {
                 if plugin.match_name(name)
                     && let Ok(dt) = plugin.create(&metadata)
@@ -358,12 +358,11 @@ pub fn data_type_metadata_v2_to_v3(
                     let configuration = dt.configuration_v3();
                     if configuration.is_empty() {
                         return Ok(MetadataV3::new(v3_name.to_string()));
-                    } else {
-                        return Ok(MetadataV3::new_with_configuration(
-                            v3_name.to_string(),
-                            configuration,
-                        ));
                     }
+                    return Ok(MetadataV3::new_with_configuration(
+                        v3_name.to_string(),
+                        configuration,
+                    ));
                 }
             }
 

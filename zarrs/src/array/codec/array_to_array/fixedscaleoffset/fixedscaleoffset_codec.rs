@@ -379,14 +379,14 @@ fn cast_array(
     result
 }
 
-fn do_encode<'a>(
-    bytes: ArrayBytes<'a>,
+fn do_encode(
+    bytes: ArrayBytes<'_>,
     element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
     encoded_element_type: FixedScaleOffsetElementType,
     astype: bool,
-) -> Result<ArrayBytes<'a>, CodecError> {
+) -> Result<ArrayBytes<'_>, CodecError> {
     let mut bytes = bytes.into_fixed()?.into_owned();
     scale_array(&mut bytes, element_type, offset, scale)?;
     if astype {

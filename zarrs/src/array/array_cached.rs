@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::Array;
+use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 
 /// A cached array wrapper.
 ///
@@ -44,6 +45,43 @@ use super::Array;
 ///
 /// For thread-local caches, invalidation only affects the thread performing the
 /// mutation.
+///
+/// Invalidation makes a cache coherent with writes that *precede* the retrievals of
+/// the chunks they invalidate. It does not make concurrent reads and writes of the same
+/// chunk safe, which [`Array`] does not support (see its *Parallel Writing* section). A
+/// retrieval that fetches a chunk while a write to that chunk invalidates the cache
+/// inserts its value after the invalidation, leaving a pre-write value cached for every
+/// later read.
+///
+/// ## Asynchronous Operations
+///
+/// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
+/// operations, which require an `AsyncChunkCache` — one of the
+/// `AsyncChunkCache*Lru*` caches, or a custom implementation.
+/// A cache implements either `ChunkCache` or `AsyncChunkCache`, so a given `ArrayCached`
+/// supports one flavour of operation; a synchronous cache passed to an `async_` operation
+/// is rejected at compile time:
+///
+/// ```compile_fail
+/// # use std::sync::Arc;
+/// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
+/// # use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
+/// # use zarrs_storage::store::AsyncMemoryStore;
+/// # async fn f() {
+/// let store = Arc::new(AsyncMemoryStore::new());
+/// let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+///     .build_arc(store, "/")
+///     .unwrap();
+/// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimit::new(2));
+/// // error: the trait bound `ChunkCacheEncodedLruChunkLimit: AsyncChunkCache` is not satisfied
+/// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
+/// # }
+/// ```
+///
+/// Caches of synchronous partial decoders only support synchronous operations, and
+/// caches of asynchronous partial decoders only support asynchronous operations
+/// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
+/// [`chunk_cache`](super::chunk_cache)).
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,
@@ -79,6 +117,29 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     #[must_use]
     pub fn cache(&self) -> &C {
         self.cache.as_ref()
+    }
+
+    /// Reconfigure the codec chain with codec-specific options.
+    ///
+    /// Refer to [`Array::with_codec_specific_options`] for details. The chunk cache is shared
+    /// with the original.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    pub fn with_codec_specific_options(
+        &self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<Self, CodecCreateError> {
+        let mut array = self.clone();
+        Arc::make_mut(&mut array.array).set_codec_specific_options(opts)?;
+        Ok(array)
+    }
+
+    /// Transform the inner array while retaining the cache.
+    pub(crate) fn map_array(&self, f: impl FnOnce(&mut Array<TStorage>)) -> Self {
+        let mut array = self.clone();
+        f(Arc::make_mut(&mut array.array));
+        array
     }
 
     /// Split into the inner array and shared cache.

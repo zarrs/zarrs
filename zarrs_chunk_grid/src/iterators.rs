@@ -92,7 +92,7 @@ mod tests {
         let expected = vec![5, 6, 9, 10];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
-        assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
+        assert_eq!(indices.into_iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.into_par_iter().collect::<Vec<_>>(), expected);
     }
 
@@ -149,7 +149,7 @@ mod tests {
         let expected = vec![(ArrayIndicesTinyVec::Heap(vec![1, 0, 0, 0]), 8)];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
-        assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
+        assert_eq!(indices.into_iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.into_par_iter().collect::<Vec<_>>(), expected);
     }
 

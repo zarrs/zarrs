@@ -501,7 +501,7 @@ mod tests {
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec

@@ -477,7 +477,7 @@ mod tests {
                     });
                 data
             }
-            FillValueAmount::None => (1..(1 + chunk_shape.num_elements_usize() as u16)).collect(),
+            FillValueAmount::None => (1..=(chunk_shape.num_elements_usize() as u16)).collect(),
         };
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -499,7 +499,7 @@ mod tests {
             ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
         ))
         .unwrap()
-        .with_context(data_type.clone(), fill_value.clone())
+        .with_context(data_type, fill_value)
         .unwrap();
         let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -621,6 +621,44 @@ mod tests {
         }
     }
 
+    /// Regression test for <https://github.com/zarrs/zarrs/issues/444>.
+    ///
+    /// A DEFLATE encoder may emit more blocks than `size / 32768`, so the gzip
+    /// encoded size of poorly compressible data can exceed a bound that assumes
+    /// a minimum block size, overflowing the shard buffer.
+    /// With gzip level 0 this is deterministic: `miniz_oxide` splits a 32768
+    /// byte input into two stored blocks.
+    #[cfg(feature = "gzip")]
+    #[cfg(feature = "crc32c")]
+    #[test]
+    fn codec_sharding_gzip_stored_blocks_exceed_naive_bound() {
+        use crate::array::codec::GzipCodec;
+        let subchunk_shape = ChunkShape::from(vec![NonZeroU64::new(32768).unwrap()]);
+        let shard_shape = vec![NonZeroU64::new(65536).unwrap()];
+        let bytes: ArrayBytes = vec![1u8; 65536].into();
+        for index_at_end in [true, false] {
+            for parallel in [true, false] {
+                let options =
+                    CodecOptions::default().with_concurrent_target(get_concurrent_target(parallel));
+                let codec = Arc::new(
+                    ShardingCodecBuilder::new(subchunk_shape.clone(), &data_type::uint8())
+                        .index_location(if index_at_end {
+                            ShardingIndexLocation::End
+                        } else {
+                            ShardingIndexLocation::Start
+                        })
+                        .bytes_to_bytes_codecs(vec![Arc::new(GzipCodec::new(0).unwrap())])
+                        .build(),
+                )
+                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .unwrap();
+                let encoded = codec.encode(bytes.clone(), &shard_shape, &options).unwrap();
+                let decoded = codec.decode(encoded, &shard_shape, &options).unwrap();
+                assert_eq!(bytes, decoded);
+            }
+        }
+    }
+
     #[cfg(feature = "async")]
     async fn codec_sharding_async_round_trip_impl(
         options: &CodecOptions,
@@ -722,7 +760,7 @@ mod tests {
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
         )
-        .with_context(data_type.clone(), fill_value.clone())
+        .with_context(data_type.clone(), fill_value)
         .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -871,7 +909,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -914,7 +952,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -963,7 +1001,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         // Step 1: Fully encode the shard

@@ -294,7 +294,7 @@ mod tests {
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -337,7 +337,7 @@ mod tests {
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(data_type, fill_value)
             .unwrap();
 
         let encoded = codec
@@ -395,9 +395,7 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec
-            .with_context(data_type.clone(), fill_value.clone())
-            .unwrap();
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();

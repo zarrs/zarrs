@@ -81,21 +81,20 @@ fn sharded_array_retrieve_encoded_subchunk() -> TestResult {
     assert_eq!(array.subchunk_codecs().len(), 1);
     assert!(array.subchunk_codecs_at_level(1).is_none());
 
-    let options = CodecOptions::default();
     for subchunk_indices in [[0, 0], [1, 2], [3, 3]] {
         let encoded = array
             .retrieve_encoded_subchunk(&subchunk_indices)?
             .expect("subchunk is stored");
         assert_eq!(
             decode_subchunk(array.as_ref(), 0, encoded)?,
-            array.retrieve_subchunk_opt::<Vec<u16>>(&subchunk_indices, &options)?
+            array.retrieve_subchunk::<Vec<u16>>(&subchunk_indices)?
         );
     }
 
-    // Explicit options and level variants are equivalent at level zero
+    // The bare and level variants are equivalent at level zero
     assert_eq!(
         array.retrieve_encoded_subchunk(&[1, 2])?,
-        array.retrieve_encoded_subchunk_at_level_opt(0, &[1, 2], &options)?
+        array.retrieve_encoded_subchunk_at_level(0, &[1, 2])?
     );
 
     // Encoded subchunks are available through a chunk cache that retains a partial decoder
@@ -139,7 +138,7 @@ fn sharded_array_retrieve_encoded_subchunk_errors() -> TestResult {
     assert!(array.retrieve_encoded_subchunk(&[4, 0]).is_err());
     // Beyond the subchunk grid hierarchy
     assert!(matches!(
-        array.retrieve_encoded_subchunk_at_level_opt(1, &[0, 0], &CodecOptions::default()),
+        array.retrieve_encoded_subchunk_at_level(1, &[0, 0]),
         Err(ArrayError::MissingSubchunkGrid)
     ));
 
@@ -206,11 +205,11 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
 
     // Level zero: an encoded subchunk is an encoded inner shard
     let encoded = array
-        .retrieve_encoded_subchunk_at_level_opt(0, &[1, 0], &options)?
+        .retrieve_encoded_subchunk_at_level(0, &[1, 0])?
         .expect("subchunk is stored");
     assert_eq!(
         decode_subchunk(array.as_ref(), 0, encoded)?,
-        array.retrieve_subchunk_at_level_opt::<Vec<u16>>(0, &[1, 0], &options)?
+        array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 0])?
     );
 
     // Level one: an encoded subchunk of a subchunk
@@ -221,15 +220,11 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
         decode_subchunk(array.as_ref(), 1, encoded)?,
         [38, 39, 46, 47]
     );
-    assert_eq!(
-        array.retrieve_encoded_subchunk_at_level(1, &[2, 3])?,
-        array.retrieve_encoded_subchunk_at_level_opt(1, &[2, 3], &options)?
-    );
 
     // Beyond the hierarchy
     assert!(
         array
-            .retrieve_encoded_subchunk_at_level_opt(2, &[0, 0], &options)
+            .retrieve_encoded_subchunk_at_level(2, &[0, 0])
             .is_err()
     );
 
@@ -276,7 +271,7 @@ fn nested_sharded_array_encoded_subchunks_are_read_lazily() -> TestResult {
 
     store.reset();
     let encoded = array
-        .retrieve_encoded_subchunk_at_level_opt(1, &[3, 2], &CodecOptions::default())?
+        .retrieve_encoded_subchunk_at_level(1, &[3, 2])?
         .expect("subchunk is stored");
     assert_eq!(encoded.len(), subchunk_bytes);
     // Only the two shard indexes and the subchunk itself are read
@@ -336,21 +331,18 @@ async fn async_sharded_array_retrieve_encoded_subchunk() -> TestResult {
         .async_store_array_subset(&array.subset_all(), &data)
         .await?;
 
-    let options = CodecOptions::default();
     let encoded = array
         .async_retrieve_encoded_subchunk(&[1, 2])
         .await?
         .expect("subchunk is stored");
     assert_eq!(
         decode_subchunk(array.as_ref(), 0, encoded)?,
-        array
-            .async_retrieve_subchunk_opt::<Vec<u16>>(&[1, 2], &options)
-            .await?
+        array.async_retrieve_subchunk::<Vec<u16>>(&[1, 2]).await?
     );
 
     assert!(
         array
-            .async_retrieve_encoded_subchunk_at_level_opt(1, &[0, 0], &options)
+            .async_retrieve_encoded_subchunk_at_level(1, &[0, 0])
             .await
             .is_err()
     );
@@ -688,7 +680,6 @@ fn block_codec_retrieve_encoded_subchunk() -> TestResult {
     );
     assert_eq!(array.subchunk_codecs().len(), 1);
 
-    let options = CodecOptions::default();
     for subchunk_indices in 0..4 {
         let encoded = array
             .retrieve_encoded_subchunk(&[subchunk_indices])?
@@ -696,7 +687,7 @@ fn block_codec_retrieve_encoded_subchunk() -> TestResult {
         assert_eq!(encoded.len(), 3 * size_of::<u16>());
         assert_eq!(
             decode_subchunk(array.as_ref(), 0, encoded)?,
-            array.retrieve_subchunk_opt::<Vec<u16>>(&[subchunk_indices], &options)?
+            array.retrieve_subchunk::<Vec<u16>>(&[subchunk_indices])?
         );
     }
 
@@ -728,7 +719,7 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
 
     // Level zero: a sharding subchunk, encoded by the block codec
     let encoded = array
-        .retrieve_encoded_subchunk_at_level_opt(0, &[1], &options)?
+        .retrieve_encoded_subchunk_at_level(0, &[1])?
         .expect("subchunk is stored");
     assert_eq!(
         decode_subchunk(array.as_ref(), 0, encoded)?,
@@ -737,7 +728,7 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
 
     // Level one: a block of a sharding subchunk
     let encoded = array
-        .retrieve_encoded_subchunk_at_level_opt(1, &[3], &options)?
+        .retrieve_encoded_subchunk_at_level(1, &[3])?
         .expect("subchunk is stored");
     assert_eq!(encoded.len(), 3 * size_of::<u16>());
     assert_eq!(decode_subchunk(array.as_ref(), 1, encoded)?, [9, 10, 11]);
