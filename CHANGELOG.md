@@ -650,6 +650,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Make `StoragePartialEncoder` generic over the underlying storage and add async support
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
+- Use WASM compatible `rayon_iter_concurrent_limit` internally
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
