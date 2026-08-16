@@ -6,8 +6,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayWriteOps, *};
+use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
-use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_storage::{Bytes, StorageHandle};
@@ -129,7 +129,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 };
 
                 let indices = chunks.indices();
-                iter_concurrent_limit!(chunk_concurrent_limit, indices, try_for_each, store_chunk)?;
+                indices
+                    .concurrent_limit(chunk_concurrent_limit)
+                    .try_for_each(store_chunk)?;
             }
         }
 

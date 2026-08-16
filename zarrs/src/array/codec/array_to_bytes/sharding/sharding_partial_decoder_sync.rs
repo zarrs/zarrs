@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubset, ChunkGridTraits};
 
@@ -10,6 +11,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
     nested_local_subchunk_grids,
 };
+use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
@@ -387,12 +389,10 @@ fn partial_decode_fixed_array_subset_into(
     let chunks = shard_chunk_grid
         .chunks_in_array_subset(array_subset)?
         .expect("subchunks always within shard");
-    crate::iter_concurrent_limit!(
-        subchunk_concurrent_limit,
-        chunks.indices(),
-        try_for_each,
-        decode_subchunk_subset_into_slice
-    )?;
+    chunks
+        .indices()
+        .concurrent_limit(subchunk_concurrent_limit)
+        .try_for_each(decode_subchunk_subset_into_slice)?;
     Ok(())
 }
 
@@ -475,13 +475,11 @@ fn partial_decode_variable_array_subset(
     let chunks = shard_chunk_grid
         .chunks_in_array_subset(array_subset)?
         .expect("subchunks always within shard");
-    let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
-        subchunk_concurrent_limit,
-        chunks.indices(),
-        map,
-        decode_subchunk_subset
-    )
-    .collect::<Result<Vec<_>, _>>()?;
+    let chunk_bytes_and_subsets = chunks
+        .indices()
+        .concurrent_limit(subchunk_concurrent_limit)
+        .map(decode_subchunk_subset)
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Convert into an array
     let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape());
