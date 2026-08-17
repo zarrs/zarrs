@@ -43,6 +43,9 @@ pub mod storage_transformer;
 #[cfg(feature = "dlpack")]
 mod array_dlpack_ext;
 
+#[cfg(feature = "dlpack")]
+pub use self::array_dlpack_ext::TensorDlpackBuilder;
+
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -198,7 +201,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - Raw bytes variants: [`ArrayBytes`]
 /// - Typed element variants: e.g. `Vec<T>` where `T: Element`
 /// - `ndarray` variants: `ndarray::ArrayD<T>` where `T: Element` (requires `ndarray` feature)
-/// - `dlpack` variants: `RawBytesDlPack` where `T: Element` (requires `dlpack` feature)
+/// - `dlpack` variants: [`Tensor`], which is convertible into a DLPack managed tensor (requires `dlpack` feature)
 ///
 /// Similarly, array `store_*` methods are generic over the input type.
 ///

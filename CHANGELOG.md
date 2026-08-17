@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
+- Add `TensorDlpackBuilder`, a `dlpark::Builder` alias for exporting a `Tensor` as a DLPack managed tensor (requires the `dlpack` feature)
+- Add `TensorError::UnsupportedShape` for tensor shapes that are not representable in a target format
+- Support additional data types in DLPack tensor export, matching DLPack 1.3
+  - `int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`, `float6_e2m3fn`, and `float6_e3m2fn`
+    - `zarrs` pads sub-byte elements to one byte, so these set the `IS_SUBBYTE_TYPE_PADDED` flag and must be built as a `dlpark::versioned::Dlpack` (the legacy ABI has no flags field)
+  - `float8_e3m4`, `float8_e4m3`, `float8_e4m3b11fnuz`, `float8_e4m3fnuz`, `float8_e5m2`, `float8_e5m2fnuz`, and `float8_e8m0fnu`
+  - `complex64`, `complex128`, `complex_float16`, `complex_float32`, and `complex_float64`
+  - `complex_bfloat16` remains unsupported, as it needs a data type code that postdates DLPack 1.3, as do the complex subfloats, which have no DLPack data type code
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
@@ -77,6 +85,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
 - **Breaking**: Bump `float8` to 0.7.0
+- **Breaking**: Bump `dlpark` to 0.8.0
+  - **Breaking**: Replace the `dlpark::traits::TensorLike` implementation for `Tensor` (removed upstream) with `TryFrom<Box<Tensor>> for TensorDlpackBuilder`
+    - A `Tensor` is now exported with `dlpark::Builder::try_from(Box::new(tensor))?.try_build()`, rather than `dlpark::versioned::SafeManagedTensorVersioned::new(tensor)`
+    - Both the versioned (`dlpark::versioned::Dlpack`) and legacy (`dlpark::legacy::Dlpack`) managed tensor ABIs are supported
+    - Returning a builder lets callers set `DlpackFlags`, the byte offset, and the device before building
 - Internal dependency bumps:
   - Bump `base64` to 0.23.1
   - Bump `getrandom` to 0.4.3
