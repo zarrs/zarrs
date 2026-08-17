@@ -1,5 +1,7 @@
 //! The [`IntoArrayBytes`] trait for converting input types into [`ArrayBytes`] for storage.
 
+use zarrs_codec::ElementLayout;
+
 use super::element::Element;
 use super::{ArrayBytes, DataType, ElementError};
 
@@ -82,9 +84,13 @@ impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static> for ndarray::Arr
 
 impl IntoArrayBytes<'static> for super::Tensor {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'static>, ElementError> {
-        let (bytes, tensor_data_type, _) = self.into_parts();
+        let (bytes, tensor_data_type, _, layout) = self.into_parts();
         if tensor_data_type != *data_type {
             return Err(ElementError::IncompatibleElementType);
+        }
+        // Array bytes are always in the default layout, and this does not convert
+        if layout != ElementLayout::default() {
+            return Err(ElementError::IncompatibleElementLayout);
         }
         Ok(ArrayBytes::from(bytes))
     }
@@ -92,9 +98,13 @@ impl IntoArrayBytes<'static> for super::Tensor {
 
 impl<'a> IntoArrayBytes<'a> for &'a super::Tensor {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ElementError> {
-        let (bytes, tensor_data_type, _) = self.as_parts();
+        let (bytes, tensor_data_type, _, layout) = self.as_parts();
         if tensor_data_type != data_type {
             return Err(ElementError::IncompatibleElementType);
+        }
+        // Array bytes are always in the default layout, and this does not convert
+        if layout != ElementLayout::default() {
+            return Err(ElementError::IncompatibleElementLayout);
         }
         Ok(ArrayBytes::from(bytes))
     }

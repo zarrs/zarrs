@@ -6,7 +6,8 @@ use dlpark::metadata::CopiedSlice;
 use dlpark::tensor::compact_strides;
 use dlpark::{Builder, DlpackFlags};
 
-use super::element_layout::{ElementLayout, ElementPacking};
+use zarrs_codec::{ElementLayout, ElementPacking};
+
 use super::{DataType, Tensor, TensorError};
 use crate::array::data_type as dt;
 
@@ -22,15 +23,24 @@ use crate::array::data_type as dt;
 /// managed tensor allocation.
 ///
 /// # Sub-byte data types
-/// A [`Tensor`] pads each sub-byte element to a whole byte, see
-/// [*Element layout*](Tensor#element-layout), whereas `DLPack` assumes that sub-byte elements are
-/// packed. The builder sets [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`] to signal this, but the legacy
-/// `DLManagedTensor` ABI has no flags field. **A sub-byte tensor (`int2`, `int4`, `uint2`, `uint4`,
-/// `float4_e2m1fn`, `float6_e2m3fn`, or `float6_e3m2fn`) must therefore be built as a
-/// [`versioned::Dlpack`](dlpark::versioned::Dlpack)**; building one as a
-/// [`legacy::Dlpack`](dlpark::legacy::Dlpack) drops the flag and consumers will misinterpret the
-/// data. Note that [`num_bytes`](dlpark::ManagedBox::num_bytes) reports the *packed* size for these
-/// data types, which is smaller than the exported buffer.
+/// `DLPack` assumes that sub-byte elements are packed, so how a sub-byte tensor (`int2`, `int4`,
+/// `uint2`, `uint4`, `float4_e2m1fn`, `float6_e2m3fn`, or `float6_e3m2fn`) is exported depends on
+/// its [`Tensor::layout`]:
+///
+/// - [`ElementPacking::PackedLsb0`] matches `DLPack` exactly, so no flag is needed and both managed
+///   tensor ABIs are safe. Get a packed tensor from [`Tensor::into_packed`], or from
+///   [`ArrayReadOps::retrieve_chunk_stored_layout`], which does not pack anything.
+/// - [`ElementPacking::Padded`], the default, needs [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`], and the
+///   legacy `DLManagedTensor` ABI has no flags field. **A padded sub-byte tensor must therefore be
+///   built as a [`versioned::Dlpack`](dlpark::versioned::Dlpack)**; building one as a
+///   [`legacy::Dlpack`](dlpark::legacy::Dlpack) drops the flag and consumers will misinterpret the
+///   data. [`num_bytes`](dlpark::ManagedBox::num_bytes) also reports the *packed* size, which is
+///   smaller than the exported buffer.
+///
+/// A packed `bool` cannot be exported at all, because `DLPack` fixes the storage size of a bool at
+/// 8 bits whereas `packbits` packs it at 1 bit per element.
+///
+/// [`ArrayReadOps::retrieve_chunk_stored_layout`]: crate::array::ArrayReadOps::retrieve_chunk_stored_layout
 ///
 /// # Examples
 /// ```rust
@@ -62,18 +72,18 @@ pub type TensorDlpackBuilder = Builder<Box<Tensor>, CopiedSlice<Vec<i64>, Vec<i6
 /// [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`].
 ///
 /// # Errors
-/// Returns [`TensorError::UnsupportedDataType`] if the data type or the layout is not supported.
+/// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported, or
+/// [`TensorError::UnsupportedLayout`] if the layout cannot be described in `DLPack`.
 fn data_type_to_dlpack(
     data_type: &DataType,
     layout: ElementLayout,
 ) -> Result<(DLDataType, DlpackFlags), TensorError> {
-    // TODO: return `TensorError::UnsupportedLayout(layout)` for the layout failures once
-    // `ElementLayout` is public
     let unsupported = || TensorError::UnsupportedDataType(data_type.clone());
+    let unsupported_layout = || TensorError::UnsupportedLayout(layout);
 
     // `DLPack` assumes the native endianness
     if !layout.endianness.is_native() {
-        return Err(unsupported());
+        return Err(unsupported_layout());
     }
 
     let type_id = data_type.as_any().type_id();
@@ -82,7 +92,7 @@ fn data_type_to_dlpack(
         // `DLPack` fixes the storage size of a bool at 8 bits, by array library convention, so a
         // bool packed at 1 bit per element cannot be described
         if layout.packing == ElementPacking::PackedLsb0 {
-            return Err(unsupported());
+            return Err(unsupported_layout());
         }
         DLDataType::scalar(DLDataTypeCode::BOOL, 8)
     } else if type_id == TypeId::of::<dt::Int2DataType>() {

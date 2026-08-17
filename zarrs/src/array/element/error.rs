@@ -10,6 +10,9 @@ pub enum ElementError {
     /// Incompatible element type for data type.
     #[error("Incompatible element type for data type")]
     IncompatibleElementType,
+    /// Incompatible element layout.
+    #[error("Incompatible element layout, expected the default layout")]
+    IncompatibleElementLayout,
     /// Invalid element value.
     #[error("Invalid element value")]
     InvalidElementValue,
