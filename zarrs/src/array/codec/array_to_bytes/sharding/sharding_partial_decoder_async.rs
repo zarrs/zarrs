@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
@@ -11,6 +12,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
     nested_local_subchunk_grids, nested_subchunk_codecs,
 };
+use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
@@ -565,11 +567,9 @@ async fn partial_decode_fixed_array_subset(
     let array_subset_shape = array_subset.shape();
 
     if !results.is_empty() {
-        crate::iter_concurrent_limit!(
-            options.concurrent_target(),
-            results,
-            try_for_each,
-            |subset_and_decoded_chunk| {
+        results
+            .concurrent_limit(options.concurrent_target())
+            .try_for_each(|subset_and_decoded_chunk| {
                 let (chunk_subset_bytes, chunk_subset_overlap): (Vec<u8>, ArraySubset) =
                     subset_and_decoded_chunk?;
                 let mut output_view = unsafe {
@@ -587,8 +587,7 @@ async fn partial_decode_fixed_array_subset(
                     .copy_from_slice(&chunk_subset_bytes)
                     .expect("chunk subset bytes are the correct length");
                 Ok::<_, CodecError>(())
-            }
-        )?;
+            })?;
     }
 
     // Write filled chunks
@@ -604,11 +603,9 @@ async fn partial_decode_fixed_array_subset(
         .collect::<Vec<_>>();
     if !filled_chunks.is_empty() {
         // Write filled chunks
-        crate::iter_concurrent_limit!(
-            options.concurrent_target(),
-            filled_chunks,
-            try_for_each,
-            |chunk_subset: &ArraySubset| {
+        filled_chunks
+            .concurrent_limit(options.concurrent_target())
+            .try_for_each(|chunk_subset: &ArraySubset| {
                 let chunk_subset_overlap = array_subset.overlap(chunk_subset)?;
                 let mut output_view = unsafe {
                     // SAFETY: chunks represent disjoint array subsets
@@ -624,8 +621,7 @@ async fn partial_decode_fixed_array_subset(
                 output_view
                     .fill(fill_value.as_ne_bytes())
                     .map_err(CodecError::from)
-            }
-        )?;
+            })?;
     }
     unsafe { shard.set_len(shard_size) };
     Ok(ArrayBytes::from(shard))

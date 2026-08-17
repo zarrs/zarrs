@@ -1,7 +1,7 @@
 use super::*;
-use crate::iter_concurrent_limit;
+use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::MaybeSync;
 
@@ -146,13 +146,11 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
-        iter_concurrent_limit!(
-            self.codec_options().concurrent_target(),
-            chunks.indices(),
-            map,
-            |chunk_indices| self.retrieve_encoded_chunk(&chunk_indices)
-        )
-        .collect()
+        chunks
+            .indices()
+            .concurrent_limit(self.codec_options().concurrent_target())
+            .map(|chunk_indices| self.retrieve_encoded_chunk(&chunk_indices))
+            .collect()
     }
 
     /// Retrieve the encoded bytes of the subchunk at `subchunk_indices`.

@@ -3,9 +3,10 @@ use std::sync::Arc;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 use super::{ArrayReadOps, *};
+use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
     wrap_optional_masks,
@@ -13,7 +14,6 @@ use crate::array::array_bytes_internal::{
 use crate::array::chunk_cache::{SealedSync, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
-use crate::iter_concurrent_limit;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
@@ -102,8 +102,9 @@ where
     C: ChunkCache + ?Sized,
 {
     let indices = chunks.indices();
-    let chunk_bytes_and_subsets =
-        iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
+    let chunk_bytes_and_subsets = indices
+        .concurrent_limit(chunk_concurrent_limit)
+        .map(|chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
             let bytes = C::Value::retrieve_chunk_subset_bytes(
@@ -196,12 +197,10 @@ where
             let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
             decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
         };
-        iter_concurrent_limit!(
-            chunk_concurrent_limit,
-            chunks.indices(),
-            try_for_each,
-            retrieve_chunk
-        )?;
+        chunks
+            .indices()
+            .concurrent_limit(chunk_concurrent_limit)
+            .try_for_each(retrieve_chunk)?;
     }
 
     unsafe { data_output.set_len(size_output) };

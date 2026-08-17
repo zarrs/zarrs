@@ -1,10 +1,10 @@
+use crate::IntoConcurrentLimitIterator;
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
     ArraySubsetTraits,
 };
-use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
@@ -170,12 +170,10 @@ where
         Ok::<_, ArrayError>(())
     };
 
-    iter_concurrent_limit!(
-        chunk_concurrent_limit,
-        chunks.indices(),
-        try_for_each,
-        retrieve_chunk
-    )?;
+    chunks
+        .indices()
+        .concurrent_limit(chunk_concurrent_limit)
+        .try_for_each(retrieve_chunk)?;
 
     Ok(())
 }
