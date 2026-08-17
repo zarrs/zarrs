@@ -5,7 +5,6 @@ use dlpark::ffi::{DLDataType, DLDataTypeCode, DLDevice};
 use dlpark::metadata::CopiedSlice;
 use dlpark::tensor::compact_strides;
 use dlpark::{Builder, DlpackFlags};
-
 use zarrs_codec::{ElementLayout, ElementPacking};
 
 use super::{DataType, Tensor, TensorError};
@@ -517,5 +516,88 @@ mod tests {
         );
         // An unrepresentable number of bytes is rejected
         assert_eq!(super::expected_num_bytes(u64::MAX, dtype, packed), None);
+    }
+
+    #[test]
+    fn array_dlpack_ext_packed_sub_byte() {
+        // Eight int4 elements pack into four bytes
+        let tensor = Tensor::new(vec![0u8; 8], data_type::int4(), vec![8])
+            .into_packed()
+            .unwrap();
+        let dlpack: versioned::Dlpack = Builder::try_from(Box::new(tensor))
+            .unwrap()
+            .try_build()
+            .unwrap();
+
+        // A packed tensor matches what DLPack assumes, so it needs no flag and `num_bytes` agrees
+        assert_eq!(dlpack.flags(), DlpackFlags::empty());
+        assert_eq!(dlpack.num_bytes().unwrap(), 4);
+        assert_eq!(dlpack.shape().unwrap(), &[8]);
+
+        // Without a flag to lose, the legacy ABI is also safe
+        let tensor = Tensor::new(vec![0u8; 8], data_type::int4(), vec![8])
+            .into_packed()
+            .unwrap();
+        let dlpack: legacy::Dlpack = Builder::try_from(Box::new(tensor))
+            .unwrap()
+            .try_build()
+            .unwrap();
+        assert_eq!(dlpack.num_bytes().unwrap(), 4);
+    }
+
+    #[test]
+    fn array_dlpack_ext_padded_sub_byte() {
+        // The default layout pads each int4 element to a byte, which must be declared
+        let tensor = Tensor::new(vec![0u8; 8], data_type::int4(), vec![8]);
+        let dlpack: versioned::Dlpack = Builder::try_from(Box::new(tensor))
+            .unwrap()
+            .try_build()
+            .unwrap();
+        assert_eq!(dlpack.flags(), DlpackFlags::IS_SUBBYTE_TYPE_PADDED);
+    }
+
+    #[test]
+    fn array_dlpack_ext_byte_offset() {
+        let layout = ElementLayout {
+            packing: ElementPacking::PackedLsb0,
+            byte_offset: 1,
+            ..ElementLayout::default()
+        };
+        // A leading byte, as `packbits` `padding_encoding: first_byte` produces
+        let tensor = Tensor::new_with_layout(vec![0u8; 5], data_type::int4(), vec![8], layout);
+        let dlpack: versioned::Dlpack = Builder::try_from(Box::new(tensor))
+            .unwrap()
+            .try_build()
+            .unwrap();
+
+        assert_eq!(dlpack.tensor().byte_offset, 1);
+        assert_eq!(dlpack.flags(), DlpackFlags::empty());
+    }
+
+    #[test]
+    fn array_dlpack_ext_unsupported_layout() {
+        // DLPack fixes the storage size of a bool at 8 bits, but packbits packs it at 1 bit
+        let tensor = Tensor::new(vec![0u8; 8], data_type::bool(), vec![8])
+            .into_packed()
+            .unwrap();
+        assert!(matches!(
+            Builder::try_from(Box::new(tensor)),
+            Err(TensorError::UnsupportedLayout(_))
+        ));
+
+        // DLPack requires the native endianness
+        let layout = ElementLayout {
+            endianness: if Endianness::native() == Endianness::Little {
+                Endianness::Big
+            } else {
+                Endianness::Little
+            },
+            ..ElementLayout::default()
+        };
+        let tensor = Tensor::new_with_layout(vec![0u8; 8], data_type::uint32(), vec![2], layout);
+        assert!(matches!(
+            Builder::try_from(Box::new(tensor)),
+            Err(TensorError::UnsupportedLayout(_))
+        ));
     }
 }

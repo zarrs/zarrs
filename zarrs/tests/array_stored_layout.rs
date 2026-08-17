@@ -113,6 +113,37 @@ fn stored_layout_missing_chunk_is_none() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "dlpack")]
+#[test]
+fn stored_layout_dlpack_export_is_packed() -> Result<(), Box<dyn Error>> {
+    use dlpark::{Builder, DlpackFlags, legacy, versioned};
+
+    let array = packbits_array(PackBitsPaddingEncoding::None)?;
+    let stored = array.retrieve_chunk_stored_layout(&[0])?.unwrap();
+    let packed_bytes = stored.bytes().to_vec();
+
+    let dlpack: versioned::Dlpack = Builder::try_from(Box::new(stored))?.try_build()?;
+    // A packed tensor is what DLPack assumes, so no flag is needed and `num_bytes` agrees
+    assert_eq!(dlpack.flags(), DlpackFlags::empty());
+    assert_eq!(dlpack.num_bytes()?, 4);
+    assert_eq!(dlpack.shape()?, &[8]);
+    drop(dlpack);
+
+    // With no flag to lose, the legacy ABI is also safe for a sub-byte data type
+    let stored = array.retrieve_chunk_stored_layout(&[0])?.unwrap();
+    let dlpack: legacy::Dlpack = Builder::try_from(Box::new(stored))?.try_build()?;
+    assert_eq!(dlpack.num_bytes()?, 4);
+    drop(dlpack);
+
+    // The decoded tensor is padded instead, and is twice the size
+    let decoded: Tensor = array.retrieve_chunk(&[0])?;
+    let dlpack: versioned::Dlpack = Builder::try_from(Box::new(decoded))?.try_build()?;
+    assert_eq!(dlpack.flags(), DlpackFlags::IS_SUBBYTE_TYPE_PADDED);
+    assert_eq!(packed_bytes.len() * 2, 8);
+
+    Ok(())
+}
+
 #[test]
 fn stored_layout_unsupported_codecs() -> Result<(), Box<dyn Error>> {
     // Sharding does not declare an element layout, and is rejected without special casing

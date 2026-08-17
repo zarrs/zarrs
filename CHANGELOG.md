@@ -35,8 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 - Add `TensorDlpackBuilder`, a `dlpark::Builder` alias for exporting a `Tensor` as a DLPack managed tensor (requires the `dlpack` feature)
 - Add `TensorError::UnsupportedShape` for tensor shapes that are not representable in a target format
+<<<<<<< HEAD
 - Add `Tensor::num_elements`
 - Add `TensorError::InsufficientBytes` for tensor bytes that are too short for the tensor shape and data type
+=======
+- Add `CodecChainBound::decode_bytes_to_bytes` to decode only the bytes-to-bytes codecs of a chain
+- Add support for bit-packed tensors, matching how sub-byte data types are stored on disk
+  - Add `Tensor::{layout,new_with_layout}` recording the `ElementLayout` of the tensor bytes, and `Tensor::num_elements`
+  - Add `Tensor::into_packed` to bit-pack the elements, which does not copy for a data type whose elements are a whole number of bytes
+  - Add `[Async]ArrayReadOps::[async_]retrieve_chunk_stored_layout` to read a chunk in the layout it is stored in, without decoding the array-to-bytes codec
+    - For a `packbits` array this yields a bit-packed tensor with no packing work and no element copy, half the size of the decoded form for `int4`
+    - Returns the new `ArrayError::NoStoredLayout` if the array-to-bytes codec does not declare an `ElementLayout`, such as for `sharding_indexed`
+  - DLPack export now honours the tensor layout: a packed tensor needs no `IS_SUBBYTE_TYPE_PADDED` flag, so it is safe on the legacy ABI and its `num_bytes()` is correct
+  - Add `TensorError::UnsupportedLayout` and `ElementError::IncompatibleElementLayout`
+>>>>>>> daba4a2b (feat: honour the tensor element layout in the DLPack export)
 - Support additional data types in DLPack tensor export, matching DLPack 1.3
   - `int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`, `float6_e2m3fn`, and `float6_e3m2fn`
     - `zarrs` pads sub-byte elements to one byte, so these set the `IS_SUBBYTE_TYPE_PADDED` flag and must be built as a `dlpark::versioned::Dlpack` (the legacy ABI has no flags field)
@@ -86,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
+- **Breaking**: `Tensor::{into_parts,as_parts}` also return the `ElementLayout`, so it cannot be dropped by accident
 - **Breaking**: Bump `float8` to 0.7.0
 - **Breaking**: Bump `dlpark` to 0.8.0
   - **Breaking**: Replace the `dlpark::traits::TensorLike` implementation for `Tensor` (removed upstream) with `TryFrom<Box<Tensor>> for TensorDlpackBuilder`
