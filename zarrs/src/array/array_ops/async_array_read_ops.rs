@@ -1,4 +1,5 @@
 use super::*;
+use crate::array::Tensor;
 use std::sync::Arc;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
@@ -90,6 +91,50 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<Option<Bytes>>, StorageError>;
+
+    /// Async variant of [`ArrayReadOps::retrieve_chunk_stored_layout`].
+    ///
+    /// Read the chunk at `chunk_indices` in the element layout it is stored in.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::NoStoredLayout`] if the array to bytes codec does not declare an
+    /// element layout, or an [`ArrayError`] if `chunk_indices` are invalid, a bytes to bytes codec
+    /// fails to decode, or there is an underlying store error.
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunk_stored_layout(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<Tensor>, ArrayError> {
+        let codecs = self.codecs_bound();
+        let layout = codecs
+            .array_to_bytes_codec()
+            .encoded_element_layout()
+            .ok_or(ArrayError::NoStoredLayout)?;
+
+        let Some(encoded) = self.async_retrieve_encoded_chunk(chunk_indices).await? else {
+            return Ok(None);
+        };
+
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let bytes = codecs.decode_bytes_to_bytes(
+            std::borrow::Cow::Owned(encoded.into()),
+            &chunk_shape,
+            self.codec_options(),
+        )?;
+
+        // The encoded chunk is described by the array to bytes codec's context, which is the
+        // representation after any array to array codecs
+        let mut shape = chunk_shape;
+        for codec in codecs.array_to_array_codecs() {
+            shape = codec.encoded_shape(&shape)?;
+        }
+        Ok(Some(Tensor::new_with_layout(
+            bytes.into_owned(),
+            codecs.array_to_bytes_codec().data_type().clone(),
+            shape.iter().map(|s| s.get()).collect(),
+            layout,
+        )))
+    }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
     #[allow(clippy::missing_errors_doc)]

@@ -134,6 +134,11 @@ pub enum ArrayError {
     /// Unsupported method.
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),
+    /// The array to bytes codec does not have a directly interpretable element layout.
+    #[error(
+        "the array to bytes codec does not have a directly interpretable element layout, its encoded output must be decoded"
+    )]
+    NoStoredLayout,
     #[cfg(feature = "dlpack")]
     /// A [`TensorError`](super::TensorError).
     #[error(transparent)]

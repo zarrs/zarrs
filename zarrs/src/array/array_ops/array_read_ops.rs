@@ -1,5 +1,8 @@
+use std::borrow::Cow;
+
 use super::*;
 use crate::IntoConcurrentLimitIterator;
+use crate::array::Tensor;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
@@ -135,6 +138,63 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, StorageError>;
+
+    /// Read the chunk at `chunk_indices` in the element layout it is stored in.
+    ///
+    /// This decodes the bytes to bytes codecs but not the array to bytes codec, returning that
+    /// codec's encoded output as-is. No element data is copied or converted.
+    ///
+    /// It is only supported if the array to bytes codec declares an
+    /// [`ElementLayout`](zarrs_codec::ElementLayout) via
+    /// [`ArrayToBytesCodecTraits::encoded_element_layout`](zarrs_codec::ArrayToBytesCodecTraits::encoded_element_layout).
+    /// The `packbits` codec reports a bit-packed layout and the `bytes` codec reports a padded
+    /// one, whereas codecs that compress, reorder, or add framing, such as `sharding_indexed`,
+    /// are unsupported.
+    ///
+    /// The data type and shape of the returned [`Tensor`] are those of the *encoded* chunk, after
+    /// any array to array codecs. They differ from the array's own if the codec chain contains a
+    /// codec such as `transpose` or `cast_value`.
+    ///
+    /// Returns [`None`] if the chunk does not exist.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::NoStoredLayout`] if the array to bytes codec does not declare an
+    /// element layout, or an [`ArrayError`] if `chunk_indices` are invalid, a bytes to bytes codec
+    /// fails to decode, or there is an underlying store error.
+    fn retrieve_chunk_stored_layout(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<Tensor>, ArrayError> {
+        let codecs = self.codecs_bound();
+        let layout = codecs
+            .array_to_bytes_codec()
+            .encoded_element_layout()
+            .ok_or(ArrayError::NoStoredLayout)?;
+
+        let Some(encoded) = self.retrieve_encoded_chunk(chunk_indices)? else {
+            return Ok(None);
+        };
+
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let bytes = codecs.decode_bytes_to_bytes(
+            Cow::Owned(encoded),
+            &chunk_shape,
+            self.codec_options(),
+        )?;
+
+        // The encoded chunk is described by the array to bytes codec's context, which is the
+        // representation after any array to array codecs
+        let mut shape = chunk_shape;
+        for codec in codecs.array_to_array_codecs() {
+            shape = codec.encoded_shape(&shape)?;
+        }
+        Ok(Some(Tensor::new_with_layout(
+            bytes.into_owned(),
+            codecs.array_to_bytes_codec().data_type().clone(),
+            shape.iter().map(|s| s.get()).collect(),
+            layout,
+        )))
+    }
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.
     ///

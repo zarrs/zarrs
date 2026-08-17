@@ -10,7 +10,7 @@ use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::{ArrayReadOps, *};
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayBytes, ChunkShapeTraits};
+use crate::array::{ArrayBytes, ChunkShapeTraits, Tensor};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use unsafe_cell_slice::UnsafeCellSlice;
@@ -175,6 +175,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_chunk_stored_layout(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<Tensor>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(
