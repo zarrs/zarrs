@@ -36,6 +36,7 @@ use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
 use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
+use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 pub use zarrs_metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
@@ -62,13 +63,13 @@ pub use zarrs_data_type::codec_traits::packbits::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct PackBitsCodecComponents {
+pub(crate) struct PackBitsCodecComponents {
     pub component_size_bits: u64,
     pub num_components: u64,
     pub sign_extension: bool,
 }
 
-fn pack_bits_components(
+pub(crate) fn pack_bits_components(
     data_type: &DataType,
 ) -> Result<PackBitsCodecComponents, zarrs_data_type::DataTypeCodecError> {
     let packbits = data_type.codec_packbits()?;
@@ -85,6 +86,77 @@ fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
     let byte = (element * element_size_bits_padded + element_bit) / 8;
     let byte_bit = (element_bit % 8) as u8;
     (byte, byte_bit)
+}
+
+/// The number of padding bits in the last byte of a packed buffer.
+pub(crate) fn padding_bits(num_elements: u64, element_size_bits: u64) -> u8 {
+    let rem = ((num_elements * element_size_bits) % 8) as u8;
+    if rem == 0 { 0 } else { 8 - rem }
+}
+
+/// Pack `bytes` into a bit-contiguous, least significant bit first buffer.
+///
+/// `bytes` holds `num_elements` elements in the `zarrs` in-memory layout, where each component
+/// occupies `ceil(component_size_bits / 8)` bytes. Bits `first_bit..=last_bit` of each component
+/// are extracted and packed without gaps.
+///
+/// This is the packing performed by the `packbits` codec. It is shared with
+/// [`Tensor::into_packed`](crate::array::Tensor::into_packed).
+///
+/// # Panics
+/// Panics if the packed size does not fit in a `usize`.
+pub(crate) fn pack_bits(
+    bytes: &[u8],
+    num_elements: u64,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
+    padding_encoding: PackBitsPaddingEncoding,
+) -> Vec<u8> {
+    let PackBitsCodecComponents {
+        component_size_bits,
+        num_components,
+        sign_extension: _,
+    } = components;
+    let component_size_bits_extracted = last_bit - first_bit + 1;
+    let element_size_bits = component_size_bits_extracted * num_components;
+    let elements_size_bytes =
+        usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
+
+    // Allocate the output
+    let padding_encoding_byte = match padding_encoding {
+        PackBitsPaddingEncoding::None => 0,
+        PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
+    };
+    let mut output = vec![0u8; elements_size_bytes + padding_encoding_byte];
+
+    // Set the padding encoding byte and grab the element bytes
+    let padding_bits = padding_bits(num_elements, element_size_bits);
+    let packed_elements = match padding_encoding {
+        PackBitsPaddingEncoding::None => &mut output[..],
+        PackBitsPaddingEncoding::FirstByte => {
+            output[0] = padding_bits;
+            &mut output[1..]
+        }
+        PackBitsPaddingEncoding::LastByte => {
+            output[elements_size_bytes] = padding_bits;
+            &mut output[..elements_size_bytes]
+        }
+    };
+
+    // Encode the components
+    for component_idx in 0..num_elements * num_components {
+        let bit_dec0 = component_idx * component_size_bits + first_bit;
+        let bit_enc0 = component_idx * component_size_bits_extracted;
+        for bit in 0..component_size_bits_extracted {
+            let (byte_enc, bit_enc) = (bit_enc0 + bit).div_rem(&8);
+            let (byte_dec, bit_dec) = div_rem_8bit(bit_dec0 + bit, component_size_bits);
+            packed_elements[usize::try_from(byte_enc).unwrap()] |=
+                ((bytes[usize::try_from(byte_dec).unwrap()] >> (bit_dec % 8)) & 0b1) << bit_enc;
+        }
+    }
+
+    output
 }
 
 #[cfg(test)]

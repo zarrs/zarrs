@@ -13,8 +13,8 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::packbits_partial_decoder::PackBitsPartialDecoder;
 use super::{
-    PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
-    pack_bits_components,
+    PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1, pack_bits,
+    pack_bits_components, padding_bits,
 };
 use crate::array::codec::BytesCodec;
 use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
@@ -58,11 +58,6 @@ impl Default for PackBitsCodec {
         Self::new(PackBitsPaddingEncoding::default(), None, None)
             .expect("this configuration is supported")
     }
-}
-
-fn padding_bits(num_elements: u64, element_size_bits: u64) -> u8 {
-    let rem = ((num_elements * element_size_bits) % 8) as u8;
-    if rem == 0 { 0 } else { 8 - rem }
 }
 
 impl PackBitsCodec {
@@ -240,7 +235,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
-            num_components,
+            num_components: _,
             sign_extension: _,
         } = self.components;
         let first_bit = self.first_bit;
@@ -258,12 +253,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 .encode(bytes.clone(), shape, options);
         }
 
-        // Get the component and element size in bits
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        let component_size_bits_extracted = last_bit - first_bit + 1;
-        let element_size_bits = component_size_bits_extracted * num_components;
-        let elements_size_bytes =
-            usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
 
         // Input checks
         let bytes = bytes.into_fixed()?;
@@ -278,40 +268,14 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             .into());
         }
 
-        // Allocate the output
-        let padding_encoding_byte = match self.padding_encoding {
-            PackBitsPaddingEncoding::None => 0,
-            PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
-        };
-        let mut bytes_enc = vec![0u8; elements_size_bytes + padding_encoding_byte];
-
-        // Set the padding encoding byte and grab the element bytes
-        let padding_bits = padding_bits(num_elements, element_size_bits);
-        let packed_elements = match self.padding_encoding {
-            PackBitsPaddingEncoding::None => &mut bytes_enc[..],
-            PackBitsPaddingEncoding::FirstByte => {
-                bytes_enc[0] = padding_bits;
-                &mut bytes_enc[1..]
-            }
-            PackBitsPaddingEncoding::LastByte => {
-                bytes_enc[elements_size_bytes] = padding_bits;
-                &mut bytes_enc[..elements_size_bytes]
-            }
-        };
-
-        // Encode the components
-        for component_idx in 0..num_elements * num_components {
-            let bit_dec0 = component_idx * component_size_bits + first_bit;
-            let bit_enc0 = component_idx * component_size_bits_extracted;
-            for bit in 0..component_size_bits_extracted {
-                let (byte_enc, bit_enc) = (bit_enc0 + bit).div_rem(&8);
-                let (byte_dec, bit_dec) = div_rem_8bit(bit_dec0 + bit, component_size_bits);
-                packed_elements[usize::try_from(byte_enc).unwrap()] |=
-                    ((bytes[usize::try_from(byte_dec).unwrap()] >> (bit_dec % 8)) & 0b1) << bit_enc;
-            }
-        }
-
-        Ok(ArrayBytesRaw::from(bytes_enc))
+        Ok(ArrayBytesRaw::from(pack_bits(
+            &bytes,
+            num_elements,
+            self.components,
+            first_bit,
+            last_bit,
+            self.padding_encoding,
+        )))
     }
 
     fn decode<'a>(
