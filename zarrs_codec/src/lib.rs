@@ -32,7 +32,7 @@ pub use codec_traits::array_to_array::{
 };
 pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,
-    ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecTraits, ElementLayout, ElementPacking, UnboundArrayToBytesCodecTraits,
 };
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;

@@ -123,6 +123,37 @@ mod tests {
     };
 
     #[test]
+    fn bytes_encoded_element_layout() -> Result<(), Box<dyn std::error::Error>> {
+        use zarrs_codec::{ElementLayout, ElementPacking};
+
+        // A multi-byte data type reports its configured endianness
+        let codec = Arc::new(BytesCodec::new(Some(Endianness::Big)))
+            .with_context(data_type::uint32(), FillValue::from(0u32))?;
+        assert_eq!(
+            codec.encoded_element_layout(),
+            Some(ElementLayout {
+                packing: ElementPacking::Padded,
+                byte_offset: 0,
+                endianness: Endianness::Big,
+            })
+        );
+
+        // A sub-byte data type is padded to one byte per element, and has no endianness
+        let codec = Arc::new(BytesCodec::new(None))
+            .with_context(data_type::int4(), FillValue::from(0i8))?;
+        assert_eq!(
+            codec.encoded_element_layout(),
+            Some(ElementLayout {
+                packing: ElementPacking::Padded,
+                byte_offset: 0,
+                endianness: Endianness::native(),
+            })
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn codec_bytes_configuration_big() {
         let codec_configuration: BytesCodecConfiguration =
             serde_json::from_str(r#"{"endian":"big"}"#).unwrap();

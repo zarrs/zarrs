@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
+use zarrs_metadata::Endianness;
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
@@ -12,6 +13,47 @@ use crate::{
     CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
     decode_into_array_bytes_target,
 };
+
+/// How the elements of a data type are packed within a buffer.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub enum ElementPacking {
+    /// Each element occupies a whole number of bytes.
+    ///
+    /// An element of `N` bits occupies `ceil(N / 8)` bytes. This is how `zarrs` represents
+    /// elements in memory, so sub-byte elements have padding bits.
+    #[default]
+    Padded,
+    /// Elements are bit-contiguous, least significant bit first.
+    ///
+    /// An element of `N` bits occupies exactly `N` bits and may straddle byte boundaries. Element
+    /// `i` is stored in bits `[i * N, (i + 1) * N)` of the buffer, where bit `j` is bit `j % 8` of
+    /// byte `j / 8`.
+    PackedLsb0,
+}
+
+/// The layout of elements within a buffer.
+///
+/// [`ElementLayout::default()`] is the layout of decoded array bytes: [`ElementPacking::Padded`],
+/// no byte offset, and native endianness.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ElementLayout {
+    /// How elements are packed.
+    pub packing: ElementPacking,
+    /// The byte offset of the first element from the start of the buffer.
+    pub byte_offset: u64,
+    /// The endianness of multi-byte components.
+    pub endianness: Endianness,
+}
+
+impl Default for ElementLayout {
+    fn default() -> Self {
+        Self {
+            packing: ElementPacking::default(),
+            byte_offset: 0,
+            endianness: Endianness::native(),
+        }
+    }
+}
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
 pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
@@ -122,6 +164,25 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError>;
+
+    /// The layout of the elements in the output of [`encode`](Self::encode).
+    ///
+    /// Returns `Some` if the encoded output is a contiguous buffer of the elements of
+    /// [`data_type()`](ArrayCodecTraits::data_type) in C-contiguous order, which a consumer can
+    /// interpret without decoding it. For example, the `packbits` codec emits
+    /// [`ElementPacking::PackedLsb0`] and the `bytes` codec emits [`ElementPacking::Padded`].
+    ///
+    /// Returns `None`, the default, if the encoded output cannot be interpreted without decoding
+    /// it. This is the case for codecs that compress, reorder, or add framing, such as
+    /// `sharding_indexed` and the variable length codecs.
+    ///
+    /// Implement this to allow the encoded output of a codec to be used without decoding it, such
+    /// as by [`ArrayReadOps::retrieve_chunk_stored_layout`].
+    ///
+    /// [`ArrayReadOps::retrieve_chunk_stored_layout`]: https://docs.rs/zarrs/latest/zarrs/array/trait.ArrayReadOps.html#method.retrieve_chunk_stored_layout
+    fn encoded_element_layout(&self) -> Option<ElementLayout> {
+        None
+    }
 
     /// Encode a chunk.
     ///

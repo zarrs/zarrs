@@ -16,8 +16,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, ElementLayout,
+    ElementPacking, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -184,6 +184,18 @@ impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for BytesCodecBound {}
 impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn encoded_element_layout(&self) -> Option<ElementLayout> {
+        // This codec writes each element as-is, so the encoded layout matches the in-memory
+        // layout: one element per `fixed_size()` bytes, with sub-byte types padded.
+        self.data_type.fixed_size()?;
+        Some(ElementLayout {
+            packing: ElementPacking::Padded,
+            byte_offset: 0,
+            // An 8-bit data type has no endianness, so it is trivially native
+            endianness: self.endian.unwrap_or_else(Endianness::native),
+        })
     }
 
     fn encode<'a>(

@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `ArrayToBytesCodecTraits::encoded_element_layout` with `ElementLayout` and `ElementPacking`
+  - Lets a codec declare that its encoded output is a directly interpretable buffer of elements, so that it can be used without decoding it
+  - Defaults to `None`, so codecs that compress, reorder, or add framing are unaffected
 
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`

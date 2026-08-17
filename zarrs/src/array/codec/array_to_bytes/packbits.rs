@@ -127,6 +127,45 @@ mod tests {
     }
 
     #[test]
+    fn packbits_encoded_element_layout() -> Result<(), Box<dyn std::error::Error>> {
+        use zarrs_codec::{ElementLayout, ElementPacking};
+        use zarrs_metadata::Endianness;
+
+        let bind = |encoding, first_bit, last_bit| {
+            Arc::new(super::PackBitsCodec::new(encoding, first_bit, last_bit).unwrap())
+                .with_context(data_type::int4(), FillValue::from(0i8))
+        };
+
+        // The packed output starts immediately, or after the padding bit count byte
+        for (encoding, byte_offset) in [
+            (PackBitsPaddingEncoding::None, 0),
+            (PackBitsPaddingEncoding::FirstByte, 1),
+            (PackBitsPaddingEncoding::LastByte, 0),
+        ] {
+            assert_eq!(
+                bind(encoding, None, None)?.encoded_element_layout(),
+                Some(ElementLayout {
+                    packing: ElementPacking::PackedLsb0,
+                    byte_offset,
+                    endianness: Endianness::Little,
+                })
+            );
+        }
+
+        // A restricted bit range does not encode whole elements
+        assert_eq!(
+            bind(PackBitsPaddingEncoding::None, Some(1), None)?.encoded_element_layout(),
+            None
+        );
+        assert_eq!(
+            bind(PackBitsPaddingEncoding::None, None, Some(2))?.encoded_element_layout(),
+            None
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn codec_packbits_bool() -> Result<(), Box<dyn std::error::Error>> {
         for encoding in [
             PackBitsPaddingEncoding::None,

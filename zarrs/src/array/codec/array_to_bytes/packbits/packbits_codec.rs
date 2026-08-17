@@ -26,8 +26,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    CodecTraits, ElementLayout, ElementPacking, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -211,6 +211,25 @@ impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PackBitsCodecBound {}
 impl ArrayToBytesCodecTraits for PackBitsCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn encoded_element_layout(&self) -> Option<ElementLayout> {
+        // A restricted bit range encodes a slice of each component rather than whole elements,
+        // so the encoded output is not a buffer of the data type's elements
+        if self.first_bit != 0 || self.last_bit != self.components.component_size_bits - 1 {
+            return None;
+        }
+
+        Some(ElementLayout {
+            packing: ElementPacking::PackedLsb0,
+            byte_offset: match self.padding_encoding {
+                // The padding bit count is prepended, so the elements start one byte in
+                PackBitsPaddingEncoding::FirstByte => 1,
+                // The padding bit count is appended, so it is past the last element
+                PackBitsPaddingEncoding::None | PackBitsPaddingEncoding::LastByte => 0,
+            },
+            endianness: Endianness::Little,
+        })
     }
 
     fn encode<'a>(
