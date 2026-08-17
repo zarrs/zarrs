@@ -353,6 +353,40 @@ impl CodecChainBound {
         Ok((array_representations, bytes_representations))
     }
 
+    /// Decode the bytes to bytes codecs with precomputed bytes representations.
+    fn decode_bytes_to_bytes_inner<'a>(
+        &self,
+        mut bytes: ArrayBytesRaw<'a>,
+        bytes_representations: &BytesRepresentations,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            bytes = codec.decode(bytes, bytes_representation, options)?;
+        }
+        Ok(bytes)
+    }
+
+    /// Decode only the bytes to bytes codecs of the chain.
+    ///
+    /// This returns the encoded output of the array to bytes codec, without decoding it.
+    /// Whether that output can be interpreted without further decoding depends on the
+    /// [`array_to_bytes_codec()`](Self::array_to_bytes_codec).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if a codec fails.
+    pub fn decode_bytes_to_bytes<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        let (_array_representations, bytes_representations) = self.get_representations(shape)?;
+        self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)
+    }
+
     /// Get the array to array codecs
     #[must_use]
     pub fn array_to_array_codecs(&self) -> &[Arc<dyn ArrayToArrayCodecTraits>] {
@@ -556,19 +590,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode<'a>(
         &self,
-        mut bytes: ArrayBytesRaw<'a>,
+        bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
+        let bytes = self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)?;
 
         // bytes->array
         let mut bytes =
@@ -591,7 +620,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        mut bytes: ArrayBytesRaw<'_>,
+        bytes: ArrayBytesRaw<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
@@ -609,12 +638,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
+        let bytes = self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)?;
 
         // Fast path if no array to array codecs
         if self.array_to_array.is_empty() {
@@ -647,19 +671,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn compact<'a>(
         &self,
-        mut bytes: ArrayBytesRaw<'a>,
+        bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         // Decode through bytes_to_bytes codecs (in reverse) to get to array_to_bytes level
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
+        let bytes = self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)?;
 
         // Compact at the array_to_bytes level (e.g., ShardingCodec compact)
         let compacted = self.array_to_bytes.compact(
