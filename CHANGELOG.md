@@ -76,6 +76,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
+- **Breaking**: Bump `float8` to 0.7.0
+- Internal dependency bumps:
+  - Bump `base64` to 0.23.1
+  - Bump `getrandom` to 0.4.3
+  - Bump `itertools` to 0.15.0
+  - Bump `lru` to 0.18.2
+  - Bump `quick_cache` to 0.7.0
+  - Bump `serial_test` to 3.5.0
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
