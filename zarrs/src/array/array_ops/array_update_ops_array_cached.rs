@@ -4,7 +4,8 @@ use std::sync::Arc;
 use super::{ArrayUpdateOps, *};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -12,6 +13,18 @@ struct CachedArrayPartialEncoder<C> {
     encoder: Arc<dyn ArrayPartialEncoderTraits>,
     cache: Arc<C>,
     chunk_indices: ArrayIndices,
+}
+
+impl<C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<C>
+where
+    C: ChunkCache + 'static,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.encoder.local_subchunk_grids(options)
+    }
 }
 
 impl<C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<C>
@@ -28,13 +41,6 @@ where
 
     fn size_held(&self) -> usize {
         self.encoder.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.encoder.local_subchunk_grids(options)
     }
 
     fn partial_decode(

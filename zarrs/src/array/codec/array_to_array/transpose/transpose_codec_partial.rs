@@ -7,9 +7,15 @@ use super::{
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
-use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Transpose codec.
@@ -96,6 +102,25 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     }
 }
 
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -128,20 +153,6 @@ where
             self.input_output_handle
                 .partial_decode(&indexer_transposed, options)
         }
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -186,6 +197,29 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)
+            .await?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for TransposeCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -220,21 +254,6 @@ where
                 .partial_decode(&indexer_transposed, options)
                 .await
         }
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)
-            .await?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
     }
 
     fn supports_partial_decode(&self) -> bool {

@@ -21,9 +21,10 @@ use crate::array::{
     IndexerError, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError,
-    CodecOptions, InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
+    BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    decode_into_array_bytes_target,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -193,6 +194,20 @@ pub(crate) fn partial_decode(
     }
 }
 
+impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialDecoder {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        let subchunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        );
+        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
+    }
+}
+
 impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
@@ -221,18 +236,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             indexer,
             options,
         )
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
-        let subchunk_grid = ChunkGrid::new(
-            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        );
-        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
     }
 
     fn partial_decode_into(

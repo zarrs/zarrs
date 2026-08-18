@@ -6,16 +6,17 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
+    CodecError, CodecOptions, DataType,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
 use crate::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
@@ -121,6 +122,19 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
     }
 }
 
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
+where
+    T: ArrayPartialDecoderTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options)
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
@@ -166,13 +180,6 @@ where
                 }
             })
         }
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -243,6 +250,13 @@ where
     }
 }
 
+// The default array-to-bytes partial codec decodes an entire chunk, so it exposes no subchunks.
+// A subchunking codec must implement its own partial decoder to expose them.
+impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
+{
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
@@ -258,13 +272,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     fn partial_decode(
@@ -474,6 +481,22 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
+where
+    T: AsyncArrayPartialDecoderTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options).await
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
@@ -485,13 +508,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
     }
 
     fn data_type(&self) -> &super::DataType {
@@ -622,13 +638,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        Ok(Vec::new())
     }
 
     async fn partial_decode<'a>(

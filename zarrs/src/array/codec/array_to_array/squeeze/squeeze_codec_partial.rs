@@ -5,10 +5,14 @@ use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Squeeze codec.
@@ -69,6 +73,25 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     }
 }
 
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits for SqueezeCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -83,20 +106,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
     }
 
     fn partial_decode(
@@ -153,18 +162,10 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderTraits for SqueezeCodecPartial<T>
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
 where
-    T: AsyncArrayPartialDecoderTraits,
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
 {
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    async fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists().await
-    }
-
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
@@ -178,6 +179,22 @@ where
                     .transpose()
             })
             .collect()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderTraits for SqueezeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderTraits,
+{
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

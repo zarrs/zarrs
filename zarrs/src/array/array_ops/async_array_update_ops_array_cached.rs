@@ -5,8 +5,8 @@ use super::{AsyncArrayUpdateOps, *};
 use crate::array::chunk_cache::AsyncChunkCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits,
-    CodecError,
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderSubchunkingTraits,
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -14,6 +14,20 @@ struct CachedAsyncArrayPartialEncoder<C> {
     encoder: Arc<dyn AsyncArrayPartialEncoderTraits>,
     cache: Arc<C>,
     chunk_indices: ArrayIndices,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<C> AsyncArrayPartialDecoderSubchunkingTraits for CachedAsyncArrayPartialEncoder<C>
+where
+    C: AsyncChunkCache + 'static,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.encoder.local_subchunk_grids(options).await
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -32,13 +46,6 @@ where
 
     fn size_held(&self) -> usize {
         self.encoder.size_held()
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.encoder.local_subchunk_grids(options).await
     }
 
     async fn partial_decode<'a>(

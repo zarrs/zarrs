@@ -10,22 +10,15 @@ use crate::{
     decode_into_array_bytes_target,
 };
 
-/// Partial array decoder traits.
-pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
-    /// Return the data type of the partial decoder.
-    fn data_type(&self) -> &DataType;
-
-    /// Returns whether the chunk exists.
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if a storage operation fails.
-    fn exists(&self) -> Result<bool, StorageError>;
-
-    /// Returns the size of chunk bytes held by the partial decoder.
-    ///
-    /// Intended for use by size-constrained partial decoder caches.
-    fn size_held(&self) -> usize;
-
+/// Subchunking traits for a partial array decoder.
+///
+/// A partial decoder exposes subchunks if the codec that created it encodes a chunk as
+/// independently encoded subchunks (e.g. the `sharding_indexed` codec), or if it forwards the
+/// subchunks of an inner partial decoder.
+///
+/// Implement [`ArrayPartialDecoderNoSubchunkingTraits`] instead of this trait for a partial decoder
+/// without subchunks.
+pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Return the chunk-local subchunk grid hierarchy for this decoder.
     ///
     /// Grids are ordered from outermost to innermost and are relative to the decoded
@@ -52,6 +45,40 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
             .next()
             .flatten())
     }
+}
+
+/// Marker trait for partial array decoders that do not expose subchunks.
+pub trait ArrayPartialDecoderNoSubchunkingTraits {}
+
+impl<T> ArrayPartialDecoderSubchunkingTraits for T
+where
+    T: ArrayPartialDecoderNoSubchunkingTraits + MaybeSend + MaybeSync + ?Sized,
+{
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
+    }
+}
+
+/// Partial array decoder traits.
+pub trait ArrayPartialDecoderTraits:
+    ArrayPartialDecoderSubchunkingTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the data type of the partial decoder.
+    fn data_type(&self) -> &DataType;
+
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    fn exists(&self) -> Result<bool, StorageError>;
+
+    /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
+    fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
     ///
