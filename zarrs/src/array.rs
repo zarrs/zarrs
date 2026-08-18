@@ -174,6 +174,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_chunk_subset`](Array::retrieve_chunk_subset)
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
+///    - [`retrieve_encoded_subchunk`](Array::retrieve_encoded_subchunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
 ///  - [`[Async]WritableStorageTraits`](crate::storage::WritableStorageTraits): store/erase array data and metadata
 ///    - [`store_metadata`](Array::store_metadata)
@@ -351,6 +352,32 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
+///
+/// ### Encoded Subchunks
+/// The encoded bytes of a subchunk can be retrieved without decoding it with
+/// [`retrieve_encoded_subchunk`](ArrayReadOps::retrieve_encoded_subchunk) (or
+/// [`retrieve_encoded_subchunk_at_level`](ArrayReadOps::retrieve_encoded_subchunk_at_level)
+/// for a nested subchunk grid level).
+/// The codecs needed to decode those bytes are exposed by
+/// [`subchunk_codecs`](Array::subchunk_codecs) /
+/// [`subchunk_codecs_at_level`](Array::subchunk_codecs_at_level), and the shape they decode to is
+/// given by the subchunk grid at the same level.
+///
+/// Encoded subchunks are also available from a partial decoder for a chunk with
+/// [`ArrayPartialDecoderSubchunkingTraits`], where subchunk indices are relative to that chunk.
+///
+/// This is codec generic: any array-to-bytes codec that stores independently encoded subchunks can
+/// support it by implementing
+/// [`ArrayToBytesCodecSubchunkingTraits::subchunk_codecs`] and
+/// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk`].
+/// A codec only implements level zero access, and nested levels are then reached with the default
+/// [`retrieve_encoded_subchunk_at_level`](ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level)
+/// implementation.
+/// A partial decoder without subchunks implements the [`ArrayPartialDecoderNoSubchunkingTraits`]
+/// marker trait instead.
+///
+/// Encoded subchunks are not exposed if the array has array-to-array codecs, because an encoded
+/// subchunk is in the encoded domain of the array-to-bytes codec.
 ///
 /// ## Parallelism and Concurrency
 /// ### Sync API
