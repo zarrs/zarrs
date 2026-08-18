@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::{ChunkGrid, Indexer};
@@ -6,6 +7,7 @@ use zarrs_data_type::DataType;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
+use super::subchunking::{enclosing_chunk_indices, plan_subchunk_descent};
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayToBytesCodecTraits, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
@@ -135,6 +137,71 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
             .retrieve_encoded_subchunk(subchunk_indices, options)
             .await?
             .map(|bytes| Arc::new(bytes.into_owned()) as Arc<dyn AsyncBytesPartialDecoderTraits>))
+    }
+
+    /// Retrieve the encoded bytes of the subchunk at `subchunk_indices` of `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// The `subchunk_indices` index the `level` grid returned by
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids), and the returned bytes are decodable
+    /// with [`subchunk_codecs_at_level`](Self::subchunk_codecs_at_level) at the same level.
+    ///
+    /// The default implementation descends through the subchunk hierarchy with
+    /// [`encoded_subchunk_partial_decoder`](Self::encoded_subchunk_partial_decoder) and
+    /// [`subchunk_codecs`](Self::subchunk_codecs), so a codec only has to implement level zero
+    /// access.
+    ///
+    /// Returns [`None`] if the subchunk, or any subchunk enclosing it, is not stored.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if a level does not expose encoded
+    /// subchunks, or a [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the
+    /// subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'static>>, CodecError> {
+        if level == 0 {
+            return Ok(self
+                .retrieve_encoded_subchunk(subchunk_indices, options)
+                .await?
+                .map(|bytes| Cow::Owned(bytes.into_owned())));
+        }
+
+        // Descend into the level zero subchunk enclosing the requested subchunk
+        let descent = plan_subchunk_descent(
+            &self.local_subchunk_grids(options).await?,
+            level,
+            subchunk_indices,
+        )?;
+        let Some(input_handle) = self
+            .encoded_subchunk_partial_decoder(&descent.subchunk_indices, options)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let codecs = self
+            .subchunk_codecs_at_level(0)
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        let partial_decoder = codecs
+            .async_partial_decoder(input_handle, &descent.subchunk_shape, options)
+            .await?;
+
+        // Repeat with the subchunk grids of the subchunk
+        let subchunk_grid = partial_decoder
+            .local_subchunk_grid_at_level(level - 1, options)
+            .await?
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "the subchunk grid at level {level} is not resolvable for this subchunk"
+                ))
+            })?;
+        let subchunk_indices = enclosing_chunk_indices(&subchunk_grid, &descent.subset)?;
+        partial_decoder
+            .retrieve_encoded_subchunk_at_level(level - 1, &subchunk_indices, options)
+            .await
     }
 }
 
