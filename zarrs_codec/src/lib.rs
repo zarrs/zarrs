@@ -639,6 +639,9 @@ pub enum CodecError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
+    /// Encoded subchunk retrieval is not supported.
+    #[error("encoded subchunks are not exposed by this partial decoder")]
+    UnsupportedEncodedSubchunk,
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"

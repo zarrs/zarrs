@@ -53,13 +53,20 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
-//! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
+//! Encoded subchunk bytes can be retrieved without decoding them.
+//! This is a codec generic operation through a partial decoder for a shard:
+//! 1. downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
 //! 2. create a storage partial decoder for the shard object,
-//! 3. construct the sharding partial decoder with the bound codec accessors, and
-//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
+//! 3. construct a [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`] with the bound codec accessors, and
+//! 4. call
+//!    [`retrieve_encoded_subchunk`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk)
+//!    with subchunk indices local to the shard, decoding the bytes with
+//!    [`subchunk_codecs`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::subchunk_codecs) if desired.
 //!
-//! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
+//! An encoded subchunk occupies a byte range of a shard, which is available from
+//! [`ShardingPartialDecoder::subchunk_byte_range`].
+//!
+//! See the `sharding_partial_decoder_retrieve_encoded_subchunk` test for an example.
 
 mod sharding_codec;
 mod sharding_codec_builder;
@@ -95,7 +102,7 @@ use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
 
@@ -221,12 +228,12 @@ fn get_index_byte_range(
     })
 }
 
-fn subchunk_byte_range(
+fn subchunk_byte_offset_length(
     shard_index: Option<&[u64]>,
     shard_shape: &[NonZeroU64],
     chunk_shape: &[NonZeroU64],
     chunk_indices: &[u64],
-) -> Result<Option<ByteRange>, CodecError> {
+) -> Result<Option<(ByteOffset, ByteLength)>, CodecError> {
     if let Some(shard_index) = shard_index {
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
@@ -242,11 +249,23 @@ fn subchunk_byte_range(
         if offset == u64::MAX && size == u64::MAX {
             Ok(None)
         } else {
-            Ok(Some(ByteRange::new(offset..offset + size)))
+            Ok(Some((offset, size)))
         }
     } else {
         Ok(None)
     }
+}
+
+fn subchunk_byte_range(
+    shard_index: Option<&[u64]>,
+    shard_shape: &[NonZeroU64],
+    chunk_shape: &[NonZeroU64],
+    chunk_indices: &[u64],
+) -> Result<Option<ByteRange>, CodecError> {
+    Ok(
+        subchunk_byte_offset_length(shard_index, shard_shape, chunk_shape, chunk_indices)?
+            .map(|(offset, length)| ByteRange::new(offset..offset + length)),
+    )
 }
 
 fn partial_decode_empty_shard<'a>(

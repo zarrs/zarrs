@@ -4,8 +4,9 @@ use std::sync::Arc;
 use super::{ArrayUpdateOps, *};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError,
+    ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -28,6 +29,24 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.encoder.subchunk_codecs()
+    }
+
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk(subchunk_indices, options)
+    }
+
+    fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn BytesPartialDecoderTraits>>, CodecError> {
+        self.encoder
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)
     }
 }
 

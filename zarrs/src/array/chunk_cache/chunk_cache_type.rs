@@ -111,6 +111,14 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
     fn subchunk_codecs(&self) -> Vec<Arc<dyn zarrs_codec::ArrayToBytesCodecTraits>> {
         self.0.subchunk_codecs()
     }
+
+    async fn retrieve_encoded_subchunk<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::ArrayBytesRaw<'a>>, CodecError> {
+        self.0.retrieve_encoded_subchunk(subchunk_indices, options)
+    }
 }
 
 #[cfg(feature = "async")]

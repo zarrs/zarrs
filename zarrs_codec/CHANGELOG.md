@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s][_at_level]` for chunk-local subchunk grids
+- Add codec-generic `retrieve_encoded_subchunk`, `subchunk_codecs[_at_level]`, and `encoded_subchunk_partial_decoder` methods to `[Async]ArrayPartialDecoderSubchunkingTraits`
+  - Add `CodecError::UnsupportedEncodedSubchunk`, returned by the default `retrieve_encoded_subchunk` implementation
 
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`

@@ -7,9 +7,9 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits,
-    ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayToBytesCodecTraits, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -87,6 +87,54 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// This is a compatibility wrapper around [`subchunk_codecs`](Self::subchunk_codecs).
     fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
         self.subchunk_codecs().into_iter().nth(level)
+    }
+
+    /// Retrieve the encoded bytes of the subchunk at `subchunk_indices`.
+    ///
+    /// The `subchunk_indices` are relative to the chunk handled by this partial decoder and index
+    /// the level zero grid returned by [`local_subchunk_grids`](Self::local_subchunk_grids).
+    /// The returned bytes are decodable with the level zero codecs returned by
+    /// [`subchunk_codecs`](Self::subchunk_codecs).
+    ///
+    /// Returns [`None`] if the subchunk is not stored, in which case it has the fill value.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this decoder does not expose encoded
+    /// subchunks, or a [`CodecError`] if the subchunk indices are invalid, a codec fails, or there
+    /// is an underlying store error.
+    async fn retrieve_encoded_subchunk<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        _ = (subchunk_indices, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Initialise a partial decoder over the encoded bytes of the subchunk at `subchunk_indices`.
+    ///
+    /// This is the lazy equivalent of
+    /// [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk), and it is how
+    /// [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level) descends
+    /// into nested subchunks.
+    /// The default implementation retrieves the entire encoded subchunk. Override it if the
+    /// encoded subchunk can be read lazily (e.g. it occupies a byte range of the input handle),
+    /// so that nested subchunks can be read without retrieving their enclosing subchunk in full.
+    ///
+    /// Returns [`None`] if the subchunk is not stored.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk)
+    /// fails, or an override fails to initialise a partial decoder.
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncBytesPartialDecoderTraits>>, CodecError> {
+        Ok(self
+            .retrieve_encoded_subchunk(subchunk_indices, options)
+            .await?
+            .map(|bytes| Arc::new(bytes.into_owned()) as Arc<dyn AsyncBytesPartialDecoderTraits>))
     }
 }
 
