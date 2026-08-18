@@ -60,7 +60,10 @@ use super::{
     StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
-use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
+    RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
 use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits,

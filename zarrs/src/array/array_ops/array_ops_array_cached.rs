@@ -130,6 +130,15 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().subchunk_grid_at_level(level)
     }
 
+    #[must_use]
+    pub fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
+
+    #[must_use]
+    pub fn subchunk_codecs_at_level(
+        &self,
+        level: usize,
+    ) -> Option<Arc<dyn ArrayToBytesCodecTraits>>;
+
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {
         self.array().chunk_key(chunk_indices)
     }

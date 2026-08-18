@@ -513,6 +513,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
 
         Ok(decoded_subchunk_grids)
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.array_to_bytes.subchunk_codecs()
+    }
 }
 
 #[cfg_attr(

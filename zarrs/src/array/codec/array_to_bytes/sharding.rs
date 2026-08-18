@@ -125,6 +125,21 @@ fn nested_local_subchunk_grids(
     Ok(subchunk_grids)
 }
 
+/// Return the subchunk codec hierarchy of a shard encoded with `inner_codecs`.
+///
+/// The subchunks of a shard are encoded with the inner codecs, and any subchunks nested inside
+/// those subchunks are encoded with the subchunk codecs of the inner codecs.
+fn nested_subchunk_codecs(
+    inner_codecs: &Arc<CodecChainBound>,
+) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+    let mut codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>> =
+        vec![ArrayToBytesCodecTraits::into_dyn(inner_codecs.clone())];
+    codecs.extend(
+        zarrs_codec::ArrayToBytesCodecSubchunkingTraits::subchunk_codecs(inner_codecs.as_ref()),
+    );
+    codecs
+}
+
 impl CodecTraitsV3 for ShardingCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ShardingCodecConfiguration = metadata.to_typed_configuration()?;

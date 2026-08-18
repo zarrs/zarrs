@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::sync::Arc;
 
 use zarrs_chunk_grid::{ChunkGrid, Indexer};
 use zarrs_data_type::DataType;
@@ -6,8 +7,9 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
-    CodecOptions, InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -43,12 +45,46 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         &self,
         options: &CodecOptions,
     ) -> Result<Option<ChunkGrid>, CodecError> {
+        self.local_subchunk_grid_at_level(0, options).await
+    }
+
+    /// Return the chunk-local subchunk grid at `level` for this decoder, if available.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
+    async fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
         Ok(self
             .local_subchunk_grids(options)
             .await?
             .into_iter()
-            .next()
+            .nth(level)
             .flatten())
+    }
+
+    /// Return the codecs that encode the subchunks exposed by this decoder, outermost first.
+    ///
+    /// The codecs at each level match the grids returned by
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids). The level zero codecs decode the
+    /// bytes returned by [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk) into the
+    /// array bytes of a subchunk with the shape given by the level zero grid.
+    /// Deeper levels apply to subchunks nested inside subchunks.
+    ///
+    /// An empty vector indicates that this decoder does not expose encoded subchunks.
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
+    }
+
+    /// Return the codecs that encode the subchunks at `level`, if any.
+    ///
+    /// This is a compatibility wrapper around [`subchunk_codecs`](Self::subchunk_codecs).
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().into_iter().nth(level)
     }
 }
 

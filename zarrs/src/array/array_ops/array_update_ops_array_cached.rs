@@ -5,7 +5,7 @@ use super::{ArrayUpdateOps, *};
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -24,6 +24,10 @@ where
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.encoder.local_subchunk_grids(options)
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.encoder.subchunk_codecs()
     }
 }
 

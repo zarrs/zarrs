@@ -10,7 +10,7 @@ use zarrs_data_type::FillValue;
 
 use super::{
     ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
-    nested_local_subchunk_grids,
+    nested_local_subchunk_grids, nested_subchunk_codecs,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
@@ -205,6 +205,10 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
                 .map_err(|err| CodecError::Other(err.to_string()))?,
         );
         nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        nested_subchunk_codecs(&self.inner_codecs)
     }
 }
 
