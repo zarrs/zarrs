@@ -1,9 +1,11 @@
 //! A cache for partial decoders.
 
 use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
+use zarrs_codec::{
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::StorageError;
 
 /// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
@@ -68,6 +70,15 @@ impl ArrayPartialDecoderCache {
     }
 }
 
+impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        Ok(self.local_subchunk_grids.clone())
+    }
+}
+
 impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
@@ -91,15 +102,20 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
             .extract_array_subset(indexer, array_shape, &self.data_type)
     }
 
-    fn local_subchunk_grids(
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+    async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(self.local_subchunk_grids.clone())
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        true
     }
 }
 
@@ -125,13 +141,6 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         ArrayPartialDecoderTraits::partial_decode(self, indexer, options)
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        Ok(self.local_subchunk_grids.clone())
     }
 
     fn supports_partial_decode(&self) -> bool {

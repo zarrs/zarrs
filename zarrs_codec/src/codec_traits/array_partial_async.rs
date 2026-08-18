@@ -6,28 +6,20 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
+    CodecOptions, InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 
-/// Asynchronous partial array decoder traits.
+/// Subchunking traits for an asynchronous partial array decoder.
+///
+/// This is the asynchronous equivalent of
+/// [`ArrayPartialDecoderSubchunkingTraits`](crate::ArrayPartialDecoderSubchunkingTraits).
+///
+/// Implement [`ArrayPartialDecoderNoSubchunkingTraits`] instead of this trait for a partial decoder
+/// without subchunks.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
-    /// Return the data type of the partial decoder.
-    fn data_type(&self) -> &DataType;
-
-    /// Returns whether the chunk exists.
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if a storage operation fails.
-    async fn exists(&self) -> Result<bool, StorageError>;
-
-    /// Returns the size of chunk bytes held by the partial decoder.
-    ///
-    /// Intended for use by size-constrained partial decoder caches.
-    fn size_held(&self) -> usize;
-
+pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Return the chunk-local subchunk grid hierarchy for this decoder.
     ///
     /// Grids are ordered from outermost to innermost and are relative to the decoded
@@ -58,6 +50,41 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
             .next()
             .flatten())
     }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T> AsyncArrayPartialDecoderSubchunkingTraits for T
+where
+    T: ArrayPartialDecoderNoSubchunkingTraits + MaybeSend + MaybeSync + ?Sized,
+{
+    async fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        Ok(Vec::new())
+    }
+}
+
+/// Asynchronous partial array decoder traits.
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub trait AsyncArrayPartialDecoderTraits:
+    AsyncArrayPartialDecoderSubchunkingTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the data type of the partial decoder.
+    fn data_type(&self) -> &DataType;
+
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    async fn exists(&self) -> Result<bool, StorageError>;
+
+    /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
+    fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
     ///

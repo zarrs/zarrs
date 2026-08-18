@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 use super::cast_value_codec::{CastBytesContext, ScalarMap, cast_bytes};
@@ -111,6 +115,18 @@ fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
     Ok(())
 }
 
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options)
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -125,13 +141,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
     }
 
     fn partial_decode(
@@ -177,6 +186,21 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options).await
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
     T: AsyncArrayPartialDecoderTraits,
@@ -191,13 +215,6 @@ where
 
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
-    }
-
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
     }
 
     async fn partial_decode<'a>(
