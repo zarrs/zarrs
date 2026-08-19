@@ -136,6 +136,29 @@ fn sharded_array_retrieve_encoded_subchunk_errors() -> TestResult {
 
     // Out-of-bounds subchunk indices
     assert!(array.retrieve_encoded_subchunk(&[4, 0]).is_err());
+    // Subchunk indices with a mismatched dimensionality
+    assert!(array.retrieve_encoded_subchunk(&[1]).is_err());
+    assert!(array.retrieve_encoded_subchunk(&[1, 1, 7]).is_err());
+
+    // The partial decoder is the lowest level entry point and validates its own indices, rather
+    // than silently linearising mismatched indices into a different subchunk
+    let partial_decoder = array.partial_decoder(&[0, 0])?;
+    let options = CodecOptions::default();
+    assert!(
+        partial_decoder
+            .retrieve_encoded_subchunk(&[0, 0], &options)?
+            .is_some()
+    );
+    assert!(
+        partial_decoder
+            .retrieve_encoded_subchunk(&[1], &options)
+            .is_err()
+    );
+    assert!(
+        partial_decoder
+            .retrieve_encoded_subchunk(&[1, 1, 7], &options)
+            .is_err()
+    );
     // Beyond the subchunk grid hierarchy
     assert!(matches!(
         array.retrieve_encoded_subchunk_at_level(1, &[0, 0]),
