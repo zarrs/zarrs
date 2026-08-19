@@ -10,7 +10,7 @@ use super::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, DataType,
+    CodecError, CodecOptions, DataType, EncodedSubchunk,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -136,6 +136,69 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.input_output_handle.subchunk_codecs()
+    }
+
+    fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<ChunkShape, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .encoded_subchunk_shape_at_level(level, subchunk_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk_bytes(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+    }
+
+    fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn BytesPartialDecoderTraits>>, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk<'static>>, CodecError> {
+        // Delegate the whole descent so the inner decoder descends in one consistent domain
+        self.assert_identity_coordinates()?;
+        self.input_output_handle.retrieve_encoded_subchunk_at_level(
+            level,
+            subchunk_indices,
+            options,
+        )
+    }
+}
+
+impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits> {
+    /// Check that this codec does not remap element coordinates.
+    ///
+    /// Encoded subchunks are addressed and shaped in the domain of the decoder this codec wraps.
+    /// Forwarding them is only sound if the codec leaves coordinates unchanged, which is the same
+    /// condition under which forwarding the subchunk grids unmapped is sound. A codec that remaps
+    /// coordinates must implement its own partial decoder to translate subchunk indices.
+    fn assert_identity_coordinates(&self) -> Result<(), CodecError> {
+        let decoded_shape = self.decoded_representation.shape();
+        if self.codec.encoded_shape(decoded_shape)? == decoded_shape {
+            Ok(())
+        } else {
+            Err(CodecError::UnsupportedEncodedSubchunk)
+        }
     }
 }
 
@@ -499,6 +562,53 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.input_output_handle.subchunk_codecs()
+    }
+
+    async fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<ChunkShape, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .encoded_subchunk_shape_at_level(level, subchunk_indices, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_bytes<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+            .await
+    }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncBytesPartialDecoderTraits>>, CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk<'static>>, CodecError> {
+        // Delegate the whole descent so the inner decoder descends in one consistent domain
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
+            .await
     }
 }
 

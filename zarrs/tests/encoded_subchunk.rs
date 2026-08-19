@@ -183,11 +183,12 @@ fn sharded_array_retrieve_encoded_subchunk_errors() -> TestResult {
 }
 
 #[test]
-fn sharded_array_with_array_to_array_codec_has_no_encoded_subchunks() -> TestResult {
+fn sharded_array_with_array_to_array_codec_retrieve_encoded_subchunk() -> TestResult {
+    // A non-square subchunk shape, so that a mismapped axis permutation is detectable
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();
-    let sharding = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
-    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type, 0u16);
+    let sharding = ShardingCodecBuilder::new(vec![nz(2), nz(4)], &data_type).build_arc();
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 8], data_type, 0u16);
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
         TransposeOrder::new(&[1, 0]).unwrap(),
     ))]);
@@ -196,18 +197,37 @@ fn sharded_array_with_array_to_array_codec_has_no_encoded_subchunks() -> TestRes
     let data: Vec<u16> = (0..64).collect();
     array.store_array_subset(&array.subset_all(), &data)?;
 
-    // The subchunk grid is resolvable through the transpose codec, but the encoded subchunks are
-    // in the encoded (transposed) domain and are not exposed by the transpose partial decoder.
     assert!(array.subchunk_grid().as_chunk_grid().is_some());
-    assert!(matches!(
-        array.retrieve_encoded_subchunk(&[0, 0]),
-        Err(ArrayError::CodecError(
-            CodecError::UnsupportedEncodedSubchunk
-        ))
-    ));
-
-    // The subchunk codecs are still exposed for introspection
     assert_eq!(array.subchunk_codecs().len(), 1);
+
+    // Encoded subchunks are exposed through the transpose codec. They are in the encoded
+    // (transposed) domain: the subchunk is addressed in the domain of the array, but the shape and
+    // element order of the bytes are those of the encoded domain.
+    for subchunk_indices in [[0, 0], [1, 1], [1, 0]] {
+        let encoded = array
+            .retrieve_encoded_subchunk(&subchunk_indices)?
+            .expect("subchunk is stored");
+
+        // The array subchunk grid is transposed relative to the encoded domain
+        let subchunk_subset = array
+            .subchunk_grid()
+            .as_chunk_grid()
+            .unwrap()
+            .subset(&subchunk_indices)?
+            .unwrap();
+        assert_eq!(subchunk_subset.shape(), [4, 2]);
+        assert_eq!(encoded.shape(), [nz(2), nz(4)]);
+
+        // Decoding yields the subchunk values transposed, since the transpose codec has not been
+        // applied to them
+        let decoded = decode_subchunk(array.as_ref(), 0, &encoded)?;
+        let expected = array.retrieve_array_subset::<Vec<u16>>(&subchunk_subset)?;
+        let transposed: Vec<u16> = (0..2)
+            .flat_map(|col| (0..4).map(move |row| (row, col)))
+            .map(|(row, col)| expected[row * 2 + col])
+            .collect();
+        assert_eq!(decoded, transposed);
+    }
 
     Ok(())
 }
