@@ -360,8 +360,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// for a nested subchunk grid level).
 /// The codecs needed to decode those bytes are exposed by
 /// [`subchunk_codecs`](Array::subchunk_codecs) /
-/// [`subchunk_codecs_at_level`](Array::subchunk_codecs_at_level), and the shape they decode to is
-/// given by the subchunk grid at the same level.
+/// [`subchunk_codecs_at_level`](Array::subchunk_codecs_at_level), and the shape to decode with
+/// travels with the bytes as [`EncodedSubchunk::shape`].
 ///
 /// Encoded subchunks are also available from a partial decoder for a chunk with
 /// [`ArrayPartialDecoderSubchunkingTraits`], where subchunk indices are relative to that chunk.
@@ -376,8 +376,19 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// A partial decoder without subchunks implements the [`ArrayPartialDecoderNoSubchunkingTraits`]
 /// marker trait instead.
 ///
-/// Encoded subchunks are not exposed if the array has array-to-array codecs, because an encoded
-/// subchunk is in the encoded domain of the array-to-bytes codec.
+/// An encoded subchunk is in the *encoded domain* of the array-to-bytes codec. If the array has
+/// array-to-array codecs, then the subchunk is addressed in the domain of the array, but decoding
+/// its bytes yields values that those codecs have yet to decode: the data type is that of the
+/// subchunk codec, and the elements are ordered by [`EncodedSubchunk::shape`], which can differ in
+/// extent and dimensionality from the shape of the subchunk in the subchunk grid. Use
+/// [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk) to read a subchunk in the domain of the
+/// array instead.
+///
+/// An array-to-array codec that remaps element coordinates (e.g. `transpose`, `reshape`, or
+/// `squeeze`) translates subchunk indices into the domain it wraps. A codec that leaves coordinates
+/// unchanged declares this with
+/// [`ArrayToArrayCodecSubchunkingTraits::has_identity_coordinates`](zarrs_codec::ArrayToArrayCodecSubchunkingTraits::has_identity_coordinates)
+/// and needs no translation.
 ///
 /// ## Parallelism and Concurrency
 /// ### Sync API

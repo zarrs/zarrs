@@ -28,8 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Add `ArrayReadOps::retrieve_encoded_subchunk[_at_level]`, `ArrayOps::subchunk_codecs[_at_level]`, and async variants for encoded subchunk access
-  - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`, but not through array-to-array codecs
+  - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`
   - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
+  - Returns an `EncodedSubchunk`, which carries the encoded domain shape needed to decode the bytes alongside them
+  - Encoded subchunks are exposed through array-to-array codecs, which translate subchunk indices into the domain they wrap
+    - The bytes remain in the encoded domain: the data type is that of the subchunk codec, and the shape can differ in extent and dimensionality from the subchunk grid (e.g. `[3]` rather than `[1, 3]` for a `reshape` codec)
+- Add `ArrayReadOps::encoded_subchunk_shape_at_level` and `AsyncArrayReadOps::async_encoded_subchunk_shape_at_level` for resolving the encoded domain shape of an individual subchunk
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec

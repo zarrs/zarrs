@@ -57,9 +57,13 @@
 //! This is a codec generic operation, so it is usually most convenient to go through the array API:
 //! 1. call [`retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk)
 //!    with subchunk indices of the [`subchunk_grid`](crate::array::ArrayOps::subchunk_grid), and
-//! 2. decode the bytes with the codecs from
-//!    [`subchunk_codecs`](crate::array::ArrayOps::subchunk_codecs) and the shape from the subchunk
-//!    grid, if desired.
+//! 2. decode the [`EncodedSubchunk`](zarrs_codec::EncodedSubchunk) bytes with the codecs from
+//!    [`subchunk_codecs`](crate::array::ArrayOps::subchunk_codecs) and
+//!    [`EncodedSubchunk::shape`](zarrs_codec::EncodedSubchunk::shape), if desired.
+//!
+//! The codec is a property of the array, so it is resolved once and reused, while the shape is
+//! resolved per subchunk and travels with the bytes. It is the shape in the *encoded domain* of the
+//! codec, which differs from the shape in the subchunk grid if the array has array-to-array codecs.
 //!
 //! Nested subchunk grid levels (e.g. sharding within sharding) are addressed with the
 //! `_at_level` variants of those methods.
