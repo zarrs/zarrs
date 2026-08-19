@@ -139,10 +139,8 @@ pub trait ArrayOps {
     /// Return the codecs that encode the subchunks at each level, outermost first.
     ///
     /// The codecs at each level match the grids returned by
-    /// [`subchunk_grids`](ArrayOps::subchunk_grids). The level zero codecs decode the bytes
-    /// returned by
-    /// [`retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk),
-    /// and deeper levels decode the encoded subchunks of subchunks.
+    /// [`subchunk_grids`](ArrayOps::subchunk_grids). The level zero codecs decode encoded
+    /// subchunk bytes, and deeper levels decode the encoded subchunks of subchunks.
     ///
     /// An empty vector indicates that the array does not expose subchunks.
     ///

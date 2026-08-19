@@ -40,8 +40,6 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
     /// by array-to-array codecs (e.g. in a codec chain), then decoding an encoded subchunk yields
     /// array bytes that those codecs have yet to decode.
     ///
-    /// Encoded subchunk bytes are retrieved with
-    /// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk`](crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk).
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         Vec::new()
     }

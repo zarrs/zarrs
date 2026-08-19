@@ -70,9 +70,9 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Return the codecs that encode the subchunks exposed by this decoder, outermost first.
     ///
     /// The codecs at each level match the grids returned by
-    /// [`local_subchunk_grids`](Self::local_subchunk_grids). The level zero codecs decode the
-    /// bytes returned by [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk) into the
-    /// array bytes of a subchunk with the shape given by the level zero grid.
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids). The level zero codecs decode encoded
+    /// subchunk bytes into the array bytes of a subchunk with the shape given by the level zero
+    /// grid.
     /// Deeper levels apply to subchunks nested inside subchunks.
     ///
     /// An empty vector indicates that this decoder does not expose encoded subchunks.
