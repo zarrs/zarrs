@@ -1,12 +1,18 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+use crate::array::codec::array_to_array::subchunk_forwarding::AsyncSubchunkRemap;
+use crate::array::codec::array_to_array::subchunk_forwarding::{
+    SubchunkMapping, SubchunkRemap, impl_subchunk_forwarding,
+};
+
 use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -64,7 +70,7 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         }
     }
 
-    fn map_local_subchunk_grid(
+    fn map_local_subchunk_grid_impl(
         &self,
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, CodecError> {
@@ -85,23 +91,15 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
     ///
     /// This errors if the subchunk grid cannot be mapped between the domains at all, and if an
     /// outward subchunk does not correspond to exactly one encoded subchunk.
-    fn inner_subchunk_indices(
+    fn map_subchunk_indices_between_domains(
         &self,
-        level: usize,
+        encoded_grid: &ChunkGrid,
         subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError>
-    where
-        T: ArrayPartialDecoderSubchunkingTraits,
-    {
-        let encoded_grid = self
-            .input_handle
-            .local_subchunk_grid_at_level(level, options)?
-            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+    ) -> Result<Vec<u64>, CodecError> {
         let decoded_grid = self
-            .map_local_subchunk_grid(&encoded_grid)?
+            .map_local_subchunk_grid_impl(encoded_grid)?
             .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
-        self.map_subchunk_indices(&decoded_grid, &encoded_grid, subchunk_indices)
+        self.map_subchunk_indices(&decoded_grid, encoded_grid, subchunk_indices)
     }
 
     /// Locate `subchunk_indices` of `decoded_grid` in `encoded_grid` through the linear index.
@@ -152,31 +150,6 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         Ok(inner_indices)
     }
 }
-
-#[cfg(feature = "async")]
-impl<T: ?Sized> ReshapeCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    /// Async variant of [`inner_subchunk_indices`](Self::inner_subchunk_indices).
-    async fn async_inner_subchunk_indices(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        let encoded_grid = self
-            .input_handle
-            .local_subchunk_grid_at_level(level, options)
-            .await?
-            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
-        let decoded_grid = self
-            .map_local_subchunk_grid(&encoded_grid)?
-            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
-        self.map_subchunk_indices(&decoded_grid, &encoded_grid, subchunk_indices)
-    }
-}
-
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -205,70 +178,6 @@ where
         self.input_handle.supports_partial_encode()
     }
 }
-
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
-where
-    T: ArrayPartialDecoderSubchunkingTraits,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
-            .collect()
-    }
-
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.input_handle.subchunk_codecs()
-    }
-
-    fn encoded_subchunk_shape_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<zarrs_metadata::ChunkShape, CodecError> {
-        let inner_indices = self.inner_subchunk_indices(level, subchunk_indices, options)?;
-        self.input_handle
-            .encoded_subchunk_shape_at_level(level, &inner_indices, options)
-    }
-
-    fn retrieve_encoded_subchunk_bytes(
-        &self,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<zarrs_codec::ArrayBytesRaw<'_>>, CodecError> {
-        let inner_indices = self.inner_subchunk_indices(0, subchunk_indices, options)?;
-        self.input_handle
-            .retrieve_encoded_subchunk_bytes(&inner_indices, options)
-    }
-
-    fn encoded_subchunk_partial_decoder(
-        &self,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<dyn zarrs_codec::BytesPartialDecoderTraits>>, CodecError> {
-        let inner_indices = self.inner_subchunk_indices(0, subchunk_indices, options)?;
-        self.input_handle
-            .encoded_subchunk_partial_decoder(&inner_indices, options)
-    }
-
-    fn retrieve_encoded_subchunk_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'static>>, CodecError> {
-        // Delegate the whole descent so the inner decoder descends in one consistent domain
-        let inner_indices = self.inner_subchunk_indices(level, subchunk_indices, options)?;
-        self.input_handle
-            .retrieve_encoded_subchunk_at_level(level, &inner_indices, options)
-    }
-}
-
 impl<T: ?Sized> ArrayPartialDecoderTraits for ReshapeCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -297,85 +206,6 @@ where
 
     fn supports_partial_decode(&self) -> bool {
         self.input_handle.supports_partial_decode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_handle
-            .local_subchunk_grids(options)
-            .await?
-            .into_iter()
-            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
-            .collect()
-    }
-
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.input_handle.subchunk_codecs()
-    }
-
-    async fn encoded_subchunk_shape_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<zarrs_metadata::ChunkShape, CodecError> {
-        let inner_indices = self
-            .async_inner_subchunk_indices(level, subchunk_indices, options)
-            .await?;
-        self.input_handle
-            .encoded_subchunk_shape_at_level(level, &inner_indices, options)
-            .await
-    }
-
-    async fn retrieve_encoded_subchunk_bytes<'a>(
-        &'a self,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<zarrs_codec::ArrayBytesRaw<'a>>, CodecError> {
-        let inner_indices = self
-            .async_inner_subchunk_indices(0, subchunk_indices, options)
-            .await?;
-        self.input_handle
-            .retrieve_encoded_subchunk_bytes(&inner_indices, options)
-            .await
-    }
-
-    async fn encoded_subchunk_partial_decoder(
-        &self,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>>, CodecError> {
-        let inner_indices = self
-            .async_inner_subchunk_indices(0, subchunk_indices, options)
-            .await?;
-        self.input_handle
-            .encoded_subchunk_partial_decoder(&inner_indices, options)
-            .await
-    }
-
-    async fn retrieve_encoded_subchunk_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'static>>, CodecError> {
-        // Delegate the whole descent so the inner decoder descends in one consistent domain
-        let inner_indices = self
-            .async_inner_subchunk_indices(level, subchunk_indices, options)
-            .await?;
-        self.input_handle
-            .retrieve_encoded_subchunk_at_level(level, &inner_indices, options)
-            .await
     }
 }
 
@@ -414,3 +244,57 @@ where
         self.input_handle.supports_partial_decode()
     }
 }
+
+impl<T: ?Sized> SubchunkMapping for ReshapeCodecPartial<T> {
+    type Inner = T;
+
+    fn inner(&self) -> &Arc<T> {
+        &self.input_handle
+    }
+
+    fn map_local_subchunk_grid(&self, grid: &ChunkGrid) -> Result<Option<ChunkGrid>, CodecError> {
+        self.map_local_subchunk_grid_impl(grid)
+    }
+}
+
+impl<T: ?Sized> SubchunkRemap for ReshapeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn remap_subchunk_indices(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Vec<u64>, CodecError> {
+        let encoded_grid = self
+            .input_handle
+            .local_subchunk_grid_at_level(level, options)?
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        self.map_subchunk_indices_between_domains(&encoded_grid, subchunk_indices)
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncSubchunkRemap for ReshapeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn async_remap_subchunk_indices(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Vec<u64>, CodecError> {
+        let encoded_grid = self
+            .input_handle
+            .local_subchunk_grid_at_level(level, options)
+            .await?
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        self.map_subchunk_indices_between_domains(&encoded_grid, subchunk_indices)
+    }
+}
+
+impl_subchunk_forwarding!(ReshapeCodecPartial);
