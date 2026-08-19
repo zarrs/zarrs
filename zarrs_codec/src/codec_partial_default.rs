@@ -8,9 +8,10 @@ use zarrs_data_type::FillValue;
 use super::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, DataType, EncodedSubchunk,
+    ArraySubset, ArrayToArrayCodecSubchunkingTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
+    EncodedSubchunk,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -192,9 +193,13 @@ impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToAr
     /// Forwarding them is only sound if the codec leaves coordinates unchanged, which is the same
     /// condition under which forwarding the subchunk grids unmapped is sound. A codec that remaps
     /// coordinates must implement its own partial decoder to translate subchunk indices.
+    ///
+    /// This relies on the codec declaring
+    /// [`has_identity_coordinates`](ArrayToArrayCodecSubchunkingTraits::has_identity_coordinates)
+    /// rather than comparing shapes, because a codec can preserve the shape while reordering
+    /// elements (e.g. a `transpose` codec applied to a square chunk).
     fn assert_identity_coordinates(&self) -> Result<(), CodecError> {
-        let decoded_shape = self.decoded_representation.shape();
-        if self.codec.encoded_shape(decoded_shape)? == decoded_shape {
+        if self.codec.has_identity_coordinates() {
             Ok(())
         } else {
             Err(CodecError::UnsupportedEncodedSubchunk)
