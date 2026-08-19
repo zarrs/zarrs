@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+use crate::array::codec::array_to_array::subchunk_forwarding::AsyncSubchunkRemap;
+use crate::array::codec::array_to_array::subchunk_forwarding::{
+    SubchunkMapping, SubchunkRemap, impl_subchunk_forwarding,
+};
+
 use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{
-    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncArrayPartialEncoderTraits,
-};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
@@ -35,23 +37,6 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         })
     }
 }
-
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
-where
-    T: ArrayPartialDecoderSubchunkingTraits,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
-    }
-
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.input_output_handle.subchunk_codecs()
-    }
-}
-
 impl<T: ?Sized> ArrayPartialDecoderTraits for BitroundCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -107,25 +92,6 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
-    }
-
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.input_output_handle.subchunk_codecs()
     }
 }
 
@@ -195,3 +161,50 @@ where
         self.input_output_handle.supports_partial_encode()
     }
 }
+
+// The codec alters values but not positions, so subchunk grids and indices are the same in its
+// decoded and encoded domains.
+impl<T: ?Sized> SubchunkMapping for BitroundCodecPartial<T> {
+    type Inner = T;
+
+    fn inner(&self) -> &Arc<T> {
+        &self.input_output_handle
+    }
+
+    fn map_local_subchunk_grid(
+        &self,
+        grid: &zarrs_chunk_grid::ChunkGrid,
+    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
+        Ok(Some(grid.clone()))
+    }
+}
+
+impl<T: ?Sized> SubchunkRemap for BitroundCodecPartial<T> {
+    fn remap_subchunk_indices(
+        &self,
+        _level: usize,
+        subchunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Vec<u64>, CodecError> {
+        Ok(subchunk_indices.to_vec())
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncSubchunkRemap for BitroundCodecPartial<T>
+where
+    T: zarrs_storage::MaybeSend + zarrs_storage::MaybeSync,
+{
+    async fn async_remap_subchunk_indices(
+        &self,
+        _level: usize,
+        subchunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Vec<u64>, CodecError> {
+        Ok(subchunk_indices.to_vec())
+    }
+}
+
+impl_subchunk_forwarding!(BitroundCodecPartial);

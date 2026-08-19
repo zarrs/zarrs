@@ -13,8 +13,9 @@ use zarrs::array::chunk_cache::{
     ChunkCacheDecodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit,
 };
 use zarrs::array::chunk_grid::RegularChunkGrid;
+use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-use zarrs::array::codec::{BytesCodec, TransposeCodec, TransposeOrder};
+use zarrs::array::codec::{BytesCodec, ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayCached, ArrayError, ArrayOps,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -182,11 +183,102 @@ fn sharded_array_retrieve_encoded_subchunk_errors() -> TestResult {
 }
 
 #[test]
-fn sharded_array_with_array_to_array_codec_has_no_encoded_subchunks() -> TestResult {
+fn sharded_array_with_reshape_codec_retrieve_encoded_subchunk() -> TestResult {
+    // The reshape flattens a [2,6] chunk to [12], so the encoded domain is one dimensional
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();
-    let sharding = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
-    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type, 0u16);
+    let sharding = ShardingCodecBuilder::new(vec![nz(3)], &data_type).build_arc();
+    let mut builder = ArrayBuilder::new(vec![4, 6], vec![2, 6], data_type, 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(
+        ReshapeShape::new([nz(12).into()]).unwrap(),
+    ))]);
+    builder.array_to_bytes_codec(sharding);
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..24).collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    // The subchunk grid is in the domain of the array, so it is two dimensional
+    let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap().clone();
+    assert_eq!(subchunk_grid.grid_shape(), [4, 2]);
+
+    for subchunk_indices in [[0, 0], [0, 1], [2, 1], [3, 1]] {
+        let encoded = array
+            .retrieve_encoded_subchunk(&subchunk_indices)?
+            .expect("subchunk is stored");
+
+        // The encoded shape is one dimensional
+        let subchunk_subset = subchunk_grid.subset(&subchunk_indices)?.unwrap();
+        assert_eq!(subchunk_subset.shape(), [1, 3]);
+        assert_eq!(encoded.shape(), [nz(3)]);
+
+        // A reshape does not reorder elements, so the values match the array subset
+        assert_eq!(
+            decode_subchunk(array.as_ref(), 0, &encoded)?,
+            array.retrieve_array_subset::<Vec<u16>>(&subchunk_subset)?
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn sharded_array_with_squeeze_codec_retrieve_encoded_subchunk() -> TestResult {
+    // Squeeze drops the unit axis, so the encoded domain has a lower dimensionality than the array
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let sharding = ShardingCodecBuilder::new(vec![nz(2)], &data_type).build_arc();
+    let mut builder = ArrayBuilder::new(vec![2, 4], vec![1, 4], data_type, 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())]);
+    builder.array_to_bytes_codec(sharding);
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..8).collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    // The subchunk grid is in the domain of the array, so it retains the unit axis
+    let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap().clone();
+    assert_eq!(subchunk_grid.grid_shape(), [2, 2]);
+
+    for subchunk_indices in [[0, 0], [0, 1], [1, 0], [1, 1]] {
+        let encoded = array
+            .retrieve_encoded_subchunk(&subchunk_indices)?
+            .expect("subchunk is stored");
+
+        // The encoded shape has the unit axis dropped
+        let subchunk_subset = subchunk_grid.subset(&subchunk_indices)?.unwrap();
+        assert_eq!(subchunk_subset.shape(), [1, 2]);
+        assert_eq!(encoded.shape(), [nz(2)]);
+
+        // Squeeze does not reorder elements, so the values match the array subset
+        assert_eq!(
+            decode_subchunk(array.as_ref(), 0, &encoded)?,
+            array.retrieve_array_subset::<Vec<u16>>(&subchunk_subset)?
+        );
+    }
+
+    // A partial decoder rejects a nonzero index on a squeezed axis rather than dropping it
+    let options = CodecOptions::default();
+    let partial_decoder = array.partial_decoder(&[1, 0])?;
+    assert!(
+        partial_decoder
+            .retrieve_encoded_subchunk(&[0, 1], &options)?
+            .is_some()
+    );
+    assert!(
+        partial_decoder
+            .retrieve_encoded_subchunk(&[5, 1], &options)
+            .is_err()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn sharded_array_with_array_to_array_codec_retrieve_encoded_subchunk() -> TestResult {
+    // A non-square subchunk shape, so that a mismapped axis permutation is detectable
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let sharding = ShardingCodecBuilder::new(vec![nz(2), nz(4)], &data_type).build_arc();
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 8], data_type, 0u16);
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
         TransposeOrder::new(&[1, 0]).unwrap(),
     ))]);
@@ -195,18 +287,37 @@ fn sharded_array_with_array_to_array_codec_has_no_encoded_subchunks() -> TestRes
     let data: Vec<u16> = (0..64).collect();
     array.store_array_subset(&array.subset_all(), &data)?;
 
-    // The subchunk grid is resolvable through the transpose codec, but the encoded subchunks are
-    // in the encoded (transposed) domain and are not exposed by the transpose partial decoder.
     assert!(array.subchunk_grid().as_chunk_grid().is_some());
-    assert!(matches!(
-        array.retrieve_encoded_subchunk(&[0, 0]),
-        Err(ArrayError::CodecError(
-            CodecError::UnsupportedEncodedSubchunk
-        ))
-    ));
-
-    // The subchunk codecs are still exposed for introspection
     assert_eq!(array.subchunk_codecs().len(), 1);
+
+    // Encoded subchunks are exposed through the transpose codec. They are in the encoded
+    // (transposed) domain: the subchunk is addressed in the domain of the array, but the shape and
+    // element order of the bytes are those of the encoded domain.
+    for subchunk_indices in [[0, 0], [1, 1], [1, 0]] {
+        let encoded = array
+            .retrieve_encoded_subchunk(&subchunk_indices)?
+            .expect("subchunk is stored");
+
+        // The array subchunk grid is transposed relative to the encoded domain
+        let subchunk_subset = array
+            .subchunk_grid()
+            .as_chunk_grid()
+            .unwrap()
+            .subset(&subchunk_indices)?
+            .unwrap();
+        assert_eq!(subchunk_subset.shape(), [4, 2]);
+        assert_eq!(encoded.shape(), [nz(2), nz(4)]);
+
+        // Decoding yields the subchunk values transposed, since the transpose codec has not been
+        // applied to them
+        let decoded = decode_subchunk(array.as_ref(), 0, &encoded)?;
+        let expected = array.retrieve_array_subset::<Vec<u16>>(&subchunk_subset)?;
+        let transposed: Vec<u16> = (0..2)
+            .flat_map(|col| (0..4).map(move |row| (row, col)))
+            .map(|(row, col)| expected[row * 2 + col])
+            .collect();
+        assert_eq!(decoded, transposed);
+    }
 
     Ok(())
 }

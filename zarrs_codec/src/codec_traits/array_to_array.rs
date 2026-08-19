@@ -40,6 +40,22 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+
+    /// Return true if this codec maps element coordinates identically.
+    ///
+    /// This must only be true if the codec preserves element ordering and chunk shape, which is the
+    /// condition under which a subchunk grid and subchunk indices are the same in the decoded and
+    /// encoded domains. It is what allows the default partial decoder to forward subchunk grids and
+    /// encoded subchunks without translating them.
+    ///
+    /// Returning true when the codec does remap coordinates yields encoded subchunks that are
+    /// addressed in one domain but hold the bytes of another, so this has no default and must be
+    /// answered explicitly. It cannot be inferred from
+    /// [`encoded_shape`](crate::ArrayToArrayCodecTraits::encoded_shape): a codec may preserve the
+    /// shape while reordering elements (e.g. a `transpose` codec applied to a square chunk).
+    ///
+    /// It is true for codecs implementing [`ArrayToArrayCodecSubchunkingIdentityTraits`].
+    fn has_identity_coordinates(&self) -> bool;
 }
 
 /// Marker trait for array-to-array codecs with identity subchunking mappings.
@@ -64,6 +80,10 @@ where
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
+    }
+
+    fn has_identity_coordinates(&self) -> bool {
+        true
     }
 }
 
