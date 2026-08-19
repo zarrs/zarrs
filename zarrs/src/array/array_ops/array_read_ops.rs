@@ -2,7 +2,9 @@ use super::*;
 use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError};
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError, EncodedSubchunk,
+};
 use zarrs_storage::{Bytes, MaybeSync};
 
 /// Synchronous array read operations.
@@ -164,6 +166,84 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             .concurrent_limit(concurrent_limit)
             .map(retrieve)
             .collect()
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices`.
+    ///
+    /// Returns [`None`] if the subchunk is not stored, in which case it has the fill value.
+    ///
+    /// The returned [`EncodedSubchunk`] carries the codec and encoded domain shape needed to decode
+    /// the bytes. See [`EncodedSubchunk`] for the encoded domain contract, which is significant if
+    /// the array has array-to-array codecs.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, the codecs of the
+    /// array do not expose encoded subchunks, the subchunk indices are invalid, a codec fails, or
+    /// there is an underlying store error.
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
+        self.retrieve_encoded_subchunk_at_level(0, subchunk_indices)
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` from `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// Returns [`None`] if the subchunk, or any subchunk containing it, is not stored.
+    ///
+    /// The returned [`EncodedSubchunk`] carries the codec and encoded domain shape needed to decode
+    /// the bytes. See [`EncodedSubchunk`] for the encoded domain contract, which is significant if
+    /// the array has array-to-array codecs.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// the codecs of the array do not expose encoded subchunks at that level, the subchunk indices
+    /// are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
+        // Locate the chunk holding the subchunk, then defer to its partial decoder
+        let (partial_decoder, local_indices) =
+            super::array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )?;
+        partial_decoder
+            .retrieve_encoded_subchunk_at_level(level, &local_indices, self.codec_options())
+            .map_err(ArrayError::CodecError)
+    }
+
+    /// Return the shape of the subchunk at `subchunk_indices` of `level` in the encoded domain of
+    /// its subchunk codec.
+    ///
+    /// This is the shape needed to decode the bytes of
+    /// [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level), and it can
+    /// differ in extent and dimensionality from the shape of the subchunk in
+    /// [`subchunk_grid_at_level`](ArrayOps::subchunk_grid_at_level) if the array has array-to-array
+    /// codecs.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// the subchunk indices are invalid, or a codec fails.
+    fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError> {
+        let (partial_decoder, local_indices) =
+            super::array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )?;
+        partial_decoder
+            .encoded_subchunk_shape_at_level(level, &local_indices, self.codec_options())
+            .map_err(ArrayError::CodecError)
     }
 
     /// Read and decode the subchunk at `subchunk_indices`.

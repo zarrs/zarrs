@@ -1,6 +1,7 @@
 use inherent::inherent;
 use std::sync::Arc;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_codec::EncodedSubchunk;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -359,6 +360,26 @@ where
         &self,
         chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

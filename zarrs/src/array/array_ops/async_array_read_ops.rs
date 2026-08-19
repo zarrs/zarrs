@@ -1,6 +1,6 @@
 use super::*;
 use std::sync::Arc;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, EncodedSubchunk};
 use zarrs_storage::Bytes;
 
 /// Asynchronous array read operations.
@@ -90,6 +90,57 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
+
+    /// Async variant of [`ArrayReadOps::retrieve_encoded_subchunk`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
+        self.async_retrieve_encoded_subchunk_at_level(0, subchunk_indices)
+            .await
+    }
+
+    /// Async variant of [`ArrayReadOps::retrieve_encoded_subchunk_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
+        // Locate the chunk holding the subchunk, then defer to its partial decoder
+        let (partial_decoder, local_indices) =
+            super::async_array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )
+            .await?;
+        partial_decoder
+            .retrieve_encoded_subchunk_at_level(level, &local_indices, self.codec_options())
+            .await
+            .map_err(ArrayError::CodecError)
+    }
+
+    /// Async variant of [`ArrayReadOps::encoded_subchunk_shape_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError> {
+        let (partial_decoder, local_indices) =
+            super::async_array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )
+            .await?;
+        partial_decoder
+            .encoded_subchunk_shape_at_level(level, &local_indices, self.codec_options())
+            .await
+            .map_err(ArrayError::CodecError)
+    }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
     #[allow(clippy::missing_errors_doc)]

@@ -287,7 +287,7 @@ fn subchunk_byte_offset_length(
         let chunks_per_shard = subchunk_grid.grid_shape();
         let shard_index_idx = ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
             CodecError::Other(format!(
-                "subchunk indices {chunk_indices:?} are out of bounds for chunks per shard {chunks_per_shard:?}"
+                "subchunk indices {chunk_indices:?} are incompatible with or out of bounds for chunks per shard {chunks_per_shard:?}"
             ))
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
