@@ -48,6 +48,14 @@ fn local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
         let written = array.partial_decoder(&case.chunk_indices)?;
         assert_eq!(written.data_type(), &case.data_type, "{}", case.name);
         assert!(written.exists()?, "{}: written chunk exists", case.name);
+        let codecs = written.subchunk_codecs();
+        assert_eq!(codecs.len(), 1, "{}: one subchunk codec", case.name);
+        assert_eq!(
+            codecs[0].data_type(),
+            &case.encoded_data_type,
+            "{}",
+            case.name
+        );
 
         let unwritten = array.partial_decoder(&case.absent_chunk_indices)?;
         assert_eq!(unwritten.data_type(), &case.data_type, "{}", case.name);

@@ -6,7 +6,7 @@ use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -120,6 +120,10 @@ where
             .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
             .collect()
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_handle.subchunk_codecs()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits for ReshapeCodecPartial<T>
@@ -170,6 +174,10 @@ where
             .into_iter()
             .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
             .collect()
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_handle.subchunk_codecs()
     }
 }
 

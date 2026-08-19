@@ -9,7 +9,7 @@ use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecError, CodecOptions,
+    ArrayToBytesCodecTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -119,6 +119,10 @@ where
             })
             .collect()
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
@@ -214,6 +218,10 @@ where
                     .transpose()
             })
             .collect()
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
     }
 }
 

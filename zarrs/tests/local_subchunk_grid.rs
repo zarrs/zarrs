@@ -32,7 +32,7 @@ use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 #[derive(Clone, Debug)]
 struct DynamicLocalSubchunkCodec;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct DynamicLocalSubchunkCodecBound {
     data_type: DataType,
     fill_value: FillValue,
@@ -40,6 +40,7 @@ struct DynamicLocalSubchunkCodecBound {
 
 struct DynamicLocalSubchunkPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
     shape: ChunkShape,
     data_type: DataType,
 }
@@ -183,6 +184,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCod
     ) -> Result<Vec<ChunkGridDecoded>, zarrs::array::ChunkGridCreateError> {
         Ok(vec![ChunkGridDecoded::ChunkLocal])
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        vec![Arc::new(self.clone())]
+    }
 }
 
 impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
@@ -223,10 +228,12 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        let data_type = self.data_type.clone();
         Ok(Arc::new(DynamicLocalSubchunkPartialDecoder {
             input_handle,
+            codec: self,
             shape: shape.to_vec(),
-            data_type: self.data_type.clone(),
+            data_type,
         }))
     }
 }
@@ -249,6 +256,10 @@ impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder
             RegularChunkGrid::new(chunk_shape, subchunk_shape)
                 .map_err(|err| CodecError::Other(err.to_string()))?,
         ))])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        vec![self.codec.clone()]
     }
 }
 

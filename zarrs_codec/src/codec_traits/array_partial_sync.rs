@@ -70,9 +70,7 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Deeper levels apply to subchunks nested inside subchunks.
     ///
     /// An empty vector indicates that this decoder does not expose encoded subchunks.
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        Vec::new()
-    }
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
 
     /// Return the codecs that encode the subchunks at `level`, if any.
     ///
@@ -94,6 +92,10 @@ where
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(Vec::new())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 

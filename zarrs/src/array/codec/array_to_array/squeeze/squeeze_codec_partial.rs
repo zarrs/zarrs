@@ -6,7 +6,7 @@ use crate::array::{ChunkGrid, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -89,6 +89,10 @@ where
                     .transpose()
             })
             .collect()
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
     }
 }
 
@@ -179,6 +183,10 @@ where
                     .transpose()
             })
             .collect()
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
     }
 }
 

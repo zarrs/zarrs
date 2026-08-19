@@ -1,8 +1,11 @@
 //! A cache for partial decoders.
 
+use std::sync::Arc;
+
 use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
 use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
@@ -14,6 +17,7 @@ pub(crate) struct ArrayPartialDecoderCache {
     data_type: DataType,
     cache: ArrayBytes<'static>,
     local_subchunk_grids: Vec<Option<ChunkGrid>>,
+    subchunk_codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>>,
 }
 
 impl ArrayPartialDecoderCache {
@@ -28,6 +32,7 @@ impl ArrayPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options)?;
+        let subchunk_codecs = input_handle.subchunk_codecs();
         let bytes = input_handle
             .partial_decode(
                 &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
@@ -39,6 +44,7 @@ impl ArrayPartialDecoderCache {
             data_type,
             cache: bytes,
             local_subchunk_grids,
+            subchunk_codecs,
         })
     }
 
@@ -54,6 +60,7 @@ impl ArrayPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<ArrayPartialDecoderCache, CodecError> {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options).await?;
+        let subchunk_codecs = input_handle.subchunk_codecs();
         let bytes = input_handle
             .partial_decode(
                 &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
@@ -66,6 +73,7 @@ impl ArrayPartialDecoderCache {
             data_type,
             cache: bytes,
             local_subchunk_grids,
+            subchunk_codecs,
         })
     }
 }
@@ -76,6 +84,10 @@ impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(self.local_subchunk_grids.clone())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs.clone()
     }
 }
 
@@ -116,6 +128,10 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(self.local_subchunk_grids.clone())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs.clone()
     }
 }
 

@@ -56,6 +56,14 @@ async fn async_local_subchunk_grid_propagates_through_partial_decoders() -> Test
             case.name
         );
         assert!(partial_decoder.exists().await?, "{}", case.name);
+        let codecs = partial_decoder.subchunk_codecs();
+        assert_eq!(codecs.len(), 1, "{}: one subchunk codec", case.name);
+        assert_eq!(
+            codecs[0].data_type(),
+            &case.encoded_data_type,
+            "{}",
+            case.name
+        );
     }
     Ok(())
 }
