@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `retrieve_encoded_subchunk[_at_level]` for the encoded bytes of a subchunk, `subchunk_codecs[_at_level]` for the codecs that decode them, and `encoded_subchunk_partial_decoder` for reading an encoded subchunk lazily
   - `retrieve_encoded_subchunk_at_level` descends the subchunk hierarchy generically, so a codec only implements level zero access
   - Add `CodecError::UnsupportedEncodedSubchunk`, returned by the default `retrieve_encoded_subchunk` implementation
+  - Add `EncodedSubchunk`, which bundles encoded subchunk bytes with the codec and encoded domain shape needed to decode them
 
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
