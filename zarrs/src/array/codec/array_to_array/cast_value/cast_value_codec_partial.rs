@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -125,6 +125,10 @@ where
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
         self.input_output_handle.local_subchunk_grids(options)
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
@@ -195,6 +199,10 @@ where
         options: &CodecOptions,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
         self.input_output_handle.local_subchunk_grids(options).await
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.input_output_handle.subchunk_codecs()
     }
 }
 

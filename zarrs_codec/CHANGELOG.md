@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
-- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s][_at_level]` for chunk-local subchunk grids
 
 ### Changed
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0
@@ -39,9 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
   - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
   - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
-- **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids
-  - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
+  - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids, and `ArrayToBytesCodecSubchunkingTraits::subchunk_codecs` for subchunk codecs
+    - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
+  - **Breaking**: Add the required `subchunk_codecs()` method for the codecs that encode exposed subchunks
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - Bump `itertools` to 0.15.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)

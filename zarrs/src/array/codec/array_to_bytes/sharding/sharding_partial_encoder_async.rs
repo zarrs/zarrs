@@ -9,8 +9,8 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
 
 use super::{
-    ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, sharding_index_shape,
-    subchunk_updates,
+    ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids,
+    nested_subchunk_codecs, sharding_index_shape, subchunk_updates,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
@@ -96,6 +96,10 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialEncoder {
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        nested_subchunk_codecs(&self.inner_codecs)
     }
 }
 

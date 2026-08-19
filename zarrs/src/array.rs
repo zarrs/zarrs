@@ -61,7 +61,6 @@ pub use zarrs_chunk_grid::{
     Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
-use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
@@ -69,7 +68,8 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, CowBytes,

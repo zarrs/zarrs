@@ -295,6 +295,15 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .map_or(ChunkGridDecodedRef::None, Into::into)
     }
 
+    #[must_use]
+    pub fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
+
+    #[must_use]
+    pub fn subchunk_codecs_at_level(
+        &self,
+        level: usize,
+    ) -> Option<Arc<dyn ArrayToBytesCodecTraits>>;
+
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
         Ok(data_key(
             self.path(),

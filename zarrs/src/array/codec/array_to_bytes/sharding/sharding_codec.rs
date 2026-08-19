@@ -365,6 +365,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
         );
         Ok(subchunk_grids)
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        super::nested_subchunk_codecs(&self.inner_codecs)
+    }
 }
 
 #[cfg_attr(
