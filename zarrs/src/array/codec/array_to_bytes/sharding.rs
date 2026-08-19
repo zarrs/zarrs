@@ -65,13 +65,33 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
-//! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
-//! 2. create a storage partial decoder for the shard object,
-//! 3. construct the sharding partial decoder with the bound codec accessors, and
-//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
+//! Encoded subchunk bytes can be retrieved without decoding them.
+//! This is a codec generic operation, so it is usually most convenient to go through the array API:
+//! 1. call [`retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk)
+//!    with subchunk indices of the [`subchunk_grid`](crate::array::ArrayOps::subchunk_grid), and
+//! 2. decode the bytes with the codecs from
+//!    [`subchunk_codecs`](crate::array::ArrayOps::subchunk_codecs) and the shape from the subchunk
+//!    grid, if desired.
 //!
-//! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
+//! Nested subchunk grid levels (e.g. sharding within sharding) are addressed with the
+//! `_at_level` variants of those methods.
+//!
+//! Alternatively, work directly with a partial decoder for a shard:
+//! 1. downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
+//! 2. create a storage partial decoder for the shard object,
+//! 3. construct a [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`] with the bound codec accessors, and
+//! 4. call
+//!    [`retrieve_encoded_subchunk`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk)
+//!    (or
+//!    [`retrieve_encoded_subchunk_at_level`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level)
+//!    for a nested level) with subchunk indices local to the shard, decoding the bytes with
+//!    [`subchunk_codecs`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::subchunk_codecs) if desired.
+//!
+//! An encoded subchunk occupies a byte range of a shard, which is available from
+//! [`ShardingPartialDecoder::subchunk_byte_range`]. Encoded subchunks are therefore read lazily,
+//! and retrieving a subchunk of a nested shard reads only the shard indexes and that subchunk.
+//!
+//! See the `encoded_subchunk` and `sharding_partial_decoder_retrieve_encoded_subchunk` tests for examples.
 
 #[cfg(test)]
 mod indexer_tests;
@@ -117,7 +137,7 @@ use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
 
@@ -258,11 +278,11 @@ fn get_index_byte_range(
     })
 }
 
-fn subchunk_byte_range(
+fn subchunk_byte_offset_length(
     shard_index: Option<&[u64]>,
     subchunk_grid: &RegularBoundedChunkGrid,
     chunk_indices: &[u64],
-) -> Result<Option<ByteRange>, CodecError> {
+) -> Result<Option<(ByteOffset, ByteLength)>, CodecError> {
     if let Some(shard_index) = shard_index {
         let chunks_per_shard = subchunk_grid.grid_shape();
         let shard_index_idx = ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
@@ -271,8 +291,7 @@ fn subchunk_byte_range(
             ))
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        Ok(subchunk_offset_size(shard_index, shard_index_idx)
-            .map(|(offset, size)| ByteRange::new(offset..offset + size)))
+        Ok(subchunk_offset_size(shard_index, shard_index_idx))
     } else {
         Ok(None)
     }

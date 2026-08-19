@@ -82,28 +82,20 @@ impl AsyncShardingPartialDecoder {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
-        super::subchunk_byte_range(
+        Ok(self
+            .subchunk_byte_offset_length(chunk_indices)?
+            .map(|(offset, length)| ByteRange::new(offset..offset + length)))
+    }
+
+    fn subchunk_byte_offset_length(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<(ByteOffset, ByteLength)>, CodecError> {
+        super::subchunk_byte_offset_length(
             self.shard_index.as_deref(),
             &self.subchunk_grid,
             chunk_indices,
         )
-    }
-
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// The `chunk_indices` are relative to the start of the shard.
-    pub async fn retrieve_subchunk_encoded(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<CowBytes<'_>>, CodecError> {
-        let byte_range = self.subchunk_byte_range(chunk_indices)?;
-        if let Some(byte_range) = byte_range {
-            self.input_handle
-                .partial_decode(byte_range, &CodecOptions::default())
-                .await
-        } else {
-            Ok(None)
-        }
     }
 }
 
@@ -192,6 +184,35 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         nested_subchunk_codecs(&self.inner_codecs)
+    }
+
+    async fn retrieve_encoded_subchunk_bytes<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
+        if let Some(byte_range) = self.subchunk_byte_range(subchunk_indices)? {
+            self.input_handle.partial_decode(byte_range, options).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncBytesPartialDecoderTraits>>, CodecError> {
+        // An encoded subchunk is a byte interval of the shard, so it is read lazily
+        Ok(self
+            .subchunk_byte_offset_length(subchunk_indices)?
+            .map(|(offset, length)| {
+                Arc::new(AsyncByteIntervalPartialDecoder::new(
+                    self.input_handle.clone(),
+                    offset,
+                    length,
+                )) as Arc<dyn AsyncBytesPartialDecoderTraits>
+            }))
     }
 }
 

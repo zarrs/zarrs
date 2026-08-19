@@ -36,6 +36,7 @@ pub use codec_traits::array_to_bytes::{
 };
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;
+pub use codec_traits::subchunking::{EncodedSubchunk, enclosing_chunk_indices};
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 
 #[cfg(feature = "async")]
@@ -640,6 +641,9 @@ pub enum CodecError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
+    /// Encoded subchunk retrieval is not supported.
+    #[error("encoded subchunks are not exposed by this partial decoder")]
+    UnsupportedEncodedSubchunk,
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"

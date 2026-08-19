@@ -6,7 +6,8 @@ use crate::array::chunk_cache::AsyncChunkCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderSubchunkingTraits,
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, CodecError,
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    CodecError, CowBytes,
 };
 use zarrs_storage::StorageError;
 
@@ -31,6 +32,26 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.encoder.subchunk_codecs()
+    }
+
+    async fn retrieve_encoded_subchunk_bytes<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+            .await
+    }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncBytesPartialDecoderTraits>>, CodecError> {
+        self.encoder
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)
+            .await
     }
 }
 

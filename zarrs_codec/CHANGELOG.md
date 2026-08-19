@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s][_at_level]` for chunk-local subchunk grids
+- Add a codec generic encoded subchunk API to `[Async]ArrayPartialDecoderSubchunkingTraits`
+  - `retrieve_encoded_subchunk[_at_level]` for the encoded bytes of a subchunk, `subchunk_codecs[_at_level]` for the codecs that decode them, and `encoded_subchunk_partial_decoder` for reading an encoded subchunk lazily
+  - `retrieve_encoded_subchunk_at_level` descends the subchunk hierarchy generically, so a codec only implements level zero access
+  - Add `CodecError::UnsupportedEncodedSubchunk`, returned by the default `retrieve_encoded_subchunk` implementation
+  - Add `EncodedSubchunk`, which bundles encoded subchunk bytes with their encoded domain shape, and is returned by `retrieve_encoded_subchunk[_at_level]`
+  - Add `encoded_subchunk_shape[_at_level]`, which resolves the encoded domain shape of an individual subchunk
+  - Add `retrieve_encoded_subchunk_bytes`, the hook implemented by a codec that exposes encoded subchunks
+  - Add `enclosing_chunk_indices`, which resolves the chunk of a grid enclosing a subchunk subset
 
 ### Changed
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0
