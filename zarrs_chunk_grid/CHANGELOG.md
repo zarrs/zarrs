@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
 - **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 
+### Fixed
+- `ravel_indices` now returns `None` if `indices` and `shape` have a different length
+
 ## [0.5.1] - 2026-02-08
 
 ### Added

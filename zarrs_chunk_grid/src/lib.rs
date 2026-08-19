@@ -511,9 +511,13 @@ impl<T> ChunkGridTraitsIterators for T where T: ChunkGridTraits {}
 
 /// Ravel ND indices to a linearised index.
 ///
-/// Returns [`None`] if any `indices` are out-of-bounds of `shape`.
+/// Returns [`None`] if `indices` and `shape` have a different length, or if any `indices` are
+/// out-of-bounds of `shape`.
 #[must_use]
 pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
+    if indices.len() != shape.len() {
+        return None;
+    }
     let mut index: u64 = 0;
     let mut count = 1;
     for (i, s) in std::iter::zip(indices, shape).rev() {
@@ -599,5 +603,31 @@ unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
             spare_capacity.as_mut_ptr().cast::<T>(),
             spare_capacity.len(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ravel_indices_valid() {
+        assert_eq!(ravel_indices(&[], &[]), Some(0));
+        assert_eq!(ravel_indices(&[3], &[5]), Some(3));
+        assert_eq!(ravel_indices(&[1, 2], &[3, 4]), Some(6));
+        assert_eq!(ravel_indices(&[2, 3], &[3, 4]), Some(11));
+    }
+
+    #[test]
+    fn ravel_indices_out_of_bounds() {
+        assert_eq!(ravel_indices(&[5], &[5]), None);
+        assert_eq!(ravel_indices(&[1, 4], &[3, 4]), None);
+    }
+
+    #[test]
+    fn ravel_indices_dimensionality_mismatch() {
+        assert_eq!(ravel_indices(&[1], &[3, 4]), None);
+        assert_eq!(ravel_indices(&[1, 1, 1], &[3, 4]), None);
+        assert_eq!(ravel_indices(&[0], &[]), None);
     }
 }
