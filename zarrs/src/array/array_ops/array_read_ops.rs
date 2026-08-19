@@ -192,17 +192,14 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunk_indices: &[u64],
     ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
         // Locate the chunk holding the subchunk, then defer to its partial decoder
-        let (chunk_indices, subchunk_subset) =
-            subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
-        let options = self.codec_options();
-        let partial_decoder = self.partial_decoder(&chunk_indices)?;
-        let local_subchunk_grid = partial_decoder
-            .local_subchunk_grid_at_level(level, options)
-            .map_err(ArrayError::CodecError)?
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
-        let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+        let (partial_decoder, local_indices) =
+            super::array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )?;
         partial_decoder
-            .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
+            .retrieve_encoded_subchunk_at_level(level, &local_indices, self.codec_options())
             .map_err(ArrayError::CodecError)
     }
 
@@ -223,17 +220,14 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<ChunkShape, ArrayError> {
-        let (chunk_indices, subchunk_subset) =
-            subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
-        let options = self.codec_options();
-        let partial_decoder = self.partial_decoder(&chunk_indices)?;
-        let local_subchunk_grid = partial_decoder
-            .local_subchunk_grid_at_level(level, options)
-            .map_err(ArrayError::CodecError)?
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
-        let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+        let (partial_decoder, local_indices) =
+            super::array_read_ops_common::subchunk_partial_decoder_and_local_indices(
+                self,
+                level,
+                subchunk_indices,
+            )?;
         partial_decoder
-            .encoded_subchunk_shape_at_level(level, &local_indices, options)
+            .encoded_subchunk_shape_at_level(level, &local_indices, self.codec_options())
             .map_err(ArrayError::CodecError)
     }
 

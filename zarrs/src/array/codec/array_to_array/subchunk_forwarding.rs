@@ -261,7 +261,9 @@ macro_rules! impl_subchunk_forwarding {
                     let inner = self
                         .async_remap_subchunk_indices(0, subchunk_indices, options)
                         .await?;
-                    self.inner().retrieve_encoded_subchunk(&inner, options).await
+                    self.inner()
+                        .retrieve_encoded_subchunk(&inner, options)
+                        .await
                 }
 
                 async fn encoded_subchunk_partial_decoder(

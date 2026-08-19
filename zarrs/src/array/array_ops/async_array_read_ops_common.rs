@@ -1,9 +1,14 @@
 use futures::{StreamExt, TryStreamExt};
 
+use std::sync::Arc;
+
 use crate::array::{
-    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndices, ArrayIndicesTinyVec, ArrayOps,
+    ArraySubset, ArraySubsetTraits, AsyncArrayReadOps,
 };
+use zarrs_codec::AsyncArrayPartialDecoderTraits;
+
+use super::{enclosing_subchunk_indices, subchunk_chunk_and_local_subset};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
@@ -196,4 +201,27 @@ where
         .await?;
 
     Ok(())
+}
+
+/// Async variant of
+/// [`subchunk_partial_decoder_and_local_indices`](super::array_read_ops_common::subchunk_partial_decoder_and_local_indices).
+pub(super) async fn subchunk_partial_decoder_and_local_indices<A>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<(Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayIndices), ArrayError>
+where
+    A: AsyncArrayReadOps + ?Sized,
+{
+    let (chunk_indices, subchunk_subset) =
+        subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
+    let options = array.codec_options();
+    let partial_decoder = array.async_partial_decoder(&chunk_indices).await?;
+    let local_subchunk_grid = partial_decoder
+        .local_subchunk_grid_at_level(level, options)
+        .await
+        .map_err(ArrayError::CodecError)?
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+    Ok((partial_decoder, local_indices))
 }

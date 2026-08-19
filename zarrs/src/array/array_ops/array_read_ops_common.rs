@@ -1,8 +1,13 @@
 use crate::IntoConcurrentLimitIterator;
+use std::sync::Arc;
+
 use crate::array::{
-    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndices, ArrayIndicesTinyVec, ArrayOps,
+    ArrayReadOps, ArraySubset, ArraySubsetTraits,
 };
+use zarrs_codec::ArrayPartialDecoderTraits;
+
+use super::{enclosing_subchunk_indices, subchunk_chunk_and_local_subset};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -176,4 +181,29 @@ where
         .try_for_each(retrieve_chunk)?;
 
     Ok(())
+}
+
+/// Resolve the partial decoder of the chunk holding a subchunk, and the subchunk indices local to
+/// it.
+///
+/// The returned indices address the `level` subchunk grid of the partial decoder, which is local to
+/// the chunk rather than to the array.
+pub(super) fn subchunk_partial_decoder_and_local_indices<A>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<(Arc<dyn ArrayPartialDecoderTraits>, ArrayIndices), ArrayError>
+where
+    A: ArrayReadOps + ?Sized,
+{
+    let (chunk_indices, subchunk_subset) =
+        subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
+    let options = array.codec_options();
+    let partial_decoder = array.partial_decoder(&chunk_indices)?;
+    let local_subchunk_grid = partial_decoder
+        .local_subchunk_grid_at_level(level, options)
+        .map_err(ArrayError::CodecError)?
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+    Ok((partial_decoder, local_indices))
 }
