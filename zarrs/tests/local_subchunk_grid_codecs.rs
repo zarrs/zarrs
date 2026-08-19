@@ -13,12 +13,10 @@ use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
     ChunkCachePartialDecoderLruChunkLimit,
 };
-use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialEncoderTraits, CodecOptions, data_type,
 };
-use zarrs::storage::StorageHandle;
 use zarrs::storage::store::MemoryStore;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -36,41 +34,6 @@ fn build_without_sharding(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dy
     let store = Arc::new(MemoryStore::default());
     Ok(case.builder_without_sharding().build_arc(store, "/array")?)
 }
-
-fn sharding_partial_decoder(
-    array: &Array<MemoryStore>,
-    chunk_indices: &[u64],
-) -> Result<ShardingPartialDecoder, Box<dyn Error>> {
-    let codecs_bound = array.codecs_bound();
-    let sharding_codec = codecs_bound
-        .array_to_bytes_codec()
-        .as_any()
-        .downcast_ref::<ShardingCodecBound>()
-        .ok_or("array-to-bytes codec is not sharding")?;
-
-    let mut encoded_shape = array.chunk_shape(chunk_indices)?;
-    for codec in codecs_bound.array_to_array_codecs() {
-        encoded_shape = codec.encoded_shape(&encoded_shape)?;
-    }
-
-    let storage_handle = Arc::new(StorageHandle::new(array.storage()));
-    let storage_transformer = array
-        .storage_transformers()
-        .create_readable_transformer(storage_handle)?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(chunk_indices)));
-
-    Ok(ShardingPartialDecoder::new(
-        input_handle,
-        encoded_shape,
-        sharding_codec.subchunk_shape().clone(),
-        sharding_codec.inner_codecs().clone(),
-        sharding_codec.index_codecs(),
-        sharding_codec.index_location(),
-        array.codec_options(),
-        sharding_codec.options().clone(),
-    )?)
-}
-
 #[test]
 fn local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
     for case in cases() {
@@ -150,7 +113,8 @@ fn transpose_preserves_subchunk_codec_encoded_domain() -> TestResult {
     // The encoded subchunk carries the encoded domain shape, so decoding it needs no external
     // knowledge of how the transpose codec maps the subchunk grid outward
     let partial_decoder = array.partial_decoder(&case.chunk_indices)?;
-    let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
+    let sharding_decoder =
+        subchunk_grid_cases::sharding_partial_decoder(array.as_ref(), &case.chunk_indices)?;
     let encoded = sharding_decoder
         .retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?
         .unwrap();

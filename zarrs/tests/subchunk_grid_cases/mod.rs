@@ -5,21 +5,25 @@
 //! remapped by that codec's partial decoder.
 #![allow(dead_code)]
 
+use std::error::Error;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::builder::ArrayBuilderFillValue;
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
-use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+use zarrs::array::codec::array_to_bytes::sharding::{
+    ShardingCodecBound, ShardingCodecBuilder, ShardingPartialDecoder,
+};
 use zarrs::array::codec::{
     BitroundCodec, CastValueCodec, ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder,
 };
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
+    ArrayBuilder, ArrayBytes, ArrayReadOps, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
     RecommendedConcurrency, UnboundArrayToArrayCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
+use zarrs::storage::{ReadableStorageTraits, StorageHandle};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError,
     PartialDecoderCapability, PartialEncoderCapability,
@@ -334,4 +338,45 @@ pub(crate) fn cases() -> Vec<Case> {
             local_subchunk_shape: vec![nz(2), nz(3)],
         },
     ]
+}
+
+/// Construct a [`ShardingPartialDecoder`] for the chunk at `chunk_indices` of `array`.
+///
+/// The shard shape is resolved in the encoded domain of the array-to-bytes codec, so any
+/// array-to-array codecs of the array are applied to the chunk shape first.
+pub(crate) fn sharding_partial_decoder<A: ArrayReadOps>(
+    array: &A,
+    chunk_indices: &[u64],
+) -> Result<ShardingPartialDecoder, Box<dyn Error>>
+where
+    A::Storage: ReadableStorageTraits + 'static,
+{
+    let codecs_bound = array.codecs_bound();
+    let sharding_codec = codecs_bound
+        .array_to_bytes_codec()
+        .as_any()
+        .downcast_ref::<ShardingCodecBound>()
+        .ok_or("array-to-bytes codec is not sharding")?;
+
+    let mut encoded_shape = array.chunk_shape(chunk_indices)?;
+    for codec in codecs_bound.array_to_array_codecs() {
+        encoded_shape = codec.encoded_shape(&encoded_shape)?;
+    }
+
+    let storage_handle = Arc::new(StorageHandle::new(array.storage()));
+    let storage_transformer = array
+        .storage_transformers()
+        .create_readable_transformer(storage_handle)?;
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(chunk_indices)));
+
+    Ok(ShardingPartialDecoder::new(
+        input_handle,
+        encoded_shape,
+        sharding_codec.subchunk_shape().clone(),
+        sharding_codec.inner_codecs().clone(),
+        sharding_codec.index_codecs(),
+        sharding_codec.index_location(),
+        array.codec_options(),
+        sharding_codec.options().clone(),
+    )?)
 }
