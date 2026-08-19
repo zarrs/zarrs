@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 - Bump `itertools` to 0.15.0
 
+### Fixed
+- `ravel_indices` now returns `None` if `indices` and `shape` have a different length
+
 ## [0.5.1] - 2026-02-08
 
 ### Added
