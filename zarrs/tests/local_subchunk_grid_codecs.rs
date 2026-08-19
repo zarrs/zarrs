@@ -147,7 +147,11 @@ fn transpose_preserves_subchunk_codec_encoded_domain() -> TestResult {
     array.store_chunk(&case.chunk_indices, &values)?;
 
     let partial_decoder = array.partial_decoder(&case.chunk_indices)?;
-    let codec = partial_decoder.subchunk_codecs().into_iter().next().unwrap();
+    let codec = partial_decoder
+        .subchunk_codecs()
+        .into_iter()
+        .next()
+        .unwrap();
     let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
     let encoded = sharding_decoder
         .retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?
