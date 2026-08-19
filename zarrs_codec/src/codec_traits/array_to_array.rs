@@ -48,15 +48,14 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
     /// encoded domains. It is what allows the default partial decoder to forward subchunk grids and
     /// encoded subchunks without translating them.
     ///
-    /// This cannot be inferred from
+    /// Returning true when the codec does remap coordinates yields encoded subchunks that are
+    /// addressed in one domain but hold the bytes of another, so this has no default and must be
+    /// answered explicitly. It cannot be inferred from
     /// [`encoded_shape`](crate::ArrayToArrayCodecTraits::encoded_shape): a codec may preserve the
     /// shape while reordering elements (e.g. a `transpose` codec applied to a square chunk).
     ///
-    /// The default implementation returns `false`. It is `true` for codecs implementing
-    /// [`ArrayToArrayCodecSubchunkingIdentityTraits`].
-    fn has_identity_coordinates(&self) -> bool {
-        false
-    }
+    /// It is true for codecs implementing [`ArrayToArrayCodecSubchunkingIdentityTraits`].
+    fn has_identity_coordinates(&self) -> bool;
 }
 
 /// Marker trait for array-to-array codecs with identity subchunking mappings.

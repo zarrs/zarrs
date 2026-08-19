@@ -158,6 +158,12 @@ impl ArrayCodecTraits for TransposeCodecBound {
 }
 
 impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
+    /// A transpose permutes element coordinates, including for a square chunk where the encoded
+    /// and decoded shapes are equal.
+    fn has_identity_coordinates(&self) -> bool {
+        false
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,

@@ -148,6 +148,12 @@ impl ArrayCodecTraits for ReshapeCodecBound {
 }
 
 impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
+    /// A reshape re-splits the linear element sequence, so encoded coordinates differ in extent
+    /// and dimensionality.
+    fn has_identity_coordinates(&self) -> bool {
+        false
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,

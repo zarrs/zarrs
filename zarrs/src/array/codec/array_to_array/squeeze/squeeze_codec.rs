@@ -147,6 +147,11 @@ impl ArrayCodecTraits for SqueezeCodecBound {
 }
 
 impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
+    /// A squeeze drops unit axes, so encoded coordinates have a lower dimensionality.
+    fn has_identity_coordinates(&self) -> bool {
+        false
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,

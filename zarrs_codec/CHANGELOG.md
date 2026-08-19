@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
   - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids, and `ArrayToBytesCodecSubchunkingTraits::subchunk_codecs` for subchunk codecs
     - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
+    - `ArrayToArrayCodecSubchunkingTraits::has_identity_coordinates` declares whether a codec preserves element ordering and chunk shape
+      - It has no default, since a codec that wrongly claims identity coordinates exposes encoded subchunks holding the bytes of a different domain
+      - It cannot be inferred from `encoded_shape()`, which is unchanged by a `transpose` codec applied to a square chunk
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - **Breaking**: Add the required `subchunk_codecs()` method for the codecs that encode exposed subchunks
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
