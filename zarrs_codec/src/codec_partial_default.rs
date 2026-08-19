@@ -8,10 +8,9 @@ use zarrs_data_type::FillValue;
 use super::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArraySubset, ArrayToArrayCodecSubchunkingTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
-    EncodedSubchunk,
+    ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
+    CodecError, CodecOptions, DataType, EncodedSubchunk,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]

@@ -14,8 +14,9 @@ use zarrs::array::chunk_cache::{
     ChunkCacheDecodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit,
 };
 use zarrs::array::chunk_grid::RegularChunkGrid;
+use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-use zarrs::array::codec::{BytesCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
+use zarrs::array::codec::{BytesCodec, ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayCached, ArrayError, ArrayOps,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -178,6 +179,45 @@ fn sharded_array_retrieve_encoded_subchunk_errors() -> TestResult {
         array.retrieve_encoded_subchunk(&[0, 0]),
         Err(ArrayError::MissingSubchunkGrid)
     ));
+
+    Ok(())
+}
+
+#[test]
+fn sharded_array_with_reshape_codec_retrieve_encoded_subchunk() -> TestResult {
+    // The reshape flattens a [2,6] chunk to [12], so the encoded domain is one dimensional
+    let store = Arc::new(MemoryStore::default());
+    let data_type = data_type::uint16();
+    let sharding = ShardingCodecBuilder::new(vec![nz(3)], &data_type).build_arc();
+    let mut builder = ArrayBuilder::new(vec![4, 6], vec![2, 6], data_type, 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(
+        ReshapeShape::new([nz(12).into()]).unwrap(),
+    ))]);
+    builder.array_to_bytes_codec(sharding);
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..24).collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    // The subchunk grid is in the domain of the array, so it is two dimensional
+    let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap().clone();
+    assert_eq!(subchunk_grid.grid_shape(), [4, 2]);
+
+    for subchunk_indices in [[0, 0], [0, 1], [2, 1], [3, 1]] {
+        let encoded = array
+            .retrieve_encoded_subchunk(&subchunk_indices)?
+            .expect("subchunk is stored");
+
+        // The encoded shape is one dimensional
+        let subchunk_subset = subchunk_grid.subset(&subchunk_indices)?.unwrap();
+        assert_eq!(subchunk_subset.shape(), [1, 3]);
+        assert_eq!(encoded.shape(), [nz(3)]);
+
+        // A reshape does not reorder elements, so the values match the array subset
+        assert_eq!(
+            decode_subchunk(array.as_ref(), 0, &encoded)?,
+            array.retrieve_array_subset::<Vec<u16>>(&subchunk_subset)?
+        );
+    }
 
     Ok(())
 }
