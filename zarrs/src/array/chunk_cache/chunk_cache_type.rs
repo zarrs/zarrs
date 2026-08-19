@@ -120,6 +120,53 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
         self.0
             .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
     }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>>, CodecError> {
+        // Preserve the lazy read of the wrapped decoder, which for a shard is a byte interval of
+        // the shard rather than the whole encoded subchunk
+        Ok(self
+            .0
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)?
+            .map(|decoder| {
+                Arc::new(SyncBytesPartialDecoderAsAsync(decoder))
+                    as Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>
+            }))
+    }
+}
+
+/// Expose an in-memory synchronous partial bytes decoder as an asynchronous one.
+///
+/// Like [`SyncPartialDecoderAsAsync`], the wrapped decoder must not perform storage operations.
+#[cfg(feature = "async")]
+struct SyncBytesPartialDecoderAsAsync(Arc<dyn zarrs_codec::BytesPartialDecoderTraits>);
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl zarrs_codec::AsyncBytesPartialDecoderTraits for SyncBytesPartialDecoderAsAsync {
+    async fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
+        self.0.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.0.size_held()
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: zarrs_storage::byte_range::ByteRangeIterator<'a>,
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<zarrs_codec::ArrayBytesRaw<'a>>>, CodecError> {
+        self.0.partial_decode_many(decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.0.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]

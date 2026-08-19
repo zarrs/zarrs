@@ -866,3 +866,48 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
 
     Ok(())
 }
+
+#[tokio::test]
+async fn async_cached_nested_encoded_subchunk_matches_uncached() -> TestResult {
+    // A chunk cache that retains a partial decoder exposes nested encoded subchunks
+    // asynchronously, forwarding the byte interval reads of the synchronous decoder it wraps.
+    use zarrs::array::chunk_cache::AsyncChunkCachePartialDecoderLruChunkLimit;
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let store = Arc::new(AsyncMemoryStore::default());
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(16), nz(16)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(32), nz(32)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+    let mut builder = ArrayBuilder::new(vec![64, 64], vec![64, 64], data_type, 0u16);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..64 * 64).map(|i| i as u16).collect();
+    array
+        .async_store_array_subset(&array.subset_all(), &data)
+        .await?;
+
+    let cached = ArrayCached::new(
+        array.clone(),
+        AsyncChunkCachePartialDecoderLruChunkLimit::new(2),
+    );
+
+    // A subchunk of an inner shard holds 16x16 elements
+    let subchunk_bytes = 16 * 16 * size_of::<u16>();
+    for subchunk_indices in [[0, 0], [3, 2]] {
+        let encoded = cached
+            .async_retrieve_encoded_subchunk_at_level(1, &subchunk_indices)
+            .await?
+            .expect("subchunk is stored");
+        assert_eq!(encoded.bytes().len(), subchunk_bytes);
+        assert_eq!(
+            encoded,
+            array
+                .async_retrieve_encoded_subchunk_at_level(1, &subchunk_indices)
+                .await?
+                .expect("subchunk is stored")
+        );
+    }
+
+    Ok(())
+}
