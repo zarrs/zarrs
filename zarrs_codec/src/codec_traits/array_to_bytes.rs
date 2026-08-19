@@ -42,10 +42,7 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
     ///
     /// The codecs are not bound to a particular subchunk shape. A caller decoding an encoded
     /// subchunk must pass its concrete shape, which can vary between subchunks.
-    ///
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        Vec::new()
-    }
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
 
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
@@ -78,6 +75,10 @@ where
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         Ok(Vec::new())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 #[cfg(feature = "async")]

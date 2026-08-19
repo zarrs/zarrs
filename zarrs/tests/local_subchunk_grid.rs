@@ -574,7 +574,7 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TestSubchunkingCodecBound {
     data_type: DataType,
     fill_value: FillValue,
@@ -621,6 +621,14 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBou
             }
         };
         Ok(vec![subchunk_grid])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        if self.expose_subchunks {
+            vec![ArrayToBytesCodecTraits::into_dyn(Arc::new(self.clone()))]
+        } else {
+            Vec::new()
+        }
     }
 }
 

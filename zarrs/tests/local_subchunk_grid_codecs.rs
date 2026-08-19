@@ -32,16 +32,7 @@ fn build(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
 /// Build `case` with the default, non-subchunking array-to-bytes codec.
 fn build_without_sharding(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
     let store = Arc::new(MemoryStore::default());
-    let mut builder = ArrayBuilder::new(
-        case.array_shape.clone(),
-        case.chunk_shape.clone(),
-        case.data_type.clone(),
-        case.fill_value.clone(),
-    );
-    if let Some(codec) = &case.codec {
-        builder.array_to_array_codecs(vec![codec.clone()]);
-    }
-    Ok(builder.build_arc(store, "/array")?)
+    Ok(case.builder_without_sharding().build_arc(store, "/array")?)
 }
 
 fn sharding_partial_decoder(
@@ -146,26 +137,28 @@ fn transpose_preserves_subchunk_codec_encoded_domain() -> TestResult {
         .into_iter()
         .find(|case| case.name == "transpose")
         .unwrap();
-    let array = build(&case)?;
+    let array = case
+        .builder()
+        .build_arc(Arc::new(MemoryStore::default()), "/array")?;
     let values = (0..case.chunk_shape.iter().product::<u64>())
         .map(|value| u16::try_from(value).unwrap())
         .collect::<Vec<_>>();
     array.store_chunk(&case.chunk_indices, &values)?;
 
-    let decoder = array.partial_decoder(&case.chunk_indices)?;
-    let codec = decoder.subchunk_codecs().into_iter().next().unwrap();
+    let partial_decoder = array.partial_decoder(&case.chunk_indices)?;
+    let codec = partial_decoder.subchunk_codecs().into_iter().next().unwrap();
     let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
     let encoded = sharding_decoder
         .retrieve_subchunk_encoded(&[0, 0])?
         .unwrap();
-    let decoded = codec
+    let decoded_bytes = codec
         .decode(
             encoded,
             &case.encoded_subchunk_shape,
             &CodecOptions::default(),
         )?
         .into_fixed()?;
-    let decoded = decoded
+    let decoded = decoded_bytes
         .chunks_exact(size_of::<u16>())
         .map(|bytes| u16::from_ne_bytes(bytes.try_into().unwrap()))
         .collect::<Vec<_>>();

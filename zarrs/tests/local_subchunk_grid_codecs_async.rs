@@ -33,16 +33,7 @@ async fn build(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Erro
 /// Build `case` with the default, non-subchunking array-to-bytes codec.
 fn build_without_sharding(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Error>> {
     let store = Arc::new(AsyncMemoryStore::new());
-    let mut builder = ArrayBuilder::new(
-        case.array_shape.clone(),
-        case.chunk_shape.clone(),
-        case.data_type.clone(),
-        case.fill_value.clone(),
-    );
-    if let Some(codec) = &case.codec {
-        builder.array_to_array_codecs(vec![codec.clone()]);
-    }
-    Ok(builder.build_arc(store, "/array")?)
+    Ok(case.builder_without_sharding().build_arc(store, "/array")?)
 }
 
 #[tokio::test]

@@ -168,6 +168,13 @@ impl Case {
         let sharding =
             ShardingCodecBuilder::new(self.encoded_subchunk_shape.clone(), &self.encoded_data_type)
                 .build_arc();
+        let mut builder = self.builder_without_sharding();
+        builder.array_to_bytes_codec(sharding);
+        builder
+    }
+
+    /// An [`ArrayBuilder`] for this case with the default, non-subchunking array-to-bytes codec.
+    pub(crate) fn builder_without_sharding(&self) -> ArrayBuilder {
         let mut builder = ArrayBuilder::new(
             self.array_shape.clone(),
             self.chunk_shape.clone(),
@@ -177,7 +184,6 @@ impl Case {
         if let Some(codec) = &self.codec {
             builder.array_to_array_codecs(vec![codec.clone()]);
         }
-        builder.array_to_bytes_codec(sharding);
         builder
     }
 
