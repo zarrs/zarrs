@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
-use crate::array::{ArraySubset, ChunkGrid, DataType};
+use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
@@ -131,16 +131,9 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
             ))
         })?;
 
-        let inner_indices = encoded_grid
-            .chunks_in_array_subset(&ArraySubset::new_with_start_shape(
-                encoded_start,
-                vec![1; encoded_shape.len()],
-            )?)?
-            .ok_or_else(|| {
-                CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
-            })?
-            .start()
-            .to_vec();
+        let inner_indices = encoded_grid.chunk_indices(&encoded_start)?.ok_or_else(|| {
+            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
+        })?;
 
         // The subchunk must occupy exactly one encoded subchunk, or its bytes are not a single
         // encoded subchunk. `reshape_rectilinear_grid` only maps a grid whose subchunk boundaries
