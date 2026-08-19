@@ -273,18 +273,6 @@ fn subchunk_byte_offset_length(
     }
 }
 
-fn subchunk_byte_range(
-    shard_index: Option<&[u64]>,
-    shard_shape: &[NonZeroU64],
-    chunk_shape: &[NonZeroU64],
-    chunk_indices: &[u64],
-) -> Result<Option<ByteRange>, CodecError> {
-    Ok(
-        subchunk_byte_offset_length(shard_index, shard_shape, chunk_shape, chunk_indices)?
-            .map(|(offset, length)| ByteRange::new(offset..offset + length)),
-    )
-}
-
 fn partial_decode_empty_shard<'a>(
     data_type: &DataType,
     fill_value: &FillValue,

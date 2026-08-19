@@ -80,12 +80,9 @@ impl ShardingPartialDecoder {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
-        super::subchunk_byte_range(
-            self.shard_index.as_deref(),
-            &self.shard_shape,
-            &self.subchunk_shape,
-            chunk_indices,
-        )
+        Ok(self
+            .subchunk_byte_offset_length(chunk_indices)?
+            .map(|(offset, length)| ByteRange::new(offset..offset + length)))
     }
 
     fn subchunk_byte_offset_length(

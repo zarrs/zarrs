@@ -216,6 +216,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_subchunk(
         &self,
         subchunk_indices: &[u64],

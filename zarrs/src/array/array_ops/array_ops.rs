@@ -163,7 +163,10 @@ pub trait ArrayOps {
     /// Returns [`None`] if `level` is beyond the subchunk grid hierarchy.
     #[must_use]
     fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.subchunk_codecs().into_iter().nth(level)
+        ArrayToBytesCodecSubchunkingTraits::subchunk_codecs_at_level(
+            self.codecs_bound().as_ref(),
+            level,
+        )
     }
 
     /// Return the store key of the chunk at `chunk_indices`.

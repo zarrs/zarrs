@@ -44,6 +44,15 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
     /// subchunk must pass its concrete shape, which can vary between subchunks.
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
 
+    /// Return the codecs that encode the subchunks at `level`, if any.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// This is a compatibility wrapper around [`subchunk_codecs`](Self::subchunk_codecs).
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().into_iter().nth(level)
+    }
+
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
     /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
