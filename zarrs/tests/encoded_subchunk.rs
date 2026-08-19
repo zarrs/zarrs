@@ -31,7 +31,7 @@ use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStor
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded,
-    ChunkGridDecodedRef, PartialDecoderCapability, PartialEncoderCapability,
+    ChunkGridDecodedRef, EncodedSubchunk, PartialDecoderCapability, PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
 
@@ -41,23 +41,27 @@ fn nz(n: u64) -> NonZeroU64 {
     NonZeroU64::new(n).unwrap()
 }
 
-/// Decode encoded subchunk `bytes` with the subchunk codecs of `array` at `level`.
+/// Decode an encoded subchunk with the subchunk codecs of `array` at `level`.
+///
+/// The subchunk codec is a property of the array, while the encoded domain shape to decode with
+/// travels with the subchunk.
 fn decode_subchunk<A: ArrayOps>(
     array: &A,
     level: usize,
-    bytes: Vec<u8>,
+    encoded: &EncodedSubchunk<'_>,
 ) -> Result<Vec<u16>, Box<dyn Error>> {
     let codecs = array
         .subchunk_codecs_at_level(level)
         .ok_or("no subchunk codecs")?;
-    let subchunk_shape = array
-        .subchunk_shape_at_level(level)
-        .ok_or("no subchunk shape")?;
-    let bytes = codecs.decode(Cow::Owned(bytes), &subchunk_shape, &CodecOptions::default())?;
+    let bytes = codecs.decode(
+        Cow::Owned(encoded.bytes().to_vec()),
+        encoded.shape(),
+        &CodecOptions::default(),
+    )?;
     Ok(Vec::<u16>::from_array_bytes(
         bytes,
-        bytemuck::must_cast_slice(&subchunk_shape),
-        array.data_type(),
+        bytemuck::must_cast_slice(encoded.shape()),
+        codecs.data_type(),
     )?)
 }
 
@@ -86,7 +90,7 @@ fn sharded_array_retrieve_encoded_subchunk() -> TestResult {
             .retrieve_encoded_subchunk(&subchunk_indices)?
             .expect("subchunk is stored");
         assert_eq!(
-            decode_subchunk(array.as_ref(), 0, encoded)?,
+            decode_subchunk(array.as_ref(), 0, &encoded)?,
             array.retrieve_subchunk::<Vec<u16>>(&subchunk_indices)?
         );
     }
@@ -231,7 +235,7 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
         .retrieve_encoded_subchunk_at_level(0, &[1, 0])?
         .expect("subchunk is stored");
     assert_eq!(
-        decode_subchunk(array.as_ref(), 0, encoded)?,
+        decode_subchunk(array.as_ref(), 0, &encoded)?,
         array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 0])?
     );
 
@@ -240,7 +244,7 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
         .retrieve_encoded_subchunk_at_level(1, &[2, 3])?
         .expect("subchunk is stored");
     assert_eq!(
-        decode_subchunk(array.as_ref(), 1, encoded)?,
+        decode_subchunk(array.as_ref(), 1, &encoded)?,
         [38, 39, 46, 47]
     );
 
@@ -259,7 +263,7 @@ fn nested_sharded_array_retrieve_encoded_subchunk_at_level() -> TestResult {
         .retrieve_encoded_subchunk_at_level(1, &[2, 3], &options)?
         .expect("subchunk is stored");
     assert_eq!(
-        decode_subchunk(array.as_ref(), 1, encoded.into_owned())?,
+        decode_subchunk(array.as_ref(), 1, &encoded)?,
         [38, 39, 46, 47]
     );
     assert!(
@@ -296,7 +300,7 @@ fn nested_sharded_array_encoded_subchunks_are_read_lazily() -> TestResult {
     let encoded = array
         .retrieve_encoded_subchunk_at_level(1, &[3, 2])?
         .expect("subchunk is stored");
-    assert_eq!(encoded.len(), subchunk_bytes);
+    assert_eq!(encoded.bytes().len(), subchunk_bytes);
     // Only the two shard indexes and the subchunk itself are read
     assert!(
         store.bytes_read() < inner_shard_bytes,
@@ -359,7 +363,7 @@ async fn async_sharded_array_retrieve_encoded_subchunk() -> TestResult {
         .await?
         .expect("subchunk is stored");
     assert_eq!(
-        decode_subchunk(array.as_ref(), 0, encoded)?,
+        decode_subchunk(array.as_ref(), 0, &encoded)?,
         array.async_retrieve_subchunk::<Vec<u16>>(&[1, 2]).await?
     );
 
@@ -627,7 +631,7 @@ impl ArrayPartialDecoderSubchunkingTraits for BlockCodecPartialDecoder {
         ArrayToBytesCodecSubchunkingTraits::subchunk_codecs(self.codec.as_ref())
     }
 
-    fn retrieve_encoded_subchunk(
+    fn retrieve_encoded_subchunk_bytes(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
@@ -707,9 +711,9 @@ fn block_codec_retrieve_encoded_subchunk() -> TestResult {
         let encoded = array
             .retrieve_encoded_subchunk(&[subchunk_indices])?
             .expect("subchunk is stored");
-        assert_eq!(encoded.len(), 3 * size_of::<u16>());
+        assert_eq!(encoded.bytes().len(), 3 * size_of::<u16>());
         assert_eq!(
-            decode_subchunk(array.as_ref(), 0, encoded)?,
+            decode_subchunk(array.as_ref(), 0, &encoded)?,
             array.retrieve_subchunk::<Vec<u16>>(&[subchunk_indices])?
         );
     }
@@ -745,7 +749,7 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
         .retrieve_encoded_subchunk_at_level(0, &[1])?
         .expect("subchunk is stored");
     assert_eq!(
-        decode_subchunk(array.as_ref(), 0, encoded)?,
+        decode_subchunk(array.as_ref(), 0, &encoded)?,
         [6, 7, 8, 9, 10, 11]
     );
 
@@ -753,18 +757,15 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
     let encoded = array
         .retrieve_encoded_subchunk_at_level(1, &[3])?
         .expect("subchunk is stored");
-    assert_eq!(encoded.len(), 3 * size_of::<u16>());
-    assert_eq!(decode_subchunk(array.as_ref(), 1, encoded)?, [9, 10, 11]);
+    assert_eq!(encoded.bytes().len(), 3 * size_of::<u16>());
+    assert_eq!(decode_subchunk(array.as_ref(), 1, &encoded)?, [9, 10, 11]);
 
     // ... and directly from the shard partial decoder
     let partial_decoder = array.partial_decoder(&[0])?;
     let encoded = partial_decoder
         .retrieve_encoded_subchunk_at_level(1, &[3], &options)?
         .expect("subchunk is stored");
-    assert_eq!(
-        decode_subchunk(array.as_ref(), 1, encoded.into_owned())?,
-        [9, 10, 11]
-    );
+    assert_eq!(decode_subchunk(array.as_ref(), 1, &encoded)?, [9, 10, 11]);
 
     Ok(())
 }

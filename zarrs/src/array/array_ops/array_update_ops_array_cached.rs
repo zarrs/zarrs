@@ -31,13 +31,13 @@ where
         self.encoder.subchunk_codecs()
     }
 
-    fn retrieve_encoded_subchunk(
+    fn retrieve_encoded_subchunk_bytes(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
         self.encoder
-            .retrieve_encoded_subchunk(subchunk_indices, options)
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
     }
 
     fn encoded_subchunk_partial_decoder(

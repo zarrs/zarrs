@@ -1,6 +1,6 @@
 use super::*;
 use std::sync::Arc;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, EncodedSubchunk};
 use zarrs_storage::Bytes;
 
 /// Asynchronous array read operations.
@@ -96,7 +96,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_encoded_subchunk(
         &self,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError> {
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
         self.async_retrieve_encoded_subchunk_at_level(0, subchunk_indices)
             .await
     }
@@ -107,7 +107,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError> {
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError> {
         // Locate the chunk holding the subchunk, then defer to its partial decoder
         let (chunk_indices, subchunk_subset) =
             subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
@@ -119,11 +119,33 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .map_err(ArrayError::CodecError)?
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
-        Ok(partial_decoder
+        partial_decoder
             .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
             .await
+            .map_err(ArrayError::CodecError)
+    }
+
+    /// Async variant of [`ArrayReadOps::encoded_subchunk_shape_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError> {
+        let (chunk_indices, subchunk_subset) =
+            subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let options = self.codec_options();
+        let partial_decoder = self.async_partial_decoder(&chunk_indices).await?;
+        let local_subchunk_grid = partial_decoder
+            .local_subchunk_grid_at_level(level, options)
+            .await
             .map_err(ArrayError::CodecError)?
-            .map(std::borrow::Cow::into_owned))
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+        partial_decoder
+            .encoded_subchunk_shape_at_level(level, &local_indices, options)
+            .await
+            .map_err(ArrayError::CodecError)
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].

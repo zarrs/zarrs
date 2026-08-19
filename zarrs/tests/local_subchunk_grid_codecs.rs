@@ -4,6 +4,7 @@
 
 mod subchunk_grid_cases;
 
+use std::borrow::Cow;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -146,28 +147,33 @@ fn transpose_preserves_subchunk_codec_encoded_domain() -> TestResult {
         .collect::<Vec<_>>();
     array.store_chunk(&case.chunk_indices, &values)?;
 
+    // The encoded subchunk carries the encoded domain shape, so decoding it needs no external
+    // knowledge of how the transpose codec maps the subchunk grid outward
     let partial_decoder = array.partial_decoder(&case.chunk_indices)?;
+    let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
+    let encoded = sharding_decoder
+        .retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?
+        .unwrap();
     let codec = partial_decoder
         .subchunk_codecs()
         .into_iter()
         .next()
         .unwrap();
-    let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
-    let encoded = sharding_decoder
-        .retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?
-        .unwrap();
     let decoded_bytes = codec
         .decode(
-            encoded,
-            &case.encoded_subchunk_shape,
+            Cow::Borrowed(encoded.bytes()),
+            encoded.shape(),
             &CodecOptions::default(),
         )?
-        .into_fixed()?;
+        .into_fixed()?
+        .into_owned();
     let decoded = decoded_bytes
         .chunks_exact(size_of::<u16>())
         .map(|bytes| u16::from_ne_bytes(bytes.try_into().unwrap()))
         .collect::<Vec<_>>();
 
+    // The encoded domain shape is transposed relative to the outwardly mapped subchunk grid
+    assert_eq!(encoded.shape(), [nz(3), nz(2)]);
     assert_eq!(case.encoded_subchunk_shape, [nz(3), nz(2)]);
     assert_eq!(case.local_subchunk_shape, [nz(2), nz(3)]);
     assert_eq!(decoded, [0, 6, 1, 7, 2, 8]);

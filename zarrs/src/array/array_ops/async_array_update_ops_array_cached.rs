@@ -34,13 +34,13 @@ where
         self.encoder.subchunk_codecs()
     }
 
-    async fn retrieve_encoded_subchunk<'a>(
+    async fn retrieve_encoded_subchunk_bytes<'a>(
         &'a self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
         self.encoder
-            .retrieve_encoded_subchunk(subchunk_indices, options)
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
             .await
     }
 

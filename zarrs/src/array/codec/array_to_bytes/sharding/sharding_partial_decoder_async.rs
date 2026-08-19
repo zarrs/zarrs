@@ -206,7 +206,7 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
         nested_subchunk_codecs(&self.inner_codecs)
     }
 
-    async fn retrieve_encoded_subchunk<'a>(
+    async fn retrieve_encoded_subchunk_bytes<'a>(
         &'a self,
         subchunk_indices: &[u64],
         options: &CodecOptions,

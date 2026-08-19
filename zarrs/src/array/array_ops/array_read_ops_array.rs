@@ -1,6 +1,7 @@
 use inherent::inherent;
 use std::borrow::Cow;
 use std::sync::Arc;
+use zarrs_codec::EncodedSubchunk;
 
 use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
@@ -180,14 +181,21 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_encoded_subchunk(
         &self,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_subchunk_at_level(
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

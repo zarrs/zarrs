@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::{ChunkGrid, ChunkShape, Indexer};
@@ -11,7 +10,7 @@ use super::subchunking::{enclosing_chunk_indices, plan_subchunk_descent, subchun
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayToBytesCodecTraits, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
-    InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    EncodedSubchunk, InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -140,12 +139,38 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         })
     }
 
-    /// Retrieve the encoded bytes of the subchunk at `subchunk_indices`.
+    /// Retrieve the raw encoded bytes of the subchunk at `subchunk_indices`.
+    ///
+    /// This is the hook implemented by a codec that exposes encoded subchunks. Prefer
+    /// [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk), which bundles these bytes
+    /// with the codec and shape needed to decode them.
     ///
     /// The `subchunk_indices` are relative to the chunk handled by this partial decoder and index
     /// the level zero grid returned by [`local_subchunk_grids`](Self::local_subchunk_grids).
-    /// The returned bytes are decodable with the level zero codecs returned by
-    /// [`subchunk_codecs`](Self::subchunk_codecs).
+    ///
+    /// Returns [`None`] if the subchunk is not stored, in which case it has the fill value.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this decoder does not expose encoded
+    /// subchunks, or a [`CodecError`] if the subchunk indices are invalid, a codec fails, or there
+    /// is an underlying store error.
+    async fn retrieve_encoded_subchunk_bytes<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        _ = (subchunk_indices, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices`.
+    ///
+    /// The `subchunk_indices` are relative to the chunk handled by this partial decoder and index
+    /// the level zero grid returned by [`local_subchunk_grids`](Self::local_subchunk_grids).
+    ///
+    /// The returned [`EncodedSubchunk`] carries the codec and encoded domain shape needed to decode
+    /// the bytes, which is not necessarily the shape of the subchunk in the grid it was addressed
+    /// by. See [`EncodedSubchunk`] for the encoded domain contract.
     ///
     /// Returns [`None`] if the subchunk is not stored, in which case it has the fill value.
     ///
@@ -157,9 +182,17 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         &'a self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
-        _ = (subchunk_indices, options);
-        Err(CodecError::UnsupportedEncodedSubchunk)
+    ) -> Result<Option<EncodedSubchunk<'a>>, CodecError> {
+        let Some(bytes) = self
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let shape = self
+            .encoded_subchunk_shape(subchunk_indices, options)
+            .await?;
+        Ok(Some(EncodedSubchunk::new(bytes, shape)))
     }
 
     /// Initialise a partial decoder over the encoded bytes of the subchunk at `subchunk_indices`.
@@ -175,25 +208,26 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Returns [`None`] if the subchunk is not stored.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk)
-    /// fails, or an override fails to initialise a partial decoder.
+    /// Returns a [`CodecError`] if
+    /// [`retrieve_encoded_subchunk_bytes`](Self::retrieve_encoded_subchunk_bytes) fails, or an
+    /// override fails to initialise a partial decoder.
     async fn encoded_subchunk_partial_decoder(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<Arc<dyn AsyncBytesPartialDecoderTraits>>, CodecError> {
         Ok(self
-            .retrieve_encoded_subchunk(subchunk_indices, options)
+            .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
             .await?
             .map(|bytes| Arc::new(bytes.into_owned()) as Arc<dyn AsyncBytesPartialDecoderTraits>))
     }
 
-    /// Retrieve the encoded bytes of the subchunk at `subchunk_indices` of `level`.
+    /// Retrieve the encoded subchunk at `subchunk_indices` of `level`.
     ///
     /// Level zero is the outermost subchunk grid and increasing levels move inward.
     /// The `subchunk_indices` index the `level` grid returned by
-    /// [`local_subchunk_grids`](Self::local_subchunk_grids), and the returned bytes are decodable
-    /// with [`subchunk_codecs_at_level`](Self::subchunk_codecs_at_level) at the same level.
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids), and the returned
+    /// [`EncodedSubchunk`] carries the codec and encoded domain shape needed to decode it.
     ///
     /// The default implementation descends through the subchunk hierarchy with
     /// [`encoded_subchunk_partial_decoder`](Self::encoded_subchunk_partial_decoder) and
@@ -211,12 +245,12 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         level: usize,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'static>>, CodecError> {
+    ) -> Result<Option<EncodedSubchunk<'static>>, CodecError> {
         if level == 0 {
             return Ok(self
                 .retrieve_encoded_subchunk(subchunk_indices, options)
                 .await?
-                .map(|bytes| Cow::Owned(bytes.into_owned())));
+                .map(EncodedSubchunk::into_owned));
         }
 
         // Descend into the level zero subchunk enclosing the requested subchunk
@@ -234,8 +268,13 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         let codecs = self
             .subchunk_codecs_at_level(0)
             .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        // The subchunk shape must be resolved in the encoded domain of the level zero codecs,
+        // which is not necessarily the domain of the outwardly mapped level zero grid
+        let subchunk_shape = self
+            .encoded_subchunk_shape(&descent.subchunk_indices, options)
+            .await?;
         let partial_decoder = codecs
-            .async_partial_decoder(input_handle, &descent.subchunk_shape, options)
+            .async_partial_decoder(input_handle, &subchunk_shape, options)
             .await?;
 
         // Repeat with the subchunk grids of the subchunk

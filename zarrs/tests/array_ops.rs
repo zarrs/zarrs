@@ -312,11 +312,19 @@ fn sharding_partial_decoder_retrieve_encoded_subchunk_missing() -> TestResult {
     let options = CodecOptions::default();
 
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_encoded_subchunk(&[0, 0], &options)?, None);
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[0, 0], &options)?
+            .is_none()
+    );
 
     array.store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])?;
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_encoded_subchunk(&[0, 1], &options)?, None);
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[0, 1], &options)?
+            .is_none()
+    );
     Ok(())
 }
 

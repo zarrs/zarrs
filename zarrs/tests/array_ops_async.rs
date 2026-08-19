@@ -268,18 +268,22 @@ async fn sharding_partial_decoder_retrieve_encoded_subchunk_missing() -> TestRes
     let options = CodecOptions::default();
 
     let decoder = sharding_partial_decoder(&array).await?;
-    assert_eq!(
-        decoder.retrieve_encoded_subchunk(&[0, 0], &options).await?,
-        None
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[0, 0], &options)
+            .await?
+            .is_none()
     );
 
     array
         .async_store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])
         .await?;
     let decoder = sharding_partial_decoder(&array).await?;
-    assert_eq!(
-        decoder.retrieve_encoded_subchunk(&[0, 1], &options).await?,
-        None
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[0, 1], &options)
+            .await?
+            .is_none()
     );
     Ok(())
 }

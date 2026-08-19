@@ -1,6 +1,7 @@
 use inherent::inherent;
 use std::sync::Arc;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_codec::EncodedSubchunk;
 
 use futures::{StreamExt, TryStreamExt};
 
@@ -430,14 +431,21 @@ where
     pub async fn async_retrieve_encoded_subchunk(
         &self,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_subchunk_at_level(
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk<'static>>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(

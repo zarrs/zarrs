@@ -125,7 +125,7 @@ impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
         nested_subchunk_codecs(&self.inner_codecs)
     }
 
-    fn retrieve_encoded_subchunk(
+    fn retrieve_encoded_subchunk_bytes(
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
