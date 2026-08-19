@@ -213,17 +213,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
         }
 
         let inverse = inverse_permutation(&self.order.0);
-        let chunk_shapes = inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
-
-        Ok(ChunkGridDecoded::Array(ChunkGrid::new(
-            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
-        )))
+        Ok(ChunkGridDecoded::Array(super::transpose_rectilinear_grid(
+            &inverse,
+            decoded_chunk_grid.array_shape().to_vec(),
+            encoded_subchunk_grid,
+        )?))
     }
 }
 

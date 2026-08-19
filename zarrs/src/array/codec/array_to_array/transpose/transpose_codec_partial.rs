@@ -10,7 +10,6 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
@@ -85,20 +84,9 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             ));
         }
 
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
         let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))
+        super::transpose_rectilinear_grid(&self.order_inverse, array_shape, encoded_subchunk_grid)
+            .map_err(|err| CodecError::Other(err.to_string()))
     }
 
     /// Map subchunk indices from the outwardly mapped grid into the grid of the inner decoder.

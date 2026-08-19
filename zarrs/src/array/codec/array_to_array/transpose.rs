@@ -71,9 +71,12 @@ pub use transpose_codec::TransposeCodec;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
+    ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, ChunkGrid, DataType, Indexer,
+    IndexerError,
 };
+use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
@@ -105,6 +108,31 @@ pub(crate) fn inverse_permutation(order: &[usize]) -> Vec<usize> {
         inverse[val] = i;
     }
     inverse
+}
+
+/// Map an encoded subchunk grid into the decoded domain of a transpose `order`.
+///
+/// The transpose permutes axes, so the decoded grid takes its edge lengths from the encoded grid
+/// through the inverse permutation: `decoded[i] = encoded[order_inverse[i]]`.
+///
+/// This is shared by the bound codec, which maps grids of the array, and its partial codec, which
+/// maps the chunk-local grids of the decoder it wraps.
+fn transpose_rectilinear_grid(
+    order_inverse: &[usize],
+    decoded_array_shape: Vec<u64>,
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    let chunk_shapes = order_inverse
+        .iter()
+        .map(|&encoded_dim| {
+            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+            Ok(ChunkEdgeLengths::encode(&edge_lengths))
+        })
+        .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+    Ok(ChunkGrid::new(RectilinearChunkGrid::new(
+        decoded_array_shape,
+        &chunk_shapes,
+    )?))
 }
 
 fn transpose_array(
