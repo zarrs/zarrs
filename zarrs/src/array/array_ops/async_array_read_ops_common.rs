@@ -8,7 +8,7 @@ use crate::array::{
 };
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 
-use super::{enclosing_subchunk_indices, subchunk_chunk_and_local_subset};
+use super::subchunk_chunk_and_local_subset;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
     copy_fill_value_into,
@@ -222,6 +222,7 @@ where
         .await
         .map_err(ArrayError::CodecError)?
         .ok_or(ArrayError::MissingSubchunkGrid)?;
-    let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+    let local_indices =
+        zarrs_codec::enclosing_chunk_indices(&local_subchunk_grid, &subchunk_subset)?;
     Ok((partial_decoder, local_indices))
 }

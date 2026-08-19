@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `EncodedSubchunk`, which bundles encoded subchunk bytes with their encoded domain shape, and is returned by `retrieve_encoded_subchunk[_at_level]`
   - Add `encoded_subchunk_shape[_at_level]`, which resolves the encoded domain shape of an individual subchunk
   - Add `retrieve_encoded_subchunk_bytes`, the hook implemented by a codec that exposes encoded subchunks
+  - Add `enclosing_chunk_indices`, which resolves the chunk of a grid enclosing a subchunk subset
 
 ### Changed
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`

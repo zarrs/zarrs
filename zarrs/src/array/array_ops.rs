@@ -112,23 +112,6 @@ fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
     Ok((chunk_indices, local_subset))
 }
 
-/// Return the indices of the chunk of `chunk_grid` which encloses `subset`.
-fn enclosing_subchunk_indices(
-    chunk_grid: &ChunkGrid,
-    subset: &ArraySubset,
-) -> Result<ArrayIndices, ArrayError> {
-    let chunks = chunk_grid.chunks_in_array_subset(subset)?.ok_or_else(|| {
-        ArrayError::InvalidArraySubset(subset.clone(), chunk_grid.grid_shape().to_vec())
-    })?;
-    if chunks.num_elements() != 1 {
-        return Err(ArrayError::UnsupportedMethod(
-            "a subchunk spanning multiple subchunks of an inner grid cannot be retrieved"
-                .to_string(),
-        ));
-    }
-    Ok(chunks.start().to_vec())
-}
-
 mod array_mut_ops;
 mod array_mut_ops_array;
 #[allow(clippy::module_inception)]

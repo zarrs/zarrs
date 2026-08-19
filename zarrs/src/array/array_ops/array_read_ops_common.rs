@@ -7,7 +7,7 @@ use crate::array::{
 };
 use zarrs_codec::ArrayPartialDecoderTraits;
 
-use super::{enclosing_subchunk_indices, subchunk_chunk_and_local_subset};
+use super::subchunk_chunk_and_local_subset;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -204,6 +204,7 @@ where
         .local_subchunk_grid_at_level(level, options)
         .map_err(ArrayError::CodecError)?
         .ok_or(ArrayError::MissingSubchunkGrid)?;
-    let local_indices = enclosing_subchunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+    let local_indices =
+        zarrs_codec::enclosing_chunk_indices(&local_subchunk_grid, &subchunk_subset)?;
     Ok((partial_decoder, local_indices))
 }

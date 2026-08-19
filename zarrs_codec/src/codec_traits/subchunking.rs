@@ -98,9 +98,12 @@ pub(crate) fn subchunk_grid_at_level(
 
 /// Return the indices of the chunk of `chunk_grid` which encloses `subset`.
 ///
+/// A subchunk must be enclosed by exactly one chunk of an inner grid for its bytes to be a single
+/// encoded subchunk, so a subset spanning several is an error.
+///
 /// # Errors
 /// Returns [`CodecError`] if `subset` is out of bounds of `chunk_grid` or spans multiple chunks.
-pub(crate) fn enclosing_chunk_indices(
+pub fn enclosing_chunk_indices(
     chunk_grid: &ChunkGrid,
     subset: &ArraySubset,
 ) -> Result<ArrayIndices, CodecError> {
