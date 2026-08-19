@@ -171,6 +171,19 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
         self.0.subchunk_codecs()
     }
 
+    // The shape and the retrieval methods below are forwarded rather than left to the defaults,
+    // since the wrapped decoder may resolve them in a different domain to its local subchunk
+    // grids (e.g. behind a transpose codec)
+    async fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<zarrs_metadata::ChunkShape, CodecError> {
+        self.0
+            .encoded_subchunk_shape_at_level(level, subchunk_indices, options)
+    }
+
     async fn retrieve_encoded_subchunk_bytes<'a>(
         &'a self,
         subchunk_indices: &[u64],
@@ -178,6 +191,71 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
     ) -> Result<Option<zarrs_codec::CowBytes<'a>>, CodecError> {
         self.0
             .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+    }
+
+    async fn retrieve_encoded_subchunk<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'a>>, CodecError> {
+        self.0.retrieve_encoded_subchunk(subchunk_indices, options)
+    }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'static>>, CodecError> {
+        self.0
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
+    }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>>, CodecError> {
+        // Preserve the lazy read of the wrapped decoder, which for a shard is a byte interval of
+        // the shard rather than the whole encoded subchunk
+        Ok(self
+            .0
+            .encoded_subchunk_partial_decoder(subchunk_indices, options)?
+            .map(|decoder| {
+                Arc::new(SyncBytesPartialDecoderAsAsync(decoder))
+                    as Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>
+            }))
+    }
+}
+
+/// Expose an in-memory synchronous partial bytes decoder as an asynchronous one.
+///
+/// Like [`SyncPartialDecoderAsAsync`], the wrapped decoder must not perform storage operations.
+#[cfg(feature = "async")]
+struct SyncBytesPartialDecoderAsAsync(Arc<dyn zarrs_codec::BytesPartialDecoderTraits>);
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl zarrs_codec::AsyncBytesPartialDecoderTraits for SyncBytesPartialDecoderAsAsync {
+    async fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
+        self.0.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.0.size_held()
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: zarrs_storage::byte_range::ByteRangeIterator<'a>,
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<zarrs_codec::CowBytes<'a>>>, CodecError> {
+        self.0.partial_decode_many(decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.0.supports_partial_decode()
     }
 }
 

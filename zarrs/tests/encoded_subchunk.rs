@@ -17,12 +17,11 @@ use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesCodec, ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayCached, ArrayError, ArrayOps,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, DataType,
-    FillValue, FromArrayBytes, Indexer, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
-    data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayCached, ArrayError, ArrayOps, ArrayPartialDecoderTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
+    ChunkShapeTraits, CodecChain, CodecChainBound, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, DataType, FillValue, FromArrayBytes,
+    Indexer, RecommendedConcurrency, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::storage::StorageError;
@@ -877,6 +876,193 @@ fn block_codec_within_sharding_retrieve_encoded_subchunk_at_level() -> TestResul
         .retrieve_encoded_subchunk_at_level(1, &[3], &options)?
         .expect("subchunk is stored");
     assert_eq!(decode_subchunk(array.as_ref(), 1, &encoded)?, [9, 10, 11]);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn async_cached_nested_encoded_subchunk_matches_uncached() -> TestResult {
+    // A cache of encoded chunks exposes nested encoded subchunks asynchronously, forwarding the
+    // byte interval reads of the synchronous partial decoder it wraps.
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+    };
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let store = Arc::new(AsyncMemoryStore::default());
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(16), nz(16)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(32), nz(32)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+    let mut builder = ArrayBuilder::new(vec![64, 64], vec![64, 64], data_type, 0u16);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    let array = builder.build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..64 * 64).map(|i| i as u16).collect();
+    array
+        .async_store_array_subset(&array.subset_all(), &data)
+        .await?;
+
+    let cached = ArrayCached::new(array.clone(), AsyncChunkCacheEncodedLruChunkLimit::new(2));
+
+    // A subchunk of an inner shard holds 16x16 elements
+    let subchunk_bytes = 16 * 16 * size_of::<u16>();
+    for subchunk_indices in [[0, 0], [3, 2]] {
+        let encoded = cached
+            .async_retrieve_encoded_subchunk_at_level(1, &subchunk_indices)
+            .await?
+            .expect("subchunk is stored");
+        assert_eq!(encoded.bytes().len(), subchunk_bytes);
+        assert_eq!(
+            encoded,
+            array
+                .async_retrieve_encoded_subchunk_at_level(1, &subchunk_indices)
+                .await?
+                .expect("subchunk is stored")
+        );
+    }
+
+    // ... but a cache of decoded chunks does not
+    let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    assert!(
+        cached
+            .async_retrieve_encoded_subchunk_at_level(1, &[0, 0])
+            .await
+            .is_err()
+    );
+
+    Ok(())
+}
+
+/// A single chunk array with a transpose codec in front of nested sharding.
+///
+/// The subchunk shapes are non-square, so resolving an encoded subchunk shape in the decoded
+/// (transposed) domain rather than the encoded domain is detectable.
+fn transposed_nested_sharding_builder() -> ArrayBuilder {
+    let data_type = data_type::uint16();
+    let inner_sharding = ShardingCodecBuilder::new(vec![nz(2), nz(4)], &data_type).build_arc();
+    let mut outer_sharding = ShardingCodecBuilder::new(vec![nz(4), nz(8)], &data_type);
+    outer_sharding.array_to_bytes_codec(inner_sharding);
+    let mut builder = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
+        TransposeOrder::new(&[1, 0]).unwrap(),
+    ))]);
+    builder.array_to_bytes_codec(outer_sharding.build_arc());
+    builder
+}
+
+#[test]
+fn cached_partial_encoder_encoded_subchunk_behind_transpose_matches_uncached() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let array = transposed_nested_sharding_builder().build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..64).collect();
+    array.store_array_subset(&array.subset_all(), &data)?;
+
+    let options = CodecOptions::default();
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(2));
+    let encoder = cached.partial_encoder(&[0, 0])?;
+    let decoder = array.partial_decoder(&[0, 0])?;
+
+    for (level, subchunk_indices, shape) in [
+        (0, [0, 1], [nz(4), nz(8)]),
+        (1, [1, 3], [nz(2), nz(4)]),
+        (1, [0, 2], [nz(2), nz(4)]),
+    ] {
+        let expected = decoder
+            .retrieve_encoded_subchunk_at_level(level, &subchunk_indices, &options)?
+            .expect("subchunk is stored");
+        assert_eq!(expected.shape(), shape);
+        assert_eq!(
+            encoder.encoded_subchunk_shape_at_level(level, &subchunk_indices, &options)?,
+            ChunkShape::from(shape.to_vec())
+        );
+        assert_eq!(
+            encoder
+                .retrieve_encoded_subchunk_at_level(level, &subchunk_indices, &options)?
+                .expect("subchunk is stored"),
+            expected
+        );
+        if level == 0 {
+            assert_eq!(
+                encoder
+                    .retrieve_encoded_subchunk(&subchunk_indices, &options)?
+                    .expect("subchunk is stored"),
+                expected
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn async_cached_encoded_subchunk_behind_transpose_matches_uncached() -> TestResult {
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+    };
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let store = Arc::new(AsyncMemoryStore::default());
+    let array = transposed_nested_sharding_builder().build_arc(store, "/array")?;
+    let data: Vec<u16> = (0..64).collect();
+    array
+        .async_store_array_subset(&array.subset_all(), &data)
+        .await?;
+
+    let options = CodecOptions::default();
+    // A cache of encoded chunks wraps a synchronous partial decoder
+    let cached_encoded =
+        ArrayCached::new(array.clone(), AsyncChunkCacheEncodedLruChunkLimit::new(2));
+    let cached_decoded =
+        ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    let encoder = cached_decoded.async_partial_encoder(&[0, 0]).await?;
+
+    for (level, subchunk_indices, shape) in [
+        (0, [0, 1], [nz(4), nz(8)]),
+        (1, [1, 3], [nz(2), nz(4)]),
+        (1, [0, 2], [nz(2), nz(4)]),
+    ] {
+        let expected = array
+            .async_retrieve_encoded_subchunk_at_level(level, &subchunk_indices)
+            .await?
+            .expect("subchunk is stored");
+        assert_eq!(expected.shape(), shape);
+        assert_eq!(
+            cached_encoded
+                .async_retrieve_encoded_subchunk_at_level(level, &subchunk_indices)
+                .await?
+                .expect("subchunk is stored"),
+            expected
+        );
+        assert_eq!(
+            encoder
+                .encoded_subchunk_shape_at_level(level, &subchunk_indices, &options)
+                .await?,
+            ChunkShape::from(shape.to_vec())
+        );
+        assert_eq!(
+            encoder
+                .retrieve_encoded_subchunk_at_level(level, &subchunk_indices, &options)
+                .await?
+                .expect("subchunk is stored"),
+            expected
+        );
+        if level == 0 {
+            assert_eq!(
+                cached_encoded
+                    .async_retrieve_encoded_subchunk(&subchunk_indices)
+                    .await?
+                    .expect("subchunk is stored"),
+                expected
+            );
+            assert_eq!(
+                encoder
+                    .retrieve_encoded_subchunk(&subchunk_indices, &options)
+                    .await?
+                    .expect("subchunk is stored"),
+                expected
+            );
+        }
+    }
 
     Ok(())
 }

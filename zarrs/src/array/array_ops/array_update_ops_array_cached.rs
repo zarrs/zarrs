@@ -6,7 +6,7 @@ use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecError,
-    CowBytes,
+    CowBytes, EncodedSubchunk,
 };
 use zarrs_storage::StorageError;
 
@@ -31,6 +31,16 @@ where
         self.encoder.subchunk_codecs()
     }
 
+    fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<ChunkShape, CodecError> {
+        self.encoder
+            .encoded_subchunk_shape_at_level(level, subchunk_indices, options)
+    }
+
     fn retrieve_encoded_subchunk_bytes(
         &self,
         subchunk_indices: &[u64],
@@ -38,6 +48,25 @@ where
     ) -> Result<Option<CowBytes<'_>>, CodecError> {
         self.encoder
             .retrieve_encoded_subchunk_bytes(subchunk_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk<'_>>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk(subchunk_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk<'static>>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
     }
 
     fn encoded_subchunk_partial_decoder(
