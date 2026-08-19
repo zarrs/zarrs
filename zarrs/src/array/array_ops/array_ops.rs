@@ -147,6 +147,11 @@ pub trait ArrayOps {
     /// The codecs operate in the encoded domain of the array-to-bytes codec. If the array has
     /// array-to-array codecs, then decoding an encoded subchunk yields array bytes that those
     /// codecs have yet to decode.
+    ///
+    /// The codecs are not bound to a particular subchunk shape. The concrete shape can vary by
+    /// subchunk and must be resolved in the codec's domain rather than assumed from an outwardly
+    /// mapped array-domain grid. Use [`ArrayReadOps::retrieve_subchunk_at_level`] for decoded
+    /// array-domain access.
     #[must_use]
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         ArrayToBytesCodecSubchunkingTraits::subchunk_codecs(self.codecs_bound().as_ref())

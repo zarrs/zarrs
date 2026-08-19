@@ -65,11 +65,15 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     ///
     /// The codecs at each level match the grids returned by
     /// [`local_subchunk_grids`](Self::local_subchunk_grids). The level zero codecs decode encoded
-    /// subchunk bytes into the array bytes of a subchunk with the shape given by the level zero
-    /// grid.
-    /// Deeper levels apply to subchunks nested inside subchunks.
+    /// subchunk bytes, and deeper levels decode the encoded subchunks of subchunks.
     ///
     /// An empty vector indicates that this decoder does not expose encoded subchunks.
+    ///
+    /// The codecs are not bound to a particular subchunk shape and operate in the encoded domain
+    /// of the codec that created the subchunk. A wrapping array-to-array codec can map a subchunk
+    /// grid into this decoder's decoded domain without changing the returned codec. Consequently,
+    /// the shape passed to a codec must be resolved for the selected subchunk in the codec's
+    /// domain; it need not equal the shape in the outwardly mapped grid and can vary by subchunk.
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
 
     /// Return the codecs that encode the subchunks at `level`, if any.
