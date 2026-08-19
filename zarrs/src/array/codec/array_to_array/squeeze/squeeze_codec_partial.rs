@@ -71,6 +71,30 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
                 .map_err(|err| CodecError::Other(err.to_string()))?,
         ))
     }
+
+    /// Map subchunk indices from the outwardly mapped grid into the grid of the inner decoder.
+    ///
+    /// This inverts what [`map_local_subchunk_grid`] does to the grid: it splices a unit edge back
+    /// in at every squeezed axis, so mapping inward drops the indices at those axes. A squeezed
+    /// axis has extent one, so its index must be zero.
+    ///
+    /// [`map_local_subchunk_grid`]: Self::map_local_subchunk_grid
+    fn inner_subchunk_indices(&self, subchunk_indices: &[u64]) -> Result<Vec<u64>, CodecError> {
+        if subchunk_indices.len() != self.shape.len() {
+            return Err(CodecError::Other(format!(
+                "subchunk indices {subchunk_indices:?} do not match the dimensionality of the squeeze codec decoded shape {:?}",
+                self.shape
+            )));
+        }
+        let inner_indices: Vec<u64> = std::iter::zip(subchunk_indices, &self.shape)
+            .filter_map(|(indices, dim)| (dim.get() > 1).then_some(*indices))
+            .collect();
+        // Squeeze always leaves at least one axis, matching `map_local_subchunk_grid`
+        if inner_indices.is_empty() {
+            return Ok(vec![0]);
+        }
+        Ok(inner_indices)
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
@@ -93,6 +117,49 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.input_output_handle.subchunk_codecs()
+    }
+
+    fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<zarrs_metadata::ChunkShape, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .encoded_subchunk_shape_at_level(level, &inner_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk_bytes(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::ArrayBytesRaw<'_>>, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_bytes(&inner_indices, options)
+    }
+
+    fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn zarrs_codec::BytesPartialDecoderTraits>>, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .encoded_subchunk_partial_decoder(&inner_indices, options)
+    }
+
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'static>>, CodecError> {
+        // Delegate the whole descent so the inner decoder descends in one consistent domain
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_at_level(level, &inner_indices, options)
     }
 }
 
@@ -187,6 +254,53 @@ where
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
         self.input_output_handle.subchunk_codecs()
+    }
+
+    async fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<zarrs_metadata::ChunkShape, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .encoded_subchunk_shape_at_level(level, &inner_indices, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_bytes<'a>(
+        &'a self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::ArrayBytesRaw<'a>>, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_bytes(&inner_indices, options)
+            .await
+    }
+
+    async fn encoded_subchunk_partial_decoder(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits>>, CodecError> {
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .encoded_subchunk_partial_decoder(&inner_indices, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk<'static>>, CodecError> {
+        // Delegate the whole descent so the inner decoder descends in one consistent domain
+        let inner_indices = self.inner_subchunk_indices(subchunk_indices)?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_at_level(level, &inner_indices, options)
+            .await
     }
 }
 
