@@ -2,12 +2,12 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ChunkGrid, Indexer};
+use zarrs_chunk_grid::{ChunkGrid, ChunkShape, Indexer};
 use zarrs_data_type::DataType;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
-use super::subchunking::{enclosing_chunk_indices, plan_subchunk_descent};
+use super::subchunking::{enclosing_chunk_indices, plan_subchunk_descent, subchunk_grid_at_level};
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayToBytesCodecTraits, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
@@ -89,6 +89,55 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// This is a compatibility wrapper around [`subchunk_codecs`](Self::subchunk_codecs).
     fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
         self.subchunk_codecs().into_iter().nth(level)
+    }
+
+    /// Return the shape of the subchunk at `subchunk_indices` in the encoded domain of the level
+    /// zero subchunk codec.
+    ///
+    /// This is a compatibility wrapper around
+    /// [`encoded_subchunk_shape_at_level`](Self::encoded_subchunk_shape_at_level).
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the subchunk indices are invalid or the shape cannot be resolved.
+    async fn encoded_subchunk_shape(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<ChunkShape, CodecError> {
+        self.encoded_subchunk_shape_at_level(0, subchunk_indices, options)
+            .await
+    }
+
+    /// Return the shape of the subchunk at `subchunk_indices` of `level` in the encoded domain of
+    /// the level `level` subchunk codec.
+    ///
+    /// The `subchunk_indices` index the `level` grid returned by
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids), which is in the decoded domain of this
+    /// decoder. The returned shape is in the domain of
+    /// [`subchunk_codecs_at_level`](Self::subchunk_codecs_at_level) and is the shape to decode the
+    /// bytes of [`retrieve_encoded_subchunk`](Self::retrieve_encoded_subchunk) with. It can differ
+    /// in extent and dimensionality from the shape of the subchunk in the `level` grid, and can
+    /// vary by subchunk.
+    ///
+    /// The default implementation resolves the shape from the `level` grid, which is correct for a
+    /// decoder whose decoded domain is the encoded domain of its subchunk codecs. A wrapping
+    /// array-to-array codec must override this to resolve the shape in the domain of the decoder it
+    /// wraps.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the subchunk
+    /// indices are invalid, or the shape cannot be resolved.
+    async fn encoded_subchunk_shape_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<ChunkShape, CodecError> {
+        let local_subchunk_grids = self.local_subchunk_grids(options).await?;
+        let subchunk_grid = subchunk_grid_at_level(&local_subchunk_grids, level)?;
+        subchunk_grid.chunk_shape(subchunk_indices)?.ok_or_else(|| {
+            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
+        })
     }
 
     /// Retrieve the encoded bytes of the subchunk at `subchunk_indices`.
