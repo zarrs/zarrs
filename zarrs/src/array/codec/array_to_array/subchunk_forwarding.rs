@@ -154,6 +154,17 @@ macro_rules! impl_subchunk_forwarding {
                         .retrieve_encoded_subchunk_bytes(&inner, options)
                 }
 
+                fn retrieve_encoded_subchunk(
+                    &self,
+                    subchunk_indices: &[u64],
+                    options: &CodecOptions,
+                ) -> Result<Option<EncodedSubchunk<'_>>, CodecError> {
+                    // Remap once and let the inner decoder resolve the bytes and the shape from
+                    // the same indices, rather than remapping for each
+                    let inner = self.remap_subchunk_indices(0, subchunk_indices, options)?;
+                    self.inner().retrieve_encoded_subchunk(&inner, options)
+                }
+
                 fn encoded_subchunk_partial_decoder(
                     &self,
                     subchunk_indices: &[u64],
@@ -238,6 +249,19 @@ macro_rules! impl_subchunk_forwarding {
                     self.inner()
                         .retrieve_encoded_subchunk_bytes(&inner, options)
                         .await
+                }
+
+                async fn retrieve_encoded_subchunk<'a>(
+                    &'a self,
+                    subchunk_indices: &[u64],
+                    options: &CodecOptions,
+                ) -> Result<Option<EncodedSubchunk<'a>>, CodecError> {
+                    // Remap once and let the inner decoder resolve the bytes and the shape from
+                    // the same indices, rather than remapping for each
+                    let inner = self
+                        .async_remap_subchunk_indices(0, subchunk_indices, options)
+                        .await?;
+                    self.inner().retrieve_encoded_subchunk(&inner, options).await
                 }
 
                 async fn encoded_subchunk_partial_decoder(
