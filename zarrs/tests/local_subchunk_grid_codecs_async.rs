@@ -30,6 +30,21 @@ async fn build(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Erro
     Ok(array)
 }
 
+/// Build `case` with the default, non-subchunking array-to-bytes codec.
+fn build_without_sharding(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Error>> {
+    let store = Arc::new(AsyncMemoryStore::new());
+    let mut builder = ArrayBuilder::new(
+        case.array_shape.clone(),
+        case.chunk_shape.clone(),
+        case.data_type.clone(),
+        case.fill_value.clone(),
+    );
+    if let Some(codec) = &case.codec {
+        builder.array_to_array_codecs(vec![codec.clone()]);
+    }
+    Ok(builder.build_arc(store, "/array")?)
+}
+
 #[tokio::test]
 async fn async_local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
     for case in cases() {
@@ -62,6 +77,28 @@ async fn async_local_subchunk_grid_propagates_through_partial_decoders() -> Test
             codecs[0].data_type(),
             &case.encoded_data_type,
             "{}",
+            case.name
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn async_rearranging_codecs_do_not_create_subchunks() -> TestResult {
+    for case in cases().into_iter().filter(|case| case.codec.is_some()) {
+        let array = build_without_sharding(&case)?;
+        let decoder = array.async_partial_decoder(&case.chunk_indices).await?;
+        assert!(
+            decoder
+                .local_subchunk_grids(&CodecOptions::default())
+                .await?
+                .is_empty(),
+            "{}: no subchunk grids without sharding",
+            case.name
+        );
+        assert!(
+            decoder.subchunk_codecs().is_empty(),
+            "{}: no subchunk codecs without sharding",
             case.name
         );
     }
