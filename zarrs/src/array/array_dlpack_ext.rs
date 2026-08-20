@@ -3,6 +3,7 @@ use std::ffi::c_void;
 
 use dlpark::ffi::{DLDataType, DLDataTypeCode, DLDevice};
 use dlpark::metadata::CopiedSlice;
+use dlpark::tensor::compact_strides;
 use dlpark::{Builder, DlpackFlags};
 
 use super::{DataType, Tensor, TensorError};
@@ -168,12 +169,7 @@ fn shape_and_strides(shape: &[u64]) -> Result<(Vec<i64>, Vec<i64>), TensorError>
         .iter()
         .map(|s| i64::try_from(*s).map_err(|_| unsupported()))
         .collect::<Result<Vec<i64>, TensorError>>()?;
-    let mut strides = vec![1i64; shape.len()];
-    for axis in (0..shape.len().saturating_sub(1)).rev() {
-        strides[axis] = strides[axis + 1]
-            .checked_mul(shape[axis + 1])
-            .ok_or_else(unsupported)?;
-    }
+    let strides = compact_strides(&shape).map_err(|_| unsupported())?;
     Ok((shape, strides))
 }
 
@@ -355,6 +351,17 @@ mod tests {
 
         // Variable-sized data types cannot be represented
         let tensor = Tensor::new(vec![0u8; 8], data_type::string(), vec![1]);
+        assert!(Builder::try_from(Box::new(tensor)).is_err());
+    }
+
+    #[test]
+    fn array_dlpack_ext_unsupported_shape() {
+        // A dimension that does not fit in an i64
+        let tensor = Tensor::new(vec![], data_type::uint8(), vec![u64::MAX]);
+        assert!(Builder::try_from(Box::new(tensor)).is_err());
+
+        // A shape whose compact strides overflow an i64
+        let tensor = Tensor::new(vec![], data_type::uint8(), vec![2, i64::MAX as u64]);
         assert!(Builder::try_from(Box::new(tensor)).is_err());
     }
 }
