@@ -5,7 +5,9 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::{BytesCodec, GzipCodec, PackBitsCodec, ShardingCodecBuilder};
-use zarrs::array::{ArrayBuilder, ArrayError, ElementLayout, ElementPacking, Tensor, data_type};
+use zarrs::array::{
+    ArrayBuilder, ArrayError, ElementError, ElementLayout, ElementPacking, Tensor, data_type,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
@@ -140,6 +142,37 @@ fn stored_layout_dlpack_export_is_packed() -> Result<(), Box<dyn Error>> {
     let dlpack: versioned::Dlpack = Builder::try_from(Box::new(decoded))?.try_build()?;
     assert_eq!(dlpack.flags(), DlpackFlags::IS_SUBBYTE_TYPE_PADDED);
     assert_eq!(packed_bytes.len() * 2, 8);
+
+    Ok(())
+}
+
+#[test]
+fn stored_layout_cannot_be_stored() -> Result<(), Box<dyn Error>> {
+    let array = packbits_array(PackBitsPaddingEncoding::None)?;
+    let stored = array.retrieve_chunk_stored_layout(&[0])?.unwrap();
+
+    // Array bytes are always in the default layout, and storing does not convert, so a packed
+    // tensor must be rejected rather than reinterpreted as padded
+    assert!(matches!(
+        array.store_chunk(&[0], &stored),
+        Err(ArrayError::ElementError(
+            ElementError::IncompatibleElementLayout
+        ))
+    ));
+    assert!(matches!(
+        array.store_chunk(&[0], stored),
+        Err(ArrayError::ElementError(
+            ElementError::IncompatibleElementLayout
+        ))
+    ));
+
+    // A decoded tensor stores as usual, and the array is unchanged by the failures above
+    let decoded: Tensor = array.retrieve_chunk(&[0])?;
+    array.store_chunk(&[0], decoded)?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<i8>>(&[0])?,
+        INT4_ELEMENTS.to_vec()
+    );
 
     Ok(())
 }

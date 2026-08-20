@@ -6,6 +6,7 @@ use zarrs_codec::{
 
 /// An element error.
 #[derive(Clone, Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ElementError {
     /// Incompatible element type for data type.
     #[error("Incompatible element type for data type")]

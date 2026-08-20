@@ -35,10 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 - Add `TensorDlpackBuilder`, a `dlpark::Builder` alias for exporting a `Tensor` as a DLPack managed tensor (requires the `dlpack` feature)
 - Add `TensorError::UnsupportedShape` for tensor shapes that are not representable in a target format
-<<<<<<< HEAD
-- Add `Tensor::num_elements`
-- Add `TensorError::InsufficientBytes` for tensor bytes that are too short for the tensor shape and data type
-=======
+- Add `TensorError::InsufficientBytes` for tensor bytes that are too short for the tensor shape, data type, and element layout
 - Add `CodecChainBound::decode_bytes_to_bytes` to decode only the bytes-to-bytes codecs of a chain
 - Add support for bit-packed tensors, matching how sub-byte data types are stored on disk
   - Add `Tensor::{layout,new_with_layout}` recording the `ElementLayout` of the tensor bytes, and `Tensor::num_elements`
@@ -48,10 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Returns the new `ArrayError::NoStoredLayout` if the array-to-bytes codec does not declare an `ElementLayout`, such as for `sharding_indexed`
   - DLPack export now honours the tensor layout: a packed tensor needs no `IS_SUBBYTE_TYPE_PADDED` flag, so it is safe on the legacy ABI and its `num_bytes()` is correct
   - Add `TensorError::UnsupportedLayout` and `ElementError::IncompatibleElementLayout`
->>>>>>> daba4a2b (feat: honour the tensor element layout in the DLPack export)
 - Support additional data types in DLPack tensor export, matching DLPack 1.3
   - `int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`, `float6_e2m3fn`, and `float6_e3m2fn`
-    - `zarrs` pads sub-byte elements to one byte, so these set the `IS_SUBBYTE_TYPE_PADDED` flag and must be built as a `dlpark::versioned::Dlpack` (the legacy ABI has no flags field)
+    - A padded tensor sets the `IS_SUBBYTE_TYPE_PADDED` flag and must be built as a `dlpark::versioned::Dlpack` (the legacy ABI has no flags field)
   - `float8_e3m4`, `float8_e4m3`, `float8_e4m3b11fnuz`, `float8_e4m3fnuz`, `float8_e5m2`, `float8_e5m2fnuz`, and `float8_e8m0fnu`
   - `complex64`, `complex128`, `complex_float16`, `complex_float32`, and `complex_float64`
   - `complex_bfloat16` remains unsupported, as it needs a data type code that postdates DLPack 1.3, as do the complex subfloats, which have no DLPack data type code
@@ -99,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
 - **Breaking**: `Tensor::{into_parts,as_parts}` also return the `ElementLayout`, so it cannot be dropped by accident
+- **Breaking**: Mark `ElementError` as `#[non_exhaustive]`
 - **Breaking**: Bump `float8` to 0.7.0
 - **Breaking**: Bump `dlpark` to 0.8.0
   - **Breaking**: Replace the `dlpark::traits::TensorLike` implementation for `Tensor` (removed upstream) with `TryFrom<Box<Tensor>> for TensorDlpackBuilder`
@@ -132,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 - **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
 - `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
-- DLPack tensor export now validates that the tensor bytes cover its shape and data type, returning `TensorError::InsufficientBytes`
+- DLPack tensor export now validates that the tensor bytes cover its shape, data type, and element layout, returning `TensorError::InsufficientBytes`
   - Previously an undersized `Tensor` produced a managed tensor describing out-of-bounds memory
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
