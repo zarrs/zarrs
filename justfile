@@ -30,11 +30,11 @@ clippy:
 
 # Generate documentation
 doc:
-    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +{{TOOLCHAIN}} doc -Z unstable-options -Z rustdoc-scrape-examples --all-features --no-deps
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc -Z unstable-options -Z rustdoc-scrape-examples --all-features --no-deps
 
 # Build/test/clippy/doc/check formatting - recommended before a PR
 check: build test clippy doc
-    cargo +{{TOOLCHAIN}} fmt --all -- --check
+    cargo +nightly fmt --all -- --check
 
 # Build (WASM)
 build_wasm:
