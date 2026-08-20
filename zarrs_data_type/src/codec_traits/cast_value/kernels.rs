@@ -440,6 +440,7 @@ fn kernel_int_to_int<S: KernelInt, T: KernelInt>(
     let num_elements = check_alignment(source, S::SIZE)?;
     output.reserve(num_elements * T::SIZE);
     let bounds = int_bounds(params.target_bits, T::SIGNED);
+    #[expect(clippy::chunks_exact_to_as_chunks)]
     for element in source.chunks_exact(S::SIZE) {
         write_int::<T>(
             S::read(element).widen(),
@@ -503,6 +504,7 @@ fn kernel_int_to_float<S: KernelInt, F: KernelFloatTarget>(
     output.reserve(num_elements * F::SIZE);
     let min = F::min_f64();
     let max = F::max_f64();
+    #[expect(clippy::chunks_exact_to_as_chunks)]
     for element in source.chunks_exact(S::SIZE) {
         let value = S::read(element).widen();
         // This conversion is used only for target-range handling. It is exact
@@ -536,6 +538,7 @@ fn kernel_to_float<S: KernelToF64, F: KernelFloatTarget>(
     output.reserve(num_elements * F::SIZE);
     let min = F::min_f64();
     let max = F::max_f64();
+    #[expect(clippy::chunks_exact_to_as_chunks)]
     for element in source.chunks_exact(S::SIZE) {
         let value = S::read_to_f64(element, params.rounding);
         let quantity = float_quantity_from_f64(
@@ -565,6 +568,7 @@ fn kernel_float_to_int<S: KernelFloatSource, T: KernelInt>(
     output.reserve(num_elements * T::SIZE);
     let bits = params.target_bits;
     let bounds = int_bounds(bits, T::SIGNED);
+    #[expect(clippy::chunks_exact_to_as_chunks)]
     for element in source.chunks_exact(S::SIZE) {
         let value = S::read_f64(element);
         if value.is_nan() || value.is_infinite() {
