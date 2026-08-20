@@ -2,7 +2,6 @@
 //!
 //! It accepts float compatible fill values.
 
-use core::f32;
 use std::borrow::Cow;
 use std::sync::Arc;
 
