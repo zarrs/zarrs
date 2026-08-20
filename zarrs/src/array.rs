@@ -27,6 +27,7 @@ mod array_errors;
 mod array_metadata_options;
 mod array_ops;
 mod element;
+mod element_layout;
 mod from_array_bytes;
 mod into_array_bytes;
 mod tensor;

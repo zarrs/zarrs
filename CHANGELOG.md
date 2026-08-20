@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 - Add `TensorDlpackBuilder`, a `dlpark::Builder` alias for exporting a `Tensor` as a DLPack managed tensor (requires the `dlpack` feature)
 - Add `TensorError::UnsupportedShape` for tensor shapes that are not representable in a target format
+- Add `Tensor::num_elements`
+- Add `TensorError::InsufficientBytes` for tensor bytes that are too short for the tensor shape and data type
 - Support additional data types in DLPack tensor export, matching DLPack 1.3
   - `int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`, `float6_e2m3fn`, and `float6_e3m2fn`
     - `zarrs` pads sub-byte elements to one byte, so these set the `IS_SUBBYTE_TYPE_PADDED` flag and must be built as a `dlpark::versioned::Dlpack` (the legacy ABI has no flags field)
@@ -117,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 - **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
 - `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- DLPack tensor export now validates that the tensor bytes cover its shape and data type, returning `TensorError::InsufficientBytes`
+  - Previously an undersized `Tensor` produced a managed tensor describing out-of-bounds memory
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

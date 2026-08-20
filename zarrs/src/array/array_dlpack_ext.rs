@@ -6,6 +6,7 @@ use dlpark::metadata::CopiedSlice;
 use dlpark::tensor::compact_strides;
 use dlpark::{Builder, DlpackFlags};
 
+use super::element_layout::{ElementLayout, ElementPacking};
 use super::{DataType, Tensor, TensorError};
 use crate::array::data_type as dt;
 
@@ -21,11 +22,11 @@ use crate::array::data_type as dt;
 /// managed tensor allocation.
 ///
 /// # Sub-byte data types
-/// `zarrs` stores sub-byte data types (`int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`,
-/// `float6_e2m3fn`, and `float6_e3m2fn`) padded to one byte per element, whereas `DLPack` assumes
-/// that sub-byte elements are packed. The builder sets
-/// [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`] to signal this, but the legacy `DLManagedTensor` ABI has
-/// no flags field. **Sub-byte tensors must therefore be built as a
+/// A [`Tensor`] pads each sub-byte element to a whole byte, see
+/// [*Element layout*](Tensor#element-layout), whereas `DLPack` assumes that sub-byte elements are
+/// packed. The builder sets [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`] to signal this, but the legacy
+/// `DLManagedTensor` ABI has no flags field. **A sub-byte tensor (`int2`, `int4`, `uint2`, `uint4`,
+/// `float4_e2m1fn`, `float6_e2m3fn`, or `float6_e3m2fn`) must therefore be built as a
 /// [`versioned::Dlpack`](dlpark::versioned::Dlpack)**; building one as a
 /// [`legacy::Dlpack`](dlpark::legacy::Dlpack) drops the flag and consumers will misinterpret the
 /// data. Note that [`num_bytes`](dlpark::ManagedBox::num_bytes) reports the *packed* size for these
@@ -53,20 +54,36 @@ use crate::array::data_type as dt;
 /// ```
 pub type TensorDlpackBuilder = Builder<Box<Tensor>, CopiedSlice<Vec<i64>, Vec<i64>>>;
 
-/// Convert a zarrs [`DataType`] to a [`DLDataType`].
+/// Convert a zarrs [`DataType`] and [`ElementLayout`] to a [`DLDataType`] and the [`DlpackFlags`]
+/// that the layout implies.
 ///
-/// Data types with fewer than 8 bits are described as `DLPack` sub-byte types. `zarrs` stores
-/// these padded to a whole byte, whereas `DLPack` assumes they are packed unless the exporter sets
-/// [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`], see [`data_type_dlpack_flags`].
+/// Data types with fewer than 8 bits are described as `DLPack` sub-byte types. `DLPack` assumes
+/// these are packed, so a [`ElementPacking::Padded`] layout is declared with
+/// [`DlpackFlags::IS_SUBBYTE_TYPE_PADDED`].
 ///
 /// # Errors
-/// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported.
-fn data_type_to_dlpack(data_type: &DataType) -> Result<DLDataType, TensorError> {
-    let type_id = data_type.as_any().type_id();
+/// Returns [`TensorError::UnsupportedDataType`] if the data type or the layout is not supported.
+fn data_type_to_dlpack(
+    data_type: &DataType,
+    layout: ElementLayout,
+) -> Result<(DLDataType, DlpackFlags), TensorError> {
+    // TODO: return `TensorError::UnsupportedLayout(layout)` for the layout failures once
+    // `ElementLayout` is public
     let unsupported = || TensorError::UnsupportedDataType(data_type.clone());
+
+    // `DLPack` assumes the native endianness
+    if !layout.endianness.is_native() {
+        return Err(unsupported());
+    }
+
+    let type_id = data_type.as_any().type_id();
     // https://github.com/rust-lang/rust/issues/70861 for match?
     let dtype = if type_id == TypeId::of::<dt::BoolDataType>() {
-        // By array library convention, the underlying storage size of a bool is 8 bits
+        // `DLPack` fixes the storage size of a bool at 8 bits, by array library convention, so a
+        // bool packed at 1 bit per element cannot be described
+        if layout.packing == ElementPacking::PackedLsb0 {
+            return Err(unsupported());
+        }
         DLDataType::scalar(DLDataTypeCode::BOOL, 8)
     } else if type_id == TypeId::of::<dt::Int2DataType>() {
         DLDataType::scalar(DLDataTypeCode::INT, 2)
@@ -141,21 +158,36 @@ fn data_type_to_dlpack(data_type: &DataType) -> Result<DLDataType, TensorError> 
 
     // Guard against a data type whose in-memory element size disagrees with its `DLPack`
     // descriptor, which would misrepresent the tensor bytes.
-    if data_type.fixed_size() == Some(dtype.element_size()) {
-        Ok(dtype)
-    } else {
-        Err(unsupported())
+    if data_type.fixed_size() != Some(dtype.element_size()) {
+        return Err(unsupported());
     }
+
+    let flags = match layout.packing {
+        // `DLPack` assumes sub-byte elements are packed, so padding must be declared
+        ElementPacking::Padded if !dtype.bits.is_multiple_of(8) => {
+            DlpackFlags::IS_SUBBYTE_TYPE_PADDED
+        }
+        // Whole-byte elements are neither padded nor packed, and packed sub-byte elements match
+        // what `DLPack` assumes, so neither needs a flag
+        ElementPacking::Padded | ElementPacking::PackedLsb0 => DlpackFlags::empty(),
+    };
+    Ok((dtype, flags))
 }
 
-/// Get the [`DlpackFlags`] implied by an exported [`DLDataType`].
-fn data_type_dlpack_flags(dtype: DLDataType) -> DlpackFlags {
-    if dtype.bits.is_multiple_of(8) {
-        DlpackFlags::empty()
-    } else {
-        // `zarrs` pads sub-byte elements to a whole byte, but `DLPack` assumes they are packed
-        DlpackFlags::IS_SUBBYTE_TYPE_PADDED
-    }
+/// The number of bytes an exported tensor occupies, including [`ElementLayout::byte_offset`].
+///
+/// Returns [`None`] if the number of bytes is not representable as a [`usize`].
+fn expected_num_bytes(
+    num_elements: u64,
+    dtype: DLDataType,
+    layout: ElementLayout,
+) -> Option<usize> {
+    let bits = u64::from(dtype.bits);
+    let elements = match layout.packing {
+        ElementPacking::Padded => num_elements.checked_mul(bits.div_ceil(8))?,
+        ElementPacking::PackedLsb0 => num_elements.checked_mul(bits)?.div_ceil(8),
+    };
+    usize::try_from(layout.byte_offset.checked_add(elements)?).ok()
 }
 
 /// Convert a tensor shape into `DLPack` shape and row-major compact strides (in elements).
@@ -183,8 +215,20 @@ impl TryFrom<Box<Tensor>> for TensorDlpackBuilder {
     type Error = TensorError;
 
     fn try_from(tensor: Box<Tensor>) -> Result<Self, Self::Error> {
-        let dtype = data_type_to_dlpack(tensor.data_type())?;
+        let layout = tensor.layout();
+        let (dtype, flags) = data_type_to_dlpack(tensor.data_type(), layout)?;
         let (shape, strides) = shape_and_strides(tensor.shape())?;
+
+        // The exported tensor must not describe bytes beyond the end of the buffer
+        let expected = expected_num_bytes(tensor.num_elements(), dtype, layout);
+        let actual = tensor.bytes().len();
+        if expected.is_none_or(|expected| expected > actual) {
+            return Err(TensorError::InsufficientBytes {
+                expected: expected.unwrap_or(usize::MAX),
+                actual,
+            });
+        }
+
         let data = if tensor.bytes().is_empty() {
             std::ptr::null_mut()
         } else {
@@ -192,13 +236,15 @@ impl TryFrom<Box<Tensor>> for TensorDlpackBuilder {
         };
         let builder = Builder::new(tensor, CopiedSlice::new(shape, strides));
         // SAFETY: the boxed tensor context owns the initialized byte allocation addressed by
-        // `data` for the lifetime of the managed tensor, and `data`/`dtype`/shape/strides describe
-        // it as a compact row-major tensor.
+        // `data` for the lifetime of the managed tensor, `data`/`dtype`/shape/strides/`byte_offset`
+        // describe it as a compact row-major tensor, and the allocation is large enough for the
+        // elements they describe.
         let builder = unsafe { builder.data(data) }
             .dtype(dtype)
-            .device(DLDevice::CPU);
+            .device(DLDevice::CPU)
+            .byte_offset(layout.byte_offset);
         Ok(builder
-            .insert_flags(data_type_dlpack_flags(dtype))
+            .insert_flags(flags)
             .expect("the flags do not include IS_COPIED"))
     }
 }
@@ -207,8 +253,10 @@ impl TryFrom<Box<Tensor>> for TensorDlpackBuilder {
 mod tests {
     use dlpark::ffi::{DLDataType, DLDataTypeCode};
     use dlpark::{Builder, DlpackFlags, legacy, versioned};
+    use zarrs_metadata::Endianness;
     use zarrs_storage::store::MemoryStore;
 
+    use super::{ElementLayout, ElementPacking, TensorError};
     use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type};
 
     fn test_tensor() -> Tensor {
@@ -309,7 +357,7 @@ mod tests {
         ];
 
         for (data_type, code, bits) in data_types {
-            let dtype = super::data_type_to_dlpack(&data_type)
+            let (dtype, _flags) = super::data_type_to_dlpack(&data_type, ElementLayout::default())
                 .unwrap_or_else(|err| panic!("{data_type} should be supported: {err}"));
             assert!(
                 dtype.matches(DLDataType::scalar(code, bits)),
@@ -363,5 +411,101 @@ mod tests {
         // A shape whose compact strides overflow an i64
         let tensor = Tensor::new(vec![], data_type::uint8(), vec![2, i64::MAX as u64]);
         assert!(Builder::try_from(Box::new(tensor)).is_err());
+    }
+
+    #[test]
+    fn array_dlpack_ext_insufficient_bytes() {
+        // The bytes must cover the shape, otherwise the managed tensor is out of bounds
+        let tensor = Tensor::new(vec![0u8; 4], data_type::float32(), vec![100]);
+        assert!(matches!(
+            Builder::try_from(Box::new(tensor)),
+            Err(TensorError::InsufficientBytes {
+                expected: 400,
+                actual: 4
+            })
+        ));
+
+        // Exactly enough bytes is accepted
+        let tensor = Tensor::new(vec![0u8; 400], data_type::float32(), vec![100]);
+        assert!(Builder::try_from(Box::new(tensor)).is_ok());
+
+        // A zero element tensor needs no bytes
+        let tensor = Tensor::new(vec![], data_type::float32(), vec![0]);
+        assert!(Builder::try_from(Box::new(tensor)).is_ok());
+    }
+
+    #[test]
+    fn array_dlpack_ext_layout_flags() {
+        let packed = ElementLayout {
+            packing: ElementPacking::PackedLsb0,
+            ..ElementLayout::default()
+        };
+        let flags = |data_type: &_, layout| {
+            super::data_type_to_dlpack(data_type, layout).map(|(_dtype, flags)| flags)
+        };
+
+        // A padded sub-byte element does not match what DLPack assumes, so it must be declared
+        assert_eq!(
+            flags(&data_type::int4(), ElementLayout::default()).unwrap(),
+            DlpackFlags::IS_SUBBYTE_TYPE_PADDED
+        );
+        // A whole-byte element is neither padded nor packed
+        assert_eq!(
+            flags(&data_type::uint16(), ElementLayout::default()).unwrap(),
+            DlpackFlags::empty()
+        );
+        // A packed sub-byte element matches what DLPack assumes, so it needs no flag
+        assert_eq!(
+            flags(&data_type::int4(), packed).unwrap(),
+            DlpackFlags::empty()
+        );
+        // DLPack fixes the storage size of a bool at 8 bits, but packbits packs it at 1 bit
+        assert_eq!(
+            flags(&data_type::bool(), ElementLayout::default()).unwrap(),
+            DlpackFlags::empty()
+        );
+        assert!(flags(&data_type::bool(), packed).is_err());
+
+        // DLPack assumes the native endianness
+        let non_native = ElementLayout {
+            endianness: match Endianness::native() {
+                Endianness::Big => Endianness::Little,
+                Endianness::Little => Endianness::Big,
+            },
+            ..ElementLayout::default()
+        };
+        assert!(flags(&data_type::uint16(), non_native).is_err());
+    }
+
+    #[test]
+    fn array_dlpack_ext_expected_num_bytes() {
+        let (dtype, _flags) =
+            super::data_type_to_dlpack(&data_type::int4(), ElementLayout::default()).unwrap();
+        let packed = ElementLayout {
+            packing: ElementPacking::PackedLsb0,
+            ..ElementLayout::default()
+        };
+
+        // Eight int4 elements occupy eight padded bytes, or four packed bytes
+        assert_eq!(
+            super::expected_num_bytes(8, dtype, ElementLayout::default()),
+            Some(8)
+        );
+        assert_eq!(super::expected_num_bytes(8, dtype, packed), Some(4));
+        // A partial trailing byte is included
+        assert_eq!(super::expected_num_bytes(7, dtype, packed), Some(4));
+        // The byte offset precedes the elements
+        let offset = ElementLayout {
+            byte_offset: 1,
+            ..packed
+        };
+        assert_eq!(super::expected_num_bytes(8, dtype, offset), Some(5));
+        // A zero element tensor needs no bytes
+        assert_eq!(
+            super::expected_num_bytes(0, dtype, ElementLayout::default()),
+            Some(0)
+        );
+        // An unrepresentable number of bytes is rejected
+        assert_eq!(super::expected_num_bytes(u64::MAX, dtype, packed), None);
     }
 }
