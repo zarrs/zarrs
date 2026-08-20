@@ -1,4 +1,4 @@
-TOOLCHAIN := "nightly"
+TOOLCHAIN := "stable"
 export RUST_BACKTRACE := "0"
 
 # Display the available recipes
@@ -22,7 +22,7 @@ test_ignored:
 
 # Format with rustfmt
 fmt:
-    cargo +{{TOOLCHAIN}} fmt
+    cargo +nightly fmt
 
 # Lint with clippy
 clippy:
