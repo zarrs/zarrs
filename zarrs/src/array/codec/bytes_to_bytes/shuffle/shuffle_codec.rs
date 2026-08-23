@@ -94,7 +94,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 
-        let mut encoded_value = decoded_value.to_vec();
+        let mut encoded_value = vec![0u8; decoded_value.len()];
         let count = encoded_value.len().div_ceil(self.elementsize);
         for i in 0..count {
             let offset = i * self.elementsize;
@@ -116,7 +116,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 
-        let mut decoded_value = encoded_value.to_vec();
+        let mut decoded_value = vec![0u8; encoded_value.len()];
         let count = decoded_value.len().div_ceil(self.elementsize);
         for i in 0..self.elementsize {
             let offset = i * count;
