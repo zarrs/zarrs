@@ -913,7 +913,7 @@ impl ShardingCodecBound {
                 .inner_codecs
                 .encode(bytes, subchunk_shape, options_inner);
             match encoded_chunk {
-                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_owned()))),
                 Err(err) => Some(Err(err)),
             }
         }
