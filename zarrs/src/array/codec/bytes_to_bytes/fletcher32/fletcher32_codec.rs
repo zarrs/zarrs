@@ -5,6 +5,7 @@ use num::Integer;
 use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1};
+use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
@@ -120,7 +121,7 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
-        let mut encoded_value = decoded_value.into_owned();
+        let mut encoded_value = into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
         encoded_value.extend_from_slice(&checksum);
         Ok(Cow::Owned(encoded_value))
     }

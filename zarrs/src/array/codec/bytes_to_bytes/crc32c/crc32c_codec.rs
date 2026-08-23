@@ -5,6 +5,7 @@ use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfigurationLocation;
 use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
+use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
@@ -93,12 +94,14 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let encoded_value = match self.0 {
             Crc32cCodecConfigurationLocation::End => {
-                let mut encoded_value = decoded_value.into_owned();
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 encoded_value.extend_from_slice(&checksum);
                 encoded_value
             }
             Crc32cCodecConfigurationLocation::Start => {
-                let mut encoded_value = decoded_value.into_owned();
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 let data_len = encoded_value.len();
                 encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
                 encoded_value.copy_within(..data_len, CHECKSUM_SIZE);

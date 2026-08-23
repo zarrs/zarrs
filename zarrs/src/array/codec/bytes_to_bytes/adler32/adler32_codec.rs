@@ -4,6 +4,7 @@ use std::sync::Arc;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 #[cfg(feature = "async")]
@@ -107,7 +108,8 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
         let encoded_value = match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => {
-                let mut encoded_value = decoded_value.into_owned();
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 let data_len = encoded_value.len();
                 encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
                 encoded_value.copy_within(..data_len, CHECKSUM_SIZE);
@@ -115,7 +117,8 @@ impl BytesToBytesCodecTraits for Adler32Codec {
                 encoded_value
             }
             Adler32CodecConfigurationChecksumLocation::End => {
-                let mut encoded_value = decoded_value.into_owned();
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 encoded_value.extend_from_slice(&checksum);
                 encoded_value
             }
