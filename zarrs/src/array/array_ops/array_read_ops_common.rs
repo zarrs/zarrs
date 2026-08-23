@@ -1,19 +1,42 @@
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArraySubsetTraits, Tensor,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, ArrayBytesRaw, CodecError, CodecOptions, ElementLayout,
+    InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
+
+/// Shared implementation of `[Async]ArrayReadOps::[async_]retrieve_chunk_stored_layout`.
+///
+/// This is the entirely synchronous remainder of those methods, which differ only in how they read
+/// the encoded chunk.
+pub(super) fn chunk_stored_layout<A: ArrayOps + ?Sized>(
+    array: &A,
+    chunk_indices: &[u64],
+    layout: ElementLayout,
+    encoded: ArrayBytesRaw<'_>,
+) -> Result<Tensor, ArrayError> {
+    let chunk_shape = array.chunk_shape(chunk_indices)?;
+    let (bytes, encoded_shape, encoded_data_type) =
+        array
+            .codecs_bound()
+            .decode_bytes_to_bytes(encoded, &chunk_shape, array.codec_options())?;
+    Ok(Tensor::new_with_layout(
+        bytes.into_owned(),
+        encoded_data_type,
+        encoded_shape.iter().map(|s| s.get()).collect(),
+        layout,
+    ))
+}
 
 /// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
 ///

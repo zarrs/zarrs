@@ -165,8 +165,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Tensor>, ArrayError> {
-        let codecs = self.codecs_bound();
-        let layout = codecs
+        let layout = self
+            .codecs_bound()
             .array_to_bytes_codec()
             .encoded_element_layout()
             .ok_or(ArrayError::NoStoredLayout)?;
@@ -175,25 +175,13 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             return Ok(None);
         };
 
-        let chunk_shape = self.chunk_shape(chunk_indices)?;
-        let bytes = codecs.decode_bytes_to_bytes(
-            Cow::Owned(encoded),
-            &chunk_shape,
-            self.codec_options(),
-        )?;
-
-        // The encoded chunk is described by the array to bytes codec's context, which is the
-        // representation after any array to array codecs
-        let mut shape = chunk_shape;
-        for codec in codecs.array_to_array_codecs() {
-            shape = codec.encoded_shape(&shape)?;
-        }
-        Ok(Some(Tensor::new_with_layout(
-            bytes.into_owned(),
-            codecs.array_to_bytes_codec().data_type().clone(),
-            shape.iter().map(|s| s.get()).collect(),
+        super::array_read_ops_common::chunk_stored_layout(
+            self,
+            chunk_indices,
             layout,
-        )))
+            Cow::Owned(encoded),
+        )
+        .map(Some)
     }
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.

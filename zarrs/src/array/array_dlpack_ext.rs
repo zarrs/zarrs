@@ -185,18 +185,18 @@ fn data_type_to_dlpack(
 
 /// The number of bytes an exported tensor occupies, including [`ElementLayout::byte_offset`].
 ///
-/// Returns [`None`] if the number of bytes is not representable as a [`usize`].
-fn expected_num_bytes(
-    num_elements: u64,
-    dtype: DLDataType,
-    layout: ElementLayout,
-) -> Option<usize> {
+/// An unrepresentable number of bytes yields [`usize::MAX`], which no buffer can reach, so it is
+/// rejected by the same comparison as a merely undersized one.
+fn expected_num_bytes(num_elements: u64, dtype: DLDataType, layout: ElementLayout) -> usize {
     let bits = u64::from(dtype.bits);
     let elements = match layout.packing {
-        ElementPacking::Padded => num_elements.checked_mul(bits.div_ceil(8))?,
-        ElementPacking::PackedLsb0 => num_elements.checked_mul(bits)?.div_ceil(8),
+        ElementPacking::Padded => num_elements.checked_mul(bits.div_ceil(8)),
+        ElementPacking::PackedLsb0 => num_elements.checked_mul(bits).map(|b| b.div_ceil(8)),
     };
-    usize::try_from(layout.byte_offset.checked_add(elements)?).ok()
+    elements
+        .and_then(|elements| layout.byte_offset.checked_add(elements))
+        .and_then(|num_bytes| usize::try_from(num_bytes).ok())
+        .unwrap_or(usize::MAX)
 }
 
 /// Convert a tensor shape into `DLPack` shape and row-major compact strides (in elements).
@@ -231,11 +231,8 @@ impl TryFrom<Box<Tensor>> for TensorDlpackBuilder {
         // The exported tensor must not describe bytes beyond the end of the buffer
         let expected = expected_num_bytes(tensor.num_elements(), dtype, layout);
         let actual = tensor.bytes().len();
-        if expected.is_none_or(|expected| expected > actual) {
-            return Err(TensorError::InsufficientBytes {
-                expected: expected.unwrap_or(usize::MAX),
-                actual,
-            });
+        if expected > actual {
+            return Err(TensorError::InsufficientBytes { expected, actual });
         }
 
         let data = if tensor.bytes().is_empty() {
@@ -498,24 +495,27 @@ mod tests {
         // Eight int4 elements occupy eight padded bytes, or four packed bytes
         assert_eq!(
             super::expected_num_bytes(8, dtype, ElementLayout::default()),
-            Some(8)
+            8
         );
-        assert_eq!(super::expected_num_bytes(8, dtype, packed), Some(4));
+        assert_eq!(super::expected_num_bytes(8, dtype, packed), 4);
         // A partial trailing byte is included
-        assert_eq!(super::expected_num_bytes(7, dtype, packed), Some(4));
+        assert_eq!(super::expected_num_bytes(7, dtype, packed), 4);
         // The byte offset precedes the elements
         let offset = ElementLayout {
             byte_offset: 1,
             ..packed
         };
-        assert_eq!(super::expected_num_bytes(8, dtype, offset), Some(5));
+        assert_eq!(super::expected_num_bytes(8, dtype, offset), 5);
         // A zero element tensor needs no bytes
         assert_eq!(
             super::expected_num_bytes(0, dtype, ElementLayout::default()),
-            Some(0)
+            0
         );
-        // An unrepresentable number of bytes is rejected
-        assert_eq!(super::expected_num_bytes(u64::MAX, dtype, packed), None);
+        // An unrepresentable number of bytes saturates, so no buffer can satisfy it
+        assert_eq!(
+            super::expected_num_bytes(u64::MAX, dtype, packed),
+            usize::MAX
+        );
     }
 
     #[test]

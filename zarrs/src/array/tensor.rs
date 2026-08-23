@@ -164,9 +164,8 @@ impl Tensor {
         );
         Ok(Self {
             bytes: bytes.into(),
-            data_type: self.data_type,
-            shape: self.shape,
             layout: packed_layout,
+            ..self
         })
     }
 

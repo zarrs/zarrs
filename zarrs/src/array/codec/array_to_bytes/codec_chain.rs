@@ -371,7 +371,11 @@ impl CodecChainBound {
 
     /// Decode only the bytes to bytes codecs of the chain.
     ///
-    /// This returns the encoded output of the array to bytes codec, without decoding it.
+    /// This returns the encoded output of the array to bytes codec, without decoding it, alongside
+    /// the shape and data type describing it. These are the representation after any array to
+    /// array codecs, which differ from the chain's own if it contains a codec such as `transpose`
+    /// or `cast_value`.
+    ///
     /// Whether that output can be interpreted without further decoding depends on the
     /// [`array_to_bytes_codec()`](Self::array_to_bytes_codec).
     ///
@@ -382,9 +386,15 @@ impl CodecChainBound {
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let (_array_representations, bytes_representations) = self.get_representations(shape)?;
-        self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)
+    ) -> Result<(ArrayBytesRaw<'a>, ChunkShape, DataType), CodecError> {
+        let (mut array_representations, bytes_representations) = self.get_representations(shape)?;
+        let bytes = self.decode_bytes_to_bytes_inner(bytes, &bytes_representations, options)?;
+        // The encoded bytes are described by the array to bytes codec's context, which is the
+        // representation after any array to array codecs
+        let (encoded_shape, encoded_data_type, _fill_value) = array_representations
+            .pop()
+            .expect("there is a representation for the array to bytes codec");
+        Ok((bytes, encoded_shape, encoded_data_type))
     }
 
     /// Get the array to array codecs
