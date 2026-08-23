@@ -120,8 +120,7 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
-        let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        encoded_value.extend_from_slice(&decoded_value);
+        let mut encoded_value = decoded_value.into_owned();
         encoded_value.extend_from_slice(&checksum);
         Ok(Cow::Owned(encoded_value))
     }

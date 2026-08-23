@@ -105,17 +105,21 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         adler.write(&decoded_value);
         let checksum = adler.finish().to_le_bytes();
 
-        let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        match self.location {
+        let encoded_value = match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => {
-                encoded_value.extend_from_slice(&checksum);
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value = decoded_value.into_owned();
+                let data_len = encoded_value.len();
+                encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
+                encoded_value.copy_within(..data_len, CHECKSUM_SIZE);
+                encoded_value[..CHECKSUM_SIZE].copy_from_slice(&checksum);
+                encoded_value
             }
             Adler32CodecConfigurationChecksumLocation::End => {
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value = decoded_value.into_owned();
                 encoded_value.extend_from_slice(&checksum);
+                encoded_value
             }
-        }
+        };
         Ok(Cow::Owned(encoded_value))
     }
 

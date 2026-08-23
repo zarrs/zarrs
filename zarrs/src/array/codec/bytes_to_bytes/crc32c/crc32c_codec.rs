@@ -91,17 +91,21 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
-        let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        match self.0 {
+        let encoded_value = match self.0 {
             Crc32cCodecConfigurationLocation::End => {
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value = decoded_value.into_owned();
                 encoded_value.extend_from_slice(&checksum);
+                encoded_value
             }
             Crc32cCodecConfigurationLocation::Start => {
-                encoded_value.extend_from_slice(&checksum);
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value = decoded_value.into_owned();
+                let data_len = encoded_value.len();
+                encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
+                encoded_value.copy_within(..data_len, CHECKSUM_SIZE);
+                encoded_value[..CHECKSUM_SIZE].copy_from_slice(&checksum);
+                encoded_value
             }
-        }
+        };
         Ok(Cow::Owned(encoded_value))
     }
 

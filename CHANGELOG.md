@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
-- Reuse the input allocation when stripping the checksum in the `crc32c` and `adler32` codec decode methods
+- Reuse the input allocation (if posible) when appending/stripping the checksum in the `crc32c`, `adler32`, and `fletcher32` codecs
 - Avoid copying each encoded inner chunk in the `sharding_indexed` codec
 - **Breaking**: Bump `float8` to 0.7.0
 - Internal dependency bumps:
