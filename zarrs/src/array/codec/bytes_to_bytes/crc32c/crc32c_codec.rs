@@ -112,12 +112,11 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
+            let data_len = encoded_value.len() - CHECKSUM_SIZE;
             let (data, checksum_stored): (&[u8], [u8; CHECKSUM_SIZE]) = match self.0 {
                 Crc32cCodecConfigurationLocation::End => (
-                    &encoded_value[..encoded_value.len() - CHECKSUM_SIZE],
-                    encoded_value[encoded_value.len() - CHECKSUM_SIZE..]
-                        .try_into()
-                        .unwrap(),
+                    &encoded_value[..data_len],
+                    encoded_value[data_len..].try_into().unwrap(),
                 ),
                 Crc32cCodecConfigurationLocation::Start => (
                     &encoded_value[CHECKSUM_SIZE..],
@@ -132,7 +131,16 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
                 }
             }
 
-            Ok(Cow::Owned(data.to_vec()))
+            // Strip the checksum in-place, reusing the allocation if `encoded_value` is owned
+            let mut decoded_value = encoded_value.into_owned();
+            match self.0 {
+                Crc32cCodecConfigurationLocation::End => decoded_value.truncate(data_len),
+                Crc32cCodecConfigurationLocation::Start => {
+                    decoded_value.copy_within(CHECKSUM_SIZE.., 0);
+                    decoded_value.truncate(data_len);
+                }
+            }
+            Ok(Cow::Owned(decoded_value))
         } else {
             Err(CodecError::Other(
                 "crc32c decoder expects a 32 bit input".to_string(),

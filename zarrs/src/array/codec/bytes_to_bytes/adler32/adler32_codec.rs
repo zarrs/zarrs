@@ -128,9 +128,11 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {
-                    let (checksum, decoded_value) = encoded_value.split_at(CHECKSUM_SIZE);
-                    let checksum: [u8; CHECKSUM_SIZE] = checksum.try_into().unwrap();
-                    (Cow::Owned(decoded_value.to_vec()), checksum)
+                    let mut owned = encoded_value.into_owned();
+                    let checksum: [u8; CHECKSUM_SIZE] = owned[..CHECKSUM_SIZE].try_into().unwrap();
+                    owned.copy_within(CHECKSUM_SIZE.., 0);
+                    owned.truncate(owned.len() - CHECKSUM_SIZE);
+                    (Cow::Owned(owned), checksum)
                 }
                 Adler32CodecConfigurationChecksumLocation::End => {
                     let mut owned = encoded_value.into_owned();
