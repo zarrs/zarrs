@@ -543,12 +543,10 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         // array->bytes
         let mut bytes = self.array_to_bytes.encode(bytes, &shape, options)?;
-        let mut decoded_representation = self.array_to_bytes.encoded_representation(&shape)?;
 
         // bytes->bytes
         for codec in &self.bytes_to_bytes {
             bytes = codec.encode(bytes, options)?;
-            decoded_representation = codec.encoded_representation(&decoded_representation);
         }
 
         Ok(bytes)
