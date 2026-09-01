@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
-- Bump `zarrs_storage` to 0.4.4
+- Bump `zarrs_storage` to 0.4.6
 - Bump `zarrs_data_type` to 0.9.1
 - Bump `rayon_iter_concurrent_limit` to 0.3.0
 - Soft deprecate the `sharding` feature flag

@@ -6,7 +6,7 @@ use bytes::BytesMut;
 use futures::lock::Mutex;
 use futures::{stream, StreamExt};
 
-use crate::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey,
@@ -33,34 +33,6 @@ impl AsyncMemoryStore {
     pub fn new() -> Self {
         Self {
             data_map: Mutex::new(BTreeMap::new()),
-        }
-    }
-
-    fn set_impl(
-        data_map: &mut BTreeMap<StoreKey, Bytes>,
-        key: &StoreKey,
-        value: &[u8],
-        offset: ByteOffset,
-        truncate: bool,
-    ) {
-        let entry = data_map.entry(key.clone()).or_default();
-
-        if offset == 0 && entry.is_empty() {
-            *entry = Bytes::copy_from_slice(value);
-        } else {
-            let length = usize::try_from(offset + value.len() as u64).unwrap();
-            // Take ownership so try_into_mut can succeed when there are no other clones.
-            let mut data = std::mem::take(entry)
-                .try_into_mut()
-                .unwrap_or_else(|bytes: Bytes| BytesMut::from(bytes.as_ref()));
-            if data.len() < length {
-                data.resize(length, 0);
-            } else if truncate {
-                data.truncate(length);
-            }
-            let offset = usize::try_from(offset).unwrap();
-            data[offset..offset + value.len()].copy_from_slice(value);
-            *entry = data.freeze();
         }
     }
 }
@@ -119,8 +91,9 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncWritableStorageTraits for AsyncMemoryStore {
     async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+        // A full set replaces any existing value, so store the handle directly to avoid a copy.
         let mut data_map = self.data_map.lock().await;
-        Self::set_impl(&mut data_map, key, &value, 0, true);
+        data_map.insert(key.clone(), value);
         Ok(())
     }
 
@@ -130,9 +103,21 @@ impl AsyncWritableStorageTraits for AsyncMemoryStore {
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let mut data_map = self.data_map.lock().await;
+        let entry = data_map.entry(key.clone()).or_default();
+
+        // Take ownership so try_into_mut can succeed when there are no other clones.
+        let mut data = std::mem::take(entry)
+            .try_into_mut()
+            .unwrap_or_else(|bytes: Bytes| BytesMut::from(bytes.as_ref()));
         for (offset, value) in offset_values {
-            Self::set_impl(&mut data_map, key, &value, offset, false);
+            let offset = usize::try_from(offset).unwrap();
+            let end = offset + value.len();
+            if data.len() < end {
+                data.resize(end, 0);
+            }
+            data[offset..end].copy_from_slice(&value);
         }
+        *entry = data.freeze();
         Ok(())
     }
 

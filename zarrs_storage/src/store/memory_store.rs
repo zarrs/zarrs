@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use bytes::BytesMut;
 
-use crate::byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError};
+use crate::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 use crate::{
     Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
@@ -30,29 +30,6 @@ impl MemoryStore {
     pub fn new() -> Self {
         Self {
             data_map: Mutex::default(),
-        }
-    }
-
-    fn set_impl(&self, key: &StoreKey, value: &[u8], offset: ByteOffset, truncate: bool) {
-        let mut data_map = self.data_map.lock().unwrap();
-        let entry = data_map.entry(key.clone()).or_default();
-
-        if offset == 0 && entry.is_empty() {
-            *entry = Bytes::copy_from_slice(value);
-        } else {
-            let length = usize::try_from(offset + value.len() as u64).unwrap();
-            // Take ownership so try_into_mut can succeed when there are no other clones.
-            let mut data = std::mem::take(entry)
-                .try_into_mut()
-                .unwrap_or_else(|b: Bytes| BytesMut::from(b.as_ref()));
-            if data.len() < length {
-                data.resize(length, 0);
-            } else if truncate {
-                data.truncate(length);
-            }
-            let offset = usize::try_from(offset).unwrap();
-            data[offset..offset + value.len()].copy_from_slice(value);
-            *entry = data.freeze();
         }
     }
 }
@@ -101,7 +78,9 @@ impl ReadableStorageTraits for MemoryStore {
 
 impl WritableStorageTraits for MemoryStore {
     fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
-        Self::set_impl(self, key, &value, 0, true);
+        // A full set replaces any existing value, so store the handle directly to avoid a copy.
+        let mut data_map = self.data_map.lock().unwrap();
+        data_map.insert(key.clone(), value);
         Ok(())
     }
 
@@ -110,9 +89,22 @@ impl WritableStorageTraits for MemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
+        let mut data_map = self.data_map.lock().unwrap();
+        let entry = data_map.entry(key.clone()).or_default();
+
+        // Take ownership so try_into_mut can succeed when there are no other clones.
+        let mut data = std::mem::take(entry)
+            .try_into_mut()
+            .unwrap_or_else(|bytes: Bytes| BytesMut::from(bytes.as_ref()));
         for (offset, value) in offset_values {
-            self.set_impl(key, &value, offset, false);
+            let offset = usize::try_from(offset).unwrap();
+            let end = offset + value.len();
+            if data.len() < end {
+                data.resize(end, 0);
+            }
+            data[offset..end].copy_from_slice(&value);
         }
+        *entry = data.freeze();
         Ok(())
     }
 
@@ -204,6 +196,33 @@ mod tests {
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
         crate::store_test::store_list_size(&store)?;
+        Ok(())
+    }
+
+    #[test]
+    fn memory_set_partial_many_multiple_offsets() -> Result<(), Box<dyn Error>> {
+        let store = MemoryStore::new();
+        let key: StoreKey = "a/b".try_into()?;
+        store.set(&key, vec![0, 0, 0, 0].into())?;
+        store.set_partial_many(
+            &key,
+            Box::new([(0, vec![1, 2].into()), (3, vec![3].into())].into_iter()),
+        )?;
+        assert_eq!(store.get(&key)?, Some(vec![1, 2, 0, 3].into()));
+        Ok(())
+    }
+
+    #[test]
+    fn memory_set_partial_many_grows_and_creates() -> Result<(), Box<dyn Error>> {
+        let store = MemoryStore::new();
+        // A partial write to an absent key zero fills up to the offset.
+        let key: StoreKey = "absent".try_into()?;
+        store.set_partial(&key, 2, vec![7, 8].into())?;
+        assert_eq!(store.get(&key)?, Some(vec![0, 0, 7, 8].into()));
+
+        // A partial write past the end grows the value rather than truncating it.
+        store.set_partial(&key, 5, vec![9].into())?;
+        assert_eq!(store.get(&key)?, Some(vec![0, 0, 7, 8, 0, 9].into()));
         Ok(())
     }
 
