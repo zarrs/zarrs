@@ -7,7 +7,7 @@ use zarrs_storage::{
     StorageError, StoreKey,
 };
 
-use crate::{CowBytes, CodecError, CodecOptions};
+use crate::{CodecError, CodecOptions, CowBytes};
 
 /// Asynchronous partial bytes decoder traits.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -198,7 +198,7 @@ impl<TStorage: AsyncReadableStorageTraits + 'static> AsyncBytesPartialDecoderTra
             use futures::{StreamExt, TryStreamExt};
             Some(
                 bytes
-                    .map(|bytes| Ok::<_, StorageError>(CowBytes::Shared(bytes?)))
+                    .map(|bytes| Ok::<_, StorageError>(CowBytes::from(bytes?)))
                     .try_collect()
                     .await?,
             )
@@ -228,7 +228,7 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
     ) -> Result<(), CodecError> {
         let offset_values = offset_values
             .into_iter()
-            .map(|(offset, bytes)| (offset, bytes.into_vec().into()));
+            .map(|(offset, bytes)| (offset, bytes.into_static()));
         Ok(self
             .0
             .set_partial_many(&self.1, Box::new(offset_values))

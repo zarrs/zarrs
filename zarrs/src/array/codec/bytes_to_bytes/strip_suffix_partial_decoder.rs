@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::array::CowBytes;
@@ -48,16 +47,12 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
                         let length = bytes.len() - self.suffix_size;
-                        let mut bytes = bytes.into_vec();
-                        bytes.truncate(length);
-                        CowBytes::from(bytes)
+                        bytes.slice(0..length)
                     }
                     ByteRange::Suffix(_) => {
                         let length = bytes.len() as u64 - (self.suffix_size as u64);
                         let length = usize::try_from(length).unwrap();
-                        let mut bytes = bytes.into_vec();
-                        bytes.truncate(length);
-                        CowBytes::from(bytes)
+                        bytes.slice(0..length)
                     }
                 }))
             })
@@ -123,9 +118,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
-                        let mut bytes = bytes.into_vec();
-                        bytes.truncate(length);
-                        Ok(Some(CowBytes::from(bytes)))
+                        Ok(Some(bytes.slice(0..length)))
                     } else {
                         Ok(None)
                     }

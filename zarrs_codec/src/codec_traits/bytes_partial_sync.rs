@@ -10,7 +10,7 @@ use zarrs_storage::{
     StoreKey,
 };
 
-use crate::{CowBytes, CodecError, CodecOptions};
+use crate::{CodecError, CodecOptions, CowBytes};
 
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
@@ -250,7 +250,7 @@ impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (T
             Ok(Some(
                 results
                     .into_iter()
-                    .map(|bytes| Ok::<_, StorageError>(CowBytes::Shared(bytes?)))
+                    .map(|bytes| Ok::<_, StorageError>(CowBytes::from(bytes?)))
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         } else {
@@ -277,7 +277,7 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
     ) -> Result<(), CodecError> {
         let offset_values = offset_values
             .into_iter()
-            .map(|(offset, bytes)| (offset, bytes.into_vec().into()));
+            .map(|(offset, bytes)| (offset, bytes.into_static()));
         Ok(self.0.set_partial_many(&self.1, Box::new(offset_values))?)
     }
 

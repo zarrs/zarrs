@@ -5,11 +5,11 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, CowBytes, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayBytes, ArrayBytesOffsets, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, DataType,
+    CodecError, CodecOptions, CowBytes, DataType,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -405,10 +405,9 @@ where
             return Ok(None);
         };
 
-        let decoded_value = self
-            .codec
-            .decode(encoded_value, &self.decoded_representation, options)?
-            .into_vec();
+        let decoded_value =
+            self.codec
+                .decode(encoded_value, &self.decoded_representation, options)?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
@@ -438,18 +437,11 @@ where
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self
-            .input_output_handle
-            .decode(options)?
-            .map(CowBytes::into_vec);
+        let encoded_value = self.input_output_handle.decode(options)?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(
-                    CowBytes::from(encoded_value),
-                    &self.decoded_representation,
-                    options,
-                )?
+                .decode(encoded_value, &self.decoded_representation, options)?
                 .into_vec()
         } else {
             vec![]
@@ -463,13 +455,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
-        let bytes_encoded = self
-            .codec
-            .encode(CowBytes::from(decoded_value), options)?
-            .into_vec();
+        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
 
         self.input_output_handle
-            .partial_encode(0, CowBytes::from(bytes_encoded), options)
+            .partial_encode(0, bytes_encoded, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -778,10 +767,9 @@ where
             return Ok(None);
         };
 
-        let decoded_value = self
-            .codec
-            .decode(encoded_value, &self.decoded_representation, options)?
-            .into_vec();
+        let decoded_value =
+            self.codec
+                .decode(encoded_value, &self.decoded_representation, options)?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
@@ -814,19 +802,11 @@ where
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self
-            .input_output_handle
-            .decode(options)
-            .await?
-            .map(CowBytes::into_vec);
+        let encoded_value = self.input_output_handle.decode(options).await?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(
-                    CowBytes::from(encoded_value),
-                    &self.decoded_representation,
-                    options,
-                )?
+                .decode(encoded_value, &self.decoded_representation, options)?
                 .into_vec()
         } else {
             vec![]
@@ -840,13 +820,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
-        let bytes_encoded = self
-            .codec
-            .encode(CowBytes::from(decoded_value), options)?
-            .into_vec();
+        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
 
         self.input_output_handle
-            .partial_encode(0, CowBytes::from(bytes_encoded), options)
+            .partial_encode(0, bytes_encoded, options)
             .await
     }
 

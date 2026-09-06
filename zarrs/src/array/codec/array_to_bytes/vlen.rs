@@ -103,8 +103,8 @@ use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    CowBytes, ChunkShape, ChunkShapeTraits, CodecChainBound, Endianness,
-    convert_from_bytes_slice, data_type,
+    ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, Endianness, convert_from_bytes_slice,
+    data_type,
 };
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
@@ -143,7 +143,7 @@ fn get_vlen_bytes_and_offsets(
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
-) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+) -> Result<(CowBytes<'static>, Vec<usize>), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
@@ -203,9 +203,9 @@ fn get_vlen_bytes_and_offsets(
         data_codecs
             .decode(data_enc.into(), &[data_len_expected], options)?
             .into_fixed()?
-            .into_vec()
+            .into_static()
     } else {
-        vec![]
+        CowBytes::from(vec![])
     };
 
     // Check the data length is as expected

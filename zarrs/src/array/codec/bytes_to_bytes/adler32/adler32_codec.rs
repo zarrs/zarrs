@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -12,7 +11,7 @@ use crate::array::codec::bytes_to_bytes::{
     strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder,
     strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
 };
-use crate::array::{CowBytes, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -135,18 +134,19 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {
-                    let mut owned = encoded_value.into_vec();
-                    let checksum: [u8; CHECKSUM_SIZE] = owned[..CHECKSUM_SIZE].try_into().unwrap();
-                    owned.copy_within(CHECKSUM_SIZE.., 0);
-                    owned.truncate(owned.len() - CHECKSUM_SIZE);
-                    (CowBytes::from(owned), checksum)
+                    let checksum: [u8; CHECKSUM_SIZE] =
+                        encoded_value[..CHECKSUM_SIZE].try_into().unwrap();
+                    let data_len = encoded_value.len() - CHECKSUM_SIZE;
+                    (
+                        encoded_value.slice(CHECKSUM_SIZE..CHECKSUM_SIZE + data_len),
+                        checksum,
+                    )
                 }
                 Adler32CodecConfigurationChecksumLocation::End => {
-                    let mut owned = encoded_value.into_vec();
-                    let checksum_start = owned.len() - CHECKSUM_SIZE;
-                    let checksum: [u8; CHECKSUM_SIZE] = owned[checksum_start..].try_into().unwrap();
-                    owned.truncate(checksum_start);
-                    (CowBytes::from(owned), checksum)
+                    let checksum_start = encoded_value.len() - CHECKSUM_SIZE;
+                    let checksum: [u8; CHECKSUM_SIZE] =
+                        encoded_value[checksum_start..].try_into().unwrap();
+                    (encoded_value.slice(0..checksum_start), checksum)
                 }
             };
 

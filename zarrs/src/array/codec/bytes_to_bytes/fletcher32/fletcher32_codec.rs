@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use num::Integer;
@@ -9,7 +8,7 @@ use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
-use crate::array::{CowBytes, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -145,9 +144,8 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
                 }
             }
 
-            let mut decoded_value = encoded_value.into_vec();
-            decoded_value.truncate(decoded_value.len() - CHECKSUM_SIZE);
-            Ok(CowBytes::from(decoded_value))
+            let data_len = encoded_value.len() - CHECKSUM_SIZE;
+            Ok(encoded_value.slice(0..data_len))
         } else {
             Err(CodecError::Other(
                 "fletcher32 decoder expects a 32 bit input".to_string(),

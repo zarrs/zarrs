@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +15,7 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, CowBytes, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChainBound,
+    ArrayBytes, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes,
     DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use zarrs_codec::{
@@ -282,7 +281,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let subchunks_encoded = self
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| bytes.into_iter().map(CowBytes::into_vec).collect::<Vec<_>>());
+            .map(|bytes| {
+                bytes
+                    .into_iter()
+                    .map(CowBytes::into_vec)
+                    .collect::<Vec<_>>()
+            });
 
         // Decode the straddling subchunks
         let subchunks_decoded: HashMap<_, _> = if let Some(subchunks_encoded) = subchunks_encoded {
@@ -383,7 +387,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     let subchunk_encoded = self
                         .inner_codecs
                         .encode(subchunk_decoded, &self.subchunk_shape, options)?
-                        .into_vec();
+                        .into_static();
                     Ok((subchunk_index, Some(subchunk_encoded)))
                 }
             })
@@ -431,17 +435,18 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             self.input_output_handle.erase()?;
         } else {
             // Encode the updated shard index
-            let shard_index_bytes: CowBytes =
-                transmute_to_bytes(shard_index.as_slice()).into();
+            let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
                 .encode(shard_index_bytes.into(), &self.index_shape, options)?
-                .into_vec();
+                .into_static();
 
             // Get the total size of the encoded subchunks
             let encoded_subchunks_size = updated_subchunks
                 .iter()
-                .filter_map(|(_, subchunk_encoded)| subchunk_encoded.as_ref().map(Vec::len))
+                .filter_map(|(_, subchunk_encoded)| {
+                    subchunk_encoded.as_ref().map(|bytes| bytes.len())
+                })
                 .sum::<usize>();
 
             // Get the suffix write size
@@ -454,7 +459,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             let mut encoded_output = Vec::with_capacity(suffix_write_size);
             for (_, subchunk_encoded) in updated_subchunks {
                 if let Some(subchunk_encoded) = subchunk_encoded {
-                    encoded_output.extend(subchunk_encoded);
+                    encoded_output.extend_from_slice(&subchunk_encoded);
                 }
             }
 
@@ -464,7 +469,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     self.input_output_handle.partial_encode_many(
                         Box::new(
                             [
-                                (0, CowBytes::from(encoded_array_index)),
+                                (0, encoded_array_index),
                                 (offset_new_chunks, CowBytes::from(encoded_output)),
                             ]
                             .into_iter(),
@@ -473,7 +478,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     )?;
                 }
                 ShardingIndexLocation::End => {
-                    encoded_output.extend(encoded_array_index);
+                    encoded_output.extend_from_slice(&encoded_array_index);
                     self.input_output_handle.partial_encode_many(
                         Box::new([(offset_new_chunks, CowBytes::from(encoded_output))].into_iter()),
                         options,
