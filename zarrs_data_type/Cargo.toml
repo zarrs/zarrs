@@ -25,6 +25,7 @@ thiserror.workspace = true
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
+cowbytes.workspace = true
 inventory.workspace = true
 paste.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }

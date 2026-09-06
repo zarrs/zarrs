@@ -201,7 +201,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 .codecs_bound()
                 .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
-            let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
+            let chunk_encoded = Bytes::from(chunk_encoded.into_vec());
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
         }
         Ok(())

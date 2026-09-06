@@ -124,7 +124,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 unsafe {
                     self.store_encoded_chunk(
                         chunk_indices,
-                        bytes::Bytes::from(compacted_bytes.into_owned()),
+                        bytes::Bytes::from(compacted_bytes.into_vec()),
                     )?;
                 }
                 Ok(true)

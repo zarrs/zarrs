@@ -2,8 +2,8 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::borrow::Cow;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -161,7 +161,7 @@ impl Element for CustomDataTypeUInt12Element {
         for element in elements {
             bytes.extend_from_slice(&element.into_le_bytes());
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(

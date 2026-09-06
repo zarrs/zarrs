@@ -24,7 +24,7 @@ use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
+    ArrayBytes, ArrayBytesFixedDisjointView, CowBytes, ArraySubset, BytesRepresentation,
     ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
     chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
 };
@@ -353,7 +353,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let data_type = self.data_type();
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, data_type)?;
@@ -372,12 +372,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 self.encode_unbounded(&bytes, shape, &self.subchunk_shape, options)
             }
         }?;
-        Ok(ArrayBytesRaw::from(bytes))
+        Ok(CowBytes::from(bytes))
     }
 
     fn decode<'a>(
         &self,
-        encoded_shard: ArrayBytesRaw<'a>,
+        encoded_shard: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -438,7 +438,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                         let size: usize = size.try_into().unwrap();
                         let encoded_chunk = &encoded_shard[offset..offset + size];
                         self.inner_codecs
-                            .decode(Cow::Borrowed(encoded_chunk), &self.subchunk_shape, &options)?
+                            .decode(CowBytes::Borrowed(encoded_chunk), &self.subchunk_shape, &options)?
                             .into_variable()?
                     };
                     Ok((chunk_bytes, chunk_subset))
@@ -497,7 +497,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                             let size: usize = size.try_into().unwrap();
                             let encoded_chunk = &encoded_shard[offset..offset + size];
                             self.inner_codecs.decode_into(
-                                Cow::Borrowed(encoded_chunk),
+                                CowBytes::Borrowed(encoded_chunk),
                                 &self.subchunk_shape,
                                 ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                                 &options,
@@ -519,10 +519,10 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn compact<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
         // Calculate chunks per shard
         let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
 
@@ -611,12 +611,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             }
         }
 
-        Ok(Some(Cow::Owned(compact_shard)))
+        Ok(Some(CowBytes::from(compact_shard)))
     }
 
     fn decode_into(
         &self,
-        encoded_shard: ArrayBytesRaw<'_>,
+        encoded_shard: CowBytes<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
@@ -689,7 +689,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 let size: usize = size.try_into().unwrap();
                 let encoded_chunk = &encoded_shard[offset..offset + size];
                 self.inner_codecs.decode_into(
-                    Cow::Borrowed(encoded_chunk),
+                    CowBytes::Borrowed(encoded_chunk),
                     &self.subchunk_shape,
                     ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                     &options,
@@ -913,7 +913,7 @@ impl ShardingCodecBound {
                 .inner_codecs
                 .encode(bytes, subchunk_shape, options_inner);
             match encoded_chunk {
-                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_owned()))),
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_vec()))),
                 Err(err) => Some(Err(err)),
             }
         }
@@ -1079,7 +1079,7 @@ impl ShardingCodecBound {
         }
 
         // Encode and write array index
-        let shard_index_bytes: ArrayBytesRaw = transmute_to_bytes_vec(shard_index).into();
+        let shard_index_bytes: CowBytes = transmute_to_bytes_vec(shard_index).into();
         let encoded_array_index =
             self.index_codecs
                 .encode(shard_index_bytes.into(), &index_shape, &options)?;

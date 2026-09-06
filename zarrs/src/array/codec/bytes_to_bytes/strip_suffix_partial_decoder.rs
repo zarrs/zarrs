@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -40,7 +40,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
                 let bytes = self.input_handle.partial_decode(decoded_region, options)?;
@@ -48,16 +48,16 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
                         let length = bytes.len() - self.suffix_size;
-                        let mut bytes = bytes.into_owned();
+                        let mut bytes = bytes.into_vec();
                         bytes.truncate(length);
-                        Cow::Owned(bytes)
+                        CowBytes::from(bytes)
                     }
                     ByteRange::Suffix(_) => {
                         let length = bytes.len() as u64 - (self.suffix_size as u64);
                         let length = usize::try_from(length).unwrap();
-                        let mut bytes = bytes.into_owned();
+                        let mut bytes = bytes.into_vec();
                         bytes.truncate(length);
-                        Cow::Owned(bytes)
+                        CowBytes::from(bytes)
                     }
                 }))
             })
@@ -106,7 +106,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
         let futures = decoded_regions.map(|decoded_region| async move {
@@ -123,9 +123,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
-                        let mut bytes = bytes.into_owned();
+                        let mut bytes = bytes.into_vec();
                         bytes.truncate(length);
-                        Ok(Some(Cow::Owned(bytes)))
+                        Ok(Some(CowBytes::from(bytes)))
                     } else {
                         Ok(None)
                     }

@@ -9,7 +9,7 @@ use super::{
     bytes_codec_partial,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
+    ArrayBytes, CowBytes, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
     FillValue,
 };
 use std::num::NonZeroU64;
@@ -191,7 +191,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
@@ -202,7 +202,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

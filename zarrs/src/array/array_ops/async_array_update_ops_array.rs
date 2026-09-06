@@ -132,7 +132,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 unsafe {
                     self.async_store_encoded_chunk(
                         chunk_indices,
-                        bytes::Bytes::from(compacted_bytes.into_owned()),
+                        bytes::Bytes::from(compacted_bytes.into_vec()),
                     )
                     .await?;
                 }

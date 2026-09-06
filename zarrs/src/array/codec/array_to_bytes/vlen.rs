@@ -103,7 +103,7 @@ use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChainBound, Endianness,
+    CowBytes, ChunkShape, ChunkShapeTraits, CodecChainBound, Endianness,
     convert_from_bytes_slice, data_type,
 };
 use itertools::Itertools;
@@ -137,7 +137,7 @@ impl CodecTraitsV3 for VlenCodec {
 }
 
 fn get_vlen_bytes_and_offsets(
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
     shape: &[NonZeroU64],
     index_codecs: &CodecChainBound,
     data_codecs: &CodecChainBound,
@@ -177,7 +177,7 @@ fn get_vlen_bytes_and_offsets(
         .into_fixed()?;
     let index_data_type = index_codecs.data_type();
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), index_data_type);
+        index.with_mut(|index| reverse_endianness(index, index_data_type));
     }
     let index = if *index_data_type == data_type::uint32() {
         let index = convert_from_bytes_slice::<u32>(&index);
@@ -203,7 +203,7 @@ fn get_vlen_bytes_and_offsets(
         data_codecs
             .decode(data_enc.into(), &[data_len_expected], options)?
             .into_fixed()?
-            .into_owned()
+            .into_vec()
     } else {
         vec![]
     };

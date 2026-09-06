@@ -76,8 +76,8 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -113,7 +113,7 @@ mod tests {
             let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
 
             let encoded = codec
-                .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
                 .unwrap();
             let decoded = codec
                 .decode(
@@ -150,7 +150,7 @@ mod tests {
                 Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
 
             let encoded = codec
-                .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
+                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
             let input_handle = Arc::new(encoded);
@@ -194,7 +194,7 @@ mod tests {
                 Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
 
             let encoded = codec
-                .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
+                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
             let input_handle = Arc::new(encoded);

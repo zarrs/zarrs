@@ -1,10 +1,9 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
@@ -87,9 +86,9 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         if !decoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
@@ -103,15 +102,15 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
                 encoded_value[j] = decoded_value[offset + byte_index];
             }
         }
-        Ok(Cow::Owned(encoded_value))
+        Ok(CowBytes::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         if !encoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
@@ -125,7 +124,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
                 decoded_value[j] = encoded_value[offset + byte_index];
             }
         }
-        Ok(Cow::Owned(decoded_value))
+        Ok(CowBytes::from(decoded_value))
     }
 
     fn encoded_representation(

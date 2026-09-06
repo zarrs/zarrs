@@ -9,7 +9,7 @@ use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{CowBytes, BytesRepresentation};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -117,21 +117,21 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
         let mut encoded_value = into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
         encoded_value.extend_from_slice(&checksum);
-        Ok(Cow::Owned(encoded_value))
+        Ok(CowBytes::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             if options.validate_checksums() {
                 let decoded_value = &encoded_value[..encoded_value.len() - CHECKSUM_SIZE];
@@ -145,9 +145,9 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
                 }
             }
 
-            let mut decoded_value = encoded_value.into_owned();
+            let mut decoded_value = encoded_value.into_vec();
             decoded_value.truncate(decoded_value.len() - CHECKSUM_SIZE);
-            Ok(Cow::Owned(decoded_value))
+            Ok(CowBytes::from(decoded_value))
         } else {
             Err(CodecError::Other(
                 "fletcher32 decoder expects a 32 bit input".to_string(),

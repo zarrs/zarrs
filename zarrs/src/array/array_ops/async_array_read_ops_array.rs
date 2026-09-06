@@ -1,5 +1,5 @@
 use inherent::inherent;
-use std::borrow::Cow;
+use zarrs_codec::CowBytes;
 use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
@@ -314,7 +314,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = chunk_encoded {
             self.codecs_bound()
                 .decode_into(
-                    Cow::Owned(chunk_encoded.into()),
+                    CowBytes::Shared(chunk_encoded),
                     &chunk_shape,
                     output_target,
                     options,
@@ -426,7 +426,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
                 .codecs_bound()
-                .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
+                .decode(CowBytes::Shared(chunk_encoded), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
             Ok(Some(T::from_array_bytes(

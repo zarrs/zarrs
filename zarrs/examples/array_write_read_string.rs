@@ -94,7 +94,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Add a convenience function for this?
     let data_all: ArrayBytes = array.retrieve_array_subset(&subset_all)?;
     let (bytes, offsets) = data_all.into_variable()?.into_parts();
-    let string = String::from_utf8(bytes.into_owned())?;
+    let string = String::from_utf8(bytes.into_vec())?;
     let elements = offsets
         .iter()
         .tuple_windows()

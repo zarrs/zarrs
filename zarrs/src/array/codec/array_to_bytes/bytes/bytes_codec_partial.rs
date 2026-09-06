@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use zarrs_codec::CowBytes;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
@@ -49,17 +50,17 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         Ok(self
             .data_type
             .codec_bytes()?
-            .decode(Cow::Owned(bytes), self.endian)?
-            .into_owned())
+            .decode(CowBytes::from(bytes), self.endian)?
+            .into_vec())
     }
 
     /// Encode bytes, applying endianness conversion if required.
-    fn encode_bytes(&self, bytes: Cow<'_, [u8]>) -> Result<Vec<u8>, CodecError> {
+    fn encode_bytes(&self, bytes: CowBytes<'_>) -> Result<Vec<u8>, CodecError> {
         Ok(self
             .data_type
             .codec_bytes()?
             .encode(bytes, self.endian)?
-            .into_owned())
+            .into_vec())
     }
 }
 
@@ -236,7 +237,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
+                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();
@@ -259,12 +260,12 @@ where
             let chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
                 .expect("fixed data type")
-                .into_owned();
+                .into_vec();
 
-            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
+            let chunk_bytes = self.encode_bytes(CowBytes::from(chunk_bytes))?;
 
             self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
+                .partial_encode(0, CowBytes::from(chunk_bytes), options)
         }
     }
 
@@ -319,7 +320,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
+                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();
@@ -343,12 +344,12 @@ where
             let chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
                 .expect("fixed data type")
-                .into_owned();
+                .into_vec();
 
-            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
+            let chunk_bytes = self.encode_bytes(CowBytes::from(chunk_bytes))?;
 
             self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
+                .partial_encode(0, CowBytes::from(chunk_bytes), options)
                 .await
         }
     }

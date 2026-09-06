@@ -16,7 +16,7 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChainBound,
+    ArrayBytes, CowBytes, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChainBound,
     DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use zarrs_codec::{
@@ -282,7 +282,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let subchunks_encoded = self
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
+            .map(|bytes| bytes.into_iter().map(CowBytes::into_vec).collect::<Vec<_>>());
 
         // Decode the straddling subchunks
         let subchunks_decoded: HashMap<_, _> = if let Some(subchunks_encoded) = subchunks_encoded {
@@ -297,7 +297,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     Ok((
                         subchunk_index,
                         self.inner_codecs.decode(
-                            Cow::Owned(subchunk_encoded),
+                            CowBytes::from(subchunk_encoded),
                             &self.subchunk_shape,
                             options,
                         )?,
@@ -383,7 +383,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     let subchunk_encoded = self
                         .inner_codecs
                         .encode(subchunk_decoded, &self.subchunk_shape, options)?
-                        .into_owned();
+                        .into_vec();
                     Ok((subchunk_index, Some(subchunk_encoded)))
                 }
             })
@@ -431,12 +431,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             self.input_output_handle.erase()?;
         } else {
             // Encode the updated shard index
-            let shard_index_bytes: ArrayBytesRaw =
+            let shard_index_bytes: CowBytes =
                 transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
                 .encode(shard_index_bytes.into(), &self.index_shape, options)?
-                .into_owned();
+                .into_vec();
 
             // Get the total size of the encoded subchunks
             let encoded_subchunks_size = updated_subchunks
@@ -464,8 +464,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     self.input_output_handle.partial_encode_many(
                         Box::new(
                             [
-                                (0, Cow::Owned(encoded_array_index)),
-                                (offset_new_chunks, Cow::Owned(encoded_output)),
+                                (0, CowBytes::from(encoded_array_index)),
+                                (offset_new_chunks, CowBytes::from(encoded_output)),
                             ]
                             .into_iter(),
                         ),
@@ -475,7 +475,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 ShardingIndexLocation::End => {
                     encoded_output.extend(encoded_array_index);
                     self.input_output_handle.partial_encode_many(
-                        Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
+                        Box::new([(offset_new_chunks, CowBytes::from(encoded_output))].into_iter()),
                         options,
                     )?;
                 }

@@ -76,9 +76,9 @@ impl CodecTraitsV2 for ZlibCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::num::NonZeroU64;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
@@ -102,7 +102,7 @@ mod tests {
         let codec = ZlibCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -127,7 +127,7 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
@@ -177,7 +177,7 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)

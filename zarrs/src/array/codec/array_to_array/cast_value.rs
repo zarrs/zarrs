@@ -72,16 +72,15 @@ mod tests {
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
         let encoded_elements = crate::array::transmute_from_bytes_vec::<u16>(
-            encoded.clone().into_fixed().unwrap().into_owned(),
+            encoded.clone().into_fixed().unwrap().into_vec(),
         );
         assert_eq!(encoded_elements, vec![0u16, 1, 127, 255]);
 
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(decoded.into_fixed().unwrap().into_vec());
         assert_eq!(decoded_elements, elements);
     }
 
@@ -106,9 +105,8 @@ mod tests {
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![127i8, -128, -127, 127]);
     }
 
@@ -131,9 +129,8 @@ mod tests {
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![-1i8]);
     }
 
@@ -159,9 +156,8 @@ mod tests {
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<f32>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<f32>(decoded.into_fixed().unwrap().into_vec());
         assert_eq!(decoded_elements, vec![255.0f32, 0.0]);
     }
 
@@ -191,9 +187,8 @@ mod tests {
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![42u8, 255, 7]);
     }
 
@@ -218,9 +213,8 @@ mod tests {
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![2u8]);
     }
 
@@ -257,7 +251,7 @@ mod tests {
                 .encode(bytes, &shape, &CodecOptions::default())
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
-                encoded.into_fixed().unwrap().into_owned(),
+                encoded.into_fixed().unwrap().into_vec(),
             );
             assert_eq!(encoded_elements, expected, "rounding={rounding}");
         }
@@ -313,7 +307,7 @@ mod tests {
                 .encode(bytes, &shape, &CodecOptions::default())
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
-                encoded.into_fixed().unwrap().into_owned(),
+                encoded.into_fixed().unwrap().into_vec(),
             );
             assert_eq!(encoded_elements, expected, "rounding={rounding}");
         }
@@ -343,9 +337,8 @@ mod tests {
         let encoded = codec_f32
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![0u8, 0, 0]);
 
         // exactly 2^127 previously saturated to i128::MAX and wrapped to 255
@@ -357,9 +350,8 @@ mod tests {
         let encoded = codec_f64
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![0u8]);
     }
 
@@ -386,9 +378,8 @@ mod tests {
         let encoded = codec
             .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<u8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![255u8, 0]);
 
         let configuration: CastValueCodecConfiguration = serde_json::from_str(
@@ -405,9 +396,8 @@ mod tests {
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
-        let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
-            encoded.into_fixed().unwrap().into_owned(),
-        );
+        let encoded_elements =
+            crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
         assert_eq!(encoded_elements, vec![127i8, -128]);
     }
 
@@ -522,7 +512,7 @@ mod tests {
                             .unwrap_or_else(|err| panic!("{case}: {err}"))
                             .into_fixed()
                             .unwrap()
-                            .into_owned();
+                            .into_vec();
                         assert_eq!(encoded, expected, "{case}: encode mismatch");
 
                         // decode direction (kernel with source and target swapped)
@@ -548,7 +538,7 @@ mod tests {
                                 .unwrap_or_else(|err| panic!("{case} (decode): {err}"))
                                 .into_fixed()
                                 .unwrap()
-                                .into_owned();
+                                .into_vec();
                             assert_eq!(decoded, expected_decoded, "{case}: decode mismatch");
                         }
                     }

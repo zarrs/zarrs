@@ -6,11 +6,10 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesRaw, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
-    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
+    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -132,7 +131,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError>;
+    ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode a chunk.
     ///
@@ -140,7 +139,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// Returns [`CodecError`] if a codec fails or the decoded output is incompatible with the decoded representation.
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
@@ -156,10 +155,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     #[allow(unused_variables)]
     fn compact<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
         Ok(None)
     }
 
@@ -178,7 +177,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(
         &self,
-        bytes: ArrayBytesRaw<'_>,
+        bytes: CowBytes<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,

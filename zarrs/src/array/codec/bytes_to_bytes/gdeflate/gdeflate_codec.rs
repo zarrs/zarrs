@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -7,7 +6,7 @@ use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
+use crate::array::{BytesRepresentation, CowBytes, RecommendedConcurrency};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability,
@@ -95,9 +94,9 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
         let (page_sizes, encoded_bytes) = compressor
@@ -122,16 +121,16 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         // Data
         encoded_value.extend_from_slice(&encoded_bytes);
 
-        Ok(Cow::Owned(encoded_value))
+        Ok(CowBytes::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        Ok(Cow::Owned(gdeflate_decode(&encoded_value)?))
+    ) -> Result<CowBytes<'a>, CodecError> {
+        Ok(CowBytes::from(gdeflate_decode(&encoded_value)?))
     }
 
     fn encoded_representation(

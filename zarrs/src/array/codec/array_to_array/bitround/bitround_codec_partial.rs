@@ -94,7 +94,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
+        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
@@ -175,7 +175,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
+        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle

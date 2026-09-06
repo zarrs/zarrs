@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use zarrs_codec::CowBytes;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "async")]
@@ -61,7 +61,7 @@ where
         .map(|encoded| {
             let bytes = array
                 .codecs_bound()
-                .decode(Cow::Borrowed(encoded), chunk_shape, options)
+                .decode(CowBytes::Borrowed(encoded), chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
             Ok(Arc::new(bytes.into_owned()))
@@ -84,7 +84,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
                 Ok(array
                     .retrieve_encoded_chunk(chunk_indices)?
-                    .map(|chunk| Arc::new(Cow::Owned(chunk))))
+                    .map(|chunk| Arc::new(CowBytes::from(chunk))))
             })
             .map_err(cache_error)?;
         partial_decoder_over_encoded(array, encoded, chunk_indices, options)
@@ -105,7 +105,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
                 Ok(array
                     .retrieve_encoded_chunk(chunk_indices)?
-                    .map(|chunk| Arc::new(Cow::Owned(chunk))))
+                    .map(|chunk| Arc::new(CowBytes::from(chunk))))
             })
             .map_err(cache_error)?;
         decode_encoded(array, &encoded, &chunk_shape, options)
@@ -145,7 +145,7 @@ where
             Ok(array
                 .async_retrieve_encoded_chunk(chunk_indices)
                 .await?
-                .map(|chunk| Arc::new(Cow::Owned(chunk.into()))))
+                .map(|chunk| Arc::new(CowBytes::Shared(chunk))))
         })
         .await
         .map_err(cache_error)

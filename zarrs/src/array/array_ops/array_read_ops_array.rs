@@ -1,5 +1,5 @@
 use inherent::inherent;
-use std::borrow::Cow;
+use zarrs_codec::CowBytes;
 use std::sync::Arc;
 
 use super::super::array_bytes_internal::{
@@ -297,7 +297,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = chunk_encoded {
             self.codecs_bound()
                 .decode_into(
-                    Cow::Owned(chunk_encoded.into()),
+                    CowBytes::Shared(chunk_encoded),
                     &chunk_shape,
                     output_target,
                     options,
@@ -395,7 +395,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
                 .codecs_bound()
-                .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
+                .decode(CowBytes::Shared(chunk_encoded), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),

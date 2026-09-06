@@ -50,7 +50,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
+use super::{ArrayBytes, CowBytes, ArrayError};
 use crate::array::{Array, ArraySubsetTraits, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -69,7 +69,7 @@ pub(crate) use chunk_cache_type::async_retrieve_chunk_bytes;
 pub(crate) use chunk_cache_type::{fill_value_bytes, retrieve_chunk_bytes};
 
 /// The chunk type of an encoded chunk cache.
-pub type ChunkCacheTypeEncoded = Option<Arc<ArrayBytesRaw<'static>>>;
+pub type ChunkCacheTypeEncoded = Option<Arc<CowBytes<'static>>>;
 
 /// The chunk type of a decoded chunk cache.
 pub type ChunkCacheTypeDecoded = Option<Arc<ArrayBytes<'static>>>;

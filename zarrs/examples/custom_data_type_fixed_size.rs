@@ -12,9 +12,9 @@
 //! }
 //! ```
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
@@ -119,7 +119,7 @@ impl Element for CustomDataTypeFixedSizeElement {
         for element in elements {
             bytes.extend_from_slice(&element.to_ne_bytes());
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(
@@ -215,14 +215,14 @@ impl DataTypeTraits for CustomDataTypeFixedSize {
 impl BytesDataTypeTraits for CustomDataTypeFixedSize {
     fn encode<'a>(
         &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
             if endianness == Endianness::native() {
                 Ok(bytes)
             } else {
-                let mut bytes = bytes.into_owned();
+                let mut bytes = bytes.into_vec();
                 for bytes in bytes
                     .as_chunks_mut::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
                     .0
@@ -234,7 +234,7 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
                         *bytes = value.to_be_bytes();
                     }
                 }
-                Ok(Cow::Owned(bytes))
+                Ok(CowBytes::from(bytes))
             }
         } else {
             Err(BytesCodecEndiannessMissingError)
@@ -243,14 +243,14 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
 
     fn decode<'a>(
         &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
             if endianness == Endianness::native() {
                 Ok(bytes)
             } else {
-                let mut bytes = bytes.into_owned();
+                let mut bytes = bytes.into_vec();
                 for bytes in bytes
                     .as_chunks_mut::<{ size_of::<u64>() + size_of::<f32>() }>()
                     .0
@@ -262,7 +262,7 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
                     };
                     *bytes = value.to_ne_bytes();
                 }
-                Ok(Cow::Owned(bytes))
+                Ok(CowBytes::from(bytes))
             }
         } else {
             Err(BytesCodecEndiannessMissingError)
