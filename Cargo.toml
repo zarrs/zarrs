@@ -43,7 +43,7 @@ version = "0.3.0"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.9.1"
+version = "0.10.0"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]
@@ -59,11 +59,11 @@ version = "0.4.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.4.6"
+version = "0.5.0"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.3.12"
+version = "0.4.0"
 path = "zarrs_filesystem"
 
 [workspace.dependencies.half]

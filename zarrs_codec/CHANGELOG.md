@@ -14,7 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
-- Bump `zarrs_storage` to 0.4.6
+- **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate
+  - Renamed from `ArrayBytesRaw` and re-exported from `zarrs_storage`
+  - It is an enum with `Borrowed` and `Shared` variants rather than a `Cow<'a, [u8]>` type alias, so that it can hold a reference counted `bytes::Bytes` and share it with the store instead of copying
+  - `Deref<Target = [u8]>` and conversions to/from `Cow<'a, [u8]>`, `Vec<u8>` and `&'a [u8]` are retained, so most usage is unaffected
+  - `to_mut()` becomes `with_mut()`, which takes a closure, as `Bytes` offers no in-place mutable access
+  - `[Async]BytesPartialDecoderTraits` is implemented for `CowBytes<'static>` instead of `Cow<'static, [u8]>`
+  - Avoids copying the decoded value in the default partial encode/decode implementations, which round-tripped through a `Vec<u8>`
+- **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
+- **Breaking**: `ArrayBytesOffsets` holds an `Arc<Vec<usize>>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
+  - Cloning shares the offset allocation rather than copying its elements
+  - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
+- **Breaking**: Bump `zarrs_storage` to 0.5.0
+- **Breaking**: Bump `zarrs_data_type` to 0.10.0
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
   - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
@@ -47,8 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: Remove `create_fn` parameter from `CodecPluginV2::create()` and add `T: CodecTraitsV2` bound
 - **Breaking**: Remove `create_fn` parameter from `CodecPluginV3::create()` and add `T: CodecTraitsV3` bound
-- **Breaking**: Rename `ArrayRawBytesOffsetsOutOfBoundsError` to `ArrayBytesRawOffsetsOutOfBoundsError`
-- **Breaking**: Rename `ArrayRawBytesOffsetsCreateError` to `ArrayBytesRawOffsetsCreateError`
+- **Breaking**: Rename `ArrayRawBytesOffsets{OutOfBounds,Create}Error` to `ArrayBytesOffsets{OutOfBounds,Create}Error`
 - **Breaking**: `ArrayBytes::into_fixed()` now returns `Result<_, ExpectedFixedLengthBytesError>` instead of `Result<_, CodecError>`
 - **Breaking**: `ArrayBytes::into_variable()` now returns `Result<_, ExpectedVariableLengthBytesError>` instead of `Result<_, CodecError>`
 - **Breaking**: `ArrayBytes::into_optional()` now returns `Result<_, ExpectedOptionalBytesError>` instead of `Result<_, CodecError>`
