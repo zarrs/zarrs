@@ -1,16 +1,17 @@
-use std::borrow::Cow;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use derive_more::derive::Display;
 use thiserror::Error;
 
 /// Array element byte offsets.
 ///
+/// Cloning retains the offset allocation without copying its elements.
 /// These must be monotonically increasing. See [`ArrayBytes`](crate::ArrayBytes).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ArrayBytesOffsets<'a>(Cow<'a, [usize]>);
+pub struct ArrayBytesOffsets(Arc<Vec<usize>>);
 
-impl Deref for ArrayBytesOffsets<'_> {
+impl Deref for ArrayBytesOffsets {
     type Target = [usize];
 
     fn deref(&self) -> &Self::Target {
@@ -20,7 +21,7 @@ impl Deref for ArrayBytesOffsets<'_> {
 
 /// An error creating [`ArrayBytesOffsets`].
 #[derive(Clone, Debug, Display, Error)]
-pub enum ArrayBytesRawOffsetsCreateError {
+pub enum ArrayBytesOffsetsCreateError {
     /// The offsets length must be greater than zero.
     #[display("offsets length must be greater than zero")]
     ZeroLength,
@@ -29,21 +30,19 @@ pub enum ArrayBytesRawOffsetsCreateError {
     NotMonotonicallyIncreasing,
 }
 
-impl<'a> ArrayBytesOffsets<'a> {
+impl ArrayBytesOffsets {
     /// Creates a new `ArrayBytesOffsets`.
     ///
     /// # Errors
     /// Returns an error if the offsets are not monotonically increasing.
-    pub fn new(
-        offsets: impl Into<Cow<'a, [usize]>>,
-    ) -> Result<Self, ArrayBytesRawOffsetsCreateError> {
+    pub fn new(offsets: impl Into<Vec<usize>>) -> Result<Self, ArrayBytesOffsetsCreateError> {
         let offsets = offsets.into();
         if offsets.is_empty() {
-            Err(ArrayBytesRawOffsetsCreateError::ZeroLength)
+            Err(ArrayBytesOffsetsCreateError::ZeroLength)
         } else if offsets.windows(2).all(|w| w[1] >= w[0]) {
-            Ok(Self(offsets))
+            Ok(Self(Arc::new(offsets)))
         } else {
-            Err(ArrayBytesRawOffsetsCreateError::NotMonotonicallyIncreasing)
+            Err(ArrayBytesOffsetsCreateError::NotMonotonicallyIncreasing)
         }
     }
 
@@ -52,17 +51,11 @@ impl<'a> ArrayBytesOffsets<'a> {
     /// # Safety
     /// The offsets must be monotonically increasing.
     #[must_use]
-    pub unsafe fn new_unchecked(offsets: impl Into<Cow<'a, [usize]>>) -> Self {
+    pub unsafe fn new_unchecked(offsets: impl Into<Vec<usize>>) -> Self {
         let offsets = offsets.into();
         debug_assert!(!offsets.is_empty());
         debug_assert!(offsets.windows(2).all(|w| w[1] >= w[0]));
-        Self(offsets)
-    }
-
-    /// Clones the offsets if not already owned.
-    #[must_use]
-    pub fn into_owned(self) -> ArrayBytesOffsets<'static> {
-        ArrayBytesOffsets(self.0.into_owned().into())
+        Self(Arc::new(offsets))
     }
 
     /// Returns the last offset.
@@ -75,32 +68,24 @@ impl<'a> ArrayBytesOffsets<'a> {
     }
 }
 
-impl<'a> TryFrom<Cow<'a, [usize]>> for ArrayBytesOffsets<'a> {
-    type Error = ArrayBytesRawOffsetsCreateError;
+impl TryFrom<&[usize]> for ArrayBytesOffsets {
+    type Error = ArrayBytesOffsetsCreateError;
 
-    fn try_from(value: Cow<'a, [usize]>) -> Result<Self, Self::Error> {
+    fn try_from(value: &[usize]) -> Result<Self, Self::Error> {
         Self::new(value)
     }
 }
 
-impl<'a> TryFrom<&'a [usize]> for ArrayBytesOffsets<'a> {
-    type Error = ArrayBytesRawOffsetsCreateError;
+impl<const N: usize> TryFrom<&[usize; N]> for ArrayBytesOffsets {
+    type Error = ArrayBytesOffsetsCreateError;
 
-    fn try_from(value: &'a [usize]) -> Result<Self, Self::Error> {
-        Self::new(value)
+    fn try_from(value: &[usize; N]) -> Result<Self, Self::Error> {
+        Self::new(value.as_slice())
     }
 }
 
-impl<'a, const N: usize> TryFrom<&'a [usize; N]> for ArrayBytesOffsets<'a> {
-    type Error = ArrayBytesRawOffsetsCreateError;
-
-    fn try_from(value: &'a [usize; N]) -> Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-impl TryFrom<Vec<usize>> for ArrayBytesOffsets<'_> {
-    type Error = ArrayBytesRawOffsetsCreateError;
+impl TryFrom<Vec<usize>> for ArrayBytesOffsets {
+    type Error = ArrayBytesOffsetsCreateError;
 
     fn try_from(value: Vec<usize>) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -113,6 +98,11 @@ mod tests {
 
     #[test]
     fn raw_bytes_offsets() {
+        let owned = vec![0, 2, 4];
+        let pointer = owned.as_ptr();
+        let shared = ArrayBytesOffsets::new(owned).unwrap();
+        assert_eq!(shared.as_ptr(), pointer);
+        assert_eq!(shared.clone().as_ptr(), pointer);
         let offsets = ArrayBytesOffsets::new(vec![0, 1, 2, 3]).unwrap();
         assert_eq!(&*offsets, &[0, 1, 2, 3]);
         assert!(ArrayBytesOffsets::new(vec![]).is_err());
@@ -126,6 +116,5 @@ mod tests {
         assert!(ArrayBytesOffsets::try_from([0, 1, 0].as_slice()).is_err());
         assert!(ArrayBytesOffsets::try_from(&[0, 1, 2]).is_ok());
         assert!(ArrayBytesOffsets::try_from(&[0, 1, 0]).is_err());
-        assert!(ArrayBytesOffsets::try_from(Cow::Owned(vec![0, 1, 0])).is_err());
     }
 }

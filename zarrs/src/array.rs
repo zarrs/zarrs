@@ -64,7 +64,7 @@ use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
+    ArrayBytesOffsetsCreateError, ArrayBytesOffsetsOutOfBoundsError,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,

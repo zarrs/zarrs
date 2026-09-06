@@ -57,7 +57,7 @@ pub use bytes_representation::BytesRepresentation;
 mod array_bytes;
 pub use array_bytes::{
     ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
+    ArrayBytesOffsetsCreateError, ArrayBytesOffsetsOutOfBoundsError,
     ArrayBytesVariableLength, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
     ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
     update_array_bytes,
@@ -670,10 +670,10 @@ pub enum CodecError {
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
     /// Invalid byte offsets for variable length data.
     #[error(transparent)]
-    RawBytesOffsetsCreate(#[from] ArrayBytesRawOffsetsCreateError),
+    RawBytesOffsetsCreate(#[from] ArrayBytesOffsetsCreateError),
     /// Variable length array bytes offsets are out of bounds.
     #[error(transparent)]
-    RawBytesOffsetsOutOfBounds(#[from] ArrayBytesRawOffsetsOutOfBoundsError),
+    RawBytesOffsetsOutOfBounds(#[from] ArrayBytesOffsetsOutOfBoundsError),
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),

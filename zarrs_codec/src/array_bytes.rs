@@ -15,7 +15,7 @@ use crate::{
 };
 
 mod array_bytes_offsets;
-pub use array_bytes_offsets::{ArrayBytesOffsets, ArrayBytesRawOffsetsCreateError};
+pub use array_bytes_offsets::{ArrayBytesOffsets, ArrayBytesOffsetsCreateError};
 
 mod array_bytes_raw;
 pub use array_bytes_raw::ArrayBytesRaw;
@@ -46,7 +46,7 @@ pub enum ArrayBytes<'a> {
 /// An error raised if variable length array bytes offsets are out of bounds.
 #[derive(Clone, Debug, Display, Error)]
 #[display("Offset {offset} is out of bounds for bytes of length {len}")]
-pub struct ArrayBytesRawOffsetsOutOfBoundsError {
+pub struct ArrayBytesOffsetsOutOfBoundsError {
     offset: usize,
     len: usize,
 }
@@ -85,11 +85,11 @@ impl<'a> ArrayBytes<'a> {
     /// Create a new variable length array bytes from `bytes` and `offsets`.
     ///
     /// # Errors
-    /// Returns a [`ArrayBytesRawOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
+    /// Returns a [`ArrayBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
     pub fn new_vlen(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
-    ) -> Result<Self, ArrayBytesRawOffsetsOutOfBoundsError> {
+        offsets: ArrayBytesOffsets,
+    ) -> Result<Self, ArrayBytesOffsetsOutOfBoundsError> {
         ArrayBytesVariableLength::new(bytes, offsets).map(Self::Variable)
     }
 
@@ -99,7 +99,7 @@ impl<'a> ArrayBytes<'a> {
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_vlen_unchecked(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
+        offsets: ArrayBytesOffsets,
     ) -> Self {
         Self::Variable(unsafe { ArrayBytesVariableLength::new_unchecked(bytes, offsets) })
     }
@@ -232,7 +232,7 @@ impl<'a> ArrayBytes<'a> {
 
     /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size bytes.
     #[must_use]
-    pub fn offsets(&self) -> Option<&ArrayBytesOffsets<'a>> {
+    pub fn offsets(&self) -> Option<&ArrayBytesOffsets> {
         match self {
             Self::Fixed(..) => None,
             Self::Variable(ArrayBytesVariableLength { offsets, .. }) => Some(offsets),
@@ -248,7 +248,7 @@ impl<'a> ArrayBytes<'a> {
             Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
                 ArrayBytes::Variable(ArrayBytesVariableLength {
                     bytes: bytes.into_owned().into(),
-                    offsets: offsets.into_owned(),
+                    offsets,
                 })
             }
             Self::Optional(optional_bytes) => ArrayBytes::Optional(optional_bytes.into_owned()),
@@ -860,7 +860,7 @@ pub fn decode_into_array_bytes_target(
 //             },
 //             Self::Variable(bytes, offsets) => {
 //                 let bytes: ArrayBytesRaw<'b> = bytes.to_vec().into();
-//                 let offsets: ArrayBytesOffsets<'b> = offsets.to_vec().into();
+//                 let offsets: ArrayBytesOffsets = offsets.to_vec().into();
 //                 ArrayBytes::new_vlen(bytes, offsets)
 //             }
 //         }
