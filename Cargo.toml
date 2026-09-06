@@ -73,6 +73,12 @@ features = ["bytemuck"]
 [workspace.dependencies.num]
 version = "0.4.1"
 
+[workspace.dependencies.cowbytes]
+version = "0.1.1"
+
+[workspace.dependencies.bytes]
+version = "1.7.0"
+
 [workspace.dependencies.inventory]
 version = "0.3.21"
 

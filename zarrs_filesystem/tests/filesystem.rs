@@ -60,20 +60,22 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
     let key = "a/b".try_into()?;
     let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
 
-    store.set(&key, Bytes::from_static(b"first"))?;
+    store.set(&key, Bytes::from_static(b"first").into())?;
     assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
     assert!(!store.list()?.contains(&temporary_key));
 
-    store.set(&key, Bytes::from_static(b"second"))?;
+    store.set(&key, Bytes::from_static(b"second").into())?;
     assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"second")));
     assert!(!store.list()?.contains(&temporary_key));
 
-    store.set_partial(&key, 1, Bytes::from_static(b"X"))?;
+    store.set_partial(&key, 1, Bytes::from_static(b"X").into())?;
     assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond")));
     assert!(!store.list()?.contains(&temporary_key));
 
-    store.set(&temporary_key, Bytes::from_static(b"incomplete"))?;
-    let error = store.set(&key, Bytes::from_static(b"third")).unwrap_err();
+    store.set(&temporary_key, Bytes::from_static(b"incomplete").into())?;
+    let error = store
+        .set(&key, Bytes::from_static(b"third").into())
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         format!("temporary key {temporary_key} already exists")
@@ -85,7 +87,7 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
     );
 
     let error = store
-        .set(&StoreKey::root(), Bytes::from_static(b"root"))
+        .set(&StoreKey::root(), Bytes::from_static(b"root").into())
         .unwrap_err();
     assert_eq!(
         error.to_string(),
@@ -106,7 +108,7 @@ fn atomic_write_adapter_leaves_temporary_key_on_rename_failure() -> Result<(), B
     std::fs::create_dir_all(store.key_to_fspath(&key))?;
 
     assert!(adapter
-        .set(&key, Bytes::from_static(b"replacement"))
+        .set(&key, Bytes::from_static(b"replacement").into())
         .is_err());
     assert!(store.key_to_fspath(&key).is_dir());
     assert_eq!(
@@ -259,7 +261,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         .to_owned()
         .into();
 
-    store.set(&"big_buff".try_into()?, base_vec)?;
+    store.set(&"big_buff".try_into()?, base_vec.into())?;
     // Mix up ordering of requests to ensure returned order is independent of the underlying coalescing operation
     let expected = vec![
         prefix,

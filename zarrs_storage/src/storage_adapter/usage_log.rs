@@ -12,7 +12,7 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -218,7 +218,7 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
 impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let len = value.len();
         let result = self.storage.set(key, value);
         writeln!(
@@ -230,10 +230,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         result
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let offset_values: Vec<_> = offset_values.collect();
         let result = self
@@ -245,7 +245,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
             (self.prefix_func)(),
             offset_values
                 .into_iter()
-                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.into()))
                 .collect_vec()
         )?;
         result
@@ -427,7 +427,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let len = value.len();
         let result = self.storage.set(key, value).await;
         writeln!(
@@ -455,7 +455,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             (self.prefix_func)(),
             offset_values
                 .into_iter()
-                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.into()))
                 .collect_vec()
         )?;
         result

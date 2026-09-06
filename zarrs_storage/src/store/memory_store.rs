@@ -7,7 +7,7 @@ use bytes::BytesMut;
 
 use crate::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 use crate::{
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
@@ -77,17 +77,17 @@ impl ReadableStorageTraits for MemoryStore {
 }
 
 impl WritableStorageTraits for MemoryStore {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
         let mut data_map = self.data_map.lock().unwrap();
-        data_map.insert(key.clone(), value);
+        data_map.insert(key.clone(), value.into());
         Ok(())
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let mut data_map = self.data_map.lock().unwrap();
         let entry = data_map.entry(key.clone()).or_default();

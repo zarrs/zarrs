@@ -209,7 +209,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .create_async_writable_transformer(storage_handle)
             .await?;
         storage_transformer
-            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)
+            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes.into())
             .await?;
         Ok(())
     }

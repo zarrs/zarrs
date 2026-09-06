@@ -173,7 +173,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
+        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes.into())?;
 
         Ok(())
     }

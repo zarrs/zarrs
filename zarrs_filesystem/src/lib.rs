@@ -12,7 +12,7 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    store_set_partial_many, AtomicRenameStorageTraits, Bytes, ListableStorageTraits,
+    store_set_partial_many, AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits,
     MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
     StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
@@ -482,14 +482,14 @@ impl ReadableStorageTraits for FilesystemStore {
 }
 
 impl WritableStorageTraits for FilesystemStore {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         Self::set_impl(self, key, &value, 0, true)
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         store_set_partial_many(self, key, offset_values)
     }
