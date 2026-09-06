@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use futures::{StreamExt, TryStreamExt};
 
@@ -8,7 +9,7 @@ use super::{AsyncArrayWriteOps, *};
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::ArrayToBytesCodecTraits;
-use zarrs_storage::{Bytes, StorageHandle};
+use zarrs_storage::StorageHandle;
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -201,7 +202,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     pub async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: Bytes,
+        encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -209,7 +210,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .create_async_writable_transformer(storage_handle)
             .await?;
         storage_transformer
-            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes.into())
+            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)
             .await?;
         Ok(())
     }
@@ -239,7 +240,6 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                 .codecs_bound()
                 .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
-            let chunk_encoded = Bytes::from(chunk_encoded.into_vec());
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }
         Ok(())

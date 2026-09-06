@@ -1,7 +1,7 @@
 //! The [`IntoArrayBytes`] trait for converting input types into [`ArrayBytes`] for storage.
 
 use super::element::Element;
-use super::{ArrayBytes, DataType, ElementError};
+use super::{ArrayBytes, CowBytes, DataType, ElementError};
 
 /// A trait for types that can be converted into [`ArrayBytes`] for storage.
 pub trait IntoArrayBytes<'a> {
@@ -18,6 +18,17 @@ pub trait IntoArrayBytes<'a> {
 impl<'a> IntoArrayBytes<'a> for ArrayBytes<'a> {
     fn into_array_bytes(self, _data_type: &DataType) -> Result<ArrayBytes<'a>, ElementError> {
         Ok(self)
+    }
+}
+
+/// Store raw bytes without a copy where possible.
+///
+/// The chunk is written directly from `self` if the codec chain passes its input through unchanged,
+/// which requires a fixed length data type, native endianness, and no bytes-to-bytes codecs.
+/// Any other configuration encodes into a new buffer, as usual.
+impl IntoArrayBytes<'_> for &bytes::Bytes {
+    fn into_array_bytes(self, _data_type: &DataType) -> Result<ArrayBytes<'static>, ElementError> {
+        Ok(ArrayBytes::new_flen(CowBytes::Shared(self.clone())))
     }
 }
 

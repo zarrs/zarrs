@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -10,7 +11,7 @@ use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::ArrayToBytesCodecTraits;
-use zarrs_storage::{Bytes, StorageHandle};
+use zarrs_storage::StorageHandle;
 
 #[inherent]
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
@@ -167,13 +168,13 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
     pub unsafe fn store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
+        encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes.into())?;
+        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
 
         Ok(())
     }
@@ -201,7 +202,6 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 .codecs_bound()
                 .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
-            let chunk_encoded = Bytes::from(chunk_encoded.into_vec());
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
         }
         Ok(())

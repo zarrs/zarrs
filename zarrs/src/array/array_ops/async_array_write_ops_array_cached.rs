@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_codec::CowBytes;
 
 use super::{AsyncArrayWriteOps, *};
 use crate::array::chunk_cache::AsyncChunkCache;
@@ -68,7 +69,7 @@ where
     pub async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
+        encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
         unsafe {
             self.array()

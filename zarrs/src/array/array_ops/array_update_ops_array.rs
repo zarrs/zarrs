@@ -122,10 +122,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             )? {
                 // SAFETY: The compacted bytes are already encoded
                 unsafe {
-                    self.store_encoded_chunk(
-                        chunk_indices,
-                        bytes::Bytes::from(compacted_bytes.into_vec()),
-                    )?;
+                    self.store_encoded_chunk(chunk_indices, compacted_bytes)?;
                 }
                 Ok(true)
             } else {
