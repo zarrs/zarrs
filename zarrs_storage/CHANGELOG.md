@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
+- Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
 - Count async erase operations in `PerformanceMetricsStorageAdapter`
 - Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
 - Clamp `StorageValueIO` reads at the end of a value instead of requesting an out-of-bounds byte range

@@ -22,11 +22,11 @@ use crate::{
 pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
 impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 
-struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
+struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, usize);
 
 impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
+        write!(f, "(key={} offset={} len={})", self.0, self.1, self.2)
     }
 }
 
@@ -245,7 +245,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
             (self.prefix_func)(),
             offset_values
                 .into_iter()
-                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.into()))
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.len()))
                 .collect_vec()
         )?;
         result
@@ -455,7 +455,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             (self.prefix_func)(),
             offset_values
                 .into_iter()
-                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.into()))
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes.len()))
                 .collect_vec()
         )?;
         result
