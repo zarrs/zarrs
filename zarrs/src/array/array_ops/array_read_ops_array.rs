@@ -1,6 +1,6 @@
 use inherent::inherent;
-use zarrs_codec::CowBytes;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
@@ -19,7 +19,7 @@ use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, InvalidNumberOfElementsError,
     copy_fill_value_into,
 };
-use zarrs_storage::StorageHandle;
+use zarrs_storage::{Bytes, StorageHandle};
 
 #[inherent]
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
@@ -157,7 +157,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let options = self.codec_options();
         let _ = options;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -165,16 +165,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
 
-        storage_transformer
-            .get(&self.chunk_key(chunk_indices))
-            .map(|maybe_bytes| maybe_bytes.map(Into::into))
+        storage_transformer.get(&self.chunk_key(chunk_indices))
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+    ) -> Result<Vec<Option<Bytes>>, StorageError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

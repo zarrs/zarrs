@@ -1,6 +1,6 @@
 use inherent::inherent;
-use zarrs_codec::CowBytes;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;

@@ -3,7 +3,7 @@ use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
-use zarrs_storage::MaybeSync;
+use zarrs_storage::{Bytes, MaybeSync};
 
 /// Synchronous array read operations.
 ///
@@ -131,10 +131,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Errors
     /// Returns an [`StorageError`] if there is an underlying store error.
-    fn retrieve_encoded_chunk(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, StorageError>;
+    fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, StorageError>;
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.
     ///
@@ -145,7 +142,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
+    ) -> Result<Vec<Option<Bytes>>, StorageError> {
         chunks
             .indices()
             .concurrent_limit(self.codec_options().concurrent_target())

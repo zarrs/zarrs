@@ -50,7 +50,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use super::{ArrayBytes, CowBytes, ArrayError};
+use super::{ArrayBytes, ArrayError};
 use crate::array::{Array, ArraySubsetTraits, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -58,7 +58,7 @@ use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions};
 
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
-use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
 
 mod chunk_cache_lru;
 mod chunk_cache_type;
@@ -69,7 +69,9 @@ pub(crate) use chunk_cache_type::async_retrieve_chunk_bytes;
 pub(crate) use chunk_cache_type::{fill_value_bytes, retrieve_chunk_bytes};
 
 /// The chunk type of an encoded chunk cache.
-pub type ChunkCacheTypeEncoded = Option<Arc<CowBytes<'static>>>;
+///
+/// [`Bytes`] is already reference counted, so this needs no further [`Arc`].
+pub type ChunkCacheTypeEncoded = Option<Bytes>;
 
 /// The chunk type of a decoded chunk cache.
 pub type ChunkCacheTypeDecoded = Option<Arc<ArrayBytes<'static>>>;

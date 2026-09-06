@@ -1,5 +1,5 @@
-use zarrs_codec::CowBytes;
 use std::sync::{Arc, Mutex};
+use zarrs_codec::CowBytes;
 
 #[cfg(feature = "async")]
 use super::SyncPartialDecoderAsAsync;
@@ -34,7 +34,7 @@ where
     TStorage: ?Sized + 'static,
 {
     let input: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> = match encoded {
-        Some(encoded) => encoded,
+        Some(encoded) => Arc::new(CowBytes::Shared(encoded)),
         None => Arc::new(Mutex::new(None)),
     };
     let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
@@ -61,7 +61,7 @@ where
         .map(|encoded| {
             let bytes = array
                 .codecs_bound()
-                .decode(CowBytes::Borrowed(encoded), chunk_shape, options)
+                .decode(CowBytes::Shared(encoded.clone()), chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
             Ok(Arc::new(bytes.into_owned()))
@@ -82,9 +82,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
     {
         let encoded = cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array
-                    .retrieve_encoded_chunk(chunk_indices)?
-                    .map(|chunk| Arc::new(CowBytes::from(chunk))))
+                Ok(array.retrieve_encoded_chunk(chunk_indices)?)
             })
             .map_err(cache_error)?;
         partial_decoder_over_encoded(array, encoded, chunk_indices, options)
@@ -103,9 +101,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let encoded = cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array
-                    .retrieve_encoded_chunk(chunk_indices)?
-                    .map(|chunk| Arc::new(CowBytes::from(chunk))))
+                Ok(array.retrieve_encoded_chunk(chunk_indices)?)
             })
             .map_err(cache_error)?;
         decode_encoded(array, &encoded, &chunk_shape, options)
@@ -142,10 +138,7 @@ where
 {
     cache
         .try_get_or_insert_with(chunk_indices.to_vec(), async move {
-            Ok(array
-                .async_retrieve_encoded_chunk(chunk_indices)
-                .await?
-                .map(|chunk| Arc::new(CowBytes::Shared(chunk))))
+            Ok(array.async_retrieve_encoded_chunk(chunk_indices).await?)
         })
         .await
         .map_err(cache_error)
