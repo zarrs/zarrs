@@ -14,13 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
-- **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate
-  - Renamed from `ArrayBytesRaw` and re-exported from `zarrs_storage`
-  - It is an enum with `Borrowed` and `Shared` variants rather than a `Cow<'a, [u8]>` type alias, so that it can hold a reference counted `bytes::Bytes` and share it with the store instead of copying
-  - `Deref<Target = [u8]>` and conversions to/from `Cow<'a, [u8]>`, `Vec<u8>` and `&'a [u8]` are retained, so most usage is unaffected
-  - `to_mut()` becomes `with_mut()`, which takes a closure, as `Bytes` offers no in-place mutable access
-  - `[Async]BytesPartialDecoderTraits` is implemented for `CowBytes<'static>` instead of `Cow<'static, [u8]>`
-  - Avoids copying the decoded value in the default partial encode/decode implementations, which round-tripped through a `Vec<u8>`
+- **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
+  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
 - **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
 - **Breaking**: `ArrayBytesOffsets` holds an `Arc<Vec<usize>>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
   - Cloning shares the offset allocation rather than copying its elements

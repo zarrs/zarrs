@@ -37,14 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
-- **Breaking**: Use `cowbytes:CowBytes` for encoded and raw bytes throughout the library
-  - It is equivalent to `Cow<'a, [u8]>` except the non-borrowed type is `bytes::Bytes`
+- **Breaking**: Use `cowbytes::CowBytes` for encoded and raw bytes throughout the library
   - Replaces `ArrayBytesRaw = Cow<'a, [u8]>` and `bytes::Bytes` in the array, codec, data type and storage APIs
   - Removes copies on some array `retrieve_`/`store_` paths with select stores, and on several codec paths including checksum stripping in `adler32`/`crc32c`/`fletcher32` and shard encoding
-    - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
-    - `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
-- **Breaking**: Rename `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
-- **Breaking**: `ArrayBytesOffsets` no longer has a lifetime parameter and shares its allocation when cloned
+  - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
+  - `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
+- **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0 and `zarrs_data_type` to 0.10.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
@@ -55,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
+  - `ArrayBytesOffsets` no longer has a lifetime parameter and shares its allocation when cloned
 - **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error

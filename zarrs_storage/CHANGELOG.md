@@ -8,11 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.5...HEAD)
 
 ### Changed
-- **Breaking**: Use `CowBytes` for store values, added as a `cowbytes` dependency and re-exported
-  - It is a `Cow` whose owned variant is `Bytes` rather than `Vec<u8>`
-  - `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`
-  - Stores that write and discard (such as `FilesystemStore`) can now write borrowed data without a copy; stores that retain the value (such as `MemoryStore`) call `.into()` to take ownership
-  - Callers passing a `Bytes` should call `.into()`
+- **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
 - **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
 - Bump `itertools` to 0.15.0
 - Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
