@@ -69,8 +69,6 @@ pub(crate) use chunk_cache_type::async_retrieve_chunk_bytes;
 pub(crate) use chunk_cache_type::{fill_value_bytes, retrieve_chunk_bytes};
 
 /// The chunk type of an encoded chunk cache.
-///
-/// [`Bytes`] is already reference counted, so this needs no further [`Arc`].
 pub type ChunkCacheTypeEncoded = Option<Bytes>;
 
 /// The chunk type of a decoded chunk cache.
