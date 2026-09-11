@@ -3,6 +3,8 @@ use std::ops::IndexMut;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
+use bytes::Bytes;
+
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
@@ -887,7 +889,7 @@ impl ShardingCodecBound {
         chunks_per_shard: &[NonZeroU64],
         subchunk_shape: &[NonZeroU64],
         options_inner: &CodecOptions,
-    ) -> Option<Result<(usize, CowBytes<'static>), CodecError>> {
+    ) -> Option<Result<(usize, Bytes), CodecError>> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
         let chunk_subset = self
@@ -912,7 +914,7 @@ impl ShardingCodecBound {
                 .inner_codecs
                 .encode(bytes, subchunk_shape, options_inner);
             match encoded_chunk {
-                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_static()))),
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_bytes()))),
                 Err(err) => Some(Err(err)),
             }
         }
@@ -1016,7 +1018,7 @@ impl ShardingCodecBound {
             SubchunkWriteOrder::C => {
                 // TODO: Replace this chunk order with the desired order i.e., a `Vec` of the ids i.e., for morton order.
                 let chunk_order = 0..n_chunks;
-                let encoded_chunk_ids_and_chunks: Vec<(usize, CowBytes<'static>)> = chunk_order
+                let encoded_chunk_ids_and_chunks: Vec<(usize, Bytes)> = chunk_order
                     .concurrent_limit(shard_concurrent_limit)
                     .filter_map(|chunk_index: usize| {
                         self.encode_inner_by_chunk_index(
@@ -1049,7 +1051,7 @@ impl ShardingCodecBound {
                 }
                 encoded_chunk_ids_and_chunks
                     .concurrent_limit(shard_concurrent_limit)
-                    .for_each(|(chunk_index, chunk): (usize, CowBytes<'_>)| unsafe {
+                    .for_each(|(chunk_index, chunk): (usize, Bytes)| unsafe {
                         let shard_index_loc = &shard_index[chunk_index * 2..chunk_index * 2 + 2];
                         let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
                         let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
@@ -1145,7 +1147,7 @@ impl ShardingCodecBound {
             }
         };
 
-        let encoded_chunks: Vec<(usize, CowBytes<'static>)> = iterator
+        let encoded_chunks: Vec<(usize, Bytes)> = iterator
             .concurrent_limit(shard_concurrent_limit)
             .filter_map(|chunk_index| {
                 self.encode_inner_by_chunk_index(
@@ -1183,7 +1185,7 @@ impl ShardingCodecBound {
                     let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                     encoded_chunks
                         .concurrent_limit(options.concurrent_target())
-                        .for_each(|(chunk_index, chunk_encoded): (usize, CowBytes<'_>)| {
+                        .for_each(|(chunk_index, chunk_encoded): (usize, Bytes)| {
                             let chunk_offset = encoded_shard_offset_atomic.fetch_add(
                                 chunk_encoded.len(),
                                 std::sync::atomic::Ordering::Relaxed,
@@ -1213,7 +1215,7 @@ impl ShardingCodecBound {
                     }
                     encoded_chunks
                         .concurrent_limit(options.concurrent_target())
-                        .for_each(|(chunk_index, chunk): (usize, CowBytes<'_>)| unsafe {
+                        .for_each(|(chunk_index, chunk): (usize, Bytes)| unsafe {
                             let shard_index_loc =
                                 &shard_index[chunk_index * 2..chunk_index * 2 + 2];
                             let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();

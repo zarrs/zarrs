@@ -101,6 +101,8 @@ mod vlen_partial_decoder;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use bytes::Bytes;
+
 use super::bytes::reverse_endianness;
 use crate::array::{
     ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, Endianness, convert_from_bytes_slice,
@@ -143,7 +145,7 @@ fn get_vlen_bytes_and_offsets(
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
-) -> Result<(CowBytes<'static>, Vec<usize>), CodecError> {
+) -> Result<(Bytes, Vec<usize>), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
@@ -203,9 +205,9 @@ fn get_vlen_bytes_and_offsets(
         data_codecs
             .decode(data_enc.into(), &[data_len_expected], options)?
             .into_fixed()?
-            .into_static()
+            .into_bytes()
     } else {
-        CowBytes::from(vec![])
+        Bytes::new()
     };
 
     // Check the data length is as expected
