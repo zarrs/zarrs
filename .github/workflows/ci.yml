@@ -155,17 +155,7 @@ jobs:
           toolchain: "1.92"
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --all-features -p zarrs
-  msrv-1-91:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.91"
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --all-features -p zarrs_chunk_key_encoding -p zarrs_codec -p zarrs_chunk_grid
+      - run: cargo minimal-versions check --all-features -p zarrs -p zarrs_storage -p zarrs_codec -p zarrs_chunk_grid -p zarrs_data_type -p zarrs_filesystem -p zarrs_chunk_key_encoding
   msrv-1-88:
     runs-on: ubuntu-latest
     steps:
@@ -176,27 +166,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
       - run: cargo minimal-versions check --all-features -p zarrs_plugin
-  msrv-1-87:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.87"
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-hack@0.6.44 cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --all-features -p zarrs_filesystem
-  msrv-1-82:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.82"
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-hack@0.6.44 cargo-minimal-versions --locked
-      - run: sed -i 's/edition = "2024"/edition = "2021"/' ./*/Cargo.toml \
-      - run: cargo minimal-versions check --all-features -p zarrs_storage
   # msrv-1-77:
   #   runs-on: ubuntu-latest
   #   steps:

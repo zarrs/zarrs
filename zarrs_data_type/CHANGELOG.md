@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `codec_traits::cast_value` module
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
 
+### Changed
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+
 ## [0.9.0] - 2026-02-02
 
 ### Added

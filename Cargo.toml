@@ -35,7 +35,7 @@ version = "0.6.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]
-version = "0.2.0"
+version = "0.3.0"
 path = "zarrs_chunk_key_encoding"
 
 [workspace.dependencies.zarrs_codec]
@@ -63,7 +63,7 @@ version = "0.4.6"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.3.12"
+version = "0.4.0"
 path = "zarrs_filesystem"
 
 [workspace.dependencies.half]

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_storage` to 0.4.6
 - Bump `itertools` to 0.15.0
 - Bump `lru` to 0.18.2
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ## [0.3.12](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.12) - 2026-07-23
 

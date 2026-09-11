@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bump `itertools` to 0.15.0
 - Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
