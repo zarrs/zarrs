@@ -37,12 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
-- **Breaking**: Use `cowbytes::CowBytes` for encoded and raw bytes throughout the library
-  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>` and `bytes::Bytes` in the array, codec, data type and storage APIs
-  - Removes copies on some array `retrieve_`/`store_` paths with select stores, and on several codec paths including checksum stripping in `adler32`/`crc32c`/`fletcher32` and shard encoding
+- **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library
+  - Removes copies on some array `retrieve_`/`store_` paths with select stores and codec paths
   - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
-  - `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
-  - Internal `sharding_indexed` and `vlen` encode/decode paths hold detached encoded bytes as `Bytes` rather than `CowBytes<'static>`
+- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
 - **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0 and `zarrs_data_type` to 0.10.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
