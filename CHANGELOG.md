@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0 and `zarrs_data_type` to 0.10.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: Bump `zarrs_chunk_key_encoding` to 0.3.0 and `zarrs_filesystem` to 0.4.0
 - **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries

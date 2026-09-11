@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
 - Bump `itertools` to 0.15.0
 - Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Count async erase operations in `PerformanceMetricsStorageAdapter`
 - Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
 - Clamp `StorageValueIO` reads at the end of a value instead of requesting an out-of-bounds byte range
+- Enable the `macros` and `rt-multi-thread` `tokio` dev dependency features so the storage adapter tests compile
 
 ## [0.4.5](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.5) - 2026-07-23
 

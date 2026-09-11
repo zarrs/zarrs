@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ## [0.9.0] - 2026-02-02
 
