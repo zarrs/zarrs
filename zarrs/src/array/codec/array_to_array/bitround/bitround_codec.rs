@@ -98,7 +98,7 @@ fn encode_fill_value(
     let mut fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?
         .into_fixed()
         .map_err(CodecCreateError::other)?
-        .into_owned();
+        .to_vec();
     round_bytes(&mut fill_value_bytes, data_type, keepbits).map_err(CodecCreateError::other)?;
     Ok(FillValue::new(fill_value_bytes))
 }
@@ -179,7 +179,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
-        round_bytes(bytes.to_mut(), &self.data_type, self.keepbits)?;
+        bytes.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
         Ok(ArrayBytes::from(bytes))
     }
 

@@ -72,7 +72,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
+    ArrayBytes, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer, IndexerError,
 };
 use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::DataTypeSize;
@@ -147,7 +147,7 @@ fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
 }
 
 fn transpose_vlen<'a>(
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
     offsets: &ArrayBytesOffsets,
     shape: &[usize],
     order: Vec<usize>,

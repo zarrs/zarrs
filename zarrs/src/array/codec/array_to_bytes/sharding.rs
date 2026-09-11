@@ -75,9 +75,9 @@ mod sharding_partial_encoder_async;
 pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
-use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
@@ -182,8 +182,11 @@ fn decode_shard_index(
     options: &CodecOptions,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
-    let decoded_shard_index =
-        index_codecs.decode(Cow::Borrowed(encoded_shard_index), index_shape, options)?;
+    let decoded_shard_index = index_codecs.decode(
+        CowBytes::Borrowed(encoded_shard_index),
+        index_shape,
+        options,
+    )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
         .as_chunks::<8>()
@@ -1050,7 +1053,7 @@ mod tests {
         // Verify that compacting an already compact shard is a no-op
         let compacted_again = codec
             .compact(
-                Cow::Borrowed(&compacted),
+                CowBytes::Borrowed(&compacted),
                 &chunk_shape,
                 &CodecOptions::default(),
             )
@@ -1060,7 +1063,7 @@ mod tests {
         // Verify that compacting the original encoded shard is a no-op (returns same reference)
         let original_compacted = codec
             .compact(
-                Cow::Borrowed(&original_encoded),
+                CowBytes::Borrowed(&original_encoded),
                 &chunk_shape,
                 &CodecOptions::default(),
             )

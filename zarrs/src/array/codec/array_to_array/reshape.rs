@@ -942,7 +942,7 @@ mod tests {
         let encoded_chunk = bytes_codec
             .encode(encoded, &encoded_shape, &CodecOptions::default())
             .unwrap()
-            .into_owned();
+            .into_vec();
         let output = Arc::new(Mutex::new(Some(encoded_chunk)));
         let input_output_handle = bytes_codec
             .clone()

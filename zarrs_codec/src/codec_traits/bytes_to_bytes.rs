@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use crate::{
-    ArrayBytesRaw, BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, RecommendedConcurrency,
-};
 #[cfg(feature = "async")]
 use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
+use crate::{
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
+    BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CowBytes, RecommendedConcurrency,
+};
 
 /// Traits for bytes to bytes codecs.
 #[cfg_attr(
@@ -51,9 +51,9 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Returns [`CodecError`] if a codec fails.
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError>;
+    ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode chunk bytes.
     //
@@ -61,10 +61,10 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Returns [`CodecError`] if a codec fails.
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError>;
+    ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Initialises a partial decoder.
     ///

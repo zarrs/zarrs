@@ -59,7 +59,7 @@ macro_rules! vlen_v2_codec {
         };
         use crate::array::{
             codec::VlenV2Codec,
-            ArrayBytes, ArrayBytesRaw, BytesRepresentation,
+            ArrayBytes, CowBytes, BytesRepresentation,
         };
         use zarrs_metadata::Configuration;
         use zarrs_plugin::{
@@ -177,13 +177,13 @@ macro_rules! vlen_v2_codec {
                 bytes: ArrayBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
-            ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+            ) -> Result<CowBytes<'a>, CodecError> {
                 self.inner.encode(bytes, shape, options)
             }
 
             fn decode<'a>(
                 &self,
-                bytes: ArrayBytesRaw<'a>,
+                bytes: CowBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
             ) -> Result<ArrayBytes<'a>, CodecError> {

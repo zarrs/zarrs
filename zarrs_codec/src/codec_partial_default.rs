@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
@@ -6,11 +5,11 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayBytes, ArrayBytesOffsets, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, DataType,
+    CodecError, CodecOptions, CowBytes, DataType,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -399,23 +398,22 @@ where
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let encoded_value = self.input_output_handle.decode(options)?;
 
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };
 
-        let decoded_value = self
-            .codec
-            .decode(encoded_value, &self.decoded_representation, options)?
-            .into_owned();
+        let decoded_value =
+            self.codec
+                .decode(encoded_value, &self.decoded_representation, options)?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
                 .map_err(CodecError::InvalidByteRangeError)?
                 .into_iter()
-                .map(Cow::Owned)
+                .map(CowBytes::from)
                 .collect(),
         ))
     }
@@ -436,22 +434,15 @@ where
 
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self
-            .input_output_handle
-            .decode(options)?
-            .map(Cow::into_owned);
+        let encoded_value = self.input_output_handle.decode(options)?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(
-                    Cow::Owned(encoded_value),
-                    &self.decoded_representation,
-                    options,
-                )?
-                .into_owned()
+                .decode(encoded_value, &self.decoded_representation, options)?
+                .into_vec()
         } else {
             vec![]
         };
@@ -464,13 +455,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
-        let bytes_encoded = self
-            .codec
-            .encode(Cow::Owned(decoded_value), options)?
-            .into_owned();
+        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
 
         self.input_output_handle
-            .partial_encode(0, Cow::Owned(bytes_encoded), options)
+            .partial_encode(0, bytes_encoded, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -772,23 +760,22 @@ where
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let encoded_value = self.input_output_handle.decode(options).await?;
 
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };
 
-        let decoded_value = self
-            .codec
-            .decode(encoded_value, &self.decoded_representation, options)?
-            .into_owned();
+        let decoded_value =
+            self.codec
+                .decode(encoded_value, &self.decoded_representation, options)?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
                 .map_err(CodecError::InvalidByteRangeError)?
                 .into_iter()
-                .map(Cow::Owned)
+                .map(CowBytes::from)
                 .collect(),
         ))
     }
@@ -812,23 +799,15 @@ where
 
     async fn partial_encode_many<'a>(
         &'a self,
-        offset_values: OffsetBytesIterator<'a, ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self
-            .input_output_handle
-            .decode(options)
-            .await?
-            .map(Cow::into_owned);
+        let encoded_value = self.input_output_handle.decode(options).await?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(
-                    Cow::Owned(encoded_value),
-                    &self.decoded_representation,
-                    options,
-                )?
-                .into_owned()
+                .decode(encoded_value, &self.decoded_representation, options)?
+                .into_vec()
         } else {
             vec![]
         };
@@ -841,13 +820,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
-        let bytes_encoded = self
-            .codec
-            .encode(Cow::Owned(decoded_value), options)?
-            .into_owned();
+        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
 
         self.input_output_handle
-            .partial_encode(0, Cow::Owned(bytes_encoded), options)
+            .partial_encode(0, bytes_encoded, options)
             .await
     }
 

@@ -1,4 +1,4 @@
-use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsError};
+use crate::{ArrayBytesOffsets, ArrayBytesOffsetsOutOfBoundsError, CowBytes};
 
 /// Variable length array bytes composed of bytes and element bytes offsets.
 ///
@@ -8,24 +8,24 @@ use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsErr
 /// - The final offset must be less than or equal to the length of the bytes buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayBytesVariableLength<'a> {
-    pub(crate) bytes: ArrayBytesRaw<'a>,
-    pub(crate) offsets: ArrayBytesOffsets<'a>,
+    pub(crate) bytes: CowBytes<'a>,
+    pub(crate) offsets: ArrayBytesOffsets,
 }
 
 impl<'a> ArrayBytesVariableLength<'a> {
     /// Create a new variable length bytes from `bytes` and `offsets`.
     ///
     /// # Errors
-    /// Returns a [`ArrayBytesRawOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
+    /// Returns a [`ArrayBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
     pub fn new(
-        bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
-    ) -> Result<Self, ArrayBytesRawOffsetsOutOfBoundsError> {
+        bytes: impl Into<CowBytes<'a>>,
+        offsets: ArrayBytesOffsets,
+    ) -> Result<Self, ArrayBytesOffsetsOutOfBoundsError> {
         let bytes = bytes.into();
         if offsets.last() <= bytes.len() {
             Ok(ArrayBytesVariableLength { bytes, offsets })
         } else {
-            Err(ArrayBytesRawOffsetsOutOfBoundsError {
+            Err(ArrayBytesOffsetsOutOfBoundsError {
                 offset: offsets.last(),
                 len: bytes.len(),
             })
@@ -37,8 +37,8 @@ impl<'a> ArrayBytesVariableLength<'a> {
     /// # Safety
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_unchecked(
-        bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
+        bytes: impl Into<CowBytes<'a>>,
+        offsets: ArrayBytesOffsets,
     ) -> Self {
         let bytes = bytes.into();
         debug_assert!(offsets.last() <= bytes.len());
@@ -47,19 +47,19 @@ impl<'a> ArrayBytesVariableLength<'a> {
 
     /// Get the underlying bytes.
     #[must_use]
-    pub fn bytes(&self) -> &ArrayBytesRaw<'a> {
+    pub fn bytes(&self) -> &CowBytes<'a> {
         &self.bytes
     }
 
     /// Get the underlying offsets.
     #[must_use]
-    pub fn offsets(&self) -> &ArrayBytesOffsets<'a> {
+    pub fn offsets(&self) -> &ArrayBytesOffsets {
         &self.offsets
     }
 
     /// Consume self and return the bytes and offsets.
     #[must_use]
-    pub fn into_parts(self) -> (ArrayBytesRaw<'a>, ArrayBytesOffsets<'a>) {
+    pub fn into_parts(self) -> (CowBytes<'a>, ArrayBytesOffsets) {
         (self.bytes, self.offsets)
     }
 }

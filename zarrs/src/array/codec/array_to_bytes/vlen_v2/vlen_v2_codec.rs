@@ -4,8 +4,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
-    FillValue,
+    ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType, DataTypeSize, FillValue,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -126,7 +125,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, &self.data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
@@ -152,7 +151,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

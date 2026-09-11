@@ -36,7 +36,7 @@ pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
 pub use vlen_v2_codec::VlenV2Codec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
 
@@ -64,7 +64,7 @@ impl CodecTraitsV3 for VlenV2Codec {
 
 fn get_interleaved_bytes_and_offsets(
     num_elements: usize,
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
     // Validate the bytes is long enough to contain header and element lengths
     let header_length = size_of::<u32>() * (1 + num_elements);

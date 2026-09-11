@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
+  - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
 - Add the `cast_value` array-to-array codec
 - Implement `Default` for `MetadataRetrieveVersion`
 - Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
@@ -35,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 
 ### Changed
+- **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library
+  - Removes copies on some array `retrieve_`/`store_` paths with select stores and codec paths
+  - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
+- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
+- **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
+- **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0 and `zarrs_data_type` to 0.10.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - **Breaking**: Bump `zarrs_chunk_key_encoding` to 0.3.0 and `zarrs_filesystem` to 0.4.0
 - **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
@@ -45,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
+  - `ArrayBytesOffsets` no longer has a lifetime parameter and shares its allocation when cloned
 - **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error

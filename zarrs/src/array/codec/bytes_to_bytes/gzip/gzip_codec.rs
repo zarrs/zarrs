@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
@@ -8,7 +7,7 @@ use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
@@ -95,28 +94,28 @@ impl BytesToBytesCodecTraits for GzipCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder = GzEncoder::new(
             Cursor::new(decoded_value),
             flate2::Compression::new(self.compression_level.as_u32()),
         );
         let mut out: Vec<u8> = Vec::new();
         encoder.read_to_end(&mut out)?;
-        Ok(Cow::Owned(out))
+        Ok(CowBytes::from(out))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = GzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
-        Ok(Cow::Owned(out))
+        Ok(CowBytes::from(out))
     }
 
     fn encoded_representation(

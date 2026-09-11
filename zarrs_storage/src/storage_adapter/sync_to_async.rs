@@ -9,7 +9,7 @@ use futures::stream;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeSend, MaybeSync,
+    AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeSend, MaybeSync,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -159,9 +159,11 @@ impl<
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncWritableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let key = key.clone();
         let storage = self.storage.clone();
+        // The value must outlive this method to cross onto the blocking thread.
+        let value = value.into_static();
         self.spawn_blocking(move || storage.set(&key, value)).await
     }
 
@@ -171,7 +173,10 @@ impl<
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let key = key.clone();
-        let offset_values: Vec<_> = offset_values.collect();
+        // The values must outlive this method to cross onto the blocking thread.
+        let offset_values: Vec<_> = offset_values
+            .map(|(offset, value)| (offset, value.into_static()))
+            .collect();
         let storage = self.storage.clone();
 
         self.spawn_blocking(move || {

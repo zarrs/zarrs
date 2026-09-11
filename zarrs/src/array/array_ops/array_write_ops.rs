@@ -1,4 +1,5 @@
 use super::*;
+use zarrs_codec::CowBytes;
 
 /// Synchronous array write operations.
 ///
@@ -78,6 +79,6 @@ pub trait ArrayWriteOps: ArrayOps {
     unsafe fn store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
+        encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError>;
 }

@@ -8,7 +8,7 @@ use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkGrid, ChunkShape, DataType, FillValue,
+    ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
@@ -530,7 +530,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
 
         let mut shape = ChunkShape::from(shape.to_vec());
@@ -554,7 +554,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode<'a>(
         &self,
-        mut bytes: ArrayBytesRaw<'a>,
+        mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -589,7 +589,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        mut bytes: ArrayBytesRaw<'_>,
+        mut bytes: CowBytes<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
@@ -645,10 +645,10 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn compact<'a>(
         &self,
-        mut bytes: ArrayBytesRaw<'a>,
+        mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         // Decode through bytes_to_bytes codecs (in reverse) to get to array_to_bytes level
@@ -982,7 +982,6 @@ impl ArrayCodecTraits for CodecChainBound {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::num::NonZeroU64;
 
     use super::*;
@@ -1113,21 +1112,21 @@ mod tests {
 
         fn encode<'a>(
             &self,
-            decoded_value: ArrayBytesRaw<'a>,
+            decoded_value: CowBytes<'a>,
             _options: &CodecOptions,
-        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-            let mut encoded = decoded_value.into_owned();
+        ) -> Result<CowBytes<'a>, CodecError> {
+            let mut encoded = decoded_value.into_vec();
             encoded.push(0);
-            Ok(Cow::Owned(encoded))
+            Ok(CowBytes::from(encoded))
         }
 
         fn decode<'a>(
             &self,
-            encoded_value: ArrayBytesRaw<'a>,
+            encoded_value: CowBytes<'a>,
             _decoded_representation: &BytesRepresentation,
             _options: &CodecOptions,
-        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-            Ok(Cow::Owned(
+        ) -> Result<CowBytes<'a>, CodecError> {
+            Ok(CowBytes::from(
                 encoded_value[..encoded_value.len() - 1].to_vec(),
             ))
         }
@@ -1289,7 +1288,8 @@ mod tests {
         .with_context(data_type, fill_value)
         .unwrap();
 
-        let encoded_input: Arc<dyn BytesPartialDecoderTraits> = Arc::new(Cow::Owned(vec![0; 9]));
+        let encoded_input: Arc<dyn BytesPartialDecoderTraits> =
+            Arc::new(CowBytes::from(vec![0; 9]));
         codec
             .partial_decoder(encoded_input, &shape, &CodecOptions::default())
             .unwrap();

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -79,18 +79,18 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }
 

@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_codec::CowBytes;
 
 use super::{ArrayWriteOps, *};
 
@@ -56,7 +57,7 @@ where
     pub unsafe fn store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
+        encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
         unsafe {
             self.array()

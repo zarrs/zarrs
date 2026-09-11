@@ -9,11 +9,11 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesRaw, ArrayPartialDecoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape,
-    ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec,
+    CodecChain, CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, CowBytes, DataType, DataTypeSize, FillValue, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -202,14 +202,16 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
-        Ok(Cow::Owned(encode_shape_header(&next_subchunk_shape(shape))))
+        Ok(CowBytes::from(encode_shape_header(&next_subchunk_shape(
+            shape,
+        ))))
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -630,13 +632,13 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
 
     fn decode<'a>(
         &self,
-        _bytes: ArrayBytesRaw<'a>,
+        _bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

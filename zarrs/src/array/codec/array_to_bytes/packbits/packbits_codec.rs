@@ -3,7 +3,6 @@
 // FIXME: This codec was really hacked together.
 // It can probably be written much cleaner and with simpler logic.
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use num::Integer;
@@ -20,7 +19,7 @@ use crate::array::codec::BytesCodec;
 use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
 use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
+    ArrayBytes, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType, FillValue,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -218,7 +217,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components,
@@ -292,12 +291,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             }
         }
 
-        Ok(ArrayBytesRaw::from(bytes_enc))
+        Ok(CowBytes::from(bytes_enc))
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -396,7 +395,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             }
         }
 
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes_dec)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes_dec)))
     }
 
     fn partial_decoder(

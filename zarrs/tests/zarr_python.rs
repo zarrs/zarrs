@@ -189,7 +189,7 @@ fn zarr_python_v3_cast_value_matrix_read() -> Result<(), Box<dyn Error>> {
         let bytes = array
             .retrieve_array_subset::<ArrayBytes<'static>>(&subset_all)
             .map_err(|err| format!("failed to decode {}: {err}", case.path))?;
-        let bytes = bytes.into_fixed()?.into_owned();
+        let bytes = bytes.into_fixed()?.into_vec();
         if zarr_python_uses_nearest_even_for_directed_uint64_to_float(case) {
             continue;
         }

@@ -1,7 +1,6 @@
 //! The `bytes` codec data type traits.
 
-use std::borrow::Cow;
-
+use cowbytes::CowBytes;
 use zarrs_metadata::Endianness;
 
 /// Error indicating the bytes codec requires endianness to be specified.
@@ -18,12 +17,11 @@ pub trait BytesDataTypeTraits {
     ///
     /// # Errors
     /// Returns a [`BytesCodecEndiannessMissingError`] if `endianness` is [`None`] but must be specified.
-    #[allow(unused_variables)]
     fn encode<'a>(
         &self,
-        bytes: Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<Endianness>,
-    ) -> Result<Cow<'a, [u8]>, BytesCodecEndiannessMissingError>;
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError>;
 
     /// Decode the bytes of a fixed-size data type from a specified endianness for the `bytes` codec.
     ///
@@ -31,12 +29,11 @@ pub trait BytesDataTypeTraits {
     ///
     /// # Errors
     /// Returns a [`BytesCodecEndiannessMissingError`] if `endianness` is [`None`] but must be specified.
-    #[allow(unused_variables)]
     fn decode<'a>(
         &self,
-        bytes: Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<Endianness>,
-    ) -> Result<Cow<'a, [u8]>, BytesCodecEndiannessMissingError>;
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError>;
 }
 
 // Generate the codec support infrastructure using the generic macro
@@ -68,10 +65,10 @@ macro_rules! _impl_bytes_data_type_traits {
         impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
             fn encode<'a>(
                 &self,
-                bytes: ::std::borrow::Cow<'a, [u8]>,
+                bytes: $crate::CowBytes<'a>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
-                ::std::borrow::Cow<'a, [u8]>,
+                $crate::CowBytes<'a>,
                 $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 Ok(bytes)
@@ -79,10 +76,10 @@ macro_rules! _impl_bytes_data_type_traits {
 
             fn decode<'a>(
                 &self,
-                bytes: ::std::borrow::Cow<'a, [u8]>,
+                bytes: $crate::CowBytes<'a>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
-                ::std::borrow::Cow<'a, [u8]>,
+                $crate::CowBytes<'a>,
                 $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 Ok(bytes)
@@ -99,10 +96,10 @@ macro_rules! _impl_bytes_data_type_traits {
         impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
             fn encode<'a>(
                 &self,
-                bytes: ::std::borrow::Cow<'a, [u8]>,
+                bytes: $crate::CowBytes<'a>,
                 endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
-                ::std::borrow::Cow<'a, [u8]>,
+                $crate::CowBytes<'a>,
                 $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 const COMPONENT_SIZE: usize = $component_size;
@@ -111,20 +108,20 @@ macro_rules! _impl_bytes_data_type_traits {
                 if endianness == ::zarrs_metadata::Endianness::native() {
                     Ok(bytes)
                 } else {
-                    let mut result = bytes.into_owned();
+                    let mut result = bytes.into_vec();
                     for chunk in result.as_chunks_mut::<COMPONENT_SIZE>().0 {
                         chunk.reverse();
                     }
-                    Ok(::std::borrow::Cow::Owned(result))
+                    Ok($crate::CowBytes::from(result))
                 }
             }
 
             fn decode<'a>(
                 &self,
-                bytes: ::std::borrow::Cow<'a, [u8]>,
+                bytes: $crate::CowBytes<'a>,
                 endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
-                ::std::borrow::Cow<'a, [u8]>,
+                $crate::CowBytes<'a>,
                 $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 self.encode(bytes, endianness)

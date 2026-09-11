@@ -10,7 +10,7 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
@@ -167,16 +167,16 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
 impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value)
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let offset_values: Vec<_> = offset_values.collect();
         let bytes_written = offset_values
@@ -294,7 +294,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value).await

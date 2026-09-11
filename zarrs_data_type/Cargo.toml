@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_data_type"
-version = "0.9.1"
+version = "0.10.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2024"
 rust-version = "1.92"
@@ -25,6 +25,7 @@ thiserror.workspace = true
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
+cowbytes.workspace = true
 inventory.workspace = true
 paste.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }

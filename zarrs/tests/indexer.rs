@@ -260,7 +260,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
                 &CodecOptions::default(),
             )
             .unwrap()
-            .into_owned(),
+            .into_vec(),
     );
 
     let partial_decoder = if _async {
@@ -309,7 +309,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
                 &CodecOptions::default(),
             )
             .unwrap()
-            .into_owned(),
+            .into_vec(),
     );
 
     // TODO: Async partial encoder

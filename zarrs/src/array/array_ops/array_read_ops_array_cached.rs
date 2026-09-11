@@ -17,6 +17,7 @@ use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec}
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
+use zarrs_storage::Bytes;
 
 fn retrieve_array_subset_bytes<TStorage, C>(
     cache: &C,
@@ -349,7 +350,7 @@ where
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         self.array().retrieve_encoded_chunk(chunk_indices)
     }
 
@@ -357,7 +358,7 @@ where
     pub fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+    ) -> Result<Vec<Option<Bytes>>, StorageError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

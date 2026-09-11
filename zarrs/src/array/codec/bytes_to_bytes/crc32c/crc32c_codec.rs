@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfigurationLocation;
@@ -12,7 +11,7 @@ use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPref
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -88,9 +87,9 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let encoded_value = match self.0 {
             Crc32cCodecConfigurationLocation::End => {
@@ -109,15 +108,15 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
                 encoded_value
             }
         };
-        Ok(Cow::Owned(encoded_value))
+        Ok(CowBytes::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let data_len = encoded_value.len() - CHECKSUM_SIZE;
             let (data, checksum_stored): (&[u8], [u8; CHECKSUM_SIZE]) = match self.0 {
@@ -138,16 +137,13 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
                 }
             }
 
-            // Strip the checksum in-place, reusing the allocation if `encoded_value` is owned
-            let mut decoded_value = encoded_value.into_owned();
-            match self.0 {
-                Crc32cCodecConfigurationLocation::End => decoded_value.truncate(data_len),
+            // Strip the checksum, which is free for borrowed and shared bytes.
+            Ok(match self.0 {
+                Crc32cCodecConfigurationLocation::End => encoded_value.slice(0..data_len),
                 Crc32cCodecConfigurationLocation::Start => {
-                    decoded_value.copy_within(CHECKSUM_SIZE.., 0);
-                    decoded_value.truncate(data_len);
+                    encoded_value.slice(CHECKSUM_SIZE..CHECKSUM_SIZE + data_len)
                 }
-            }
-            Ok(Cow::Owned(decoded_value))
+            })
         } else {
             Err(CodecError::Other(
                 "crc32c decoder expects a 32 bit input".to_string(),
