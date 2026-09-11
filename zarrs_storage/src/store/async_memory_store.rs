@@ -9,8 +9,8 @@ use futures::{stream, StreamExt};
 use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey,
-    StoreKeys, StoreKeysPrefixes, StorePrefix,
+    AsyncWritableStorageTraits, Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
 };
 
 /// An asynchronous in-memory store.
@@ -90,10 +90,10 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncWritableStorageTraits for AsyncMemoryStore {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
         let mut data_map = self.data_map.lock().await;
-        data_map.insert(key.clone(), value);
+        data_map.insert(key.clone(), value.into());
         Ok(())
     }
 
@@ -213,7 +213,10 @@ mod tests {
         block_on(async {
             let store = AsyncMemoryStore::new();
             let key = StoreKey::new("key").unwrap();
-            store.set(&key, Bytes::from_static(b"value")).await.unwrap();
+            store
+                .set(&key, Bytes::from_static(b"value").into())
+                .await
+                .unwrap();
 
             assert!(store
                 .get_partial(&key, ByteRange::FromStart(6, None))

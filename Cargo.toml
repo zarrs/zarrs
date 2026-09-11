@@ -35,7 +35,7 @@ version = "0.6.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]
-version = "0.2.0"
+version = "0.3.0"
 path = "zarrs_chunk_key_encoding"
 
 [workspace.dependencies.zarrs_codec]
@@ -43,7 +43,7 @@ version = "0.3.0"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.9.1"
+version = "0.10.0"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]
@@ -59,11 +59,11 @@ version = "0.4.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.4.6"
+version = "0.5.0"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.3.12"
+version = "0.4.0"
 path = "zarrs_filesystem"
 
 [workspace.dependencies.half]
@@ -72,6 +72,12 @@ features = ["bytemuck"]
 
 [workspace.dependencies.num]
 version = "0.4.1"
+
+[workspace.dependencies.cowbytes]
+version = "0.1.2"
+
+[workspace.dependencies.bytes]
+version = "1.7.0"
 
 [workspace.dependencies.inventory]
 version = "0.3.21"

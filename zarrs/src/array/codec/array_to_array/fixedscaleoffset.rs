@@ -134,9 +134,8 @@ mod tests {
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<f64>(decoded.into_fixed().unwrap().into_vec());
         assert_eq!(
             decoded_elements,
             &[

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use pco::standalone::guarantee::file_size;
@@ -14,8 +13,8 @@ use crate::array::{
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
@@ -209,7 +208,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
             ( $t:ty ) => {
@@ -217,7 +216,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
                     &convert_from_bytes_slice::<$t>(&bytes),
                     &self.chunk_config,
                 )
-                .map(Cow::Owned)
+                .map(CowBytes::from)
                 .map_err(|err| CodecError::Other(err.to_string()))
             };
         }
@@ -237,14 +236,14 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
                 pco::standalone::simple_decompress(&bytes)
-                    .map(|bytes| Cow::Owned(transmute_to_bytes_vec::<$t>(bytes)))
+                    .map(|bytes| CowBytes::from(transmute_to_bytes_vec::<$t>(bytes)))
                     .map_err(|err| CodecError::Other(err.to_string()))
             };
         }

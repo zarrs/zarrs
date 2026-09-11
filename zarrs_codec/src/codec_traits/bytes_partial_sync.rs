@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::borrow::Cow;
 use std::sync::Mutex;
 
 use zarrs_plugin::{MaybeSend, MaybeSync};
@@ -11,7 +10,7 @@ use zarrs_storage::{
     StoreKey,
 };
 
-use crate::{ArrayBytesRaw, CodecError, CodecOptions};
+use crate::{CodecError, CodecOptions, CowBytes};
 
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
@@ -36,7 +35,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &self,
         decoded_region: ByteRange,
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+    ) -> Result<Option<CowBytes<'_>>, CodecError> {
         Ok(self
             .partial_decode_many(Box::new([decoded_region].into_iter()), options)?
             .map(|mut v| v.pop().expect("single byte range")))
@@ -52,7 +51,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError>;
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError>;
 
     /// Decode all bytes.
     ///
@@ -60,7 +59,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails.
-    fn decode(&self, options: &CodecOptions) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+    fn decode(&self, options: &CodecOptions) -> Result<Option<CowBytes<'_>>, CodecError> {
         self.partial_decode(ByteRange::FromStart(0, None), options)
     }
 
@@ -88,7 +87,7 @@ pub trait BytesPartialEncoderTraits:
     fn partial_encode(
         &self,
         offset: u64,
-        bytes: ArrayBytesRaw<'_>,
+        bytes: CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         self.partial_encode_many(Box::new([(offset, bytes)].into_iter()), options)
@@ -100,7 +99,7 @@ pub trait BytesPartialEncoderTraits:
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 
@@ -111,7 +110,7 @@ pub trait BytesPartialEncoderTraits:
     fn supports_partial_encode(&self) -> bool;
 }
 
-impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
+impl BytesPartialDecoderTraits for CowBytes<'static> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -124,11 +123,11 @@ impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
         &self,
         decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
                 .into_iter()
-                .map(Cow::Owned)
+                .map(CowBytes::from)
                 .collect(),
         ))
     }
@@ -151,11 +150,11 @@ impl BytesPartialDecoderTraits for Vec<u8> {
         &self,
         decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
                 .into_iter()
-                .map(Cow::Owned)
+                .map(CowBytes::from)
                 .collect(),
         ))
     }
@@ -178,13 +177,15 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         if let Some(input) = self.lock().unwrap().as_ref() {
             let size = input.len() as u64;
             let mut outputs = vec![];
             for byte_range in decoded_regions {
                 if byte_range.end(size) <= size {
-                    outputs.push(Cow::Owned(input[byte_range.to_range_usize(size)].into()));
+                    outputs.push(CowBytes::from(
+                        input[byte_range.to_range_usize(size)].to_vec(),
+                    ));
                 } else {
                     return Err(InvalidByteRangeError::new(byte_range, size).into());
                 }
@@ -208,7 +209,7 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
 
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<CowBytes<'_>>,
         _options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let mut v = self.lock().unwrap();
@@ -243,13 +244,13 @@ impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (T
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let results = self.0.get_partial_many(&self.1, decoded_regions)?;
         if let Some(results) = results {
             Ok(Some(
                 results
                     .into_iter()
-                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
+                    .map(|bytes| Ok::<_, StorageError>(CowBytes::from(bytes?)))
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         } else {
@@ -271,12 +272,12 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
 
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<CowBytes<'_>>,
         _options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let offset_values = offset_values
             .into_iter()
-            .map(|(offset, bytes)| (offset, bytes.into_owned().into()));
+            .map(|(offset, bytes)| (offset, bytes.into_static()));
         Ok(self.0.set_partial_many(&self.1, Box::new(offset_values))?)
     }
 

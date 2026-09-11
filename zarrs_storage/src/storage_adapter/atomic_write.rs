@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator,
+    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, MaybeBytesIterator,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -53,7 +53,7 @@ impl<
         &self,
         key: &StoreKey,
         temporary_key: &StoreKey,
-        value: Bytes,
+        value: CowBytes<'_>,
     ) -> Result<(), StorageError> {
         if self.storage.size_key(temporary_key)?.is_some() {
             return Err(StorageError::Other(format!(
@@ -113,15 +113,15 @@ impl<
             + 'static,
     > WritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
 {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let temporary_key = Self::temporary_key(key)?;
         self.set_via_temporary_key(key, &temporary_key, value)
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let temporary_key = Self::temporary_key(key)?;
 
@@ -135,7 +135,7 @@ impl<
             bytes_out[offset..offset + value.len()].copy_from_slice(&value);
         }
 
-        self.set_via_temporary_key(key, &temporary_key, bytes_out.freeze())
+        self.set_via_temporary_key(key, &temporary_key, bytes_out.into())
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -155,7 +155,7 @@ impl<
 mod tests {
     use crate::byte_range::ByteRangeIterator;
     use crate::store::MemoryStore;
-    use crate::MaybeBytes;
+    use crate::{Bytes, MaybeBytes};
 
     use super::*;
 
@@ -183,14 +183,14 @@ mod tests {
     }
 
     impl WritableStorageTraits for RenameStore {
-        fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+        fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
             self.inner.set(key, value)
         }
 
-        fn set_partial_many(
-            &self,
+        fn set_partial_many<'a>(
+            &'a self,
             key: &StoreKey,
-            offset_values: OffsetBytesIterator,
+            offset_values: OffsetBytesIterator<'a>,
         ) -> Result<(), StorageError> {
             self.inner.set_partial_many(key, offset_values)
         }
@@ -212,7 +212,7 @@ mod tests {
         fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
             let value: MaybeBytes = self.inner.get(source)?;
             let value = value.ok_or_else(|| StorageError::Other(format!("{source} is missing")))?;
-            self.inner.set(destination, value)?;
+            self.inner.set(destination, value.into())?;
             self.inner.erase(source)
         }
     }
@@ -221,9 +221,9 @@ mod tests {
     fn writes_full_and_partial_values() {
         let adapter = AtomicWriteStorageAdapter::new(Arc::new(RenameStore::default()));
         let key = StoreKey::new("key").unwrap();
-        adapter.set(&key, Bytes::from_static(b"00")).unwrap();
+        adapter.set(&key, Bytes::from_static(b"00").into()).unwrap();
         adapter
-            .set_partial(&key, 1, Bytes::from_static(b"B"))
+            .set_partial(&key, 1, Bytes::from_static(b"B").into())
             .unwrap();
 
         assert_eq!(adapter.get(&key).unwrap(), Some(Bytes::from_static(b"0B")));
@@ -235,13 +235,13 @@ mod tests {
         let key = StoreKey::new("key").unwrap();
         let temporary_key = AtomicWriteStorageAdapter::<RenameStore>::temporary_key(&key).unwrap();
         storage
-            .set(&temporary_key, Bytes::from_static(b"incomplete"))
+            .set(&temporary_key, Bytes::from_static(b"incomplete").into())
             .unwrap();
         let adapter = AtomicWriteStorageAdapter::new(storage);
 
         assert_eq!(
             adapter
-                .set(&key, Bytes::from_static(b"replacement"))
+                .set(&key, Bytes::from_static(b"replacement").into())
                 .unwrap_err()
                 .to_string(),
             "temporary key key.tmp already exists"
@@ -254,7 +254,7 @@ mod tests {
 
         assert_eq!(
             adapter
-                .set(&StoreKey::root(), Bytes::from_static(b"value"))
+                .set(&StoreKey::root(), Bytes::from_static(b"value").into())
                 .unwrap_err()
                 .to_string(),
             "atomic writes do not support the root store key"

@@ -10,7 +10,7 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::{CodecChain, CodecChainBound};
-use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
+use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
@@ -389,7 +389,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let ArrayBytes::Optional(optional_bytes) = bytes else {
             return Err(CodecError::Other(
                 "expected optional array bytes for optional codec".to_string(),
@@ -427,7 +427,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
                 .clone()
                 .encode(sparse_data, &data_shape, options)?
         } else {
-            ArrayBytesRaw::from(vec![])
+            CowBytes::from(vec![])
         };
 
         // Concatenate: [mask_len (u64) | data_len (u64) | mask | data]
@@ -437,12 +437,12 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         result.extend_from_slice(&encoded_mask);
         result.extend_from_slice(&encoded_data);
 
-        Ok(ArrayBytesRaw::from(result))
+        Ok(CowBytes::from(result))
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -466,7 +466,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             .mask_codecs
             .clone()
             .decode(encoded_mask.into(), shape, options)?;
-        let mask = decoded_mask.into_fixed()?.into_owned();
+        let mask = decoded_mask.into_fixed()?.into_vec();
 
         // Decode data
         let opt = self.data_type.as_optional().ok_or_else(|| {

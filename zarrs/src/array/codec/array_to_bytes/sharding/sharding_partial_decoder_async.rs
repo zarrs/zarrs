@@ -16,10 +16,10 @@ use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits,
-    CodecChainBound, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer,
-    IndexerError, ravel_indices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayIndices, ArrayIndicesTinyVec,
+    ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound,
+    CowBytes, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError,
+    ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
@@ -96,7 +96,7 @@ impl AsyncShardingPartialDecoder {
     pub async fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+    ) -> Result<Option<CowBytes<'_>>, CodecError> {
         let byte_range = self.subchunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle
@@ -404,7 +404,7 @@ async fn partial_decode_fixed_array_subset_into(
                             )
                             .await?
                             .into_fixed()?
-                            .into_owned();
+                            .into_vec();
                         Ok((Some(decoded), output_subset))
                     }
                 }
@@ -527,7 +527,7 @@ async fn partial_decode_fixed_array_subset(
                             data_type,
                         )?
                         .into_fixed()?
-                        .into_owned();
+                        .into_vec();
                     Ok::<_, CodecError>((decoded_chunk, chunk_subset_overlap))
                 }
             }),

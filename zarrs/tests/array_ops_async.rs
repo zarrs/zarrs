@@ -328,7 +328,9 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
     let encoded = array.async_retrieve_encoded_chunk(&[0, 0]).await?.unwrap();
     unsafe {
         // SAFETY: bytes were produced by the same array and chunk configuration.
-        array.async_store_encoded_chunk(&[0, 1], encoded).await?;
+        array
+            .async_store_encoded_chunk(&[0, 1], encoded.into())
+            .await?;
     }
     let _ = array.async_compact_chunk(&[0, 0]).await?;
     array.async_erase_chunk(&[0, 1]).await?;

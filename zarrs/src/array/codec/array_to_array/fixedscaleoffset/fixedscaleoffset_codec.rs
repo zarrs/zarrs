@@ -387,7 +387,7 @@ fn do_encode(
     encoded_element_type: FixedScaleOffsetElementType,
     astype: bool,
 ) -> Result<ArrayBytes<'_>, CodecError> {
-    let mut bytes = bytes.into_fixed()?.into_owned();
+    let mut bytes = bytes.into_fixed()?.into_vec();
     scale_array(&mut bytes, element_type, offset, scale)?;
     if astype {
         Ok(cast_array(&bytes, element_type, encoded_element_type).into())
@@ -419,7 +419,7 @@ fn encode_fill_value(
         encoded_fill_value
             .into_fixed()
             .map_err(CodecCreateError::other)?
-            .into_owned(),
+            .into_vec(),
     ))
 }
 
@@ -534,7 +534,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let bytes = bytes.into_fixed()?.into_owned();
+        let bytes = bytes.into_fixed()?.into_vec();
         let mut bytes = if self.astype.is_some() {
             cast_array(&bytes, self.encoded_element_type, self.element_type)
         } else {

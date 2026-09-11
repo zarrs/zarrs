@@ -446,8 +446,8 @@ mod tests {
 
     #[test]
     fn bytes_codec_little_endian() {
-        use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
+        use zarrs_storage::CowBytes;
 
         let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points in native endian
@@ -456,11 +456,11 @@ mod tests {
             .iter()
             .flat_map(|&c| (c as u32).to_ne_bytes())
             .collect();
-        let bytes_cow: std::borrow::Cow<'_, [u8]> = Cow::Owned(bytes.clone());
+        let bytes_raw = CowBytes::from(bytes.clone());
 
         // Encode to little endian (same as native on LE)
         let encoded = data_type
-            .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
+            .encode(bytes_raw.clone(), Some(zarrs_metadata::Endianness::Little))
             .unwrap();
 
         // On LE, little endian should be a no-op
@@ -471,8 +471,8 @@ mod tests {
 
     #[test]
     fn bytes_codec_big_endian_swap_per_code_unit() {
-        use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
+        use zarrs_storage::CowBytes;
 
         let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points
@@ -485,7 +485,7 @@ mod tests {
         // Encode to big endian
         let encoded = data_type
             .encode(
-                Cow::Owned(native_bytes.clone()),
+                CowBytes::from(native_bytes.clone()),
                 Some(zarrs_metadata::Endianness::Big),
             )
             .unwrap();

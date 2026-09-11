@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
-use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
+use crate::array::{ArrayBytes, CowBytes, DataType, FillValue};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
     CodecError, CodecOptions,
@@ -39,7 +39,7 @@ impl VlenV2PartialDecoder {
 }
 
 fn decode_vlen_bytes<'a>(
-    bytes: Option<ArrayBytesRaw>,
+    bytes: Option<CowBytes>,
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,

@@ -1,9 +1,7 @@
-use std::borrow::Cow;
-
 use derive_more::Display;
 use thiserror::Error;
 
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 
 use super::DataType;
 
@@ -41,7 +39,7 @@ pub enum TensorError {
 /// sign or zero extended into the padding bits. This is not how the `packbits` codec stores such
 /// elements, which is bit-packed with no padding.
 pub struct Tensor {
-    bytes: ArrayBytesRaw<'static>,
+    bytes: CowBytes<'static>,
     data_type: DataType,
     shape: Vec<u64>,
 }
@@ -49,11 +47,7 @@ pub struct Tensor {
 impl Tensor {
     /// Create a new [`Tensor`].
     #[must_use]
-    pub fn new(
-        bytes: impl Into<ArrayBytesRaw<'static>>,
-        data_type: DataType,
-        shape: Vec<u64>,
-    ) -> Self {
+    pub fn new(bytes: impl Into<CowBytes<'static>>, data_type: DataType, shape: Vec<u64>) -> Self {
         Self {
             bytes: bytes.into(),
             data_type,
@@ -90,7 +84,7 @@ impl Tensor {
 
     /// Consume self and return the parts.
     #[must_use]
-    pub fn into_parts(self) -> (Cow<'static, [u8]>, DataType, Vec<u64>) {
+    pub fn into_parts(self) -> (CowBytes<'static>, DataType, Vec<u64>) {
         (self.bytes, self.data_type, self.shape)
     }
 

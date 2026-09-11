@@ -15,10 +15,9 @@ use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits,
-    CodecChainBound, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer,
-    IndexerError, ravel_indices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayIndices, ArrayIndicesTinyVec,
+    ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes,
+    DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
@@ -94,7 +93,7 @@ impl ShardingPartialDecoder {
     pub fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+    ) -> Result<Option<CowBytes<'_>>, CodecError> {
         let byte_range = self.subchunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle

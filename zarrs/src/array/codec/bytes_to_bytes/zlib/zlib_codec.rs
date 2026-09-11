@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
@@ -89,26 +88,26 @@ impl BytesToBytesCodecTraits for ZlibCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder =
             flate2::read::ZlibEncoder::new(Cursor::new(decoded_value), self.compression);
         let mut out: Vec<u8> = Vec::new();
         encoder.read_to_end(&mut out)?;
-        Ok(Cow::Owned(out))
+        Ok(CowBytes::from(out))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
-        Ok(Cow::Owned(out))
+        Ok(CowBytes::from(out))
     }
 
     fn encoded_representation(

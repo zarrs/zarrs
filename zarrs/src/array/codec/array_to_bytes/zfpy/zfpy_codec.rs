@@ -6,8 +6,8 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -179,13 +179,13 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         self.inner.encode(bytes, shape, options)
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

@@ -33,18 +33,21 @@ mod strip_suffix_partial_decoder;
 /// without a reallocation, whether or not the input is already owned.
 #[cfg(any(feature = "adler32", feature = "crc32c", feature = "fletcher32"))]
 pub(crate) fn into_owned_with_spare_capacity(
-    bytes: crate::array::ArrayBytesRaw<'_>,
+    bytes: crate::array::CowBytes<'_>,
     spare: usize,
 ) -> Vec<u8> {
     match bytes {
-        std::borrow::Cow::Owned(mut bytes) => {
-            bytes.reserve_exact(spare);
-            bytes
-        }
-        std::borrow::Cow::Borrowed(bytes) => {
+        // One allocation, sized for the suffix up front.
+        crate::array::CowBytes::Borrowed(bytes) => {
             let mut owned = Vec::with_capacity(bytes.len().saturating_add(spare));
             owned.extend_from_slice(bytes);
             owned
+        }
+        bytes @ crate::array::CowBytes::Shared(_) => {
+            // Reuses the buffer if it is not shared, otherwise copies.
+            let mut bytes = bytes.into_vec();
+            bytes.reserve_exact(spare);
+            bytes
         }
     }
 }

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -21,8 +20,8 @@ use super::{
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -224,7 +223,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         let mut bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding);
         let zfp_type = bytes_promoted.zfp_type();
@@ -281,13 +280,13 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             Err(CodecError::from("zfp compression failed"))
         } else {
             encoded_value.truncate(size);
-            Ok(Cow::Owned(encoded_value))
+            Ok(CowBytes::from(encoded_value))
         }
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

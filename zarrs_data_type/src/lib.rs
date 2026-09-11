@@ -15,6 +15,7 @@ mod optional;
 
 pub mod codec_traits;
 
+pub use cowbytes::CowBytes;
 pub use data_type::{DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3};
 pub use data_type_plugin::{
     DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3, DataTypePluginV2,

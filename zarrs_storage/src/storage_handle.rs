@@ -7,8 +7,8 @@ use super::{
     AsyncWritableStorageTraits,
 };
 use super::{
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StorePrefix, WritableStorageTraits,
+    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits, StorageError,
+    StoreKey, StorePrefix, WritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -76,14 +76,18 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for Storage
 }
 
 impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for StorageHandle<TStorage> {
-    fn set(&self, key: &super::StoreKey, value: Bytes) -> Result<(), super::StorageError> {
+    fn set(
+        &self,
+        key: &super::StoreKey,
+        value: super::CowBytes<'_>,
+    ) -> Result<(), super::StorageError> {
         self.0.set(key, value)
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), super::StorageError> {
         self.0.set_partial_many(key, offset_values)
     }
@@ -171,7 +175,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for StorageHandle<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: super::CowBytes<'_>) -> Result<(), StorageError> {
         self.0.set(key, value).await
     }
 

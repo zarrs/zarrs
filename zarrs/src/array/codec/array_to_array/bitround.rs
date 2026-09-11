@@ -129,9 +129,8 @@ mod tests {
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<f32>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<f32>(decoded.into_fixed().unwrap().into_vec());
         assert_eq!(decoded_elements, &[0.0f32, 1.25f32, -8.0f32, 98304.0f32]);
     }
 
@@ -171,9 +170,8 @@ mod tests {
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<u32>(decoded.into_fixed().unwrap().into_vec());
         for element in &decoded_elements {
             println!("{element} -> {element:#b}");
         }
@@ -204,9 +202,8 @@ mod tests {
         let decoded = codec
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
-        let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
-            decoded.into_fixed().unwrap().into_owned(),
-        );
+        let decoded_elements =
+            crate::array::transmute_from_bytes_vec::<u32>(decoded.into_fixed().unwrap().into_vec());
         for element in &decoded_elements {
             println!("{element} -> {element:#b}");
         }

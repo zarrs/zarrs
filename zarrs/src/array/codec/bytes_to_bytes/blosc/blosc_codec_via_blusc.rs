@@ -12,7 +12,7 @@ use super::super::{
     BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder,
     blosc_validate,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -211,31 +211,31 @@ impl BytesToBytesCodecTraits for BloscCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
         //     std::thread::available_parallelism().unwrap(),
         // )
         // .get();
         let n_threads = 1;
-        Ok(Cow::Owned(self.do_encode(&decoded_value, n_threads)?))
+        Ok(CowBytes::from(self.do_encode(&decoded_value, n_threads)?))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
         //     std::thread::available_parallelism().unwrap(),
         // )
         // .get();
         let n_threads = 1;
-        Ok(Cow::Owned(Self::do_decode(&encoded_value, n_threads)?))
+        Ok(CowBytes::from(Self::do_decode(&encoded_value, n_threads)?))
     }
 
     fn partial_decoder(

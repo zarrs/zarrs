@@ -14,7 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
-- Bump `zarrs_storage` to 0.4.6
+- **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
+  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
+- **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
+- **Breaking**: Rename `ArrayRawBytesOffsets{OutOfBounds,Create}Error` to `ArrayBytesOffsets{OutOfBounds,Create}Error`
+- **Breaking**: `ArrayBytesOffsets` holds an `Arc<Vec<usize>>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
+  - Cloning shares the offset allocation rather than copying its elements
+  - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
+- **Breaking**: Bump `zarrs_storage` to 0.5.0
+- **Breaking**: Bump `zarrs_data_type` to 0.10.0
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
   - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
@@ -25,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - Bump `itertools` to 0.15.0
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`

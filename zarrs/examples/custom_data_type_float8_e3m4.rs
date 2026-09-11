@@ -2,8 +2,8 @@
 //!
 //! It accepts float compatible fill values.
 
-use std::borrow::Cow;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -170,7 +170,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
         for element in elements {
             bytes.push(element.0);
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(

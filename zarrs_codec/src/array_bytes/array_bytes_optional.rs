@@ -1,4 +1,4 @@
-use crate::{ArrayBytes, ArrayBytesRaw};
+use crate::{ArrayBytes, CowBytes};
 
 /// Optional array bytes composed of data and a validity mask.
 ///
@@ -16,12 +16,12 @@ use crate::{ArrayBytes, ArrayBytesRaw};
 #[derive(Clone, Debug)]
 pub struct ArrayBytesOptional<'a> {
     data: Box<ArrayBytes<'a>>,
-    mask: ArrayBytesRaw<'a>,
+    mask: CowBytes<'a>,
 }
 
 impl<'a> ArrayBytesOptional<'a> {
     /// Create a new `ArrayBytesOptional` with validation.
-    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
+    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<CowBytes<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();
 
@@ -36,7 +36,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Get the validity mask.
     #[must_use]
-    pub fn mask(&self) -> &ArrayBytesRaw<'a> {
+    pub fn mask(&self) -> &CowBytes<'a> {
         &self.mask
     }
 
@@ -48,7 +48,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Consume self and return the data and mask.
     #[must_use]
-    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, ArrayBytesRaw<'a>) {
+    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, CowBytes<'a>) {
         (self.data, self.mask)
     }
 
@@ -57,7 +57,7 @@ impl<'a> ArrayBytesOptional<'a> {
     pub fn into_owned(self) -> ArrayBytesOptional<'static> {
         ArrayBytesOptional {
             data: Box::new((*self.data).into_owned()),
-            mask: self.mask.into_owned().into(),
+            mask: self.mask.into_static(),
         }
     }
 }

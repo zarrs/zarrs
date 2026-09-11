@@ -1,6 +1,6 @@
-use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
@@ -45,21 +45,13 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     }
 
     /// Decode bytes, applying endianness conversion if required.
-    fn decode_bytes(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CodecError> {
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .decode(Cow::Owned(bytes), self.endian)?
-            .into_owned())
+    fn decode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
+        Ok(self.data_type.codec_bytes()?.decode(bytes, self.endian)?)
     }
 
     /// Encode bytes, applying endianness conversion if required.
-    fn encode_bytes(&self, bytes: Cow<'_, [u8]>) -> Result<Vec<u8>, CodecError> {
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .encode(bytes, self.endian)?
-            .into_owned())
+    fn encode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
+        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
     }
 }
 
@@ -114,7 +106,7 @@ where
             .partial_decode_many(Box::new(byte_ranges), options)?;
 
         let decoded = if let Some(decoded) = decoded {
-            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
+            ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
@@ -180,7 +172,7 @@ where
             .await?;
 
         let decoded = if let Some(decoded) = decoded {
-            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
+            ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
@@ -236,7 +228,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
+                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();
@@ -256,15 +248,12 @@ where
                 bytes,
                 self.data_type.size(),
             )?;
-            let chunk_bytes: Vec<u8> = chunk_bytes
-                .into_fixed()
-                .expect("fixed data type")
-                .into_owned();
+            let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
 
-            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
+            let chunk_bytes = self.encode_bytes(chunk_bytes)?;
 
             self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
+                .partial_encode(0, chunk_bytes, options)
         }
     }
 
@@ -319,7 +308,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
+                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();
@@ -340,15 +329,12 @@ where
                 bytes,
                 self.data_type.size(),
             )?;
-            let chunk_bytes: Vec<u8> = chunk_bytes
-                .into_fixed()
-                .expect("fixed data type")
-                .into_owned();
+            let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
 
-            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
+            let chunk_bytes = self.encode_bytes(chunk_bytes)?;
 
             self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
+                .partial_encode(0, chunk_bytes, options)
                 .await
         }
     }
