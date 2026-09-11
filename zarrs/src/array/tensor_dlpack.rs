@@ -161,11 +161,14 @@ fn shape_and_strides(shape: &[u64]) -> Result<(Vec<i64>, Vec<i64>), TensorError>
     Ok((shape, strides))
 }
 
-impl Tensor {
+impl Tensor<'static> {
     /// Convert this tensor into a versioned `DLPack` managed tensor.
     ///
-    /// The tensor is moved into the managed tensor and keeps its data alive. The element data is
-    /// not copied; only the shape and strides are copied into the managed tensor allocation.
+    /// The tensor is moved into the managed tensor and keeps its data alive. Only the shape and
+    /// strides are copied, not the elements.
+    ///
+    /// A consumer may hold the data for as long as it likes, so the tensor must be `'static`. Use
+    /// [`into_static`](Tensor::into_static) to export borrowed bytes, which copies them.
     ///
     /// # Errors
     ///
@@ -180,7 +183,8 @@ impl Tensor {
     /// # let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::float32(), -1.0f32)
     /// #     .build(store.into(), "/")?;
     /// # array.store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])?;
-    /// let tensor: Tensor = array.retrieve_chunks(&ArraySubset::new_with_shape(vec![1, 2]))?;
+    /// let subset = ArraySubset::new_with_shape(vec![1, 2]);
+    /// let tensor: Tensor<'static> = array.retrieve_chunks(&subset)?;
     /// let dlpack = tensor.into_dlpack()?;
     ///
     /// assert_eq!(dlpack.shape()?, &[2, 4]);
@@ -188,6 +192,15 @@ impl Tensor {
     ///     dlpack.cpu_data_slice::<f32>()?,
     ///     &[0.0, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0]
     /// );
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Exporting borrowed bytes without [`into_static`](Tensor::into_static) does not compile:
+    /// ```rust,compile_fail
+    /// # use zarrs::array::{Tensor, data_type};
+    /// let bytes = vec![0u8; 16];
+    /// let tensor = Tensor::new(&bytes[..], data_type::float32(), vec![2, 2]);
+    /// let dlpack = tensor.into_dlpack()?; // `bytes` does not live for `'static`
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn into_dlpack(self) -> Result<versioned::Dlpack, TensorError> {
@@ -213,10 +226,9 @@ impl Tensor {
             tensor.bytes().as_ptr().cast::<c_void>().cast_mut()
         };
         let builder = Builder::new(tensor, CopiedSlice::new(shape, strides));
-        // SAFETY: the boxed tensor context owns the initialized byte allocation addressed by
-        // `data` for the lifetime of the managed tensor, `data`/`dtype`/shape/strides/`byte_offset`
-        // describe it as a compact row-major tensor, and the allocation is large enough for the
-        // elements they describe.
+        // SAFETY: the boxed tensor owns the bytes at `data` and outlives the managed tensor, which
+        // needs the `'static` tensor. `dtype`/shape/strides/`byte_offset` describe those bytes as a
+        // compact row-major tensor, and there are enough of them for the elements described.
         let builder = unsafe { builder.data(data) }
             .dtype(dtype)
             .device(DLDevice::CPU)
@@ -238,7 +250,7 @@ mod tests {
     use super::{ElementLayout, ElementPacking, TensorError};
     use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type};
 
-    fn test_tensor() -> Tensor {
+    fn test_tensor() -> Tensor<'static> {
         let store = MemoryStore::new();
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::float32(), -1.0f32)
             .build(store.into(), "/")
@@ -249,6 +261,28 @@ mod tests {
         array
             .retrieve_chunks(&ArraySubset::new_with_shape(vec![1, 2]))
             .unwrap()
+    }
+
+    #[test]
+    fn tensor_into_static_shared_does_not_copy() {
+        let bytes = vec![0u8; 4 * size_of::<f32>()];
+        let ptr = bytes.as_ptr();
+        let tensor = Tensor::new(bytes, data_type::float32(), vec![2, 2]);
+        // A `Vec` is adopted as shared bytes, so `into_static` retains the allocation
+        assert_eq!(tensor.into_static().bytes().as_ptr(), ptr);
+    }
+
+    #[test]
+    fn tensor_borrowed_into_static_dlpack() {
+        let elements = [1.0f32, 2.0, 3.0, 4.0];
+        let bytes: Vec<u8> = elements.iter().flat_map(|f| f.to_ne_bytes()).collect();
+        let tensor = Tensor::new(&bytes[..], data_type::float32(), vec![2, 2]);
+        let dlpack = tensor.into_static().into_dlpack().unwrap();
+
+        // `into_static` copied the borrowed bytes, so the export outlives them
+        drop(bytes);
+        assert_eq!(dlpack.shape().unwrap(), &[2, 2]);
+        assert_eq!(dlpack.cpu_data_slice::<f32>().unwrap(), &elements);
     }
 
     #[test]

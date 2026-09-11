@@ -54,7 +54,7 @@ impl Default for ElementLayout {
     }
 }
 
-impl Tensor {
+impl Tensor<'_> {
     /// The layout of the elements in [`bytes`](Tensor::bytes).
     ///
     /// Always [`ElementLayout::default()`]; `zarrs` does not produce tensors in another layout yet.
