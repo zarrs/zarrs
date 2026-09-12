@@ -35,11 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
+- Add `Tensor::into_dlpack()` for exporting a `Tensor<'static>` as a versioned DLPack managed tensor (requires the `dlpack` feature)
+- Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
+- Implement `Clone` and `Debug` for `Tensor`
 
 ### Changed
 - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library
   - Removes copies on some array `retrieve_`/`store_` paths with select stores and codec paths
   - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
+- **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes
 - **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
 - **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0 and `zarrs_data_type` to 0.10.0
@@ -87,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
 - Remove warnings from now-stable `reshape` codec
 - **Breaking**: Bump `float8` to 0.7.0
+- **Breaking**: Bump `dlpark` to 0.8.0 and replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`
 - Internal dependency bumps:
   - Bump `base64` to 0.23.1
   - Bump `getrandom` to 0.4.3
@@ -117,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reuse the input allocation (if posible) when appending/stripping the checksum in the `crc32c`, `adler32`, and `fletcher32` codecs
 - Avoid copying each encoded inner chunk in the `sharding_indexed` codec
 - Avoid redundant copy in `shuffle` codec
+- Validate that tensor bytes cover the shape and data type during DLPack export
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

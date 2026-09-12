@@ -109,7 +109,7 @@ impl<T: ElementOwned, D: ndarray::Dimension> FromArrayBytes for ndarray::Array<T
     }
 }
 
-impl FromArrayBytes for super::Tensor {
+impl FromArrayBytes for super::Tensor<'static> {
     fn from_array_bytes(
         bytes: ArrayBytes<'static>,
         shape: &[u64],
