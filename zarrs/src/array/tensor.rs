@@ -14,6 +14,17 @@ pub enum TensorError {
     /// The data type is not supported.
     #[display("Data type {_0:?} is not supported for this operation.")]
     UnsupportedDataType(DataType),
+    /// The shape cannot be represented for this operation.
+    #[display("Shape {_0:?} is not supported for this operation.")]
+    UnsupportedShape(Vec<u64>),
+    /// The tensor bytes do not cover its shape and data type.
+    #[display("Tensor needs at least {expected} bytes, but has {actual}.")]
+    InsufficientBytes {
+        /// The number of bytes required.
+        expected: usize,
+        /// The number of available bytes.
+        actual: usize,
+    },
 }
 
 /// A tensor holding raw bytes with data type and shape metadata.
