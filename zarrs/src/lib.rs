@@ -199,7 +199,7 @@
 //!    - The async API is runtime-agnostic. This has some limitations that are detailed in the [`Array`](crate::array::Array) docs.
 //!    - The async API is not as performant as the sync API.
 //!  - Codecs: `adler32`, `bitround`, `bz2`, `fletcher32`, `gdeflate`, `pcodec`, `zfp`, `zlib`.
-//!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array).
+//!  - `dlpack`: adds [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) interoperability to [`Tensor`](crate::array::Tensor).
 //!  - Additional [`Element`](crate::array::Element)/[`ElementOwned`](crate::array::ElementOwned) implementations:
 //!    - `float8`: add support for [`float8`] subfloat data types.
 //!    - `microfloat`: add support for [`microfloat`] subfloat data types.
