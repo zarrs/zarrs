@@ -30,6 +30,7 @@ pub enum TensorError {
 /// A tensor holding raw bytes with data type and shape metadata.
 ///
 /// This represents a multidimensional array of fixed-size elements in C-contiguous (row-major) order.
+#[derive(Clone, Debug)]
 pub struct Tensor {
     bytes: ArrayBytesRaw<'static>,
     data_type: DataType,

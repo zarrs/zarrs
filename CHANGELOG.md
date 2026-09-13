@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Implement `Clone` and `Debug` for `Tensor`, retaining owned/borrowed bytes semantics (backport of #456, `fa226fa4`)
 - Implement `Copy` for `GroupMetadataOptions` (backport of #399, `f662c596`)
 - Implement `Debug`, `Clone`, `Copy` and `Default` for `MetadataRetrieveVersion` (backport of `1bcba576`)
 - Implement `Clone` for `Array` without a `Clone` bound on storage (backport of #435, `495aedee`)

@@ -70,3 +70,21 @@ fn group_metadata_options_are_copy() {
         MetadataConvertVersion::V3
     ));
 }
+
+#[test]
+fn tensor_clone_preserves_cow_semantics() {
+    use std::borrow::Cow;
+    use zarrs::array::Tensor;
+    fn bounds<T: Clone + std::fmt::Debug>() {}
+    bounds::<Tensor>();
+    let owned = Tensor::new(vec![1, 2, 3], data_type::uint8(), vec![3]);
+    let cloned = owned.clone();
+    assert_eq!(owned.as_parts(), cloned.as_parts());
+    assert_ne!(owned.bytes().as_ptr(), cloned.bytes().as_ptr());
+    assert!(matches!(cloned.into_parts().0, Cow::Owned(_)));
+    static BYTES: &[u8] = &[4, 5];
+    let borrowed = Tensor::new(Cow::Borrowed(BYTES), data_type::uint8(), vec![2]);
+    let cloned = borrowed.clone();
+    assert_eq!(borrowed.bytes().as_ptr(), cloned.bytes().as_ptr());
+    assert!(matches!(cloned.into_parts().0, Cow::Borrowed(_)));
+}
