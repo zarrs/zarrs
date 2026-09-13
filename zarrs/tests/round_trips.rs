@@ -58,14 +58,14 @@ fn filesystem_chunk_round_trip_impl(
         &data_key(
             &"/group/array".try_into()?,
             &chunk_key_encoding.encode(&[0, 0, 0]),
-        ),
+        )?,
         data_serialised_in.clone().into(),
     )?;
     let data_serialised_out = store
         .get(&data_key(
             &"/group/array".try_into()?,
             &chunk_key_encoding.encode(&[0, 0, 0]),
-        ))?
+        )?)?
         .unwrap()
         .to_vec();
     assert_eq!(data_serialised_in, data_serialised_out);

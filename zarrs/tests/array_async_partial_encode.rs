@@ -57,7 +57,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
         .unwrap()
         .with_codec_options(opt);
 
-    let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
+    let chunk_key = array.chunk_key(&[0, 0]).unwrap();
 
     // Verify the chunk doesn't exist initially
     assert!(store.get(&chunk_key).await.unwrap().is_none());
@@ -192,7 +192,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
         .unwrap()
         .with_codec_options(opt);
 
-    let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
+    let chunk_key = array.chunk_key(&[0, 0]).unwrap();
 
     // Verify the chunk doesn't exist initially
     assert!(store.get(&chunk_key).await.unwrap().is_none());

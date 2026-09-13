@@ -222,7 +222,7 @@ where
         .storage_transformers()
         .create_async_readable_transformer(storage_handle)
         .await?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0])));
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
     Ok(AsyncShardingPartialDecoder::new(
         input_handle,

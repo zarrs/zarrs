@@ -56,7 +56,7 @@ fn array_partial_encode_sharding(
         .with_codec_options(opt);
 
     let get_bytes_0_0 = || {
-        let key = array.chunk_key_encoding().encode(&[0, 0]);
+        let key = array.chunk_key(&[0, 0]).unwrap();
         store.get(&key)
     };
 
@@ -292,7 +292,7 @@ fn array_partial_encode_sharding_compact(
         .with_codec_options(opt);
 
     let get_bytes_0_0 = || {
-        let key = array.chunk_key_encoding().encode(&[0, 0]);
+        let key = array.chunk_key(&[0, 0]).unwrap();
         store.get(&key)
     };
 

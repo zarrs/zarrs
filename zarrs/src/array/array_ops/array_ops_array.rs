@@ -13,6 +13,7 @@ use zarrs_codec::ChunkGridDecoded;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
+use zarrs_storage::StoreKeyError;
 
 #[inherent]
 impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
@@ -274,7 +275,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .map_or(ChunkGridDecodedRef::None, Into::into)
     }
 
-    pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {
+    pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, StoreKeyError> {
         data_key(self.path(), &self.chunk_key_encoding.encode(chunk_indices))
     }
 

@@ -9,7 +9,7 @@ use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
 use zarrs_plugin::PluginCreateError;
-use zarrs_storage::StorageError;
+use zarrs_storage::{StorageError, StoreKeyError};
 
 /// An array creation error.
 #[derive(Clone, Debug, Error)]
@@ -90,6 +90,9 @@ pub enum ArrayError {
     /// A store error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
+    /// An invalid store key, e.g. produced by a custom chunk key encoding.
+    #[error(transparent)]
+    InvalidStoreKey(#[from] StoreKeyError),
     /// A codec error.
     #[error(transparent)]
     CodecError(#[from] CodecError),

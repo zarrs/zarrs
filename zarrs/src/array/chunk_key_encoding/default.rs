@@ -7,7 +7,6 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{ChunkKeySeparator, Configuration};
 pub use zarrs_metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_storage::StoreKey;
 
 zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, v3: "default");
 
@@ -76,10 +75,10 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
         .into()
     }
 
-    fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {
+    fn encode(&self, chunk_grid_indices: &[u64]) -> String {
         const PREFIX: &str = "c";
 
-        let key = if chunk_grid_indices.is_empty() {
+        if chunk_grid_indices.is_empty() {
             PREFIX.to_string()
         } else {
             // Avoid a heap allocation of the chunk key separator
@@ -94,11 +93,8 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
                 .iter()
                 .zip(&mut buffers)
                 .map(|(&n, buffer)| buffer.format(n));
-            #[allow(clippy::let_and_return)]
-            let out = [PREFIX].into_iter().chain(iter).join(separator_str);
-            out
-        };
-        unsafe { StoreKey::new_unchecked(key) }
+            [PREFIX].into_iter().chain(iter).join(separator_str)
+        }
     }
 }
 
@@ -106,32 +102,33 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
 mod tests {
     use super::*;
     use crate::node::{NodePath, data_key};
+    use zarrs_storage::StoreKey;
 
     #[test]
     fn slash_nd() {
         let chunk_key_encoding: ChunkKeyEncoding = DefaultChunkKeyEncoding::new_slash().into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45]));
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45])).unwrap();
         assert_eq!(key, StoreKey::new("c/1/23/45").unwrap());
     }
 
     #[test]
     fn dot_nd() {
         let chunk_key_encoding: ChunkKeyEncoding = DefaultChunkKeyEncoding::new_dot().into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45]));
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45])).unwrap();
         assert_eq!(key, StoreKey::new("c.1.23.45").unwrap());
     }
 
     #[test]
     fn slash_scalar() {
         let chunk_key_encoding: ChunkKeyEncoding = DefaultChunkKeyEncoding::new_slash().into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[]));
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[])).unwrap();
         assert_eq!(key, StoreKey::new("c").unwrap());
     }
 
     #[test]
     fn dot_scalar() {
         let chunk_key_encoding: ChunkKeyEncoding = DefaultChunkKeyEncoding::new_dot().into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[]));
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[])).unwrap();
         assert_eq!(key, StoreKey::new("c").unwrap());
     }
 }
