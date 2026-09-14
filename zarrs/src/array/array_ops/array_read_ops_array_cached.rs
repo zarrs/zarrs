@@ -350,7 +350,7 @@ where
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError> {
+    ) -> Result<Option<Bytes>, ArrayError> {
         self.array().retrieve_encoded_chunk(chunk_indices)
     }
 
@@ -358,7 +358,7 @@ where
     pub fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError>;
+    ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

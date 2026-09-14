@@ -35,11 +35,11 @@ pub trait AsyncArrayWriteOps: ArrayOps {
 
     /// Async variant of [`ArrayWriteOps::erase_chunk`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError>;
+    async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::erase_chunks`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError>;
+    async fn async_erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::store_encoded_chunk`].
     ///

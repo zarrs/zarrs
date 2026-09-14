@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
-- Add `ArrayError::InvalidStoreKey`
+- Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
 - Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
   - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
 - Add the `cast_value` array-to-array codec
@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
   - Chunk keys from a chunk key encoding are now validated rather than being trusted
-- **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, StoreKeyError>`
+- **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`
+- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` and `[Async]ArrayWriteOps::erase_chunk[s]` return an `ArrayError` instead of a `StorageError`
 - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library
   - Removes copies on some array `retrieve_`/`store_` paths with select stores and codec paths
   - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types

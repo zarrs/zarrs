@@ -49,7 +49,7 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         self.array().async_erase_chunk(chunk_indices).await?;
         let _ = self.cache().invalidate_chunk(chunk_indices).await;
         Ok(())
@@ -59,7 +59,7 @@ where
     pub async fn async_erase_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), ArrayError> {
         self.array().async_erase_chunks(chunks).await?;
         let _ = self.cache().invalidate_chunks(chunks).await;
         Ok(())

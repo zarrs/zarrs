@@ -15,6 +15,7 @@ categories = ["encoding"]
 [dependencies]
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 inventory.workspace = true
+thiserror.workspace = true
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
 

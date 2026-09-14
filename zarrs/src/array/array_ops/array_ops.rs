@@ -1,5 +1,4 @@
 use super::*;
-use zarrs_storage::StoreKeyError;
 
 /// Core array operations.
 pub trait ArrayOps {
@@ -140,9 +139,9 @@ pub trait ArrayOps {
     /// Return the store key of the chunk at `chunk_indices`.
     ///
     /// # Errors
-    /// Returns [`StoreKeyError`] if the chunk key encoding produces an invalid store key.
-    /// This can only occur with a malformed custom chunk key encoding.
-    fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, StoreKeyError>;
+    /// Returns [`ArrayError::ChunkKeyEncodingError`] if the chunk key encoding cannot encode
+    /// `chunk_indices`, or [`ArrayError::InvalidStoreKey`] if it produces an invalid store key.
+    fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError>;
 
     /// Return the origin of the chunk at `chunk_indices`.
     ///

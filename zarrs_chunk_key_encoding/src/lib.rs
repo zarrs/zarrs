@@ -17,6 +17,38 @@ use zarrs_plugin::{
     PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersion, ZarrVersion3,
 };
 
+/// A chunk key encoding error.
+#[derive(Clone, Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ChunkKeyEncodingError {
+    /// The chunk grid indices are incompatible with the chunk key encoding.
+    #[error("chunk key encoding is incompatible with {_0} dimensional chunk grid indices: {_1}")]
+    IncompatibleDimensionality(usize, String),
+    /// Any other error.
+    #[error("{_0}")]
+    Other(String),
+}
+
+impl ChunkKeyEncodingError {
+    /// Create a new [`ChunkKeyEncodingError::Other`].
+    #[must_use]
+    pub fn other(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<&str> for ChunkKeyEncodingError {
+    fn from(error: &str) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<String> for ChunkKeyEncodingError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
+}
+
 /// A chunk key encoding.
 #[derive(Debug, Clone, From, Deref)]
 pub struct ChunkKeyEncoding(Arc<dyn ChunkKeyEncodingTraits>);
@@ -164,5 +196,9 @@ pub trait ChunkKeyEncodingTraits: ExtensionName + core::fmt::Debug + MaybeSend +
     ///
     /// The returned key is relative to the array path, and is combined with it to form a store key.
     /// It must not start or end with `/`, or contain `//`.
-    fn encode(&self, chunk_grid_indices: &[u64]) -> String;
+    ///
+    /// # Errors
+    /// Returns a [`ChunkKeyEncodingError`] if `chunk_grid_indices` cannot be encoded,
+    /// such as if they are incompatible with the dimensionality of the chunk key encoding.
+    fn encode(&self, chunk_grid_indices: &[u64]) -> Result<String, ChunkKeyEncodingError>;
 }

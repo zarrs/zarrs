@@ -161,7 +161,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError> {
+    ) -> Result<Option<Bytes>, ArrayError> {
         let options = self.codec_options();
         let _ = options;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -170,9 +170,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .create_async_readable_transformer(storage_handle)
             .await?;
 
-        storage_transformer
+        Ok(storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
-            .await
+            .await?)
     }
 
     /////////////////////////////////////////////////////////////////////////////
@@ -190,7 +190,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError> {
+    ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -201,9 +201,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         let retrieve_encoded_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let storage_transformer = storage_transformer.clone();
             async move {
-                storage_transformer
-                    .get(&self.chunk_key(&chunk_indices)?)
-                    .await
+                Ok::<_, ArrayError>(
+                    storage_transformer
+                        .get(&self.chunk_key(&chunk_indices)?)
+                        .await?,
+                )
             }
         };
 

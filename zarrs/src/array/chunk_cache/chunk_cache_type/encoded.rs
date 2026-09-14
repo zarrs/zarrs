@@ -82,7 +82,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
     {
         let encoded = cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array.retrieve_encoded_chunk(chunk_indices)?)
+                array.retrieve_encoded_chunk(chunk_indices)
             })
             .map_err(cache_error)?;
         partial_decoder_over_encoded(array, encoded, chunk_indices, options)
@@ -101,7 +101,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let encoded = cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                Ok(array.retrieve_encoded_chunk(chunk_indices)?)
+                array.retrieve_encoded_chunk(chunk_indices)
             })
             .map_err(cache_error)?;
         decode_encoded(array, &encoded, &chunk_shape, options)
@@ -138,7 +138,7 @@ where
 {
     cache
         .try_get_or_insert_with(chunk_indices.to_vec(), async move {
-            Ok(array.async_retrieve_encoded_chunk(chunk_indices).await?)
+            array.async_retrieve_encoded_chunk(chunk_indices).await
         })
         .await
         .map_err(cache_error)

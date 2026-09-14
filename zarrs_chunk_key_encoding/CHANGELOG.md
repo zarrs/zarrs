@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `ChunkKeyEncodingError`
+
 ### Changed
-- **Breaking**: `ChunkKeyEncodingTraits::encode` returns a `String` instead of a `StoreKey`
+- **Breaking**: `ChunkKeyEncodingTraits::encode` returns a `Result<String, ChunkKeyEncodingError>` instead of a `StoreKey`
   - The returned key is relative to the array path and is validated when combined with it, rather than being wrapped unvalidated
 - Bump MSRV to 1.92 (11 December, 2025)
 

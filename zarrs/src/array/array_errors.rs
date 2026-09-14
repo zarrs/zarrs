@@ -8,6 +8,7 @@ use zarrs_metadata::FillValueMetadata;
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
+use zarrs_chunk_key_encoding::ChunkKeyEncodingError;
 use zarrs_plugin::PluginCreateError;
 use zarrs_storage::{StorageError, StoreKeyError};
 
@@ -93,6 +94,9 @@ pub enum ArrayError {
     /// An invalid store key, e.g. produced by a custom chunk key encoding.
     #[error(transparent)]
     InvalidStoreKey(#[from] StoreKeyError),
+    /// A chunk key encoding failed to encode chunk grid indices.
+    #[error(transparent)]
+    ChunkKeyEncodingError(#[from] ChunkKeyEncodingError),
     /// A codec error.
     #[error(transparent)]
     CodecError(#[from] CodecError),
