@@ -171,7 +171,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
+        chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -365,7 +365,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             if chunk_subset.start().iter().all(|&o| o == 0)
                 && chunk_subset.shape() == chunk_shape_u64
             {
-                return self.retrieve_chunk_into_with_options(chunk_indices, output_target, options);
+                return self.retrieve_chunk_into_with_options(
+                    chunk_indices,
+                    output_target,
+                    options,
+                );
             }
         }
 

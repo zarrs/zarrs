@@ -5,8 +5,7 @@ use crate::array::chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer,
-    chunk_shape_to_array_shape,
+    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, chunk_shape_to_array_shape,
 };
 use zarrs_codec::ArrayPartialDecoderTraits;
 use zarrs_storage::ReadableStorageTraits;
