@@ -41,6 +41,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` and `Debug` for `Tensor`
 
 ### Changed
+- **Breaking**: Chunk subset array operations take an `indexer: &dyn Indexer` instead of a `chunk_subset: &dyn ArraySubsetTraits`, so a chunk can be read or written with a generic indexer (e.g. a list of chunk-relative indices) rather than only a rectangular subset
+  - `ArrayReadOps::{retrieve_chunk_subset,retrieve_chunk_subset_into}` and async variants
+  - `ArrayUpdateOps::store_chunk_subset` and its async variant
+  - The `chunk_subset_data` parameter of `store_chunk_subset` is renamed to `indexer_data`
+  - Passing an `ArraySubset`, `[a..b, c..d]`, `&[Range<u64>]` or `Vec<Range<u64>>` is unaffected, and bounds validation and whole-chunk fast paths are unchanged for those types
+  - Partial encoding of a chunk encoded with the `sharding_indexed` codec is not yet supported for non-subset indexers and returns a `CodecError`
+- **Breaking**: `ArrayWriteOps::erase_chunks` and `ArrayReadOps::retrieve_encoded_chunks` (and their async variants) take `chunks: &dyn Indexer` instead of `chunks: &dyn ArraySubsetTraits`, matching `ChunkCache::invalidate_chunks`
+  - Chunks may now be selected with a scattered list of chunk indices
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
   - Chunk keys from a chunk key encoding are now validated rather than being trusted
 - **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`
