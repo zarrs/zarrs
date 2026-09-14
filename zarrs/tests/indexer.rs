@@ -569,3 +569,157 @@ async fn async_indexer_array_subsets_variable() {
         }
     }
 }
+
+/// `Array` read/write of a chunk with a generic (non-subset) indexer.
+#[test]
+fn array_chunk_subset_generic_indexer() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
+        .build(store, "/array")?;
+    array.store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())?;
+
+    // Chunk-relative list of indices, in a deliberately non-monotonic order.
+    let indexer: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
+
+    // Read
+    let elements: Vec<u16> = array.retrieve_chunk_subset(&[0, 0], &indexer)?;
+    assert_eq!(elements, vec![1, 15, 4, 10]);
+
+    // ... and the output is flattened, matching `Indexer::output_shape`
+    assert_eq!(indexer.output_shape(), vec![4]);
+
+    // Write
+    array.store_chunk_subset(&[0, 0], &indexer, &[100u16, 101, 102, 103])?;
+    let chunk: Vec<u16> = array.retrieve_chunk(&[0, 0])?;
+    assert_eq!(
+        chunk,
+        vec![0, 100, 2, 3, 102, 5, 6, 7, 8, 9, 103, 11, 12, 13, 14, 101]
+    );
+
+    // An out-of-bounds indexer is rejected by the codec layer
+    let oob: Vec<ArrayIndices> = vec![vec![0, 4]];
+    assert!(
+        array
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+            .is_err()
+    );
+
+    // An array subset still works and is not flattened
+    let subset = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+    let elements: Vec<u16> = array.retrieve_chunk_subset(&[0, 0], &subset)?;
+    assert_eq!(elements, vec![0, 100, 102, 5]);
+
+    Ok(())
+}
+
+/// `erase_chunks` with a scattered list of chunk indices.
+#[test]
+fn array_erase_chunks_generic_indexer() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint16(), 0u16)
+        .build(store, "/array")?;
+    for chunk in [[0u64, 0], [0, 1], [1, 0], [1, 1]] {
+        array.store_chunk(&chunk, &[1u16, 1, 1, 1])?;
+    }
+
+    // Erase the two chunks on the anti-diagonal, which is not an array subset.
+    let chunks: Vec<ArrayIndices> = vec![vec![0, 1], vec![1, 0]];
+    array.erase_chunks(&chunks)?;
+
+    assert!(array.retrieve_encoded_chunk(&[0, 0])?.is_some());
+    assert!(array.retrieve_encoded_chunk(&[0, 1])?.is_none());
+    assert!(array.retrieve_encoded_chunk(&[1, 0])?.is_none());
+    assert!(array.retrieve_encoded_chunk(&[1, 1])?.is_some());
+
+    // `retrieve_encoded_chunks` follows `iter_indices` order
+    let encoded = array.retrieve_encoded_chunks(&chunks)?;
+    assert_eq!(encoded.len(), 2);
+    assert!(encoded.iter().all(Option::is_none));
+
+    // Chunk indices out-of-bounds of the chunk grid or with an incompatible dimensionality are rejected
+    for bad in [vec![vec![9, 9]], vec![vec![0]]] {
+        assert!(array.erase_chunks(&bad).is_err());
+        assert!(array.retrieve_encoded_chunks(&bad).is_err());
+    }
+
+    Ok(())
+}
+
+/// Partial encoding a sharded chunk with a generic indexer is not yet supported and must
+/// report an error rather than silently writing the wrong bytes.
+#[test]
+fn array_store_chunk_subset_sharded_generic_indexer_unsupported()
+-> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::default());
+    let mut builder = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16);
+    builder.array_to_bytes_codec(
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
+            .build_arc(),
+    );
+    let array = builder
+        .build(store, "/array")?
+        .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
+    array.store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())?;
+
+    let indexer: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3]];
+    assert!(
+        array
+            .store_chunk_subset(&[0, 0], &indexer, &[100u16, 101])
+            .is_err()
+    );
+
+    // The chunk is untouched
+    let chunk: Vec<u16> = array.retrieve_chunk(&[0, 0])?;
+    assert_eq!(chunk, (0u16..16).collect::<Vec<_>>());
+
+    Ok(())
+}
+
+/// A generic indexer is validated against the chunk shape even if the cached chunk is absent.
+#[test]
+fn array_cached_chunk_subset_generic_indexer_absent_chunk() -> Result<(), Box<dyn std::error::Error>>
+{
+    use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+    use zarrs::array::{ArrayBuilder, ArrayCached};
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::uint16(), 0u16)
+        .build(store, "/array")?;
+    let cached = ArrayCached::new(array.into(), ChunkCacheDecodedLruChunkLimit::new(4));
+
+    // Chunk [0, 0] is absent, so the fill value is returned
+    let indexer: Vec<ArrayIndices> = vec![vec![0, 1], vec![1, 1]];
+    let elements: Vec<u16> = cached.retrieve_chunk_subset(&[0, 0], &indexer)?;
+    assert_eq!(elements, vec![0, 0]);
+
+    // ... but an out-of-bounds or incompatible indexer is still rejected
+    let oob: Vec<ArrayIndices> = vec![vec![0, 2]];
+    assert!(
+        cached
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+            .is_err()
+    );
+    let bad_dimensionality: Vec<ArrayIndices> = vec![vec![0]];
+    assert!(
+        cached
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &bad_dimensionality)
+            .is_err()
+    );
+    assert!(
+        cached
+            .retrieve_chunk_subset::<Vec<u16>>(&[9, 9], &indexer)
+            .is_err()
+    );
+
+    Ok(())
+}
