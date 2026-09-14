@@ -157,7 +157,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError> {
+    ) -> Result<Option<Bytes>, ArrayError> {
         let options = self.codec_options();
         let _ = options;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -165,14 +165,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
 
-        storage_transformer.get(&self.chunk_key(chunk_indices)?)
+        Ok(storage_transformer.get(&self.chunk_key(chunk_indices)?)?)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError>;
+    ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

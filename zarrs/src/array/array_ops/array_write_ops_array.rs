@@ -139,21 +139,21 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(())
     }
 
-    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        storage_transformer.erase(&self.chunk_key(chunk_indices)?)
+        Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
+    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            storage_transformer.erase(&self.chunk_key(&chunk_indices)?)
+        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
+            Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
 
         #[cfg(not(target_arch = "wasm32"))]

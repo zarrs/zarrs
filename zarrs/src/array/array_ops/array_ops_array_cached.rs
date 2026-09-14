@@ -1,7 +1,6 @@
 use inherent::inherent;
 
 use super::{ArrayOps, *};
-use zarrs_storage::StoreKeyError;
 
 #[inherent]
 impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
@@ -131,7 +130,7 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().subchunk_grid_at_level(level)
     }
 
-    pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, StoreKeyError> {
+    pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
         self.array().chunk_key(chunk_indices)
     }
 

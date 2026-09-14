@@ -60,14 +60,14 @@ pub trait ArrayWriteOps: ArrayOps {
     /// Succeeds if the chunk does not exist.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError>;
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
+    fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError>;
 
     /// Erase the chunks in `chunks`.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError>;
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
+    fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError>;
 
     /// Store `encoded_chunk_bytes` at `chunk_indices`.
     ///

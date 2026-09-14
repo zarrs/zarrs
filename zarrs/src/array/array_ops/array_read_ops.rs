@@ -130,19 +130,19 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Retrieve the encoded bytes of a chunk.
     ///
     /// # Errors
-    /// Returns an [`StorageError`] if there is an underlying store error.
-    fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, StorageError>;
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
+    fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError>;
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.
     ///
     /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
+    /// Returns an [`ArrayError`] if a chunk key cannot be encoded or there is an underlying store error.
     fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError> {
+    ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         chunks
             .indices()
             .concurrent_limit(self.codec_options().concurrent_target())

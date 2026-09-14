@@ -4,7 +4,9 @@ use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
+use zarrs_chunk_key_encoding::{
+    ChunkKeyEncoding, ChunkKeyEncodingError, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits,
+};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{ChunkKeySeparator, Configuration, ConfigurationSerialize};
 use zarrs_plugin::PluginCreateError;
@@ -76,11 +78,11 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
         .into()
     }
 
-    fn encode(&self, chunk_grid_indices: &[u64]) -> String {
+    fn encode(&self, chunk_grid_indices: &[u64]) -> Result<String, ChunkKeyEncodingError> {
         const PREFIX: &str = "c";
         let suffix: &str = &self.suffix;
 
-        if chunk_grid_indices.is_empty() {
+        Ok(if chunk_grid_indices.is_empty() {
             format!("{PREFIX}{suffix}")
         } else {
             // Avoid a heap allocation of the chunk key separator
@@ -96,7 +98,7 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
                 .zip(&mut buffers)
                 .map(|(&n, buffer)| buffer.format(n));
             [PREFIX].into_iter().chain(iter).join(separator_str) + suffix
-        }
+        })
     }
 }
 
@@ -111,7 +113,11 @@ mod tests {
         let chunk_key_encoding: ChunkKeyEncoding =
             DefaultSuffixChunkKeyEncoding::new(ChunkKeySeparator::Slash, ".tiff".to_string())
                 .into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45])).unwrap();
+        let key = data_key(
+            &NodePath::root(),
+            &chunk_key_encoding.encode(&[1, 23, 45]).unwrap(),
+        )
+        .unwrap();
         assert_eq!(key, StoreKey::new("c/1/23/45.tiff").unwrap());
     }
 
@@ -119,7 +125,11 @@ mod tests {
     fn dot_nd() {
         let chunk_key_encoding: ChunkKeyEncoding =
             DefaultSuffixChunkKeyEncoding::new(ChunkKeySeparator::Dot, ".tiff".to_string()).into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[1, 23, 45])).unwrap();
+        let key = data_key(
+            &NodePath::root(),
+            &chunk_key_encoding.encode(&[1, 23, 45]).unwrap(),
+        )
+        .unwrap();
         assert_eq!(key, StoreKey::new("c.1.23.45.tiff").unwrap());
     }
 
@@ -128,7 +138,7 @@ mod tests {
         let chunk_key_encoding: ChunkKeyEncoding =
             DefaultSuffixChunkKeyEncoding::new(ChunkKeySeparator::Slash, ".tiff".to_string())
                 .into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[])).unwrap();
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[]).unwrap()).unwrap();
         assert_eq!(key, StoreKey::new("c.tiff").unwrap());
     }
 
@@ -136,7 +146,7 @@ mod tests {
     fn dot_scalar() {
         let chunk_key_encoding: ChunkKeyEncoding =
             DefaultSuffixChunkKeyEncoding::new(ChunkKeySeparator::Dot, ".tiff".to_string()).into();
-        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[])).unwrap();
+        let key = data_key(&NodePath::root(), &chunk_key_encoding.encode(&[]).unwrap()).unwrap();
         assert_eq!(key, StoreKey::new("c.tiff").unwrap());
     }
 }

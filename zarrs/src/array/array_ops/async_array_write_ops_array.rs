@@ -161,21 +161,21 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         Ok(())
     }
 
-    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+    pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
             .create_async_writable_transformer(storage_handle)
             .await?;
-        storage_transformer
+        Ok(storage_transformer
             .erase(&self.chunk_key(chunk_indices)?)
-            .await
+            .await?)
     }
 
     pub async fn async_erase_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -184,9 +184,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let storage_transformer = storage_transformer.clone();
             async move {
-                storage_transformer
-                    .erase(&self.chunk_key(&chunk_indices)?)
-                    .await
+                Ok::<_, ArrayError>(
+                    storage_transformer
+                        .erase(&self.chunk_key(&chunk_indices)?)
+                        .await?,
+                )
             }
         };
         futures::stream::iter(chunks.indices())

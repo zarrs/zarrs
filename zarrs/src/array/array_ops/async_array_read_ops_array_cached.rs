@@ -412,7 +412,7 @@ where
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError> {
+    ) -> Result<Option<Bytes>, ArrayError> {
         self.array()
             .async_retrieve_encoded_chunk(chunk_indices)
             .await
@@ -422,7 +422,7 @@ where
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError> {
+    ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         self.array().async_retrieve_encoded_chunks(chunks).await
     }
 

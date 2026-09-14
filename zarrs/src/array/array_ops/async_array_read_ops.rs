@@ -70,12 +70,12 @@ pub trait AsyncArrayReadOps: ArrayOps {
     /// Retrieve the encoded bytes of a chunk.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<Bytes>, StorageError>;
+    ) -> Result<Option<Bytes>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks`].
     ///
@@ -84,12 +84,12 @@ pub trait AsyncArrayReadOps: ArrayOps {
     /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Bytes>>, StorageError>;
+    ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
     #[allow(clippy::missing_errors_doc)]

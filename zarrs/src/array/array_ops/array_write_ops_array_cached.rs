@@ -41,13 +41,13 @@ where
         Ok(())
     }
 
-    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         self.array().erase_chunk(chunk_indices)?;
         let _ = self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
+    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError> {
         self.array().erase_chunks(chunks)?;
         let _ = self.cache().invalidate_chunks(chunks);
         Ok(())
