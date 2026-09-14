@@ -10,10 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: `ChunkKeyEncodingTraits::encode` returns a `String` instead of a `StoreKey`
   - The returned key is relative to the array path and is validated when combined with it, rather than being wrapped unvalidated
-- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- Bump MSRV to 1.92 (11 December, 2025)
 
 ### Removed
-- **Breaking**: Remove the `zarrs_storage` dependency
+- Remove the `zarrs_storage` dependency
 
 ## [0.2.0] - 2026-02-02
 
