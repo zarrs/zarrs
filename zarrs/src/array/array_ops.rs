@@ -56,7 +56,7 @@ use super::{
     ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded,
     ChunkGridDecodedRef, ChunkKeyEncoding, ChunkShape, ChunkShapeTraits, CodecChain,
     CodecChainBound, CodecCreateError, CodecOptions, CodecSpecificOptions, DataType, DimensionName,
-    FillValue, FromArrayBytes, IncompatibleDimensionalityError, IntoArrayBytes, NodePath,
+    FillValue, FromArrayBytes, IncompatibleDimensionalityError, Indexer, IntoArrayBytes, NodePath,
     StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;

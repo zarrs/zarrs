@@ -229,7 +229,7 @@ where
     pub(in crate::array) fn retrieve_chunk_subset_into_with_options(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -237,7 +237,7 @@ where
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             options,
         )?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
@@ -284,29 +284,29 @@ where
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
         let bytes = C::Value::retrieve_chunk_subset_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             options,
         )?;
-        T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
+        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         self.retrieve_chunk_subset_into_with_options(
             chunk_indices,
-            chunk_subset,
+            indexer,
             output_target,
             self.codec_options(),
         )

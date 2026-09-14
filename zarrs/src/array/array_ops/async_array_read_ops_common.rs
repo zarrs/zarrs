@@ -2,7 +2,7 @@ use futures::{StreamExt, TryStreamExt};
 
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
@@ -34,7 +34,7 @@ pub(super) trait AsyncRetrieveInto {
     async fn retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError>;
