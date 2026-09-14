@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `ravel_indices` now returns `None` if `indices` and `shape` have a different length
+- `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`, which were missing rectangular fast paths
 
 ## [0.5.1] - 2026-02-08
 
