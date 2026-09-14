@@ -471,6 +471,10 @@ macro_rules! impl_indexer_for_ranges {
                         .into_iter(),
                 ))
             }
+
+            fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
+                Some(self)
+            }
         }
     };
 }
@@ -554,5 +558,19 @@ mod tests {
         // Reference to range array
         let ranges_ref: &[Range<u64>; 2] = &ranges;
         assert!(ranges_ref.as_array_subset().is_some());
+
+        // Vec of ranges
+        let ranges_vec: Vec<Range<u64>> = vec![0..10, 0..10];
+        assert!(ranges_vec.as_array_subset().is_some());
+
+        // Slice of ranges
+        let ranges_slice: &[Range<u64>] = ranges_vec.as_slice();
+        assert!(ranges_slice.as_array_subset().is_some());
+
+        // ... and through `&dyn Indexer`
+        let indexer_ref: &dyn Indexer = &ranges_vec;
+        assert!(indexer_ref.as_array_subset().is_some());
+        let indexer_ref: &dyn Indexer = &ranges_slice;
+        assert!(indexer_ref.as_array_subset().is_some());
     }
 }
