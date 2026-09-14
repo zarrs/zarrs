@@ -235,7 +235,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             .storage_transformers()
             .create_async_readable_writable_transformer(storage_handle)
             .await?;
-        let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+        let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self
             .codecs_bound()
             .async_partial_encoder(input_output_handle, &chunk_shape, options)

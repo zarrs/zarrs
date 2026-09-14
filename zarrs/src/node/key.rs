@@ -1,5 +1,5 @@
 use super::NodePath;
-use zarrs_storage::StoreKey;
+use zarrs_storage::{StoreKey, StoreKeyError};
 
 /// Return the metadata key given a node path for a specified metadata file name (e.g. zarr.json, .zarray, .zgroup, .zaatrs).
 #[must_use]
@@ -47,14 +47,46 @@ pub fn meta_key_v2_attributes(path: &NodePath) -> StoreKey {
 /// Return the data key given a node path and a `chunk_key` of an array.
 ///
 /// A chunk key is computed with the `encode` method of a chunk key encoder.
-#[must_use]
-pub fn data_key(path: &NodePath, chunk_key: &StoreKey) -> StoreKey {
+///
+/// # Errors
+/// Returns [`StoreKeyError`] if `chunk_key` does not yield a valid [`StoreKey`] when
+/// combined with `path`. This can only occur with a custom chunk key encoding that
+/// produces a key starting or ending with `/`, or containing `//`.
+pub fn data_key(path: &NodePath, chunk_key: &str) -> Result<StoreKey, StoreKeyError> {
     let path = path.as_str();
     let path = path.strip_prefix('/').unwrap_or(path);
     let key_path = if path.is_empty() {
-        chunk_key.as_str().to_string()
+        chunk_key.to_string()
     } else {
-        format!("{}/{}", path, chunk_key.as_str())
+        format!("{path}/{chunk_key}")
     };
-    unsafe { StoreKey::new_unchecked(key_path) }
+    StoreKey::new(key_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_key_valid() {
+        let path = NodePath::new("/group/array").unwrap();
+        assert_eq!(
+            data_key(&path, "c/0/0").unwrap(),
+            StoreKey::new("group/array/c/0/0").unwrap()
+        );
+        assert_eq!(
+            data_key(&NodePath::root(), "c/0/0").unwrap(),
+            StoreKey::new("c/0/0").unwrap()
+        );
+    }
+
+    #[test]
+    fn data_key_invalid() {
+        // A chunk key encoding that emits a malformed key is rejected rather than
+        // silently producing an invalid store key.
+        let path = NodePath::new("/array").unwrap();
+        assert!(data_key(&path, "c/0/").is_err());
+        assert!(data_key(&path, "c//0").is_err());
+        assert!(data_key(&NodePath::root(), "/c/0").is_err());
+    }
 }

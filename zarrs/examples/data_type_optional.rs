@@ -89,7 +89,7 @@ N marks missing (`None`=`null`) values:
     for chunk_y in 0..chunk_grid_shape[0] {
         for chunk_x in 0..chunk_grid_shape[1] {
             let chunk_indices = vec![chunk_y, chunk_x];
-            let chunk_key = array.chunk_key(&chunk_indices);
+            let chunk_key = array.chunk_key(&chunk_indices)?;
             println!("  Chunk [{chunk_y}, {chunk_x}] (key: {chunk_key}):");
 
             if let Some(chunk_bytes) = store.get(&chunk_key)? {

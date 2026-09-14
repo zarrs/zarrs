@@ -1,4 +1,5 @@
 use super::*;
+use zarrs_storage::StoreKeyError;
 
 /// Core array operations.
 pub trait ArrayOps {
@@ -137,7 +138,11 @@ pub trait ArrayOps {
     fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
 
     /// Return the store key of the chunk at `chunk_indices`.
-    fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;
+    ///
+    /// # Errors
+    /// Returns [`StoreKeyError`] if the chunk key encoding produces an invalid store key.
+    /// This can only occur with a malformed custom chunk key encoding.
+    fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, StoreKeyError>;
 
     /// Return the origin of the chunk at `chunk_indices`.
     ///

@@ -168,7 +168,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .create_async_writable_transformer(storage_handle)
             .await?;
         storage_transformer
-            .erase(&self.chunk_key(chunk_indices))
+            .erase(&self.chunk_key(chunk_indices)?)
             .await
     }
 
@@ -185,7 +185,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             let storage_transformer = storage_transformer.clone();
             async move {
                 storage_transformer
-                    .erase(&self.chunk_key(&chunk_indices))
+                    .erase(&self.chunk_key(&chunk_indices)?)
                     .await
             }
         };
@@ -210,7 +210,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .create_async_writable_transformer(storage_handle)
             .await?;
         storage_transformer
-            .set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)
+            .set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)
             .await?;
         Ok(())
     }

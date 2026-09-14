@@ -217,7 +217,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         let storage_transformer = self
             .storage_transformers()
             .create_readable_writable_transformer(storage_handle)?;
-        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self.codecs_bound().partial_encoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,

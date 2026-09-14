@@ -16,7 +16,6 @@ use zarrs_plugin::{
     ExtensionAliases, ExtensionName, MaybeSend, MaybeSync, Plugin, PluginCreateError,
     PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersion, ZarrVersion3,
 };
-use zarrs_storage::StoreKey;
 
 /// A chunk key encoding.
 #[derive(Debug, Clone, From, Deref)]
@@ -161,6 +160,9 @@ pub trait ChunkKeyEncodingTraits: ExtensionName + core::fmt::Debug + MaybeSend +
     /// The configuration of the chunk key encoding.
     fn configuration(&self) -> Configuration;
 
-    /// Encode chunk grid indices (grid cell coordinates) into a store key.
-    fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey;
+    /// Encode chunk grid indices (grid cell coordinates) into a chunk key.
+    ///
+    /// The returned key is relative to the array path, and is combined with it to form a store key.
+    /// It must not start or end with `/`, or contain `//`.
+    fn encode(&self, chunk_grid_indices: &[u64]) -> String;
 }

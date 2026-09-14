@@ -165,7 +165,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
 
-        storage_transformer.get(&self.chunk_key(chunk_indices))
+        storage_transformer.get(&self.chunk_key(chunk_indices)?)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -290,7 +290,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
         let chunk_encoded = storage_transformer
-            .get(&self.chunk_key(chunk_indices))
+            .get(&self.chunk_key(chunk_indices)?)
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
             self.codecs_bound()
@@ -331,7 +331,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let storage_transformer = self
                 .storage_transformers()
                 .create_readable_transformer(storage_handle)?;
-            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode(chunk_subset, options)?
@@ -364,7 +364,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let storage_transformer = self
                 .storage_transformers()
                 .create_readable_transformer(storage_handle)?;
-            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode_into(chunk_subset, output_target, options)?;
@@ -387,7 +387,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
         let chunk_encoded = storage_transformer
-            .get(&self.chunk_key(chunk_indices))
+            .get(&self.chunk_key(chunk_indices)?)
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
@@ -414,7 +414,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let storage_transformer = self
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
-        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)));
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self.codecs_bound().partial_decoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,

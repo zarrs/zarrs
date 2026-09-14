@@ -144,7 +144,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        storage_transformer.erase(&self.chunk_key(chunk_indices))
+        storage_transformer.erase(&self.chunk_key(chunk_indices)?)
     }
 
     pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
@@ -153,7 +153,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
         let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            storage_transformer.erase(&self.chunk_key(&chunk_indices))
+            storage_transformer.erase(&self.chunk_key(&chunk_indices)?)
         };
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -174,7 +174,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
+        storage_transformer.set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)?;
 
         Ok(())
     }

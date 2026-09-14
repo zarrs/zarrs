@@ -125,7 +125,7 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     let _ = array.subchunk_grid();
     let _ = array.chunk_key_encoding();
     let _ = array.storage_transformers();
-    let _ = array.chunk_key(&[0, 0]);
+    let _ = array.chunk_key(&[0, 0]).unwrap();
     Ok(())
 }
 
@@ -271,7 +271,7 @@ where
     let storage_transformer = array
         .storage_transformers()
         .create_readable_transformer(storage_handle)?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0])));
+    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
     Ok(ShardingPartialDecoder::new(
         input_handle,
