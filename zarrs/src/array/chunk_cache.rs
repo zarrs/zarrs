@@ -121,9 +121,9 @@ mod chunk_cache_type_sealed {
     use std::sync::Arc;
 
     use super::{
-        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, Indexer,
-        ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
-        CodecOptions, ReadableStorageTraits,
+        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, ChunkCacheType,
+        ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions,
+        Indexer, ReadableStorageTraits,
     };
     #[cfg(feature = "async")]
     use super::{

@@ -147,7 +147,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError> {
+    pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -156,10 +156,20 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
 
-        #[cfg(not(target_arch = "wasm32"))]
-        chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
-        #[cfg(target_arch = "wasm32")]
-        chunks.indices().into_iter().try_for_each(erase_chunk)?;
+        // `Indexer::iter_indices` is a sequential iterator, so an array subset keeps its lazy
+        // parallel `Indices` iterator and other indexers are collected first.
+        if let Some(chunks) = chunks.as_array_subset() {
+            #[cfg(not(target_arch = "wasm32"))]
+            chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+            #[cfg(target_arch = "wasm32")]
+            chunks.indices().into_iter().try_for_each(erase_chunk)?;
+        } else {
+            let chunk_indices = chunks.iter_indices().collect::<Vec<_>>();
+            #[cfg(not(target_arch = "wasm32"))]
+            chunk_indices.into_par_iter().try_for_each(erase_chunk)?;
+            #[cfg(target_arch = "wasm32")]
+            chunk_indices.into_iter().try_for_each(erase_chunk)?;
+        }
 
         Ok(())
     }

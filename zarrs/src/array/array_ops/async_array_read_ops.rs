@@ -79,16 +79,16 @@ pub trait AsyncArrayReadOps: ArrayOps {
 
     /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks`].
     ///
-    /// Retrieve the encoded bytes of the chunks in `chunks`.
+    /// Retrieve the encoded bytes of the chunks selected by `chunks`.
     ///
-    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
+    /// The chunks are in order of the chunk indices returned by `chunks.iter_indices()`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
+        chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].

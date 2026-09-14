@@ -67,7 +67,7 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
-    fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError>;
+    fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError>;
 
     /// Store `encoded_chunk_bytes` at `chunk_indices`.
     ///

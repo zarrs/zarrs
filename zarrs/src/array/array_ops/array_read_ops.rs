@@ -137,21 +137,39 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
     fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError>;
 
-    /// Retrieve the encoded bytes of the chunks in `chunks`.
+    /// Retrieve the encoded bytes of the chunks selected by `chunks`.
     ///
-    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
+    /// `chunks` indexes the chunk grid. It may be an [`ArraySubset`] or any other [`Indexer`],
+    /// such as a list of chunk indices.
+    ///
+    /// The chunks are in order of the chunk indices returned by `chunks.iter_indices()`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if a chunk key cannot be encoded or there is an underlying store error.
     fn retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
+        chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
-        chunks
-            .indices()
-            .concurrent_limit(self.codec_options().concurrent_target())
-            .map(|chunk_indices| self.retrieve_encoded_chunk(&chunk_indices))
-            .collect()
+        let concurrent_limit = self.codec_options().concurrent_target();
+        let retrieve = |chunk_indices: crate::array::ArrayIndicesTinyVec| {
+            self.retrieve_encoded_chunk(&chunk_indices)
+        };
+        // `Indexer::iter_indices` is a sequential iterator, so an array subset keeps its lazy
+        // parallel `Indices` iterator and other indexers are collected first.
+        if let Some(chunks) = chunks.as_array_subset() {
+            chunks
+                .indices()
+                .concurrent_limit(concurrent_limit)
+                .map(retrieve)
+                .collect()
+        } else {
+            chunks
+                .iter_indices()
+                .collect::<Vec<_>>()
+                .concurrent_limit(concurrent_limit)
+                .map(retrieve)
+                .collect()
+        }
     }
 
     /// Read and decode the subchunk at `subchunk_indices`.

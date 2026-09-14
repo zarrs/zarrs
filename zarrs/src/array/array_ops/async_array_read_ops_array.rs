@@ -185,7 +185,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
 
     pub async fn async_retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
+        chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -205,8 +205,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             }
         };
 
-        let indices = chunks.indices();
-        let futures = indices.into_iter().map(retrieve_encoded_chunk);
+        let futures = chunks.iter_indices().map(retrieve_encoded_chunk);
         futures::stream::iter(futures)
             .buffered(options.concurrent_target())
             .try_collect()

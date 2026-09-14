@@ -56,10 +56,7 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_chunks(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<(), ArrayError> {
+    pub async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         self.array().async_erase_chunks(chunks).await?;
         let _ = self.cache().invalidate_chunks(chunks).await;
         Ok(())
