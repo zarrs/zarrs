@@ -5,7 +5,7 @@ use crate::array::chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions,
+    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer,
     chunk_shape_to_array_shape,
 };
 use zarrs_codec::ArrayPartialDecoderTraits;
@@ -64,7 +64,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -72,7 +72,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         Ok(Self::partial_decoder(cache, array, chunk_indices, options)?
-            .partial_decode(chunk_subset, options)?
+            .partial_decode(indexer, options)?
             .into_owned()
             .into())
     }

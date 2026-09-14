@@ -51,7 +51,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use super::{ArrayBytes, ArrayError};
-use crate::array::{Array, ArraySubsetTraits, Indexer};
+use crate::array::{Array, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions};
@@ -121,7 +121,7 @@ mod chunk_cache_type_sealed {
     use std::sync::Arc;
 
     use super::{
-        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ArraySubsetTraits, ChunkCache,
+        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, Indexer,
         ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
         CodecOptions, ReadableStorageTraits,
     };
@@ -168,7 +168,7 @@ mod chunk_cache_type_sealed {
             cache: &C,
             array: &Array<TStorage>,
             chunk_indices: &[u64],
-            chunk_subset: &dyn ArraySubsetTraits,
+            indexer: &dyn Indexer,
             options: &CodecOptions,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where
@@ -209,7 +209,7 @@ mod chunk_cache_type_sealed {
             cache: &C,
             array: &Array<TStorage>,
             chunk_indices: &[u64],
-            chunk_subset: &dyn ArraySubsetTraits,
+            indexer: &dyn Indexer,
             options: &CodecOptions,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where

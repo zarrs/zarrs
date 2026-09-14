@@ -1,7 +1,7 @@
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArraySubsetTraits, Indexer,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -31,7 +31,7 @@ where
         for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
-            &dyn ArraySubsetTraits,
+            &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
         ) -> Result<(), ArrayError>
@@ -121,7 +121,7 @@ where
     A: ArrayOps + MaybeSync,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
-            &dyn ArraySubsetTraits,
+            &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
         ) -> Result<(), ArrayError>

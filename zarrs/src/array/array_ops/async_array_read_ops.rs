@@ -39,7 +39,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_chunk_subset_into`].
@@ -47,7 +47,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError>;
 
