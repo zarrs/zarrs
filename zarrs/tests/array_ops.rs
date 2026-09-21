@@ -918,6 +918,24 @@ fn array_cached_encoded_reads_bypass_cache() -> TestResult {
     Ok(())
 }
 
+/// `erase_chunks` and `retrieve_encoded_chunks` validate `chunks` against the chunk grid.
+#[test]
+fn erase_and_retrieve_encoded_chunks_validate_chunks() -> TestResult {
+    let (array, _store) = fixture();
+
+    // The chunk grid is 2x2
+    array.erase_chunks(&ArraySubset::new_with_ranges(&[0..2, 0..2]))?;
+    for chunks in [
+        ArraySubset::new_with_ranges(&[0..3, 0..2]),
+        ArraySubset::new_with_ranges(&[0..2]),
+    ] {
+        assert!(array.erase_chunks(&chunks).is_err());
+        assert!(array.retrieve_encoded_chunks(&chunks).is_err());
+    }
+
+    Ok(())
+}
+
 /// A chunk subset is validated against the chunk shape even if the cached chunk is absent.
 #[test]
 fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {

@@ -191,6 +191,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
+        chunks
+            .validate(self.chunk_grid_shape())
+            .map_err(CodecError::from)?;
         let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self

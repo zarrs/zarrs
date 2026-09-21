@@ -8,7 +8,7 @@ use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{AsyncArrayWriteOps, *};
 use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use zarrs_codec::ArrayToBytesCodecTraits;
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::StorageHandle;
 
 #[cfg(feature = "async")]
@@ -176,6 +176,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<(), ArrayError> {
+        chunks
+            .validate(self.chunk_grid_shape())
+            .map_err(CodecError::from)?;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
