@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
+- **Breaking**: Add the required `Indexer::validate` method for validating an indexer against an array shape
 - **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
 - **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 - Bump `itertools` to 0.15.0

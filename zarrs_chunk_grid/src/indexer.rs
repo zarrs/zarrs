@@ -46,6 +46,29 @@ impl IndexerError {
     }
 }
 
+/// Validate an array subset shaped indexer against an array with `array_shape`.
+///
+/// # Errors
+/// Returns [`IndexerError`] if the `array_shape` does not encapsulate the array subset.
+pub(crate) fn validate_array_subset(
+    subset: &(impl ArraySubsetTraits + ?Sized),
+    array_shape: &[u64],
+) -> Result<(), IndexerError> {
+    if subset.start().len() != array_shape.len() {
+        Err(IndexerError::new_incompatible_dimensionality(
+            subset.start().len(),
+            array_shape.len(),
+        ))
+    } else if subset.inbounds_shape(array_shape) {
+        Ok(())
+    } else {
+        Err(IndexerError::new_oob(
+            subset.end_exc(),
+            array_shape.to_vec(),
+        ))
+    }
+}
+
 /// This trait combines `MaybeSend` and `MaybeSync`
 /// for an iterator over generic items.
 pub trait IndexerIterator: Iterator + MaybeSend + MaybeSync {}
@@ -111,6 +134,16 @@ pub trait Indexer: MaybeSend + MaybeSync {
         Ok(Box::new(byte_ranges))
     }
 
+    /// Validate the indexer against an array with `array_shape`.
+    ///
+    /// An indexer is in-bounds if every index it references is within `array_shape`.
+    /// An empty indexer references no indices, so it is in-bounds of any `array_shape` with a
+    /// matching dimensionality.
+    ///
+    /// # Errors
+    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate the indices.
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError>;
+
     /// Return the indexer as an [`ArraySubsetTraits`].
     ///
     /// Returns [`None`] if the indexer does not represent a contiguous array subset.
@@ -122,6 +155,10 @@ pub trait Indexer: MaybeSend + MaybeSync {
 impl<T: Indexer> Indexer for &T {
     fn dimensionality(&self) -> usize {
         (**self).dimensionality()
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        (**self).validate(array_shape)
     }
 
     fn len(&self) -> u64 {
@@ -158,6 +195,11 @@ impl<T: Indexer> Indexer for &T {
 impl<T: Indexer> Indexer for &[T] {
     fn dimensionality(&self) -> usize {
         self.first().map_or(0, T::dimensionality)
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.iter()
+            .try_for_each(|indexer| indexer.validate(array_shape))
     }
 
     fn len(&self) -> u64 {
@@ -213,6 +255,10 @@ impl<T: Indexer> Indexer for Vec<T> {
         self.as_slice().dimensionality()
     }
 
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.as_slice().validate(array_shape)
+    }
+
     fn len(&self) -> u64 {
         self.iter().map(T::len).sum()
     }
@@ -250,6 +296,10 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
         self.as_slice().dimensionality()
     }
 
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.as_slice().validate(array_shape)
+    }
+
     fn len(&self) -> u64 {
         self.iter().map(T::len).sum()
     }
@@ -285,6 +335,21 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
 impl Indexer for &[ArrayIndices] {
     fn dimensionality(&self) -> usize {
         self.first().map_or(0, Vec::len)
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.iter().try_for_each(|indices| {
+            if indices.len() != array_shape.len() {
+                Err(
+                    IncompatibleDimensionalityError::new(self.dimensionality(), array_shape.len())
+                        .into(),
+                )
+            } else if std::iter::zip(indices, array_shape).any(|(index, size)| index >= size) {
+                Err(IndexerError::new_oob(indices.clone(), array_shape.to_vec()))
+            } else {
+                Ok(())
+            }
+        })
     }
 
     fn len(&self) -> u64 {
@@ -359,6 +424,10 @@ impl Indexer for Vec<ArrayIndices> {
         self.as_slice().dimensionality()
     }
 
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.as_slice().validate(array_shape)
+    }
+
     fn len(&self) -> u64 {
         self.as_slice().len() as u64
     }
@@ -394,6 +463,10 @@ impl Indexer for Vec<ArrayIndices> {
 impl<const N: usize> Indexer for [ArrayIndices; N] {
     fn dimensionality(&self) -> usize {
         self.as_slice().dimensionality()
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        self.as_slice().validate(array_shape)
     }
 
     fn len(&self) -> u64 {
@@ -436,6 +509,10 @@ macro_rules! impl_indexer_for_ranges {
         impl Indexer for $ty {
             fn dimensionality(&self) -> usize {
                 (*self).len()
+            }
+
+            fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+                validate_array_subset(self, array_shape)
             }
 
             fn len(&self) -> u64 {
@@ -485,6 +562,10 @@ impl_indexer_for_ranges!(Vec<Range<u64>>);
 impl<const N: usize> Indexer for [Range<u64>; N] {
     fn dimensionality(&self) -> usize {
         N
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        validate_array_subset(self, array_shape)
     }
 
     fn len(&self) -> u64 {
@@ -572,5 +653,110 @@ mod tests {
         assert!(indexer_ref.as_array_subset().is_some());
         let indexer_ref: &dyn Indexer = &ranges_slice;
         assert!(indexer_ref.as_array_subset().is_some());
+    }
+
+    /// `validate` must agree with the validation performed by the linearised indices iterators.
+    fn assert_validate_matches_linearised(indexer: &dyn Indexer) {
+        for array_shape in [
+            vec![4, 4],
+            vec![2, 8],
+            vec![8, 2],
+            vec![4],
+            vec![4, 4, 4],
+            vec![0, 0],
+        ] {
+            assert_eq!(
+                indexer.validate(&array_shape).is_err(),
+                indexer.iter_linearised_indices(&array_shape).is_err(),
+                "{indexer:?} with array shape {array_shape:?}",
+                indexer = indexer.output_shape()
+            );
+            assert_eq!(
+                indexer.validate(&array_shape).is_err(),
+                indexer
+                    .iter_contiguous_linearised_indices(&array_shape)
+                    .is_err(),
+                "{indexer:?} with array shape {array_shape:?}",
+                indexer = indexer.output_shape()
+            );
+        }
+    }
+
+    #[test]
+    #[allow(clippy::single_range_in_vec_init)]
+    fn indexer_validate() {
+        let shape = [4, 4];
+
+        // Array subset shaped indexers
+        let subset = ArraySubset::new_with_shape(vec![2, 2]);
+        assert!(subset.validate(&shape).is_ok());
+        assert!(matches!(
+            ArraySubset::new_with_ranges(&[0..5, 0..2]).validate(&shape),
+            Err(IndexerError::OutOfBounds(..))
+        ));
+        assert!(matches!(
+            ArraySubset::new_with_shape(vec![2]).validate(&shape),
+            Err(IndexerError::IncompatibleDimensionality(_))
+        ));
+        assert!([0..2, 0..2].validate(&shape).is_ok());
+        assert!(vec![0..2, 0..2].validate(&shape).is_ok());
+        assert!(vec![0..2, 0..2].as_slice().validate(&shape).is_ok());
+        assert!(matches!(
+            [0..2, 0..5].validate(&shape),
+            Err(IndexerError::OutOfBounds(..))
+        ));
+        assert!(matches!(
+            vec![0..5, 0..2].validate(&shape),
+            Err(IndexerError::OutOfBounds(..))
+        ));
+        assert!(matches!(
+            vec![0..2].as_slice().validate(&shape),
+            Err(IndexerError::IncompatibleDimensionality(_))
+        ));
+
+        // Lists of indices
+        let indices = vec![vec![0, 1], vec![3, 3]];
+        assert!(indices.validate(&shape).is_ok());
+        assert!(indices.as_slice().validate(&shape).is_ok());
+        assert!([vec![0, 1], vec![3, 3]].validate(&shape).is_ok());
+        assert!(matches!(
+            vec![vec![0, 1], vec![4, 0]].validate(&shape),
+            Err(IndexerError::OutOfBounds(..))
+        ));
+        assert!(matches!(
+            vec![vec![0]].validate(&shape),
+            Err(IndexerError::IncompatibleDimensionality(_))
+        ));
+
+        // Composites
+        let subsets = vec![
+            ArraySubset::new_with_shape(vec![2, 2]),
+            ArraySubset::new_with_ranges(&[2..4, 2..4]),
+        ];
+        assert!(subsets.validate(&shape).is_ok());
+        assert!(matches!(
+            vec![
+                ArraySubset::new_with_shape(vec![2, 2]),
+                ArraySubset::new_with_ranges(&[2..5, 2..4]),
+            ]
+            .validate(&shape),
+            Err(IndexerError::OutOfBounds(..))
+        ));
+
+        // ... and all of them agree with `iter_linearised_indices`
+        assert_validate_matches_linearised(&subset);
+        assert_validate_matches_linearised(&&subset);
+        assert_validate_matches_linearised(&[0..2, 0..5]);
+        assert_validate_matches_linearised(&vec![0..2, 0..2]);
+        assert_validate_matches_linearised(&vec![0..2, 0..2].as_slice());
+        assert_validate_matches_linearised(&indices);
+        assert_validate_matches_linearised(&indices.as_slice());
+        assert_validate_matches_linearised(&[vec![0, 1], vec![4, 4]]);
+        assert_validate_matches_linearised(&ArraySubset::new_with_ranges(&[4..4, 0..2]));
+        assert_validate_matches_linearised(&ArraySubset::new_with_ranges(&[5..5, 0..2]));
+        assert_validate_matches_linearised(&ArraySubset::new_empty(2));
+        assert_validate_matches_linearised(&[4..4, 0..2]);
+        assert_validate_matches_linearised(&subsets);
+        assert_validate_matches_linearised(&subsets.as_slice());
     }
 }

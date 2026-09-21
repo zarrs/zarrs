@@ -359,6 +359,10 @@ impl Indexer for ArraySubset {
         self.start.len()
     }
 
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        crate::indexer::validate_array_subset(self, array_shape)
+    }
+
     fn len(&self) -> u64 {
         self.shape.iter().product()
     }
