@@ -52,6 +52,7 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
                 &self.data_type,
             )?)
         } else {
+            indexer.validate(bytemuck::must_cast_slice(&self.shape))?;
             Ok(ArrayBytes::new_fill_value(
                 &self.data_type,
                 indexer.len(),
@@ -98,8 +99,8 @@ fn cached_chunk_subset_bytes<TStorage>(
 where
     TStorage: ?Sized + 'static,
 {
+    let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
     if let Some(chunk) = chunk {
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         Ok(chunk
             .extract_array_subset(
                 chunk_subset,
@@ -109,6 +110,9 @@ where
             .into_owned()
             .into())
     } else {
+        chunk_subset
+            .validate(bytemuck::must_cast_slice(&chunk_shape))
+            .map_err(CodecError::from)?;
         fill_value_bytes(array, chunk_subset.num_elements())
     }
 }

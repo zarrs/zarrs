@@ -918,6 +918,41 @@ fn array_cached_encoded_reads_bypass_cache() -> TestResult {
     Ok(())
 }
 
+/// A chunk subset is validated against the chunk shape even if the cached chunk is absent.
+#[test]
+fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
+    let (array, _store) = fixture();
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
+
+    // Chunk [0, 0] is absent, so the fill value is returned
+    assert_eq!(
+        cached.retrieve_chunk_subset::<Vec<u8>>(
+            &[0, 0],
+            &ArraySubset::new_with_ranges(&[0..1, 0..2])
+        )?,
+        [0, 0]
+    );
+
+    // ... but an out-of-bounds or incompatible chunk subset is still rejected
+    for chunk_subset in [
+        ArraySubset::new_with_ranges(&[0..1, 0..4]),
+        ArraySubset::new_with_ranges(&[0..1]),
+    ] {
+        assert!(
+            cached
+                .retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)
+                .is_err()
+        );
+    }
+    assert!(
+        cached
+            .retrieve_chunk_subset::<Vec<u8>>(&[9, 9], &ArraySubset::new_with_ranges(&[0..1, 0..2]))
+            .is_err()
+    );
+
+    Ok(())
+}
+
 #[cfg(feature = "async")]
 mod async_cached {
     use std::sync::Arc;
