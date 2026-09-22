@@ -442,6 +442,14 @@ mod tests {
         assert!(!array_subset0.inbounds(&[2..5, 2..6]));
         assert!(!array_subset0.inbounds(&[1..5, 2..5]));
         assert!(!array_subset0.inbounds(&[2..5]));
+
+        // An empty subset references no elements, so it is in-bounds irrespective of its start
+        let empty = ArraySubset::new_with_ranges(&[9..9, 9..9]);
+        assert!(empty.inbounds_shape(&[10, 10]));
+        assert!(empty.inbounds_shape(&[2, 2]));
+        assert!(!empty.inbounds_shape(&[10, 10, 10]));
+        assert!(empty.inbounds(&array_subset0));
+        assert!(!empty.inbounds(&[2..5]));
         assert_eq!(array_subset0.to_ranges(), vec![1..5, 2..6]);
 
         let array_subset2 = ArraySubset::new_with_ranges(&[3..6, 4..7, 0..1]);

@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
+- An empty array subset is now always in-bounds, since it references no elements
+  - *Behavioural Change*: `ArraySubsetTraits::{inbounds_shape,inbounds}`, `LinearisedIndices::new` and `ContiguousIndices::new` no longer reject an empty array subset based on its start (e.g. `5..5` with an array shape of `[4]`)
+  - An empty array subset with an incompatible dimensionality is still rejected
 - `ravel_indices` now returns `None` if `indices` and `shape` have a different length
 - `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
 

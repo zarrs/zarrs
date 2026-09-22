@@ -90,20 +90,30 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     }
 
     /// Returns true if the region is within the bounds of an array with the given shape.
+    ///
+    /// An empty region references no elements, so it is in-bounds of any array with a matching
+    /// dimensionality, irrespective of its start.
     fn inbounds_shape(&self, array_shape: &[u64]) -> bool {
         if self.start().len() != array_shape.len() || self.shape().len() != array_shape.len() {
             return false;
         }
         let start = self.start();
         let shape = self.shape();
-        izip!(start.iter(), shape.iter(), array_shape)
-            .all(|(&start, &size, &bound)| start + size <= bound)
+        shape.contains(&0)
+            || izip!(start.iter(), shape.iter(), array_shape)
+                .all(|(&start, &size, &bound)| start + size <= bound)
     }
 
     /// Returns true if the region is within another region.
+    ///
+    /// An empty region references no elements, so it is in-bounds of any region with a matching
+    /// dimensionality, irrespective of its start.
     fn inbounds(&self, other: &dyn ArraySubsetTraits) -> bool {
         if self.start().len() != other.start().len() || self.shape().len() != other.shape().len() {
             return false;
+        }
+        if self.shape().contains(&0) {
+            return true;
         }
         let self_start = self.start();
         let self_shape = self.shape();

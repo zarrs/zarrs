@@ -43,6 +43,9 @@ impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
 impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// Create a new non-overlapping view of the bytes in an array.
     ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start and
+    /// yields a view that reads and writes nothing.
+    ///
     /// # Errors
     /// Returns [`ArrayBytesFixedDisjointViewCreateError`] if
     /// - `subset` is out-of-bounds of `shape`, or
@@ -84,6 +87,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     }
 
     /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
+    ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start.
     ///
     /// # Errors
     /// Returns [`SubsetOutOfBoundsError`] if `subset` is out-of-bounds of the parent subset.

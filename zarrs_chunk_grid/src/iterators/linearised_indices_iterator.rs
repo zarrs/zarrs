@@ -24,6 +24,8 @@ pub struct LinearisedIndices {
 impl LinearisedIndices {
     /// Create a new linearised indices iterator.
     ///
+    /// An empty `subset` is always in-bounds.
+    ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
     pub fn new(subset: ArraySubset, array_shape: ArrayShape) -> Result<Self, IndexerError> {
@@ -32,6 +34,12 @@ impl LinearisedIndices {
                 subset.dimensionality(),
                 array_shape.len(),
             ))
+        } else if subset.is_empty() {
+            // An empty subset references no elements, so it is always in-bounds.
+            Ok(Self {
+                subset,
+                array_shape,
+            })
         } else if std::iter::zip(subset.end_exc(), &array_shape).any(|(end, shape)| end > *shape) {
             Err(IndexerError::new_oob(subset.end_exc(), array_shape))
         } else {
