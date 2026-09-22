@@ -27,7 +27,7 @@ impl LinearisedIndices {
     /// An empty `subset` is always in-bounds.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
     pub fn new(subset: ArraySubset, array_shape: ArrayShape) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             Err(IndexerError::new_incompatible_dimensionality(

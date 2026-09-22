@@ -49,7 +49,7 @@ impl IndexerError {
 /// Validate an array subset shaped indexer against an array with `array_shape`.
 ///
 /// # Errors
-/// Returns [`IndexerError`] if the `array_shape` does not encapsulate the array subset.
+/// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate the array subset.
 pub(crate) fn validate_array_subset(
     subset: &(impl ArraySubsetTraits + ?Sized),
     array_shape: &[u64],
@@ -100,7 +100,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     /// Returns an iterator over the linearised indices of elements.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate the indices.
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
@@ -109,7 +109,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate the indices.
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
@@ -118,7 +118,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     /// Return the byte ranges of the indexer in an array with `array_shape` and a fixed element size of `element_size`.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate indices of the indexer.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate indices of the indexer.
     fn iter_contiguous_byte_ranges(
         &self,
         array_shape: &[u64],
@@ -141,7 +141,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     /// matching dimensionality.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate the indices.
     fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError>;
 
     /// Return the indexer as an [`ArraySubsetTraits`].

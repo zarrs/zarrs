@@ -281,7 +281,7 @@ impl ArraySubset {
     /// Returns an iterator over the linearised indices of elements within the subset.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn linearised_indices(
         &self,
         array_shape: &[u64],
@@ -293,7 +293,7 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn contiguous_indices(
         &self,
         array_shape: &[u64],
@@ -305,7 +305,7 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],

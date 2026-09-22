@@ -35,10 +35,10 @@ pub struct ContiguousIndices {
 impl ContiguousIndices {
     /// Create a new contiguous indices iterator.
     ///
-    /// An empty `subset` is always in-bounds.
+    /// An empty `subset` is always in-bounds unless it has an incompatible dimensionality.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
     pub fn new(subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
