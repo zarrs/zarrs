@@ -6,7 +6,7 @@ use futures::{StreamExt, TryStreamExt};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{AsyncArrayUpdateOps, *};
 use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
-use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
+use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits};
 use zarrs_storage::StorageHandle;
 
 #[cfg(feature = "async")]
@@ -168,7 +168,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             .chunk_grid()
             .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        // A non-subset indexer is bounds checked by the codec layer, which reports an `IndexerError`.
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
                 .any(|(end_exc, shape)| end_exc > *shape)
@@ -186,6 +185,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     .async_store_chunk_with_options(chunk_indices, indexer_data, options)
                     .await;
             }
+        } else {
+            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
+            // size-1 dimensions), so they are validated here.
+            indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;

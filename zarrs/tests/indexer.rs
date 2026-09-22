@@ -615,6 +615,134 @@ fn array_chunk_subset_generic_indexer() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+/// An out-of-bounds generic indexer must be rejected, even where the codec chain does not check it.
+///
+/// The `squeeze` codec drops the indices of size-1 dimensions without bounds checking them, so
+/// `[0, 7, 2]` on a `[4, 1, 4]` chunk would otherwise silently alias element `[0, 0, 2]`.
+#[tokio::test]
+async fn array_chunk_subset_generic_indexer_oob_squeeze()
+-> Result<(), Box<dyn std::error::Error>> {
+    use unsafe_cell_slice::UnsafeCellSlice;
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+    };
+    use zarrs::array::{
+        ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
+    };
+    use zarrs::storage::store::{AsyncMemoryStore, MemoryStore};
+
+    let chunk = (0u16..16).collect::<Vec<_>>();
+    let oob: Vec<ArrayIndices> = vec![vec![0, 7, 2]];
+
+    let mut builder = ArrayBuilder::new(vec![4, 1, 4], vec![4, 1, 4], data_type::uint16(), 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())]);
+
+    // Sync
+    let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
+    array.store_chunk(&[0, 0, 0], &chunk)?;
+    assert!(
+        array
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0, 0], &oob)
+            .is_err()
+    );
+    {
+        // A one element decode-into target. SAFETY: this is the only view over `element`
+        // and covers it exactly.
+        let mut element = vec![0u8; 2];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut element),
+                2,
+                &[1],
+                ArraySubset::new_with_shape(vec![1]),
+            )?
+        };
+        assert!(
+            array
+                .retrieve_chunk_subset_into(
+                    &[0, 0, 0],
+                    &oob,
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut view)
+                )
+                .is_err()
+        );
+    }
+
+    // ... including with partial encoding, which bypasses `update_array_bytes` on write
+    let partial_encoding =
+        array.with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
+    for array in [&array, &partial_encoding] {
+        assert!(array.store_chunk_subset(&[0, 0, 0], &oob, &[999u16]).is_err());
+        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0, 0])?, chunk);
+    }
+
+    // ... and via an encoded chunk cache, which decodes the indexer without the array layer
+    let cached = ArrayCached::new(Arc::new(array), ChunkCacheEncodedLruChunkLimit::new(1));
+    assert!(
+        cached
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0, 0], &oob)
+            .is_err()
+    );
+
+    // Async
+    let array = builder.build(Arc::new(AsyncMemoryStore::new()), "/array")?;
+    array.async_store_chunk(&[0, 0, 0], &chunk).await?;
+    assert!(
+        array
+            .async_retrieve_chunk_subset::<Vec<u16>>(&[0, 0, 0], &oob)
+            .await
+            .is_err()
+    );
+    {
+        // A one element decode-into target. SAFETY: this is the only view over `element`
+        // and covers it exactly.
+        let mut element = vec![0u8; 2];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut element),
+                2,
+                &[1],
+                ArraySubset::new_with_shape(vec![1]),
+            )?
+        };
+        assert!(
+            array
+                .async_retrieve_chunk_subset_into(
+                    &[0, 0, 0],
+                    &oob,
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut view)
+                )
+                .await
+                .is_err()
+        );
+    }
+
+    let partial_encoding =
+        array.with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
+    for array in [&array, &partial_encoding] {
+        assert!(
+            array
+                .async_store_chunk_subset(&[0, 0, 0], &oob, &[999u16])
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            array.async_retrieve_chunk::<Vec<u16>>(&[0, 0, 0]).await?,
+            chunk
+        );
+    }
+
+    let cached = ArrayCached::new(Arc::new(array), AsyncChunkCacheEncodedLruChunkLimit::new(1));
+    assert!(
+        cached
+            .async_retrieve_chunk_subset::<Vec<u16>>(&[0, 0, 0], &oob)
+            .await
+            .is_err()
+    );
+
+    Ok(())
+}
+
 /// `erase_chunks` with a scattered list of chunk indices.
 #[test]
 fn array_erase_chunks_generic_indexer() -> Result<(), Box<dyn std::error::Error>> {

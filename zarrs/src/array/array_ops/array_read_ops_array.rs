@@ -315,7 +315,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<T, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        // A non-subset indexer is bounds checked by the codec layer, which reports an `IndexerError`.
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if !chunk_subset.inbounds_shape(chunk_shape_u64) {
                 return Err(ArrayError::InvalidArraySubset(
@@ -328,6 +327,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             {
                 return self.retrieve_chunk_with_options(chunk_indices, options);
             }
+        } else {
+            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
+            // size-1 dimensions), so they are validated here.
+            indexer.validate(chunk_shape_u64).map_err(CodecError::from)?;
         }
 
         let bytes = {
@@ -354,7 +357,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        // A non-subset indexer is bounds checked by the codec layer, which reports an `IndexerError`.
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if !chunk_subset.inbounds_shape(chunk_shape_u64) {
                 return Err(ArrayError::InvalidArraySubset(
@@ -371,6 +373,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     options,
                 );
             }
+        } else {
+            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
+            // size-1 dimensions), so they are validated here.
+            indexer.validate(chunk_shape_u64).map_err(CodecError::from)?;
         }
 
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));

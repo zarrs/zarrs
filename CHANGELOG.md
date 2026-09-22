@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayUpdateOps::store_chunk_subset` and its async variant
   - The `chunk_subset_data` parameter of `store_chunk_subset` is renamed to `indexer_data`
   - Passing an `ArraySubset`, `[a..b, c..d]`, `&[Range<u64>]` or `Vec<Range<u64>>` is unaffected, and bounds validation and whole-chunk fast paths are unchanged for those types
+  - Generic indexers are bounds checked against the chunk shape by the array layer, since not all codecs validate them
   - Partial encoding of a chunk encoded with the `sharding_indexed` codec is not yet supported for non-subset indexers and returns a `CodecError`
 - **Breaking**: `ArrayWriteOps::erase_chunks` and `ArrayReadOps::retrieve_encoded_chunks` (and their async variants) take `chunks: &dyn Indexer` instead of `chunks: &dyn ArraySubsetTraits`, matching `ChunkCache::invalidate_chunks`
   - Chunks may now be selected with a scattered list of chunk indices
