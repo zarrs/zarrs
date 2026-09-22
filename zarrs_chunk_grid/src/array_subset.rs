@@ -281,7 +281,7 @@ impl ArraySubset {
     /// Returns an iterator over the linearised indices of elements within the subset.
     ///
     /// # Errors
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn linearised_indices(
         &self,
         array_shape: &[u64],
@@ -293,7 +293,7 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn contiguous_indices(
         &self,
         array_shape: &[u64],
@@ -305,7 +305,7 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     pub fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
@@ -359,6 +359,10 @@ impl Indexer for ArraySubset {
         self.start.len()
     }
 
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        crate::indexer::validate_array_subset(self, array_shape)
+    }
+
     fn len(&self) -> u64 {
         self.shape.iter().product()
     }
@@ -396,7 +400,6 @@ impl Indexer for ArraySubset {
 mod tests {
     use super::*;
 
-    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn array_subset() {
         assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10]).is_ok());
@@ -442,6 +445,14 @@ mod tests {
         assert!(!array_subset0.inbounds(&[2..5, 2..6]));
         assert!(!array_subset0.inbounds(&[1..5, 2..5]));
         assert!(!array_subset0.inbounds(&[2..5]));
+
+        // An empty subset references no elements, so it is in-bounds irrespective of its start
+        let empty = ArraySubset::new_with_ranges(&[9..9, 9..9]);
+        assert!(empty.inbounds_shape(&[10, 10]));
+        assert!(empty.inbounds_shape(&[2, 2]));
+        assert!(!empty.inbounds_shape(&[10, 10, 10]));
+        assert!(empty.inbounds(&array_subset0));
+        assert!(!empty.inbounds(&[2..5]));
         assert_eq!(array_subset0.to_ranges(), vec![1..5, 2..6]);
 
         let array_subset2 = ArraySubset::new_with_ranges(&[3..6, 4..7, 0..1]);

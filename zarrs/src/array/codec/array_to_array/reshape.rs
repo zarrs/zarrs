@@ -1126,7 +1126,6 @@ mod tests {
         let shape = vec![NonZeroU64::new(12).unwrap()];
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..12).collect());
 
-        #[expect(clippy::single_range_in_vec_init)]
         let decoded_region = ArraySubset::new_with_ranges(&[3..10]);
         assert_eq!(
             partial_decode_u16(partial_decoder.as_ref(), &decoded_region),

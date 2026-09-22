@@ -507,7 +507,6 @@ mod tests {
     use crate::array::{ArrayBuilder, FillValue, data_type};
     use zarrs_storage::store::AsyncMemoryStore;
 
-    #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_async<C>(cache: C)
     where
         C: AsyncChunkCache + 'static,
@@ -587,7 +586,6 @@ mod tests {
         assert!(cached.cache().is_empty().await);
     }
 
-    #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_sharded_async<C>(cache: C)
     where
         C: AsyncChunkCache + 'static,
@@ -678,7 +676,6 @@ mod tests {
     }
 
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
-    #[expect(clippy::single_range_in_vec_init)]
     async fn test_cache_nested_optional_async<C>(cache: C)
     where
         C: AsyncChunkCache + 'static,

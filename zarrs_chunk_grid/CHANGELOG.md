@@ -14,12 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
+- **Breaking**: Add the required `Indexer::validate` method for validating an indexer against an array shape
 - **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
 - **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
 - Bump `itertools` to 0.15.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
+- An empty array subset is now always in-bounds, since it references no elements (unless it has an incompatible dimensionality)
 - `ravel_indices` now returns `None` if `indices` and `shape` have a different length
 - `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
 

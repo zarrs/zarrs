@@ -29,6 +29,7 @@ module_name_repetitions = "allow"
 missing_panics_doc = "warn"
 missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
+single_range_in_vec_init = "allow"
 
 [workspace.dependencies.zarrs_chunk_grid]
 version = "0.6.0"

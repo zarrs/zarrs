@@ -452,7 +452,6 @@ mod tests {
     use crate::array::{ArrayBuilder, ArrayError, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
-    #[expect(clippy::single_range_in_vec_init)]
     fn test_cache<C>(cache: C)
     where
         C: ChunkCache,
@@ -507,7 +506,6 @@ mod tests {
         assert!(cached.cache().is_empty());
     }
 
-    #[expect(clippy::single_range_in_vec_init)]
     fn test_cache_sharded<C>(cache: C)
     where
         C: ChunkCache,
@@ -543,7 +541,6 @@ mod tests {
     }
 
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
-    #[expect(clippy::single_range_in_vec_init)]
     fn test_cache_nested_optional<C>(cache: C)
     where
         C: ChunkCache,
