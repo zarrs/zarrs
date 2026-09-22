@@ -353,7 +353,6 @@ mod tests {
         );
     }
 
-    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];

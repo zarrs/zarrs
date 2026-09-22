@@ -182,7 +182,6 @@ mod tests {
     /// An empty array subset references no elements, so it is in-bounds irrespective of its start.
     /// `LinearisedIndices` and `ContiguousIndices` must agree on this.
     #[test]
-    #[allow(clippy::single_range_in_vec_init)]
     fn array_subset_iter_empty_subset_bounds() {
         for (region, array_shape) in [
             // ... at the origin

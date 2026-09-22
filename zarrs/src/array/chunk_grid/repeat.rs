@@ -412,7 +412,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(clippy::single_range_in_vec_init)]
     fn repeat_chunk_grid_regular_bounded_inner_grid() {
         let grid =
             RepeatChunkGrid::new(vec![2], regular_bounded_grid(vec![5], vec![nz(3)])).unwrap();

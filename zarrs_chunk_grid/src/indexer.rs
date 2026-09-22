@@ -683,7 +683,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::single_range_in_vec_init)]
     fn indexer_validate() {
         let shape = [4, 4];
 
