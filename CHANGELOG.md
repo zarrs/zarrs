@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Validate encoded-cache chunk indices and subsets even when the stored chunk is absent (backport of #461), preserving existing chunk-grid bounds policies.
 - Propagate codec-specific options through `CodecChain`s used as nested array-to-bytes codecs (backport of #470).
 - Correct optional sharding and transpose decoding, generic sharding indexer batches, zero concurrency, partial-encode concurrency limits and append/index overflow before mutation
 - Propagate codec-specific options through optional, vlen and nested sharding chains

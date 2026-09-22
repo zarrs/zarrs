@@ -170,6 +170,10 @@ macro_rules! impl_ChunkCacheLruEncoded {
             chunk_subset: &dyn ArraySubsetTraits,
             options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
+            chunk_subset
+                .validate(bytemuck::must_cast_slice(&chunk_shape))
+                .map_err(CodecError::from)?;
             let chunk_encoded: ChunkCacheTypeEncoded = self
                 .cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -186,7 +190,6 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 })?;
 
             if let Some(chunk_encoded) = chunk_encoded {
-                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
                 Ok(self
                     .array
                     .codecs()
@@ -430,6 +433,75 @@ mod tests {
     use zarrs_storage::{
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
     };
+
+    #[test]
+    #[expect(clippy::single_range_in_vec_init)]
+    fn encoded_cache_validates_absent_chunk_subsets() {
+        let store = Arc::new(MemoryStore::new());
+        let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 7u8)
+            .build(store, "/")
+            .unwrap();
+        let read_only = Arc::new(array.readable());
+        let caches: Vec<Box<dyn ChunkCache>> = vec![
+            Box::new(ChunkCacheEncodedLruChunkLimit::new(read_only.clone(), 2)),
+            Box::new(ChunkCacheEncodedLruChunkLimitThreadLocal::new(
+                read_only.clone(),
+                2,
+            )),
+            Box::new(ChunkCacheEncodedLruSizeLimit::new(read_only.clone(), 32)),
+            Box::new(ChunkCacheEncodedLruSizeLimitThreadLocal::new(read_only, 32)),
+        ];
+        let options = CodecOptions::default();
+        for cache in caches {
+            // These chunks do not exist. Neither bad dimensions nor an invalid subset may
+            // bypass validation just because the result would consist of fill values.
+            assert!(
+                cache
+                    .retrieve_chunk_subset_bytes(&[], &[0..1], &options)
+                    .is_err()
+            );
+            assert!(
+                cache
+                    .retrieve_chunk_subset_bytes(&[0, 0], &[0..1], &options)
+                    .is_err()
+            );
+            assert!(
+                cache
+                    .retrieve_chunk_subset_bytes(&[0], &[0..1, 0..1], &options)
+                    .is_err()
+            );
+            assert!(
+                cache
+                    .retrieve_chunk_subset_bytes(&[0], &[2..3], &options)
+                    .is_err()
+            );
+            let bytes = cache
+                .retrieve_chunk_subset_bytes(&[0], &[0..2], &options)
+                .unwrap();
+            assert_eq!(
+                bytes.as_ref().clone().into_fixed().unwrap().as_ref(),
+                &[7, 7]
+            );
+            // Empty subsets reference no elements, even if their start is past the end.
+            let bytes = cache
+                .retrieve_chunk_subset_bytes(&[0], &[10..10], &options)
+                .unwrap();
+            assert!(bytes.as_ref().clone().into_fixed().unwrap().is_empty());
+            // Preserve the regular grid's existing support for out-of-bounds chunks.
+            assert!(
+                cache
+                    .retrieve_chunk_subset_bytes(&[20], &[0..1], &options)
+                    .is_ok()
+            );
+        }
+        array.store_chunk(&[0], &[1u8, 2]).unwrap();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(Arc::new(array.readable()), 2);
+        assert!(
+            cache
+                .retrieve_chunk_subset_bytes(&[0], &[2..3], &options)
+                .is_err()
+        );
+    }
 
     #[allow(clippy::type_complexity)]
     fn create_store_array() -> (
