@@ -1,4 +1,4 @@
-//! `zarrs` is Rust library for the [Zarr](https://zarr.dev) storage format for multidimensional arrays and metadata.
+//! `zarrs` is a Rust library for the [Zarr](https://zarr.dev) storage format for multidimensional arrays and metadata.
 //!
 //! If you are a Python user, check out [`zarrs-python`](https://github.com/zarrs/zarrs-python).
 //! It includes a high-performance codec pipeline for the reference [`zarr-python`](https://github.com/zarr-developers/zarr-python) implementation.
