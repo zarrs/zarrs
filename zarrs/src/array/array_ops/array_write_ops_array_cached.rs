@@ -47,7 +47,7 @@ where
         Ok(())
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), ArrayError> {
+    pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         self.array().erase_chunks(chunks)?;
         let _ = self.cache().invalidate_chunks(chunks);
         Ok(())

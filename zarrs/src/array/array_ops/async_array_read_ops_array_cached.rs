@@ -421,7 +421,7 @@ where
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
+        chunks: &dyn Indexer,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         self.array().async_retrieve_encoded_chunks(chunks).await
     }

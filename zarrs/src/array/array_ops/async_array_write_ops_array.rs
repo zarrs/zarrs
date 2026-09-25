@@ -172,10 +172,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await?)
     }
 
-    pub async fn async_erase_chunks(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<(), ArrayError> {
+    pub async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
@@ -194,7 +191,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 )
             }
         };
-        futures::stream::iter(chunks.indices())
+        futures::stream::iter(chunks.iter_indices())
             .map(Ok)
             .try_for_each_concurrent(None, erase_chunk)
             .await
