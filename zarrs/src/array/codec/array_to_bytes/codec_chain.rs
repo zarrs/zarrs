@@ -711,15 +711,19 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 .partial_decoder(input_handle, shape, options)?
         };
 
-        for (codec, (shape, data_type, _fill_value)) in std::iter::zip(
+        for (codec, representations) in std::iter::zip(
             self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
+            array_representations.windows(2).rev(),
         ) {
+            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
+                unreachable!()
+            };
             if Some(codec_index) == self.cache_index {
+                // The cache wraps the input handle, which decodes to this codec's encoded representation
                 input_handle = Arc::new(ArrayPartialDecoderCache::new(
                     &*input_handle,
-                    shape.clone(),
-                    data_type.clone(),
+                    encoded_shape.clone(),
+                    encoded_data_type.clone(),
                     options,
                 )?);
             }
@@ -818,16 +822,20 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 .await?
         };
 
-        for (codec, (shape, data_type, _fill_value)) in std::iter::zip(
+        for (codec, representations) in std::iter::zip(
             self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
+            array_representations.windows(2).rev(),
         ) {
+            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
+                unreachable!()
+            };
             if Some(codec_index) == self.cache_index {
+                // The cache wraps the input handle, which decodes to this codec's encoded representation
                 input_handle = Arc::new(
                     ArrayPartialDecoderCache::async_new(
                         &*input_handle,
-                        shape.clone(),
-                        data_type.clone(),
+                        encoded_shape.clone(),
+                        encoded_data_type.clone(),
                         options,
                     )
                     .await?,

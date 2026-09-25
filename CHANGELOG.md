@@ -132,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid copying each encoded inner chunk in the `sharding_indexed` codec
 - Avoid redundant copy in `shuffle` codec
 - Validate that tensor bytes cover the shape and data type during DLPack export
+- Pass the encoded shape and data type to the partial decoder cache in a codec chain
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
