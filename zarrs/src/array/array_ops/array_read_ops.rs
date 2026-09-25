@@ -157,22 +157,13 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         let retrieve = |chunk_indices: crate::array::ArrayIndicesTinyVec| {
             self.retrieve_encoded_chunk(&chunk_indices)
         };
-        // `Indexer::iter_indices` is a sequential iterator, so an array subset keeps its lazy
-        // parallel `Indices` iterator and other indexers are collected first.
-        if let Some(chunks) = chunks.as_array_subset() {
-            chunks
-                .indices()
-                .concurrent_limit(concurrent_limit)
-                .map(retrieve)
-                .collect()
-        } else {
-            chunks
-                .iter_indices()
-                .collect::<Vec<_>>()
-                .concurrent_limit(concurrent_limit)
-                .map(retrieve)
-                .collect()
-        }
+        // `Indexer::iter_indices` is a sequential iterator, so collect it for parallel iteration.
+        chunks
+            .iter_indices()
+            .collect::<Vec<_>>()
+            .concurrent_limit(concurrent_limit)
+            .map(retrieve)
+            .collect()
     }
 
     /// Read and decode the subchunk at `subchunk_indices`.
