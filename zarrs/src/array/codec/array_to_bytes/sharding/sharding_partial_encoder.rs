@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
@@ -14,8 +14,8 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-    DataType, IndexerError, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
+    transmute_to_bytes,
 };
 use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
@@ -137,7 +137,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     }
 
     fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
+        let mut index = self.shard_index.lock().unwrap();
+        self.input_output_handle.erase()?;
+        index.fill(u64::MAX);
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -149,7 +152,11 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         chunk_subset_indexer.validate(bytemuck::must_cast_slice(&self.shard_shape))?;
-        chunk_subset_bytes.validate(chunk_subset_indexer.len(), &self.data_type)?;
+        let num_elements = chunk_subset_indexer.len();
+        chunk_subset_bytes.validate(num_elements, &self.data_type)?;
+        if num_elements == 0 {
+            return Ok(());
+        }
         let mut shard_index_guard = self.shard_index.lock().unwrap();
         let mut shard_index = shard_index_guard.clone();
 
@@ -179,82 +186,21 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 options,
             )?;
 
-        let get_subchunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
-        let subchunk_fill_value = || {
-            ArrayBytes::new_fill_value(
-                &self.data_type,
-                self.subchunk_shape.num_elements_u64(),
-                &self.fill_value,
-            )
-        };
-
-        // Get all the subchunks that need to be retrieved
-        //   This only includes chunks that straddle chunk subsets.
-        //   Chunks that are entirely within a chunk subset are entirely replaced and are not read.
-        let mut subchunks_intersected = HashSet::<u64>::new();
-        let mut subchunks_indices = HashSet::<u64>::new();
-
-        let Some(chunk_subset_indexer) = chunk_subset_indexer.as_array_subset() else {
-            // TODO: Add support for generic indexers
-            return Err(CodecError::from(
-                "sharding_indexed does not yet support partial encoding with generic indexers",
-            ));
-        };
-
-        // Check the subset is within the chunk shape
-        if chunk_subset_indexer
-            .end_exc()
+        // Split each selection into one ordered update per affected subchunk.
+        let updates = super::subchunk_updates(
+            &self.chunk_grid,
+            &chunks_per_shard,
+            &self.subchunk_shape,
+            chunk_subset_indexer,
+            chunk_subset_bytes,
+            &self.data_type,
+        )?;
+        let subchunks_intersected: Vec<_> = updates.iter().map(|u| u.subchunk_index).collect();
+        let subchunks_indices: Vec<_> = updates
             .iter()
-            .zip(&self.shard_shape)
-            .any(|(a, b)| *a > b.get())
-        {
-            Err(IndexerError::new_oob(
-                chunk_subset_indexer.end_exc(),
-                bytemuck::cast_slice(&self.shard_shape).to_vec(),
-            ))?;
-        }
-
-        // Get the iterator over the subchunks
-        let subchunks = get_subchunks(chunk_subset_indexer)?;
-        let subchunks = subchunks.indices();
-
-        // Get all the subchunks intersected
-        subchunks_intersected.extend(subchunks.iter().map(
-            |subchunk_indices: ArrayIndicesTinyVec| {
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk")
-            },
-        ));
-
-        // Get all the subchunks that need to be updated
-        let chunk_subset_start = chunk_subset_indexer.start();
-        let chunk_subset_end_exc = chunk_subset_indexer.end_exc();
-        subchunks_indices.extend(subchunks.iter().filter_map(
-            |subchunk_indices: ArrayIndicesTinyVec| {
-                let subchunk_subset = self
-                    .chunk_grid
-                    .subset(&subchunk_indices)
-                    .expect("matching dimensionality");
-
-                // Check if the subchunk straddles the chunk subset
-                if subchunk_subset
-                    .start()
-                    .iter()
-                    .zip(chunk_subset_start.iter())
-                    .any(|(a, b)| a < b)
-                    || subchunk_subset
-                        .end_exc()
-                        .iter()
-                        .zip(chunk_subset_end_exc.iter())
-                        .any(|(a, b)| *a > *b)
-                {
-                    let subchunk_index = ravel_indices(&subchunk_indices, &chunks_per_shard)
-                        .expect("inbounds chunk");
-                    Some(subchunk_index)
-                } else {
-                    None
-                }
-            },
-        ));
+            .filter(|u| !u.fully_covered)
+            .map(|u| u.subchunk_index)
+            .collect();
 
         // Get the byte ranges of the straddling subchunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
@@ -279,102 +225,79 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .unzip();
 
         // Read the straddling subchunks
-        let subchunks_encoded = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
-
-        // Decode the straddling subchunks
-        let subchunks_decoded: HashMap<_, _> = if let Some(subchunks_encoded) = subchunks_encoded {
-            let subchunks_encoded = crate::iter_concurrent_limit!(
-                subchunk_concurrent_limit,
-                subchunks_indices
-                    .into_iter()
-                    .zip(subchunks_encoded)
-                    .collect::<Vec<_>>(),
-                map,
-                |(subchunk_index, subchunk_encoded)| {
-                    Ok((
-                        subchunk_index,
-                        self.inner_codecs.decode(
-                            Cow::Owned(subchunk_encoded),
-                            &self.subchunk_shape,
-                            &self.data_type,
-                            &self.fill_value,
-                            &subchunk_options,
-                        )?,
-                    ))
-                }
-            )
-            .collect::<Result<Vec<_>, CodecError>>()?;
-            HashMap::from_iter(subchunks_encoded)
+        let subchunks_encoded = if byte_ranges.is_empty() {
+            None
         } else {
-            HashMap::new()
+            self.input_output_handle
+                .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
+                .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>())
         };
 
-        // Update all of the intersecting subchunks
-        let subchunks_decoded = Arc::new(Mutex::new(subchunks_decoded));
-        let subchunks = get_subchunks(chunk_subset_indexer)?;
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let iterator = subchunks.indices().into_par_iter();
-        #[cfg(target_arch = "wasm32")]
-        let mut iterator = subchunks.indices().into_iter();
-
-        let chunk_subset_start = chunk_subset_indexer.start();
-        let chunk_subset_shape = chunk_subset_indexer.shape();
-        iterator.try_for_each(|subchunk_indices: ArrayIndicesTinyVec| {
-            // Extract the subchunk bytes that overlap with the chunk subset
-            let subchunk_index =
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk");
-            let subchunk_subset = self
-                .chunk_grid
-                .subset(&subchunk_indices)
-                .expect("matching dimensionality");
-            let subchunk_subset_overlap = chunk_subset_indexer.overlap(&subchunk_subset).unwrap();
-            let subchunk_bytes = chunk_subset_bytes.extract_array_subset(
-                &subchunk_subset_overlap
-                    .relative_to(&chunk_subset_start)
-                    .unwrap(),
-                &chunk_subset_shape,
-                &self.data_type,
-            )?;
-
-            // Decode the subchunk
-            let subchunk_decoded = if let Some(subchunk_decoded) =
-                subchunks_decoded.lock().unwrap().remove(&subchunk_index)
-            {
-                subchunk_decoded.into_owned()
+        // Decode the straddling subchunks
+        let mut subchunks_decoded: HashMap<_, _> =
+            if let Some(subchunks_encoded) = subchunks_encoded {
+                let subchunks_encoded = crate::iter_concurrent_limit!(
+                    subchunk_concurrent_limit,
+                    subchunks_indices
+                        .into_iter()
+                        .zip(subchunks_encoded)
+                        .collect::<Vec<_>>(),
+                    map,
+                    |(subchunk_index, subchunk_encoded)| {
+                        Ok((
+                            subchunk_index,
+                            self.inner_codecs.decode(
+                                Cow::Owned(subchunk_encoded),
+                                &self.subchunk_shape,
+                                &self.data_type,
+                                &self.fill_value,
+                                &subchunk_options,
+                            )?,
+                        ))
+                    }
+                )
+                .collect::<Result<Vec<_>, CodecError>>()?;
+                HashMap::from_iter(subchunks_encoded)
             } else {
-                subchunk_fill_value()?
+                HashMap::new()
             };
 
-            // Update the subchunk
-            let subchunk_updated = update_array_bytes(
-                subchunk_decoded,
-                bytemuck::cast_slice(&self.subchunk_shape),
-                &subchunk_subset_overlap
-                    .relative_to(subchunk_subset.start())
-                    .unwrap(),
-                &subchunk_bytes,
-                self.data_type.size(),
-            )?;
-            subchunks_decoded
-                .lock()
-                .unwrap()
-                .insert(subchunk_index, subchunk_updated);
-
-            Ok::<_, CodecError>(())
-        })?;
-        let subchunks_decoded = Arc::try_unwrap(subchunks_decoded)
-            .expect("subchunks_decoded should have one strong reference")
-            .into_inner()
-            .expect("subchunks_decoded should not be poisoned");
+        // Every update owns its subchunk; duplicates retain their input order.
+        let updates = updates
+            .into_iter()
+            .map(|update| {
+                let decoded = subchunks_decoded.remove(&update.subchunk_index);
+                (update, decoded)
+            })
+            .collect::<Vec<_>>();
+        let subchunks_decoded =
+            crate::iter_concurrent_limit!(subchunk_concurrent_limit, updates, map, |(
+                update,
+                decoded,
+            )| {
+                let decoded = match decoded {
+                    Some(decoded) => decoded.into_owned(),
+                    None => ArrayBytes::new_fill_value(
+                        &self.data_type,
+                        self.subchunk_shape.num_elements_u64(),
+                        &self.fill_value,
+                    )?,
+                };
+                let updated = update_array_bytes(
+                    decoded,
+                    bytemuck::cast_slice(&self.subchunk_shape),
+                    update.indexer.as_ref(),
+                    &update.bytes,
+                    self.data_type.size(),
+                )?;
+                Ok((update.subchunk_index, updated))
+            })
+            .collect::<Result<Vec<_>, CodecError>>()?;
 
         // Encode the updated subchunks
         let updated_subchunks = crate::iter_concurrent_limit!(
             subchunk_concurrent_limit,
-            subchunks_decoded.into_iter().collect::<Vec<_>>(),
+            subchunks_decoded,
             map,
             |(subchunk_index, subchunk_decoded)| {
                 if subchunk_decoded.is_fill_value(&self.fill_value) {

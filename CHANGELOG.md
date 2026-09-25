@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Support generic indexers in sharding codec partial writes, batching each affected subchunk and retaining duplicate update order (backport of #466/#469, `297b0f8b`/`18cd5ec7`)
 - Implement `Clone` and `Debug` for `Tensor`, retaining owned/borrowed bytes semantics (backport of #456, `fa226fa4`)
 - Implement `Copy` for `GroupMetadataOptions` (backport of #399, `f662c596`)
 - Implement `Debug`, `Clone`, `Copy` and `Default` for `MetadataRetrieveVersion` (backport of `1bcba576`)
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Reset the sharding partial encoder index after a successful erase so the encoder can be reused
 - Build the sharding codec without `crc32c`, retaining the existing feature gates (backport of #385).
 - Compose partial-decode granularity through all array-to-array codecs, retaining the infallible query and conservative defaults for custom codecs (backport of #388).
 - Validate DLPack export buffer lengths and shapes without changing the `TensorLike` interface or `dlpark` dependency (backport of #456).
