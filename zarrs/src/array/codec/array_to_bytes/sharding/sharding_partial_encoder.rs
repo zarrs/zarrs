@@ -298,7 +298,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
+        let mut shard_index = self.shard_index.lock().unwrap();
+        self.input_output_handle.erase()?;
+        shard_index.fill(u64::MAX);
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -427,6 +430,23 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         })?;
         let mut shard_index = self.shard_index.lock().unwrap();
         self.commit_subchunk_updates(&mut shard_index, vec![(index, Some(bytes))], options)
+    }
+
+    fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let chunks_per_shard = self.chunk_grid.grid_shape();
+        let index = super::ravel_indices(subchunk_indices, &chunks_per_shard).ok_or_else(|| {
+            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
+        })?;
+        let mut shard_index = self.shard_index.lock().unwrap();
+        let entry = usize::try_from(index * 2).unwrap();
+        if shard_index[entry..entry + 2] == [u64::MAX; 2] {
+            return Ok(());
+        }
+        self.commit_subchunk_updates(&mut shard_index, vec![(index, None)], options)
     }
 
     fn supports_partial_encode(&self) -> bool {

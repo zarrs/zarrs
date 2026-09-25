@@ -203,6 +203,26 @@ where
         }
     }
 
+    fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self.remap_subchunk_indices(0, subchunk_indices, options)?;
+        self.inner().erase_subchunk(&indices, options)
+    }
+
+    fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self.remap_subchunk_indices(level, subchunk_indices, options)?;
+        self.inner()
+            .erase_subchunk_at_level(level, &indices, options)
+    }
+
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
     }
@@ -318,6 +338,31 @@ where
                 .store_encoded_subchunk_at_level(level, &indices, bytes, options)
                 .await
         }
+    }
+
+    async fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self
+            .async_remap_subchunk_indices(0, subchunk_indices, options)
+            .await?;
+        self.inner().erase_subchunk(&indices, options).await
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self
+            .async_remap_subchunk_indices(level, subchunk_indices, options)
+            .await?;
+        self.inner()
+            .erase_subchunk_at_level(level, &indices, options)
+            .await
     }
 
     fn supports_partial_encode(&self) -> bool {

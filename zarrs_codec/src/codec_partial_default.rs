@@ -349,6 +349,27 @@ where
         }
     }
 
+    fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .erase_subchunk(subchunk_indices, options)
+    }
+
+    fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .erase_subchunk_at_level(level, subchunk_indices, options)
+    }
+
     fn supports_partial_encode(&self) -> bool {
         false
     }
@@ -791,6 +812,29 @@ where
                 .store_encoded_subchunk_at_level(level, subchunk_indices, bytes, options)
                 .await
         }
+    }
+
+    async fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .erase_subchunk(subchunk_indices, options)
+            .await
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        self.input_output_handle
+            .erase_subchunk_at_level(level, subchunk_indices, options)
+            .await
     }
 
     fn supports_partial_encode(&self) -> bool {

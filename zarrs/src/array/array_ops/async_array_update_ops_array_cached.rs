@@ -185,6 +185,30 @@ where
         result
     }
 
+    async fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let result = self.encoder.erase_subchunk(subchunk_indices, options).await;
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let result = self
+            .encoder
+            .erase_subchunk_at_level(level, subchunk_indices, options)
+            .await;
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
+
     fn supports_partial_encode(&self) -> bool {
         self.encoder.supports_partial_encode()
     }

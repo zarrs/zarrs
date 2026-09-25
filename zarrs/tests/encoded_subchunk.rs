@@ -1296,10 +1296,16 @@ fn encoded_writes_skip_leaf_codecs() -> TestResult {
             .is_err()
     );
     assert_eq!(target.retrieve_encoded_chunk(&[0])?, before);
+    encoder.erase_subchunk_at_level(1, &[3], &options)?;
+    assert!(
+        target
+            .retrieve_encoded_subchunk_at_level(1, &[3])?
+            .is_none()
+    );
     leaf.forbid_full_codec.store(false, Ordering::Relaxed);
     assert_eq!(
         target.retrieve_chunk::<Vec<u8>>(&[0])?,
-        vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 13, 14, 15, 16]
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     Ok(())
 }
@@ -1481,5 +1487,171 @@ fn array_store_encoded_subchunks_three_levels() -> TestResult {
             );
         }
     }
+    Ok(())
+}
+
+#[test]
+fn partial_encoder_erase_subchunks() -> TestResult {
+    use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+    for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        let data_type = data_type::uint8();
+        let mut sharding = ShardingCodecBuilder::new(vec![nz(2)], &data_type);
+        sharding.index_location(location);
+        let mut builder = ArrayBuilder::new(vec![8], vec![8], data_type, 0u8);
+        builder.array_to_bytes_codec(sharding.build_arc());
+        let array = builder.build(Arc::new(MemoryStore::default()), "/")?;
+        let encoder = array.partial_encoder(&[0])?;
+        let options = CodecOptions::default();
+        encoder.erase_subchunk(&[1], &options)?;
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+        for indices in [[0], [1], [3]] {
+            // SAFETY: The subchunk codec is native uint8 bytes with shape [2].
+            unsafe {
+                encoder.store_encoded_subchunk(&indices, vec![7u8; 2].into(), &options)?;
+            }
+        }
+        encoder.erase_subchunk(&[1], &options)?;
+        encoder.erase_subchunk(&[1], &options)?;
+        assert!(array.retrieve_encoded_subchunk(&[1])?.is_none());
+        assert_eq!(
+            array.retrieve_chunk::<Vec<u8>>(&[0])?,
+            vec![7, 7, 0, 0, 0, 0, 7, 7]
+        );
+        for indices in [vec![], vec![4], vec![0, 0]] {
+            assert!(encoder.erase_subchunk(&indices, &options).is_err());
+        }
+        encoder.erase_subchunk(&[0], &options)?;
+        encoder.erase_subchunk(&[3], &options)?;
+        assert!(!encoder.exists()?);
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+        for _ in 0..2 {
+            unsafe {
+                encoder.store_encoded_subchunk(&[2], vec![8u8; 2].into(), &options)?;
+            }
+            assert_eq!(
+                array.retrieve_chunk::<Vec<u8>>(&[0])?,
+                vec![0, 0, 0, 0, 8, 8, 0, 0]
+            );
+            encoder.erase()?;
+            assert!(encoder.retrieve_encoded_subchunk(&[2], &options)?.is_none());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn partial_encoder_erase_nested_subchunks() -> TestResult {
+    use zarrs::array::chunk_cache::{ChunkCache, ChunkCacheEncodedLruChunkLimit};
+    fn check<C: ChunkCache + 'static>(cache: C) -> TestResult {
+        let target = transposed_nested_sharding_builder()
+            .build_arc(Arc::new(MemoryStore::default()), "/")?;
+        let cached = ArrayCached::new(target.clone(), cache);
+        let encoder = cached.partial_encoder(&[0, 0])?;
+        let options = CodecOptions::default();
+        let indices = [1, 3];
+        encoder.erase_subchunk_at_level(1, &indices, &options)?;
+        assert!(target.retrieve_encoded_chunk(&[0, 0])?.is_none());
+        let codec = encoder.subchunk_codecs_at_level(1).unwrap();
+        let shape = encoder.encoded_subchunk_shape_at_level(1, &indices, &options)?;
+        let bytes = codec.encode(
+            ArrayBytes::new_flen(bytemuck::cast_slice(&[7u16; 8]).to_vec()),
+            &shape,
+            &options,
+        )?;
+        // SAFETY: The destination's subchunk codec and shape produced these bytes.
+        unsafe {
+            encoder.store_encoded_subchunk_at_level(1, &indices, bytes, &options)?;
+        }
+        cached.retrieve_chunk::<Vec<u16>>(&[0, 0])?;
+        encoder.erase_subchunk_at_level(1, &indices, &options)?;
+        assert!(cached.cache().is_empty());
+        assert!(target.retrieve_encoded_chunk(&[0, 0])?.is_none());
+        assert_eq!(cached.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![0; 64]);
+        encoder.erase_subchunk_at_level(1, &indices, &options)?;
+        for (level, indices) in [(9, vec![0, 0]), (1, vec![0]), (1, vec![4, 0])] {
+            cached.retrieve_chunk::<Vec<u16>>(&[0, 0])?;
+            assert!(
+                encoder
+                    .erase_subchunk_at_level(level, &indices, &options)
+                    .is_err()
+            );
+            assert!(cached.cache().is_empty());
+        }
+        Ok(())
+    }
+    check(ChunkCacheDecodedLruChunkLimit::new(2))?;
+    check(ChunkCacheEncodedLruChunkLimit::new(2))?;
+    check(ChunkCachePartialDecoderLruChunkLimit::new(2))
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_partial_encoder_erase_nested_subchunks() -> TestResult {
+    use zarrs::array::chunk_cache::{AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit};
+    use zarrs::storage::store::AsyncMemoryStore;
+    let target = transposed_nested_sharding_builder()
+        .build_arc(Arc::new(AsyncMemoryStore::default()), "/")?;
+    let cached = ArrayCached::new(target.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    let encoder = cached.async_partial_encoder(&[0, 0]).await?;
+    let options = CodecOptions::default();
+    let indices = [1, 3];
+    encoder
+        .erase_subchunk_at_level(1, &indices, &options)
+        .await?;
+    assert!(
+        target
+            .async_retrieve_encoded_chunk(&[0, 0])
+            .await?
+            .is_none()
+    );
+    let codec = encoder.subchunk_codecs_at_level(1).unwrap();
+    let shape = encoder
+        .encoded_subchunk_shape_at_level(1, &indices, &options)
+        .await?;
+    let bytes = codec.encode(
+        ArrayBytes::new_flen(bytemuck::cast_slice(&[7u16; 8]).to_vec()),
+        &shape,
+        &options,
+    )?;
+    for erase_whole_chunk in [false, true, false] {
+        // SAFETY: The destination's subchunk codec and shape produced these bytes.
+        unsafe {
+            encoder
+                .store_encoded_subchunk_at_level(1, &indices, bytes.clone(), &options)
+                .await?;
+        }
+        cached.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?;
+        if erase_whole_chunk {
+            encoder.erase().await?;
+        } else {
+            encoder
+                .erase_subchunk_at_level(1, &indices, &options)
+                .await?;
+        }
+        assert!(cached.cache().is_empty().await);
+        assert!(
+            target
+                .async_retrieve_encoded_chunk(&[0, 0])
+                .await?
+                .is_none()
+        );
+        assert_eq!(
+            cached.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,
+            vec![0; 64]
+        );
+        assert!(
+            encoder
+                .retrieve_encoded_subchunk_at_level(1, &indices, &options)
+                .await?
+                .is_none()
+        );
+    }
+    assert!(
+        encoder
+            .erase_subchunk_at_level(1, &[4, 0], &options)
+            .await
+            .is_err()
+    );
+    assert!(cached.cache().is_empty().await);
     Ok(())
 }

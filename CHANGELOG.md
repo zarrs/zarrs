@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
+- Support subchunk erasure through sharding partial encoders, codec wrappers, and cached partial encoders
 - Add `ArrayUpdateOps::store_encoded_subchunk[_at_level]` and async variants, including cached arrays
 - Support encoded subchunk writes through sharding partial encoders, array-to-array codecs, and cached partial encoders
 - Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
@@ -142,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 - Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
+- Reset the cached shard index when a sharding partial encoder erases its chunk
 - Partial codecs validate indexers against their own decoded shape
 - The `vlen` codec returns an error rather than panicking if the encoded index length exceeds the chunk length
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
+- Add `erase_subchunk[_at_level]` to sync/async partial encoders, including nested subchunks
 - Add `store_encoded_subchunk[_at_level]` to sync/async partial encoders, with generic nested updates
 - Implement asynchronous partial bytes access for `Mutex<Option<Vec<u8>>>`
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
