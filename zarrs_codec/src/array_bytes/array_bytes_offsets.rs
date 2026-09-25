@@ -602,7 +602,8 @@ mod tests {
         assert_eq!(offsets_u64.clone().into_u32_vec().unwrap(), vec![0, 2, 5]);
         #[cfg(target_pointer_width = "64")]
         {
-            let offsets_large = ArrayBytesOffsets::new(vec![0u64, u64::from(u32::MAX) + 1]).unwrap();
+            let offsets_large =
+                ArrayBytesOffsets::new(vec![0u64, u64::from(u32::MAX) + 1]).unwrap();
             assert!(offsets_large.into_u32_vec().is_err());
         }
 
