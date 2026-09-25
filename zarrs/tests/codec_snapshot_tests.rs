@@ -609,10 +609,11 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
 
             // Build bytes and offsets for vlen encoding
             let mut bytes = Vec::new();
-            let mut offsets = vec![0usize];
+            let mut offsets = Vec::new();
+            offsets.push(0);
             for s in &strings {
                 bytes.extend(s.as_bytes());
-                offsets.push(bytes.len());
+                offsets.push(u64::try_from(bytes.len()).unwrap());
             }
 
             let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
@@ -627,10 +628,11 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
 
             // Build bytes and offsets for vlen encoding
             let mut bytes = Vec::new();
-            let mut offsets = vec![0usize];
+            let mut offsets = Vec::new();
+            offsets.push(0);
             for b in &byte_arrays {
                 bytes.extend(b);
-                offsets.push(bytes.len());
+                offsets.push(u64::try_from(bytes.len()).unwrap());
             }
 
             let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };

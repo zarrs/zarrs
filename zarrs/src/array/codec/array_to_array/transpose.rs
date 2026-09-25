@@ -72,6 +72,7 @@ pub use transpose_codec::TransposeCodec;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
+use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::{
     ArrayBytes, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer, IndexerError,
 };
@@ -165,15 +166,10 @@ fn transpose_vlen<'a>(
     let mut offsets_new = Vec::with_capacity(offsets.len());
     for idx in &ndarray_indices_transposed {
         offsets_new.push(bytes_new.len());
-        let curr = offsets[*idx];
-        let next = offsets[idx + 1];
-        bytes_new.extend_from_slice(&bytes[curr..next]);
+        bytes_new.extend_from_slice(&bytes[offsets.element_range(*idx)]);
     }
     offsets_new.push(bytes_new.len());
-    let offsets_new = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets_new)
-    };
+    let offsets_new = offsets_from_usize(offsets_new).unwrap();
     unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)

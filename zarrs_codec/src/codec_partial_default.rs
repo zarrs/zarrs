@@ -175,7 +175,8 @@ where
             Ok(match self.decoded_representation.data_type().size() {
                 DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
                 DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
+                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0u32]).unwrap())
+                        .unwrap()
                 }
             })
         }
@@ -531,7 +532,8 @@ where
             Ok(match self.decoded_representation.data_type().size() {
                 DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
                 DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
+                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0u32]).unwrap())
+                        .unwrap()
                 }
             })
         }

@@ -12,12 +12,12 @@ use super::{
     nested_local_subchunk_grids,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::merge_chunks_vlen;
+use crate::array::array_bytes_internal::{merge_chunks_vlen, offsets_from_usize};
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayIndices, ArrayIndicesTinyVec,
-    ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes,
-    DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, ravel_indices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArrayIndicesTinyVec, ArraySubsetTraits,
+    ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType, DataTypeSize,
+    IncompatibleDimensionalityError, Indexer, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
@@ -606,7 +606,7 @@ fn partial_decode_variable_indexer(
 
     let offsets_len = usize::try_from(indexer.len() + 1).unwrap();
     let mut bytes: Vec<u8> = Vec::new();
-    let mut offsets: Vec<usize> = Vec::with_capacity(offsets_len);
+    let mut offsets = Vec::with_capacity(offsets_len);
     offsets.push(0);
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -675,8 +675,5 @@ fn partial_decode_variable_indexer(
         offsets.push(bytes.len());
     }
 
-    Ok(ArrayBytes::new_vlen(
-        bytes,
-        ArrayBytesOffsets::new(offsets)?,
-    )?)
+    Ok(ArrayBytes::new_vlen(bytes, offsets_from_usize(offsets)?)?)
 }

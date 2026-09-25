@@ -97,14 +97,11 @@ impl PartialEq for ArrayBytesOptional<'_> {
                 let a_offsets = a_var.offsets();
                 let b_offsets = b_var.offsets();
                 for (i, &mask_val) in self.mask.iter().enumerate() {
-                    if mask_val != 0 {
-                        let a_start = a_offsets[i];
-                        let a_end = a_offsets[i + 1];
-                        let b_start = b_offsets[i];
-                        let b_end = b_offsets[i + 1];
-                        if a_var.bytes().get(a_start..a_end) != b_var.bytes().get(b_start..b_end) {
-                            return false;
-                        }
+                    if mask_val != 0
+                        && a_var.bytes().get(a_offsets.element_range(i))
+                            != b_var.bytes().get(b_offsets.element_range(i))
+                    {
+                        return false;
                     }
                 }
                 true

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::BytesCodec;
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CodecChain, CodecChainBound, CowBytes,
-    DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
+    ArrayBytes, BytesRepresentation, CodecChain, CodecChainBound, CowBytes, DataType, DataTypeSize,
+    Endianness, FillValue,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -245,28 +245,19 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         let num_offsets =
             NonZeroU64::try_from(usize::try_from(num_elements).unwrap() as u64 + 1).unwrap();
         let offsets = if *self.index_codecs.data_type() == crate::array::data_type::uint32() {
-            let offsets = offsets
-                .iter()
-                .map(|offset| u32::try_from(*offset))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| {
-                    CodecError::Other(
-                        "index offsets are too large for a uint32 index_data_type".to_string(),
-                    )
-                })?;
-            let offsets = transmute_to_bytes_vec(offsets);
+            let offsets = offsets.into_u32_ne_bytes().map_err(|_| {
+                CodecError::Other(
+                    "index offsets are too large for a uint32 index_data_type".to_string(),
+                )
+            })?;
             let index_shape = vec![num_offsets];
             self.index_codecs
-                .encode(offsets.into(), &index_shape, options)?
+                .encode(ArrayBytes::new_flen(offsets), &index_shape, options)?
         } else if *self.index_codecs.data_type() == crate::array::data_type::uint64() {
-            let offsets = offsets
-                .iter()
-                .map(|offset| u64::try_from(*offset).unwrap())
-                .collect::<Vec<u64>>();
-            let offsets = transmute_to_bytes_vec(offsets);
+            let offsets = offsets.into_u64_ne_bytes();
             let index_shape = vec![num_offsets];
             self.index_codecs
-                .encode(offsets.into(), &index_shape, options)?
+                .encode(ArrayBytes::new_flen(offsets), &index_shape, options)?
         } else {
             return Err(CodecError::Other(
                 "unsupported bound vlen index data type, expected uint32 or uint64".to_string(),
@@ -314,7 +305,6 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
             self.index_location,
             options,
         )?;
-        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }
