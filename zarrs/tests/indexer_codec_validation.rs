@@ -67,7 +67,7 @@ fn transpose_partial_codec_reports_decoded_shape() -> Result<(), Box<dyn std::er
             &[1, 0],
         )?))])
         .build(store, "/array")?;
-    array.store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())?;
+    array.store_chunk(&[0, 0], (0u16..16).collect::<Vec<_>>())?;
     let oob: Vec<ArrayIndices> = vec![vec![3, 0]];
     let error = array
         .partial_decoder(&[0, 0])?
