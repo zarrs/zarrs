@@ -37,7 +37,7 @@ use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
+use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
@@ -65,13 +65,7 @@ fn get_squeezed_array_subset(
     decoded_region: &dyn ArraySubsetTraits,
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
-    if decoded_region.dimensionality() != shape.len() {
-        return Err(IndexerError::new_incompatible_dimensionality(
-            decoded_region.dimensionality(),
-            shape.len(),
-        )
-        .into());
-    }
+    decoded_region.validate(bytemuck::must_cast_slice(shape))?;
 
     let decoded_region_start = decoded_region.start();
     let decoded_region_shape = decoded_region.shape();
@@ -91,25 +85,20 @@ fn get_squeezed_indexer(
     indexer: &dyn Indexer,
     shape: &[NonZeroU64],
 ) -> Result<impl Indexer, CodecError> {
+    // The indices of size-1 dimensions are dropped below, so they cannot be bounds checked by
+    // the inner codec.
+    indexer.validate(bytemuck::must_cast_slice(shape))?;
+
     let indices = indexer
         .iter_indices()
         .map(|indices| {
-            if indices.len() == shape.len() {
-                Ok(indices
-                    .into_iter()
-                    .zip(shape)
-                    .filter_map(
-                        |(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None },
-                    )
-                    .collect_vec())
-            } else {
-                Err(IndexerError::new_incompatible_dimensionality(
-                    indices.len(),
-                    shape.len(),
-                ))
-            }
+            indices
+                .into_iter()
+                .zip(shape)
+                .filter_map(|(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None })
+                .collect_vec()
         })
-        .collect::<Result<Vec<ArrayIndices>, _>>()?;
+        .collect::<Vec<ArrayIndices>>();
 
     Ok(indices)
 }

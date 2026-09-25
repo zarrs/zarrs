@@ -88,6 +88,16 @@ pub trait AsyncArrayPartialDecoderTraits:
 
     /// Partially decode a chunk.
     ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError). This is often satisfied inherently, such
+    /// as by indexer iterators like
+    /// [`iter_contiguous_byte_ranges`](zarrs_chunk_grid::Indexer::iter_contiguous_byte_ranges);
+    /// otherwise call [`Indexer::validate`]. Callers are not required to validate the indexer, and
+    /// an indexer that is transformed before being passed to an inner partial codec (e.g. by an
+    /// array to array codec) cannot generally be validated by that inner codec.
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode<'a>(
@@ -146,6 +156,16 @@ pub trait AsyncArrayPartialEncoderTraits:
     async fn erase(&self) -> Result<(), CodecError>;
 
     /// Partially encode a chunk.
+    ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError). This is often satisfied inherently, such
+    /// as by indexer iterators like
+    /// [`iter_contiguous_byte_ranges`](zarrs_chunk_grid::Indexer::iter_contiguous_byte_ranges);
+    /// otherwise call [`Indexer::validate`]. Callers are not required to validate the indexer, and
+    /// an indexer that is transformed before being passed to an inner partial codec (e.g. by an
+    /// array to array codec) cannot generally be validated by that inner codec.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.

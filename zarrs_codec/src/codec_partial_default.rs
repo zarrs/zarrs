@@ -156,6 +156,8 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
+        indexer.validate(self.decoded_representation.shape_u64())?;
+
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
@@ -278,6 +280,8 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
+        indexer.validate(self.decoded_representation.shape_u64())?;
+
         // Read the entire chunk
         let bytes_enc = self.input_output_handle.decode(options)?;
 
@@ -507,6 +511,8 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
+        indexer.validate(self.decoded_representation.shape_u64())?;
+
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
@@ -633,6 +639,8 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
+        indexer.validate(self.decoded_representation.shape_u64())?;
+
         // Read the entire chunk
         let bytes_enc = self.input_output_handle.decode(options).await?;
 

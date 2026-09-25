@@ -18,6 +18,9 @@ use zarrs_data_type::codec_traits::cast_value::{
 };
 
 /// Partial encoder and decoder for the `cast_value` codec.
+///
+/// The indexer is forwarded to the inner partial codec unchanged, and this codec does not change
+/// the array shape, so the inner partial codec is responsible for validating it.
 pub(crate) struct CastValueCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     decoded_data_type: DataType,

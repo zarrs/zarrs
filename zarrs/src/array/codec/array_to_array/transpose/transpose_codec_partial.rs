@@ -143,13 +143,13 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed = get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             let encoded_value = self
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_decode(&indexer_transposed, options)
         }
@@ -176,14 +176,14 @@ where
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed = get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             self.input_output_handle.partial_encode(
                 &array_subset_transposed,
                 &encoded_value,
                 options,
             )
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
         }
@@ -242,14 +242,14 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed = get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             let encoded_value = self
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)
                 .await?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_decode(&indexer_transposed, options)
                 .await
@@ -280,12 +280,12 @@ where
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed = get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             self.input_output_handle
                 .partial_encode(&array_subset_transposed, &encoded_value, options)
                 .await
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
                 .await

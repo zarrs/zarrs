@@ -812,6 +812,80 @@ fn array_store_chunk_subset_sharded_generic_indexer_unsupported()
     Ok(())
 }
 
+/// Codecs validate generic indexers against their own shape, not just at the array layer.
+///
+/// Each case below is a codec that could not rely on the indexer being bounds checked downstream:
+/// an absent chunk never reaches the indexer, and a partial shard is padded out to whole subchunks
+/// so an out-of-bounds index can land in that padding.
+#[test]
+fn array_chunk_subset_generic_indexer_oob_codecs() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    // `vlen`: an absent chunk is filled without consulting the indexer
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
+        .array_to_bytes_codec(Arc::new(VlenCodec::default()))
+        .build(store, "/array")?;
+    let inbounds: Vec<ArrayIndices> = vec![vec![0, 1]];
+    assert_eq!(
+        array.retrieve_chunk_subset::<Vec<String>>(&[0, 0], &inbounds)?,
+        vec![String::new()]
+    );
+    let oob: Vec<ArrayIndices> = vec![vec![0, 2]];
+    assert!(
+        array
+            .retrieve_chunk_subset::<Vec<String>>(&[0, 0], &oob)
+            .is_err()
+    );
+
+    // `sharding_indexed`: an absent shard has no shard index, so it is filled without reaching the
+    // code that maps indices onto subchunks
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
+        .array_to_bytes_codec(
+            ShardingCodecBuilder::new(
+                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()],
+                &data_type::uint16(),
+            )
+            .build_arc(),
+        )
+        .build(store, "/array")?;
+    let inbounds: Vec<ArrayIndices> = vec![vec![0, 1]];
+    assert_eq!(
+        array.retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &inbounds)?,
+        vec![0]
+    );
+    let oob: Vec<ArrayIndices> = vec![vec![0, 4]];
+    assert!(
+        array
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+            .is_err()
+    );
+    // ... and the equivalent array subset, which takes the decode-into code path
+    assert!(
+        array
+            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 4..5]))
+            .is_err()
+    );
+
+    // `transpose`: permuting an out-of-bounds index keeps it out-of-bounds, but the error must
+    // name the decoded shape, not the transposed one
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![2, 8], vec![2, 8], data_type::uint16(), 0u16)
+        .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0])?))])
+        .build(store, "/array")?;
+    array.store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())?;
+    let oob: Vec<ArrayIndices> = vec![vec![3, 0]];
+    let err = array
+        .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("[2, 8]"), "{err}");
+
+    Ok(())
+}
+
 /// A generic indexer is validated against the chunk shape even if the cached chunk is absent.
 #[test]
 fn array_cached_chunk_subset_generic_indexer_absent_chunk() -> Result<(), Box<dyn std::error::Error>>

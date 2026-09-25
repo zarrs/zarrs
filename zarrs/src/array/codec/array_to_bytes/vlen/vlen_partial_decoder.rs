@@ -61,6 +61,9 @@ fn decode_vlen_bytes<'a>(
     shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
+    // An absent chunk is filled without touching the indexer, so validate up front.
+    indexer.validate(bytemuck::must_cast_slice(shape))?;
+
     if let Some(bytes) = bytes {
         let (data, index) = super::get_vlen_bytes_and_offsets(
             &bytes,

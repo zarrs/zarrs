@@ -14,6 +14,9 @@ use zarrs_codec::{
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
+///
+/// The indexer is forwarded to the inner partial codec unchanged, and this codec does not change
+/// the array shape, so the inner partial codec is responsible for validating it.
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     data_type: DataType,

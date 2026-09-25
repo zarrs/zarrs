@@ -65,6 +65,7 @@
 mod transpose_codec;
 mod transpose_codec_partial;
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
@@ -181,15 +182,10 @@ fn transpose_vlen<'a>(
 
 fn get_transposed_array_subset(
     order: &[usize],
+    shape: &[NonZeroU64],
     decoded_region: &dyn ArraySubsetTraits,
 ) -> Result<ArraySubset, CodecError> {
-    if decoded_region.dimensionality() != order.len() {
-        return Err(IndexerError::new_incompatible_dimensionality(
-            decoded_region.dimensionality(),
-            order.len(),
-        )
-        .into());
-    }
+    decoded_region.validate(bytemuck::must_cast_slice(shape))?;
 
     let start = permute(&decoded_region.start(), order).expect("matching dimensionality");
     let size = permute(&decoded_region.shape(), order).expect("matching dimensionality");
@@ -199,8 +195,13 @@ fn get_transposed_array_subset(
 
 fn get_transposed_indexer(
     order: &[usize],
+    shape: &[NonZeroU64],
     indexer: &dyn Indexer,
 ) -> Result<impl Indexer, CodecError> {
+    // Permuting an out-of-bounds index yields an index that is out-of-bounds of the permuted
+    // shape, but it is reported in encoded coordinates. Validate here for a useful error.
+    indexer.validate(bytemuck::must_cast_slice(shape))?;
+
     indexer
         .iter_indices()
         .map(|indices| permute(&indices, order))

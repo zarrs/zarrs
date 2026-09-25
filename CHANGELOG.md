@@ -46,7 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayUpdateOps::store_chunk_subset` and its async variant
   - The `chunk_subset_data` parameter of `store_chunk_subset` is renamed to `indexer_data`
   - Passing an `ArraySubset`, `[a..b, c..d]`, `&[Range<u64>]` or `Vec<Range<u64>>` is unaffected, and bounds validation and whole-chunk fast paths are unchanged for those types
-  - Generic indexers are bounds checked against the chunk shape by the array layer, since not all codecs validate them
   - Partial encoding of a chunk encoded with the `sharding_indexed` codec is not yet supported for non-subset indexers and returns a `CodecError`
 - **Breaking**: `ArrayWriteOps::erase_chunks` and `ArrayReadOps::retrieve_encoded_chunks` (and their async variants) take `chunks: &dyn Indexer` instead of `chunks: &dyn ArraySubsetTraits`, matching `ChunkCache::invalidate_chunks`
   - Chunks may now be selected with a scattered list of chunk indices
@@ -127,6 +126,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- Partial codecs now validate indexers against the shape they were created with, rather than relying on an inner codec or the array layer to do it
+  - The `squeeze` codec dropped the indices of size-1 dimensions without bounds checking them, so an out-of-bounds index in such a dimension aliased a valid element on read, and silently corrupted data on write with `experimental_partial_encoding` enabled
+  - The `sharding_indexed` codec did not bounds check an indexer when a shard was absent
+  - The `transpose` codec reported out-of-bounds indexers in transposed coordinates
+  - This is documented as an implementation requirement on `[Async]ArrayPartialDecoderTraits::partial_decode` and `[Async]ArrayPartialEncoderTraits::partial_encode`
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op

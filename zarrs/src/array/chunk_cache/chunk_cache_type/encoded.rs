@@ -12,7 +12,7 @@ use crate::array::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError};
+use zarrs_codec::{ArrayPartialDecoderTraits, ArrayToBytesCodecTraits};
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::ReadableStorageTraits;
@@ -118,11 +118,6 @@ impl SealedSync for ChunkCacheTypeEncoded {
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        // The partial decoder does not reliably bounds check generic indexers.
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        indexer
-            .validate(bytemuck::must_cast_slice(&chunk_shape))
-            .map_err(CodecError::from)?;
         Self::partial_decoder(cache, array, chunk_indices, options)?
             .partial_decode(indexer, options)
             .map(|bytes| bytes.into_owned().into())
@@ -211,11 +206,6 @@ impl SealedAsync for ChunkCacheTypeEncoded {
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
-        // The partial decoder does not reliably bounds check generic indexers.
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        indexer
-            .validate(bytemuck::must_cast_slice(&chunk_shape))
-            .map_err(CodecError::from)?;
         async_partial_decoder_sync(cache, array, chunk_indices, options)
             .await?
             .partial_decode(indexer, options)

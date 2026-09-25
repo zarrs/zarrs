@@ -8,7 +8,7 @@ use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayUpdateOps, *};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec, ArraySubsetTraits, update_array_bytes};
-use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
+use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
 #[inherent]
@@ -170,10 +170,6 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
                 return self.store_chunk_with_options(chunk_indices, indexer_data, options);
             }
-        } else {
-            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
-            // size-1 dimensions), so they are validated here.
-            indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;

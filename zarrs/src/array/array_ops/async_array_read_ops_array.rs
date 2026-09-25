@@ -348,10 +348,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     .async_retrieve_chunk_with_options(chunk_indices, options)
                     .await;
             }
-        } else {
-            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
-            // size-1 dimensions), so they are validated here.
-            indexer.validate(chunk_shape_u64).map_err(CodecError::from)?;
         }
 
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -394,10 +390,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     .async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
                     .await;
             }
-        } else {
-            // Not all codecs bounds check generic indexers (e.g. `squeeze` drops the indices of
-            // size-1 dimensions), so they are validated here.
-            indexer.validate(chunk_shape_u64).map_err(CodecError::from)?;
         }
 
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));

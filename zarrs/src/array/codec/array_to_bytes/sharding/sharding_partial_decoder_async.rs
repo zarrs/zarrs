@@ -117,13 +117,9 @@ pub(crate) async fn partial_decode(
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
-    if indexer.dimensionality() != shard_shape.len() {
-        return Err(IndexerError::new_incompatible_dimensionality(
-            indexer.dimensionality(),
-            shard_shape.len(),
-        )
-        .into());
-    }
+    // A partial shard is padded out to whole subchunks, so an out-of-bounds index can land in the
+    // padding of the last subchunk rather than outside the subchunk grid.
+    indexer.validate(bytemuck::must_cast_slice(shard_shape))?;
 
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs.fill_value();
@@ -323,6 +319,7 @@ async fn partial_decode_fixed_array_subset_into(
     options: &CodecOptions,
     output_view: &mut ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
+    array_subset.validate(bytemuck::must_cast_slice(shard_shape))?;
     let fill_value = inner_codecs.fill_value();
     if array_subset.len() != output_view.num_elements() {
         return Err(InvalidNumberOfElementsError::new(
