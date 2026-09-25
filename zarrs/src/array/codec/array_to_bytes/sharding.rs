@@ -75,14 +75,20 @@ mod sharding_partial_encoder_async;
 pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::CowBytes;
 
+use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
-    ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChain,
-    CodecChainBound, DataType, FillValue, RecommendedConcurrency, ravel_indices,
+    ArrayBytes, ArrayIndices, ArrayIndicesTinyVec, BytesRepresentation, ChunkGrid, ChunkShape,
+    ChunkShapeTraits, CodecChain, CodecChainBound, DataType, FillValue, Indexer,
+    RecommendedConcurrency, ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
@@ -243,6 +249,111 @@ fn partial_decode_empty_shard<'a>(
     indexer: &dyn crate::array::Indexer,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
+}
+
+/// An update to a subchunk from a partial encode.
+struct SubchunkUpdate<'a> {
+    /// The raveled subchunk index within the shard.
+    subchunk_index: u64,
+    /// The updated elements, relative to the subchunk origin.
+    indexer: Box<dyn Indexer>,
+    /// The updated element bytes, in `indexer` order.
+    bytes: ArrayBytes<'a>,
+    /// Whether the subchunk is entirely overwritten, so its existing data need not be read.
+    fully_covered: bool,
+}
+
+/// Split a shard-level partial encode into updates of each intersected subchunk.
+///
+/// The `indexer` must be validated against the shard shape.
+fn subchunk_updates<'a>(
+    chunk_grid: &RegularChunkGrid,
+    chunks_per_shard: &[u64],
+    subchunk_shape: &[NonZeroU64],
+    indexer: &dyn Indexer,
+    bytes: &'a ArrayBytes<'_>,
+    data_type: &DataType,
+) -> Result<Vec<SubchunkUpdate<'a>>, CodecError> {
+    if let Some(subset) = indexer.as_array_subset() {
+        let subchunks = chunk_grid
+            .chunks_in_array_subset(subset)?
+            .expect("subchunks always within shard");
+        let subset_start = subset.start();
+        let subset_end_exc = subset.end_exc();
+        let subset_shape = subset.shape();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = subchunks.indices().into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = subchunks.indices().into_iter();
+
+        iterator
+            .map(|subchunk_indices: ArrayIndicesTinyVec| {
+                let subchunk_index =
+                    ravel_indices(&subchunk_indices, chunks_per_shard).expect("inbounds chunk");
+                let subchunk_subset = chunk_grid
+                    .subset(&subchunk_indices)
+                    .expect("matching dimensionality")
+                    .expect("subchunk always within shard");
+                let fully_covered = subchunk_subset
+                    .start()
+                    .iter()
+                    .zip(subset_start.iter())
+                    .all(|(a, b)| a >= b)
+                    && subchunk_subset
+                        .end_exc()
+                        .iter()
+                        .zip(subset_end_exc.iter())
+                        .all(|(a, b)| a <= b);
+                let overlap = subset.overlap(&subchunk_subset).unwrap();
+                let bytes = bytes.extract_array_subset(
+                    &overlap.relative_to(&subset_start).unwrap(),
+                    &subset_shape,
+                    data_type,
+                )?;
+                Ok(SubchunkUpdate {
+                    subchunk_index,
+                    indexer: Box::new(overlap.relative_to(subchunk_subset.start()).unwrap()),
+                    bytes,
+                    fully_covered,
+                })
+            })
+            .collect()
+    } else {
+        // Group the indexer elements by subchunk, preserving their order
+        let mut groups: HashMap<u64, (Vec<ArrayIndices>, Vec<ArrayIndices>)> = HashMap::new();
+        for (position, indices) in indexer.iter_indices().enumerate() {
+            let subchunk_indices: ArrayIndices = indices
+                .iter()
+                .zip(subchunk_shape)
+                .map(|(&i, &cs)| i / cs)
+                .collect();
+            let subchunk_index =
+                ravel_indices(&subchunk_indices, chunks_per_shard).expect("validated indexer");
+            let indices_in_subchunk: ArrayIndices = indices
+                .iter()
+                .zip(subchunk_shape)
+                .map(|(&i, &cs)| i % cs)
+                .collect();
+            let (group_indices, group_positions) = groups.entry(subchunk_index).or_default();
+            group_indices.push(indices_in_subchunk);
+            group_positions.push(vec![position as u64]);
+        }
+
+        let bytes_shape = [indexer.len()];
+        groups
+            .into_iter()
+            .map(|(subchunk_index, (indices, positions))| {
+                Ok(SubchunkUpdate {
+                    subchunk_index,
+                    indexer: Box::new(indices),
+                    bytes: bytes.extract_array_subset(&positions, &bytes_shape, data_type)?,
+                    // Duplicate indices are permitted, so coverage is not tracked
+                    fully_covered: false,
+                })
+            })
+            .collect()
+    }
 }
 
 fn get_concurrent_target_and_codec_options(

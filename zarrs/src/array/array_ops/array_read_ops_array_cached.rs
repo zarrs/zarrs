@@ -49,7 +49,7 @@ where
             if chunk_subset == array_subset {
                 retrieve_chunk_bytes(cache, array, chunk_indices, options)
             } else {
-                C::Value::retrieve_chunk_subset_bytes(
+                C::Value::retrieve_partial_chunk_bytes(
                     cache,
                     array,
                     chunk_indices,
@@ -108,7 +108,7 @@ where
         .map(|chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let bytes = C::Value::retrieve_chunk_subset_bytes(
+            let bytes = C::Value::retrieve_partial_chunk_bytes(
                 cache,
                 array,
                 &chunk_indices,
@@ -169,7 +169,7 @@ where
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let overlap = chunk_subset.overlap(array_subset)?;
             let output_subset = overlap.relative_to(&array_subset_start)?;
-            let bytes = C::Value::retrieve_chunk_subset_bytes(
+            let bytes = C::Value::retrieve_partial_chunk_bytes(
                 cache,
                 array,
                 &chunk_indices,
@@ -226,18 +226,18 @@ where
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
     }
 
-    pub(in crate::array) fn retrieve_chunk_subset_into_with_options(
+    pub(in crate::array) fn retrieve_partial_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::retrieve_chunk_subset_bytes(
+        let bytes = C::Value::retrieve_partial_chunk_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             options,
         )?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
@@ -281,32 +281,32 @@ where
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_subset<T: FromArrayBytes>(
+    pub fn retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = C::Value::retrieve_chunk_subset_bytes(
+        let bytes = C::Value::retrieve_partial_chunk_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             options,
         )?;
-        T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
+        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_subset_into(
+    pub fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
-        self.retrieve_chunk_subset_into_with_options(
+        self.retrieve_partial_chunk_into_with_options(
             chunk_indices,
-            chunk_subset,
+            indexer,
             output_target,
             self.codec_options(),
         )
@@ -401,7 +401,7 @@ where
                 self.retrieve_chunk_into_with_options(chunk_indices, output_target, options)
             },
             |chunk_indices, chunk_subset, output_target, options| {
-                self.retrieve_chunk_subset_into_with_options(
+                self.retrieve_partial_chunk_into_with_options(
                     chunk_indices,
                     chunk_subset,
                     output_target,
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
         assert_eq!(
             cached
-                .retrieve_chunk_subset::<Vec<u8>>(&[0], &[1..2])
+                .retrieve_partial_chunk::<Vec<u8>>(&[0], &[1..2])
                 .unwrap(),
             vec![2]
         );

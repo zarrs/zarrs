@@ -118,7 +118,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     println!("store_array_subset [0..8, 6..7]:\n{data_all:+4.1}\n");
 
     // Store chunk subset
-    array.store_chunk_subset(
+    array.store_partial_chunk(
         // chunk indices
         &[1, 1],
         // subset within chunk
@@ -126,7 +126,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         &[-7.4f32, -7.5, -7.6, -7.7],
     )?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
-    println!("store_chunk_subset [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
+    println!("store_partial_chunk [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
 
     // Erase a chunk
     array.erase_chunk(&[0, 0])?;

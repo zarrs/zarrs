@@ -59,39 +59,43 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_array_subset(&array_subset)
     }
 
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
+    /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into their bytes.
+    ///
+    /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
+    /// [`Indexer`], such as a list of chunk-relative indices.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if:
     ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
+    ///  - the indexer is out-of-bounds of the chunk or has an incompatible dimensionality,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
     ///
     /// # Panics
-    /// Will panic if the number of elements in `chunk_subset` is `usize::MAX` or larger.
-    fn retrieve_chunk_subset<T: FromArrayBytes>(
+    /// Will panic if the number of elements in `indexer` is `usize::MAX` or larger.
+    fn retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into a preallocated `output_target`.
+    /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into a preallocated `output_target`.
     ///
-    /// Only supports fixed-length data types (including optional types with fixed inner types).
+    /// `indexer` is relative to the chunk. Only supports fixed-length data types (including
+    /// optional types with fixed inner types).
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if:
     ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
+    ///  - the indexer is out-of-bounds of the chunk or has an incompatible dimensionality,
     ///  - the data type is variable-length,
-    ///  - the number of elements in `output_target` does not match `chunk_subset`,
+    ///  - the number of elements in `output_target` does not match `indexer`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
-    fn retrieve_chunk_subset_into(
+    fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError>;
 

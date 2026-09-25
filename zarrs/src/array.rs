@@ -172,7 +172,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_chunk_if_exists`](Array::retrieve_chunk_if_exists)
 ///    - [`retrieve_chunk`](Array::retrieve_chunk)
 ///    - [`retrieve_chunks`](Array::retrieve_chunks)
-///    - [`retrieve_chunk_subset`](Array::retrieve_chunk_subset)
+///    - [`retrieve_partial_chunk`](Array::retrieve_partial_chunk)
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
@@ -185,7 +185,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`erase_chunk`](Array::erase_chunk)
 ///    - [`erase_chunks`](Array::erase_chunks)
 ///  - [`[Async]ReadableWritableStorageTraits`](crate::storage::ReadableWritableStorageTraits): store operations requiring reading *and* writing
-///    - [`store_chunk_subset`](Array::store_chunk_subset)
+///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
@@ -293,7 +293,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ## Optimising Writes
 /// For optimum write performance, an array should be written using [`store_chunk`](Array::store_chunk) or [`store_chunks`](Array::store_chunks) where possible.
 ///
-/// [`store_chunk_subset`](Array::store_chunk_subset) and [`store_array_subset`](Array::store_array_subset) may incur decoding overhead, and they require careful usage if executed in parallel (see [Parallel Writing](#parallel-writing) below).
+/// [`store_partial_chunk`](Array::store_partial_chunk) and [`store_array_subset`](Array::store_array_subset) may incur decoding overhead, and they require careful usage if executed in parallel (see [Parallel Writing](#parallel-writing) below).
 /// However, these methods will use a fast path and avoid decoding if the subset covers entire chunks.
 ///
 /// ### Direct IO (Linux)
@@ -311,12 +311,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Reads and writes of *different* chunks may proceed concurrently.
 ///
 /// If a chunk is written more than once, its element values depend on whichever operation wrote to the chunk last.
-/// The [`store_chunk_subset`](Array::store_chunk_subset) and [`store_array_subset`](Array::store_array_subset) methods and their variants internally retrieve, update, and store chunks.
+/// The [`store_partial_chunk`](Array::store_partial_chunk) and [`store_array_subset`](Array::store_array_subset) methods and their variants internally retrieve, update, and store chunks.
 /// So do [`partial_encoder`](Array::partial_encoder)s, which may be used internally by the above methods.
 ///
 /// It is the responsibility of `zarrs` consumers to ensure that:
 ///   - [`store_array_subset`](Array::store_array_subset) is not called concurrently on array subsets sharing chunks,
-///   - [`store_chunk_subset`](Array::store_chunk_subset) is not called concurrently on the same chunk,
+///   - [`store_partial_chunk`](Array::store_partial_chunk) is not called concurrently on the same chunk,
 ///   - [`partial_encoder`](Array::partial_encoder)s are not created or used concurrently for the same chunk,
 ///   - or any combination of the above are called concurrently on the same chunk.
 ///
@@ -327,11 +327,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ## Optimising Reads
 /// It is fastest to load arrays using [`retrieve_chunk`](Array::retrieve_chunk) or [`retrieve_chunks`](Array::retrieve_chunks) where possible.
-/// In contrast, the [`retrieve_chunk_subset`](Array::retrieve_chunk_subset) and [`retrieve_array_subset`](Array::retrieve_array_subset) may use partial decoders which can be less efficient with some codecs/stores.
+/// In contrast, the [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) and [`retrieve_array_subset`](Array::retrieve_array_subset) may use partial decoders which can be less efficient with some codecs/stores.
 /// Like their write counterparts, these methods will use a fast path if subsets cover entire chunks.
 ///
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
-/// For this reason, retrieving multiple subsets in a chunk with [`retrieve_chunk_subset`](Array::store_chunk_subset) is very inefficient and strongly discouraged.
+/// For this reason, retrieving multiple subsets in a chunk with [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) is very inefficient and strongly discouraged.
 /// For example, consider that a compressed chunk may need to be retrieved and decoded in its entirety even if only a small part of the data is needed.
 /// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::ArrayPartialDecoderTraits::partial_decode).
 /// The underlying codec chain will use a cache where efficient to optimise multiple partial decoding requests (see [`CodecChain`]).

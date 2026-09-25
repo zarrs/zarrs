@@ -2,7 +2,7 @@ use futures::{StreamExt, TryStreamExt};
 
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
@@ -17,7 +17,7 @@ use super::recommended_codec_concurrency;
 /// Chunk level `_into` retrieval, as used by [`retrieve_array_subset_into`].
 ///
 /// This is the asynchronous counterpart of the `retrieve_chunk_into` and
-/// `retrieve_chunk_subset_into` closure parameters of
+/// `retrieve_partial_chunk_into` closure parameters of
 /// [`retrieve_array_subset_into`](super::array_read_ops_common::retrieve_array_subset_into). A
 /// trait is used rather than closures because the returned futures must be `Send` on non-`wasm32`
 /// targets, which the `AsyncFn` traits cannot express.
@@ -31,10 +31,10 @@ pub(super) trait AsyncRetrieveInto {
         options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
-    async fn retrieve_chunk_subset_into(
+    async fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError>;
@@ -94,7 +94,7 @@ where
                     .await
             } else {
                 retrieve
-                    .retrieve_chunk_subset_into(
+                    .retrieve_partial_chunk_into(
                         chunk_indices,
                         &array_subset.relative_to(chunk_subset.start())?,
                         output_target,
@@ -179,7 +179,7 @@ where
             let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
 
             retrieve
-                .retrieve_chunk_subset_into(
+                .retrieve_partial_chunk_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                     target,

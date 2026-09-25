@@ -1,7 +1,7 @@
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{
     ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits,
+    ArraySubsetTraits, Indexer,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -23,7 +23,7 @@ pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubs
     output_target: ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
     retrieve_chunk_into: RetrieveChunkInto,
-    retrieve_chunk_subset_into: RetrieveChunkSubsetInto,
+    retrieve_partial_chunk_into: RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
@@ -31,7 +31,7 @@ where
         for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
-            &dyn ArraySubsetTraits,
+            &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
         ) -> Result<(), ArrayError>
@@ -78,7 +78,7 @@ where
             if chunk_subset == array_subset {
                 retrieve_chunk_into(chunk_indices, output_target, options)
             } else {
-                retrieve_chunk_subset_into(
+                retrieve_partial_chunk_into(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     output_target,
@@ -102,7 +102,7 @@ where
                 chunk_concurrent_limit,
                 &output_target,
                 &options,
-                &retrieve_chunk_subset_into,
+                &retrieve_partial_chunk_into,
             )
         }
     }
@@ -115,13 +115,13 @@ fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     chunk_concurrent_limit: usize,
     output_target: &ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
-    retrieve_chunk_subset_into: &RetrieveChunkSubsetInto,
+    retrieve_partial_chunk_into: &RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
-            &dyn ArraySubsetTraits,
+            &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
         ) -> Result<(), ArrayError>
@@ -161,7 +161,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
-        retrieve_chunk_subset_into(
+        retrieve_partial_chunk_into(
             &chunk_indices,
             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
             target,

@@ -6,23 +6,28 @@ use zarrs_codec::ArrayPartialEncoderTraits;
 /// These operations encode and decode with the array's
 /// [`codec_options`](ArrayOps::codec_options).
 pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
-    /// Encode `chunk_subset_data` and store in `chunk_subset` of the chunk at `chunk_indices`.
+    /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
+    ///
+    /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
+    /// [`Indexer`], such as a list of chunk-relative indices.
     ///
     /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
-    ///  - `chunk_subset` is invalid or out of bounds of the chunk,
+    ///  - `indexer` is out-of-bounds of the chunk or has an incompatible dimensionality,
+    ///  - `indexer` is not an [`ArraySubset`] and the chunk is encoded with the `sharding_indexed`
+    ///    codec while experimental partial encoding is enabled (not yet supported),
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
     ///
     /// # Panics
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
-    fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
+        indexer: &dyn Indexer,
+        indexer_data: T,
     ) -> Result<(), ArrayError>;
 
     /// Encode `subset_data` and store in `array_subset`.

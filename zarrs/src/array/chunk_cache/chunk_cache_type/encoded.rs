@@ -8,7 +8,7 @@ use super::{cache_error, validate_chunk_indices};
 use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
 use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded, SealedSync};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, CodecOptions,
+    Array, ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions, Indexer,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -107,11 +107,11 @@ impl SealedSync for ChunkCacheTypeEncoded {
         decode_encoded(array, &encoded, &chunk_shape, options)
     }
 
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
+    fn retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -119,7 +119,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         Self::partial_decoder(cache, array, chunk_indices, options)?
-            .partial_decode(chunk_subset, options)
+            .partial_decode(indexer, options)
             .map(|bytes| bytes.into_owned().into())
             .map_err(ArrayError::from)
     }
@@ -195,11 +195,11 @@ impl SealedAsync for ChunkCacheTypeEncoded {
         decode_encoded(array, &encoded, &chunk_shape, options)
     }
 
-    async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
+    async fn async_retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -208,7 +208,7 @@ impl SealedAsync for ChunkCacheTypeEncoded {
     {
         async_partial_decoder_sync(cache, array, chunk_indices, options)
             .await?
-            .partial_decode(chunk_subset, options)
+            .partial_decode(indexer, options)
             .map(|bytes| bytes.into_owned().into())
             .map_err(ArrayError::from)
     }

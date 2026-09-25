@@ -51,17 +51,17 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0])?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1])?, None);
 
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
 
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
 
     assert!(array.retrieve_chunks::<ArrayBytes>(&[0..2]).is_err());
     assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());

@@ -99,14 +99,14 @@ where
     C: ChunkCache + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    pub fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
+        indexer: &dyn Indexer,
+        indexer_data: T,
     ) -> Result<(), ArrayError> {
         self.array()
-            .store_chunk_subset(chunk_indices, chunk_subset, chunk_subset_data)?;
+            .store_partial_chunk(chunk_indices, indexer, indexer_data)?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }

@@ -130,7 +130,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store chunk subset
     array
-        .async_store_chunk_subset(
+        .async_store_partial_chunk(
             // chunk indices
             &[1, 1],
             // subset within chunk
@@ -139,7 +139,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
     let data_all: ArrayD<f32> = array.async_retrieve_array_subset(&subset_all).await?;
-    println!("async_store_chunk_subset [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
+    println!("async_store_partial_chunk [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
 
     // Erase a chunk
     array.async_erase_chunk(&[0, 0]).await?;
