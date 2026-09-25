@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Tensor::into_dlpack()` for exporting a `Tensor<'static>` as a versioned DLPack managed tensor (requires the `dlpack` feature)
 - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
 - Implement `Clone` and `Debug` for `Tensor`
+- Support partial encoding with generic indexers in the `sharding_indexed` codec
 
 ### Changed
 - **Breaking**: Chunk subset operations now accept `&dyn Indexer`
