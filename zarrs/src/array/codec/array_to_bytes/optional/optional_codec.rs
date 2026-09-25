@@ -9,6 +9,7 @@ use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
+use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
 use zarrs_codec::{
@@ -103,14 +104,12 @@ impl OptionalCodecBound {
 
                 for (i, &mask_byte) in mask.iter().enumerate() {
                     if mask_byte != 0 {
-                        let start = offsets[i];
-                        let end = offsets[i + 1];
-                        sparse_bytes.extend_from_slice(&bytes[start..end]);
+                        sparse_bytes.extend_from_slice(&bytes[offsets.element_range(i)]);
                         sparse_offsets.push(sparse_bytes.len());
                     }
                 }
 
-                let sparse_offsets = unsafe { ArrayBytesOffsets::new_unchecked(sparse_offsets) };
+                let sparse_offsets = offsets_from_usize(sparse_offsets)?;
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(sparse_bytes, sparse_offsets) })
             }
             ArrayBytes::Optional(optional_bytes) => {
@@ -186,16 +185,16 @@ impl OptionalCodecBound {
                 for &mask_byte in mask {
                     if mask_byte != 0 {
                         // Copy valid element from sparse data
-                        let sparse_start = sparse_offsets[sparse_idx];
-                        let sparse_end = sparse_offsets[sparse_idx + 1];
-                        dense_bytes.extend_from_slice(&sparse_bytes[sparse_start..sparse_end]);
+                        dense_bytes.extend_from_slice(
+                            &sparse_bytes[sparse_offsets.element_range(sparse_idx)],
+                        );
                         sparse_idx += 1;
                     }
                     // For invalid elements, just add current offset (empty element)
                     dense_offsets.push(dense_bytes.len());
                 }
 
-                let dense_offsets = unsafe { ArrayBytesOffsets::new_unchecked(dense_offsets) };
+                let dense_offsets = offsets_from_usize(dense_offsets)?;
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(dense_bytes, dense_offsets) })
             }
             ArrayBytes::Optional(sparse_optional_bytes) => {
@@ -280,7 +279,7 @@ impl OptionalCodecBound {
                 }
                 DataTypeSize::Variable => {
                     // Variable-size: create empty offsets (all elements have zero length)
-                    let offsets = vec![0usize; num_elements + 1];
+                    let offsets = vec![0u32; num_elements + 1];
                     let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
                     Ok(unsafe { ArrayBytes::new_vlen_unchecked(vec![], offsets) })
                 }

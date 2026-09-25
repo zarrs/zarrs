@@ -1,8 +1,7 @@
 use std::any::TypeId;
 
-use itertools::Itertools;
-
-use crate::array::{ArrayBytes, ArrayBytesOffsets, DataType};
+use crate::array::array_bytes_internal::offsets_from_usize;
+use crate::array::{ArrayBytes, DataType};
 
 use super::{Element, ElementError, ElementOwned};
 
@@ -28,16 +27,13 @@ macro_rules! impl_element_bytes {
 
                 // Calculate offsets
                 let mut len: usize = 0;
-                let mut offsets = Vec::with_capacity(elements.len());
+                let mut offsets = Vec::with_capacity(elements.len() + 1);
                 for element in elements {
                     offsets.push(len);
                     len = len.checked_add(element.len()).unwrap();
                 }
                 offsets.push(len);
-                let offsets = unsafe {
-                    // SAFETY: The offsets are monotonically increasing.
-                    ArrayBytesOffsets::new_unchecked(offsets)
-                };
+                let offsets = offsets_from_usize(offsets).unwrap();
 
                 // Concatenate bytes
                 let bytes = elements.concat();
@@ -70,8 +66,8 @@ impl ElementOwned for Vec<u8> {
         Self::validate_data_type(data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
-        for (curr, next) in offsets.iter().tuple_windows() {
-            elements.push(bytes[*curr..*next].to_vec());
+        for range in offsets.element_ranges() {
+            elements.push(bytes[range].to_vec());
         }
         Ok(elements)
     }

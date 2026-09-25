@@ -64,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
     so nested sharding levels can be selected independently
-  - `ArrayBytesOffsets` no longer has a lifetime parameter and shares its allocation when cloned
+  - `ArrayBytesOffsets` stores shareable `u32` or `u64` offsets instead of `usize` and no longer has a lifetime parameter
+  - `vlen` decoding can reuse shared data and aligned index bytes with pass-through codec chains; encoding avoids offset-width conversion when the stored width matches `index_data_type`
 - **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
@@ -123,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Partial codecs validate indexers against their own decoded shape
+- The `vlen` codec returns an error rather than panicking if the encoded index length exceeds the chunk length
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op

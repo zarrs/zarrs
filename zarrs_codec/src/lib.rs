@@ -57,9 +57,11 @@ pub use bytes_representation::BytesRepresentation;
 mod array_bytes;
 pub use array_bytes::{
     ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
-    ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOptional, ArrayBytesVariableLength, CowBytes,
-    ExpectedFixedLengthBytesError, ExpectedOptionalBytesError, ExpectedVariableLengthBytesError,
-    copy_fill_value_into, decode_into_array_bytes_target, update_array_bytes,
+    ArrayBytesOffsetsElement, ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError,
+    ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
+    ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
+    ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
+    update_array_bytes,
 };
 
 mod byte_interval_partial_decoder;

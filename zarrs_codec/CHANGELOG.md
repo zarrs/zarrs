@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
+- Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
@@ -18,8 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
 - **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
 - **Breaking**: Rename `ArrayRawBytesOffsets{OutOfBounds,Create}Error` to `ArrayBytesOffsets{OutOfBounds,Create}Error`
-- **Breaking**: `ArrayBytesOffsets` holds an `Arc<Vec<usize>>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
+- **Breaking**: `ArrayBytesOffsets` stores native-endian `u32` or `u64` offsets in a `CowBytes<'static>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
   - Cloning shares the offset allocation rather than copying its elements
+  - Add `ArrayBytesOffsets::from_ne_bytes`, which retains shared and suitably aligned bytes without copying
+  - Add `ArrayBytesOffsets::{as_ne_bytes,into_u32_ne_bytes,into_u64_ne_bytes}`, which do not copy if the width matches
+  - `Deref<Target = [usize]>` is removed, use the new accessors instead (e.g. `element_range`, `element_ranges`, `iter`, `get`, `last`, `as_slice`, `as_u32`, `as_u64`, `into_u32_vec`, `into_u64_vec`)
+  - `ArrayBytesOffsets::new[_unchecked]` and the `TryFrom` implementations accept `u32` or `u64` offsets (via the sealed `ArrayBytesOffsetsElement` trait) rather than `usize`
+  - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
   - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
 - **Breaking**: Bump `zarrs_storage` to 0.5.0
 - **Breaking**: Bump `zarrs_data_type` to 0.10.0

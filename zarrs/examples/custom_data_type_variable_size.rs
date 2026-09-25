@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use derive_more::Deref;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, DataType, DataTypeSize, Element, ElementError,
@@ -50,10 +49,22 @@ impl Element for CustomDataTypeVariableSizeElement {
             }
         }
         offsets.push(bytes.len());
-        let offsets = unsafe {
-            // SAFETY: Constructed correctly above
-            ArrayBytesOffsets::new_unchecked(offsets)
-        };
+        let offsets = if bytes.len() <= u32::MAX as usize {
+            ArrayBytesOffsets::new(
+                offsets
+                    .into_iter()
+                    .map(|offset| u32::try_from(offset).unwrap())
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            ArrayBytesOffsets::new(
+                offsets
+                    .into_iter()
+                    .map(|offset| u64::try_from(offset).unwrap())
+                    .collect::<Vec<_>>(),
+            )
+        }
+        .unwrap();
         unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
     }
 
@@ -74,8 +85,8 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
-        for (curr, next) in offsets.iter().tuple_windows() {
-            let bytes = &bytes[*curr..*next];
+        for range in offsets.element_ranges() {
+            let bytes = &bytes[range];
             if let Ok(bytes) = <[u8; 4]>::try_from(bytes) {
                 let value = f32::from_le_bytes(bytes);
                 elements.push(CustomDataTypeVariableSizeElement(Some(value)));
