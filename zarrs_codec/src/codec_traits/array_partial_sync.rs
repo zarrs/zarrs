@@ -84,6 +84,11 @@ pub trait ArrayPartialDecoderTraits:
     ///
     /// If the inner `input_handle` is a bytes decoder and partial decoding returns [`None`], then the array subsets have the fill value.
     ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError).
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_decode(
@@ -139,6 +144,11 @@ pub trait ArrayPartialEncoderTraits:
     fn erase(&self) -> Result<(), CodecError>;
 
     /// Partially encode a chunk.
+    ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError).
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.

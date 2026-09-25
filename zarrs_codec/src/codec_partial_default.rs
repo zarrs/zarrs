@@ -297,6 +297,8 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
+            // The fill value does not touch the indexer, so validate it here.
+            indexer.validate(self.decoded_representation.shape_u64())?;
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),
@@ -652,6 +654,8 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
+            // The fill value does not touch the indexer, so validate it here.
+            indexer.validate(self.decoded_representation.shape_u64())?;
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),
