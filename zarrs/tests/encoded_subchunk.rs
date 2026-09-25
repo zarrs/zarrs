@@ -1142,7 +1142,7 @@ fn partial_encoder_store_nested_encoded_subchunk_invalidates_caches() -> TestRes
     fn check<C: ChunkCache + 'static>(cache: C) -> TestResult {
         let store = Arc::new(MemoryStore::default());
         let source = transposed_nested_sharding_builder().build(store.clone(), "/source")?;
-        source.store_chunk(&[0, 0], &(0..64u16).collect::<Vec<_>>())?;
+        source.store_chunk(&[0, 0], (0..64u16).collect::<Vec<_>>())?;
         let target = transposed_nested_sharding_builder().build_arc(store, "/target")?;
         let cached = ArrayCached::new(target.clone(), cache);
         let options = CodecOptions::default();
@@ -1198,7 +1198,7 @@ async fn async_partial_encoder_store_nested_encoded_subchunk() -> TestResult {
     let store = Arc::new(AsyncMemoryStore::default());
     let source = transposed_nested_sharding_builder().build(store.clone(), "/source")?;
     source
-        .async_store_chunk(&[0, 0], &(0..64u16).collect::<Vec<_>>())
+        .async_store_chunk(&[0, 0], (0..64u16).collect::<Vec<_>>())
         .await?;
     let target = transposed_nested_sharding_builder().build_arc(store, "/target")?;
     let cached = ArrayCached::new(target.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
@@ -1265,7 +1265,7 @@ fn encoded_writes_skip_leaf_codecs() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let source = builder.build(store.clone(), "/source")?;
     let target = builder.build(store, "/target")?;
-    source.store_chunk(&[0], &(1..=16u8).collect::<Vec<_>>())?;
+    source.store_chunk(&[0], (1..=16u8).collect::<Vec<_>>())?;
     let encoder = target.partial_encoder(&[0])?;
     let options = CodecOptions::default();
     leaf.forbid_full_codec.store(true, Ordering::Relaxed);
@@ -1338,7 +1338,7 @@ fn array_store_encoded_subchunks_through_mappings() -> TestResult {
     ] {
         let store = Arc::new(MemoryStore::default());
         let source = builder.build(store.clone(), "/source")?;
-        source.store_array_subset(&source.subset_all(), &(1..=len).collect::<Vec<u16>>())?;
+        source.store_array_subset(&source.subset_all(), (1..=len).collect::<Vec<u16>>())?;
         let target = builder.build_arc(store, "/target")?;
         let cached = ArrayCached::new(target.clone(), ChunkCacheDecodedLruChunkLimit::new(2));
         let encoded = source
@@ -1377,6 +1377,22 @@ fn array_store_encoded_subchunks_through_mappings() -> TestResult {
             cached.retrieve_array_subset::<Vec<u16>>(&cached.subset_all())?,
             before
         );
+        cached.erase_subchunk_at_level(level, &indices)?;
+        assert!(
+            target
+                .retrieve_encoded_subchunk_at_level(level, &indices)?
+                .is_none()
+        );
+        assert!(
+            cached
+                .retrieve_array_subset::<Vec<u16>>(&cached.subset_all())?
+                .iter()
+                .all(|&value| value == 0)
+        );
+        if level == 0 {
+            target.erase_subchunk(&indices)?;
+        }
+        assert!(cached.erase_subchunk_at_level(9, &indices).is_err());
     }
     Ok(())
 }
@@ -1434,6 +1450,19 @@ async fn async_array_store_encoded_subchunks() -> TestResult {
                 .async_retrieve_subchunk_at_level::<Vec<u16>>(level, &indices)
                 .await?
         );
+        cached
+            .async_erase_subchunk_at_level(level, &indices)
+            .await?;
+        assert!(cached.cache().is_empty().await);
+        assert!(
+            target
+                .async_retrieve_encoded_subchunk_at_level(level, &indices)
+                .await?
+                .is_none()
+        );
+        if level == 0 {
+            target.async_erase_subchunk(&indices).await?;
+        }
     }
     Ok(())
 }
@@ -1462,7 +1491,7 @@ fn array_store_encoded_subchunks_three_levels() -> TestResult {
         let store = Arc::new(MemoryStore::default());
         let source = builder.build(store.clone(), "/source")?;
         let target = builder.build(store, "/target")?;
-        source.store_chunk(&[0], &(1..=32u8).collect::<Vec<_>>())?;
+        source.store_chunk(&[0], (1..=32u8).collect::<Vec<_>>())?;
         for (level, indices) in [(2, [3]), (2, [6]), (1, [0]), (0, [1]), (2, [0])] {
             let encoded = source
                 .retrieve_encoded_subchunk_at_level(level, &indices)?
@@ -1654,4 +1683,195 @@ async fn async_partial_encoder_erase_nested_subchunks() -> TestResult {
     );
     assert!(cached.cache().is_empty().await);
     Ok(())
+}
+
+#[test]
+fn encoded_mutations_reject_arrays_without_subchunks() -> TestResult {
+    let array = ArrayBuilder::new(vec![4], vec![4], data_type::uint8(), 0u8)
+        .build(Arc::new(MemoryStore::default()), "/")?;
+    array.store_chunk(&[0], &[1u8, 2, 3, 4])?;
+    assert!(unsafe { array.store_encoded_subchunk(&[0], vec![7u8; 4].into()) }.is_err());
+    assert!(array.erase_subchunk(&[0]).is_err());
+    let encoder = array.partial_encoder(&[0])?;
+    let options = CodecOptions::default();
+    assert!(matches!(
+        unsafe { encoder.store_encoded_subchunk(&[0], vec![7u8; 4].into(), &options) },
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    ));
+    assert!(matches!(
+        encoder.erase_subchunk(&[0], &options),
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    ));
+    assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[0])?, vec![1, 2, 3, 4]);
+    Ok(())
+}
+
+mod failed_encoded_mutations {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use zarrs::array::chunk_cache::{ChunkCache, ChunkCacheEncodedLruChunkLimit};
+    use zarrs::storage::byte_range::ByteRangeIterator;
+    use zarrs::storage::{
+        MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StoreKey, StorePrefix,
+        WritableStorageTraits,
+    };
+
+    #[derive(Default)]
+    struct FailAfterMutation {
+        store: MemoryStore,
+        fail: AtomicBool,
+    }
+
+    impl FailAfterMutation {
+        fn result(&self) -> Result<(), StorageError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(StorageError::Other(
+                    "injected failure after mutation".into(),
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl ReadableStorageTraits for FailAfterMutation {
+        fn get_partial_many<'a>(
+            &'a self,
+            key: &StoreKey,
+            ranges: ByteRangeIterator<'a>,
+        ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+            self.store.get_partial_many(key, ranges)
+        }
+        fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+            self.store.size_key(key)
+        }
+        fn supports_get_partial(&self) -> bool {
+            true
+        }
+    }
+
+    impl WritableStorageTraits for FailAfterMutation {
+        fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
+            self.store.set(key, value)?;
+            self.result()
+        }
+        fn set_partial_many<'a>(
+            &'a self,
+            key: &StoreKey,
+            values: OffsetBytesIterator<'a>,
+        ) -> Result<(), StorageError> {
+            self.store.set_partial_many(key, values)?;
+            self.result()
+        }
+        fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
+            self.store.erase(key)?;
+            self.result()
+        }
+        fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
+            self.store.erase_prefix(prefix)?;
+            self.result()
+        }
+        fn supports_set_partial(&self) -> bool {
+            true
+        }
+    }
+
+    fn check<C: ChunkCache + 'static>(cache: C) -> TestResult {
+        let store = Arc::new(FailAfterMutation::default());
+        let data_type = data_type::uint8();
+        let mut builder = ArrayBuilder::new(vec![4], vec![4], data_type.clone(), 0u8);
+        builder
+            .array_to_bytes_codec(ShardingCodecBuilder::new(vec![nz(2)], &data_type).build_arc());
+        let target = builder.build_arc(store.clone(), "/")?;
+        target.store_chunk(&[0], &[1u8, 2, 3, 4])?;
+        let cached = ArrayCached::new(target.clone(), cache);
+        cached.retrieve_chunk::<Vec<u8>>(&[0])?;
+        store.fail.store(true, Ordering::Relaxed);
+        // SAFETY: The subchunk codec is native uint8 bytes with shape [2].
+        assert!(unsafe { cached.store_encoded_subchunk(&[0], vec![7u8; 2].into()) }.is_err());
+        assert!(cached.cache().is_empty());
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0])?, vec![7, 7, 3, 4]);
+        assert!(cached.erase_subchunk(&[0]).is_err());
+        assert!(cached.cache().is_empty());
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0])?, vec![0, 0, 3, 4]);
+        assert!(cached.erase_subchunk(&[1]).is_err());
+        assert!(cached.cache().is_empty());
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0])?, vec![0; 4]);
+        Ok(())
+    }
+
+    #[test]
+    fn invalidate_after_storage_errors() -> TestResult {
+        check(ChunkCacheDecodedLruChunkLimit::new(2))?;
+        check(ChunkCacheEncodedLruChunkLimit::new(2))?;
+        check(ChunkCachePartialDecoderLruChunkLimit::new(2))
+    }
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_invalidate_after_storage_errors() -> TestResult {
+        use zarrs::array::chunk_cache::{
+            AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit,
+            AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
+        };
+        use zarrs::storage::MaybeSend;
+        use zarrs::storage::storage_adapter::sync_to_async::{
+            SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+        };
+
+        struct Immediate;
+        impl SyncToAsyncSpawnBlocking for Immediate {
+            fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + MaybeSend
+            where
+                F: FnOnce() -> R + MaybeSend + 'static,
+                R: MaybeSend + 'static,
+            {
+                std::future::ready(f())
+            }
+        }
+
+        async fn check<C: AsyncChunkCache + 'static>(cache: C) -> TestResult {
+            let store = Arc::new(FailAfterMutation::default());
+            let adapted = Arc::new(SyncToAsyncStorageAdapter::new(store.clone(), Immediate));
+            let data_type = data_type::uint8();
+            let mut builder = ArrayBuilder::new(vec![4], vec![4], data_type.clone(), 0u8);
+            builder.array_to_bytes_codec(
+                ShardingCodecBuilder::new(vec![nz(2)], &data_type).build_arc(),
+            );
+            let target = builder.build_arc(adapted, "/")?;
+            target.async_store_chunk(&[0], &[1u8, 2, 3, 4]).await?;
+            let cached = ArrayCached::new(target, cache);
+            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await?;
+            store.fail.store(true, Ordering::Relaxed);
+            // SAFETY: The subchunk codec is native uint8 bytes with shape [2].
+            assert!(
+                unsafe {
+                    cached
+                        .async_store_encoded_subchunk(&[0], vec![7u8; 2].into())
+                        .await
+                }
+                .is_err()
+            );
+            assert!(cached.cache().is_empty().await);
+            assert_eq!(
+                cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await?,
+                vec![7, 7, 3, 4]
+            );
+            assert!(cached.async_erase_subchunk(&[0]).await.is_err());
+            assert!(cached.cache().is_empty().await);
+            assert_eq!(
+                cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await?,
+                vec![0, 0, 3, 4]
+            );
+            assert!(cached.async_erase_subchunk(&[1]).await.is_err());
+            assert!(cached.cache().is_empty().await);
+            assert_eq!(
+                cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await?,
+                vec![0; 4]
+            );
+            Ok(())
+        }
+        check(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await?;
+        check(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await?;
+        check(AsyncChunkCachePartialDecoderLruChunkLimit::new(2)).await
+    }
 }

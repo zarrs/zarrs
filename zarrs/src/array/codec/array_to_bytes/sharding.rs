@@ -69,6 +69,8 @@
 //! `_at_level` variant append supplied payloads and update shard indexes without decoding the
 //! data subchunks. Nested writes may buffer and rewrite enclosing encoded shards. The caller
 //! must ensure the bytes match the destination codec and encoded-domain shape.
+//! Use [`erase_subchunk`](crate::array::ArrayUpdateOps::erase_subchunk) or its `_at_level` variant
+//! to restore fill values without encoding a payload. Empty shards are removed.
 //!
 //! ```rust,no_run
 //! # use std::sync::Arc;

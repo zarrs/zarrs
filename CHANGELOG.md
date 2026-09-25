@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
+- Add `ArrayUpdateOps::erase_subchunk[_at_level]` and async variants, including cached arrays
 - Support subchunk erasure through sharding partial encoders, codec wrappers, and cached partial encoders
 - Add `ArrayUpdateOps::store_encoded_subchunk[_at_level]` and async variants, including cached arrays
 - Support encoded subchunk writes through sharding partial encoders, array-to-array codecs, and cached partial encoders

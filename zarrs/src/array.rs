@@ -190,6 +190,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`store_encoded_subchunk`](Array::store_encoded_subchunk)
+///    - [`erase_subchunk`](Array::erase_subchunk)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
 /// `async_` prefix variants can be used with async stores (requires `async` feature).
@@ -320,6 +321,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// It is the responsibility of `zarrs` consumers to ensure that:
 ///   - [`store_array_subset`](Array::store_array_subset) is not called concurrently on array subsets sharing chunks,
 ///   - [`store_partial_chunk`](Array::store_partial_chunk) is not called concurrently on the same chunk,
+///   - encoded subchunk writes and subchunk erasures are not called concurrently on the same chunk,
 ///   - [`partial_encoder`](Array::partial_encoder)s are not created or used concurrently for the same chunk,
 ///   - or any combination of the above are called concurrently on the same chunk.
 ///

@@ -275,6 +275,16 @@ where
         bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError>;
 
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError>;
+
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.array().async_readable()
     }

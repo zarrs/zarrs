@@ -106,6 +106,36 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         .map_err(ArrayError::CodecError)
     }
 
+    /// Erase a subchunk addressed in the array's outermost subchunk grid.
+    ///
+    /// Missing subchunks read as fill values. Erasing an absent subchunk succeeds.
+    /// Concurrent updates to the same chunk require external synchronisation.
+    ///
+    /// # Errors
+    /// Returns an error for invalid addressing, unsupported encoders, or codec and storage failures.
+    fn erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError> {
+        self.erase_subchunk_at_level(0, subchunk_indices)
+    }
+
+    /// Erase a subchunk at a selected level of the array's subchunk grid hierarchy.
+    ///
+    /// Level zero is outermost. Enclosing encoded subchunks may be buffered and rewritten;
+    /// empty shards are removed.
+    ///
+    /// # Errors
+    /// Returns an error for invalid addressing, unsupported encoders, or codec and storage failures.
+    fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError> {
+        let (encoder, indices) =
+            subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices)?;
+        encoder
+            .erase_subchunk_at_level(level, &indices, self.codec_options())
+            .map_err(ArrayError::CodecError)
+    }
+
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;
 
