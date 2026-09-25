@@ -86,6 +86,124 @@ impl ShardingPartialEncoder {
         })
     }
 
+    /// Append encoded updates and replace the shard index.
+    #[allow(clippy::too_many_lines)]
+    fn commit_subchunk_updates(
+        &self,
+        shard_index: &mut [u64],
+        updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // Get the maximum offset of existing encoded chunks
+        let max_data_offset = shard_index
+            .iter()
+            .tuples()
+            .map(|(&offset, &size)| {
+                if offset == u64::MAX && size == u64::MAX {
+                    0
+                } else {
+                    offset + size
+                }
+            })
+            .max()
+            .expect("shards cannot be empty");
+
+        // Check if the shard can be entirely rewritten instead of appended
+        //  This occurs if the shard index is empty if all of the intersected subchunks are removed
+        for (subchunk_index, _) in &updated_subchunks {
+            shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
+            shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
+        }
+        let max_data_offset = if shard_index.par_iter().all(|&x| x == u64::MAX) {
+            self.input_output_handle.erase()?;
+            0
+        } else {
+            max_data_offset
+        };
+
+        // Get the offset for new data
+        let index_encoded_size =
+            compute_index_encoded_size(self.index_codecs.as_ref(), &self.index_shape)?;
+        let offset_new_chunks = match self.index_location {
+            ShardingIndexLocation::Start => max_data_offset.max(index_encoded_size),
+            ShardingIndexLocation::End => max_data_offset,
+        };
+
+        // Update the shard index
+        {
+            let mut offset_append = offset_new_chunks;
+            for (subchunk_index, subchunk_encoded) in &updated_subchunks {
+                if let Some(subchunk_encoded) = subchunk_encoded {
+                    let len = subchunk_encoded.len() as u64;
+                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = offset_append;
+                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = len;
+                    offset_append += len;
+                } else {
+                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
+                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
+                }
+            }
+        }
+
+        if shard_index.par_iter().all(|&x| x == u64::MAX) {
+            // Erase the shard if all chunks are empty
+            self.input_output_handle.erase()?;
+        } else {
+            // Encode the updated shard index
+            let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index).into();
+            let encoded_array_index = self
+                .index_codecs
+                .encode(shard_index_bytes.into(), &self.index_shape, options)?
+                .into_static();
+
+            // Get the total size of the encoded subchunks
+            let encoded_subchunks_size = updated_subchunks
+                .iter()
+                .filter_map(|(_, subchunk_encoded)| {
+                    subchunk_encoded.as_ref().map(|bytes| bytes.len())
+                })
+                .sum::<usize>();
+
+            // Get the suffix write size
+            let suffix_write_size = match self.index_location {
+                ShardingIndexLocation::Start => encoded_subchunks_size,
+                ShardingIndexLocation::End => encoded_subchunks_size + encoded_array_index.len(),
+            };
+
+            // Concatenate the updated subchunks
+            let mut encoded_output = Vec::with_capacity(suffix_write_size);
+            for (_, subchunk_encoded) in updated_subchunks {
+                if let Some(subchunk_encoded) = subchunk_encoded {
+                    encoded_output.extend_from_slice(&subchunk_encoded);
+                }
+            }
+
+            // Write the encoded index and updated subchunks
+            match self.index_location {
+                ShardingIndexLocation::Start => {
+                    self.input_output_handle.partial_encode_many(
+                        Box::new(
+                            [
+                                (0, encoded_array_index),
+                                (offset_new_chunks, CowBytes::from(encoded_output)),
+                            ]
+                            .into_iter(),
+                        ),
+                        options,
+                    )?;
+                }
+                ShardingIndexLocation::End => {
+                    encoded_output.extend_from_slice(&encoded_array_index);
+                    self.input_output_handle.partial_encode_many(
+                        Box::new([(offset_new_chunks, CowBytes::from(encoded_output))].into_iter()),
+                        options,
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Return the byte offset and length of an encoded subchunk in the shard.
     fn subchunk_byte_offset_length(
         &self,
@@ -94,8 +212,7 @@ impl ShardingPartialEncoder {
         let shard_index = self.shard_index.lock().unwrap();
         super::subchunk_byte_offset_length(
             Some(shard_index.as_slice()),
-            &self.shard_shape,
-            &self.subchunk_shape,
+            &self.chunk_grid,
             subchunk_indices,
         )
     }
@@ -196,19 +313,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let fill_value = self.inner_codecs.fill_value();
         let mut shard_index = self.shard_index.lock().unwrap();
 
-        // Get the maximum offset of existing encoded chunks
-        let max_data_offset = shard_index
-            .iter()
-            .tuples()
-            .map(|(&offset, &size)| {
-                if offset == u64::MAX && size == u64::MAX {
-                    0
-                } else {
-                    offset + size
-                }
-            })
-            .max()
-            .expect("shards cannot be empty");
+
 
         // Validate the indexer and bytes
         chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
@@ -225,9 +330,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             chunk_subset_bytes,
             data_type,
         )?;
-        let subchunks_intersected: Vec<u64> =
-            updates.iter().map(|update| update.subchunk_index).collect();
-
         // Get the byte ranges of the subchunks that need to be retrieved
         //   This only includes chunks that are not entirely replaced by the update.
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
@@ -310,100 +412,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             })
             .collect::<Result<Vec<_>, CodecError>>()?;
 
-        // Check if the shard can be entirely rewritten instead of appended
-        //  This occurs if the shard index is empty if all of the intersected subchunks are removed
-        for subchunk_index in &subchunks_intersected {
-            shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
-            shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
-        }
-        let max_data_offset = if shard_index.par_iter().all(|&x| x == u64::MAX) {
-            self.input_output_handle.erase()?;
-            0
-        } else {
-            max_data_offset
-        };
-
-        // Get the offset for new data
-        let index_encoded_size =
-            compute_index_encoded_size(self.index_codecs.as_ref(), &self.index_shape)?;
-        let offset_new_chunks = match self.index_location {
-            ShardingIndexLocation::Start => max_data_offset.max(index_encoded_size),
-            ShardingIndexLocation::End => max_data_offset,
-        };
-
-        // Update the shard index
-        {
-            let mut offset_append = offset_new_chunks;
-            for (subchunk_index, subchunk_encoded) in &updated_subchunks {
-                if let Some(subchunk_encoded) = subchunk_encoded {
-                    let len = subchunk_encoded.len() as u64;
-                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = offset_append;
-                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = len;
-                    offset_append += len;
-                } else {
-                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
-                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
-                }
-            }
-        }
-
-        if shard_index.par_iter().all(|&x| x == u64::MAX) {
-            // Erase the shard if all chunks are empty
-            self.input_output_handle.erase()?;
-        } else {
-            // Encode the updated shard index
-            let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index.as_slice()).into();
-            let encoded_array_index = self
-                .index_codecs
-                .encode(shard_index_bytes.into(), &self.index_shape, options)?
-                .into_static();
-
-            // Get the total size of the encoded subchunks
-            let encoded_subchunks_size = updated_subchunks
-                .iter()
-                .filter_map(|(_, subchunk_encoded)| {
-                    subchunk_encoded.as_ref().map(|bytes| bytes.len())
-                })
-                .sum::<usize>();
-
-            // Get the suffix write size
-            let suffix_write_size = match self.index_location {
-                ShardingIndexLocation::Start => encoded_subchunks_size,
-                ShardingIndexLocation::End => encoded_subchunks_size + encoded_array_index.len(),
-            };
-
-            // Concatenate the updated subchunks
-            let mut encoded_output = Vec::with_capacity(suffix_write_size);
-            for (_, subchunk_encoded) in updated_subchunks {
-                if let Some(subchunk_encoded) = subchunk_encoded {
-                    encoded_output.extend_from_slice(&subchunk_encoded);
-                }
-            }
-
-            // Write the encoded index and updated subchunks
-            match self.index_location {
-                ShardingIndexLocation::Start => {
-                    self.input_output_handle.partial_encode_many(
-                        Box::new(
-                            [
-                                (0, encoded_array_index),
-                                (offset_new_chunks, CowBytes::from(encoded_output)),
-                            ]
-                            .into_iter(),
-                        ),
-                        options,
-                    )?;
-                }
-                ShardingIndexLocation::End => {
-                    encoded_output.extend_from_slice(&encoded_array_index);
-                    self.input_output_handle.partial_encode_many(
-                        Box::new([(offset_new_chunks, CowBytes::from(encoded_output))].into_iter()),
-                        options,
-                    )?;
-                }
-            }
-        }
-        Ok(())
+        self.commit_subchunk_updates(&mut shard_index, updated_subchunks, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
