@@ -14,13 +14,13 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArrayUpdateOps
     for Array<TStorage>
 {
-    pub async fn async_store_chunk_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+    pub async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_subset_with_options(
+        self.async_store_partial_chunk_with_options(
             chunk_indices,
             indexer,
             indexer_data,
@@ -57,12 +57,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             let chunk_subset = self.chunk_subset(chunk_indices)?;
             if chunk_subset == array_subset {
                 // A fast path if the array subset matches the chunk subset
-                // This skips the internal decoding occurring in store_chunk_subset
+                // This skips the internal decoding occurring in store_partial_chunk
                 self.async_store_chunk_with_options(chunk_indices, subset_data, options)
                     .await?;
             } else {
                 // Store the chunk subset
-                self.async_store_chunk_subset_with_options(
+                self.async_store_partial_chunk_with_options(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
@@ -101,7 +101,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                     )
                     .unwrap(); // FIXME: unwrap
                 async move {
-                    self.async_store_chunk_subset_with_options(
+                    self.async_store_partial_chunk_with_options(
                         &chunk_indices,
                         &array_subset_in_chunk_subset,
                         chunk_subset_bytes,
@@ -154,7 +154,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
 }
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
-    pub(in crate::array) async fn async_store_chunk_subset_with_options<
+    pub(in crate::array) async fn async_store_partial_chunk_with_options<
         'a,
         T: IntoArrayBytes<'a> + MaybeSend,
     >(

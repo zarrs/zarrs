@@ -51,22 +51,22 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
-    pub async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
+    pub async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_subset_with_options(chunk_indices, indexer, self.codec_options())
+        self.async_retrieve_partial_chunk_with_options(chunk_indices, indexer, self.codec_options())
             .await
     }
 
-    pub async fn async_retrieve_chunk_subset_into(
+    pub async fn async_retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_subset_into_with_options(
+        self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
@@ -116,7 +116,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 } else {
                     let array_subset_in_chunk_subset =
                         array_subset.relative_to(chunk_subset.start())?;
-                    self.async_retrieve_chunk_subset(chunk_indices, &array_subset_in_chunk_subset)
+                    self.async_retrieve_partial_chunk(chunk_indices, &array_subset_in_chunk_subset)
                         .await
                 }
             }
@@ -326,7 +326,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         }
     }
 
-    pub(in crate::array) async fn async_retrieve_chunk_subset_with_options<T: FromArrayBytes>(
+    pub(in crate::array) async fn async_retrieve_partial_chunk_with_options<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
@@ -365,7 +365,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
     }
 
-    pub(in crate::array) async fn async_retrieve_chunk_subset_into_with_options(
+    pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
@@ -475,7 +475,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                     Ok::<_, ArrayError>((
-                        self.async_retrieve_chunk_subset_with_options::<ArrayBytes>(
+                        self.async_retrieve_partial_chunk_with_options::<ArrayBytes>(
                             &chunk_indices,
                             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                             options,
@@ -505,7 +505,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                     Ok::<_, ArrayError>((
-                        self.async_retrieve_chunk_subset_with_options::<ArrayBytes>(
+                        self.async_retrieve_partial_chunk_with_options::<ArrayBytes>(
                             &chunk_indices,
                             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                             options,
@@ -597,7 +597,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     let target =
                         build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
 
-                    self.async_retrieve_chunk_subset_into_with_options(
+                    self.async_retrieve_partial_chunk_into_with_options(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                         target,
@@ -642,14 +642,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
             .await
     }
 
-    async fn retrieve_chunk_subset_into(
+    async fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_subset_into_with_options(
+        self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,

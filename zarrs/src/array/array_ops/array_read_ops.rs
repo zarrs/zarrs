@@ -73,7 +73,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Panics
     /// Will panic if the number of elements in `indexer` is `usize::MAX` or larger.
-    fn retrieve_chunk_subset<T: FromArrayBytes>(
+    fn retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
@@ -92,7 +92,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match `indexer`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
-    fn retrieve_chunk_subset_into(
+    fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,

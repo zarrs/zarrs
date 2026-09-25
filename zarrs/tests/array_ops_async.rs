@@ -65,7 +65,7 @@ async fn retrieve_into<A: AsyncArrayReadOps>(
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
         if let Some(chunk_indices) = chunk_indices {
             array
-                .async_retrieve_chunk_subset_into(chunk_indices, subset, target)
+                .async_retrieve_partial_chunk_into(chunk_indices, subset, target)
                 .await?;
         } else {
             array
@@ -134,13 +134,13 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
     );
     assert_eq!(
         array
-            .async_retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)
+            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
             .await?,
         [7, 8, 12, 13]
     );
     assert_eq!(
         array
-            .async_retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)
+            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
             .await?,
         [7, 8, 12, 13]
     );
@@ -287,14 +287,14 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
         .await?;
 
     array
-        .async_store_chunk_subset(
+        .async_store_partial_chunk(
             &[0, 0],
             &ArraySubset::new_with_ranges(&[1..2, 1..3]),
             &[4u8, 5],
         )
         .await?;
     array
-        .async_store_chunk_subset(
+        .async_store_partial_chunk(
             &[0, 0],
             &ArraySubset::new_with_ranges(&[2..3, 0..1]),
             &[6u8],

@@ -145,7 +145,7 @@ fn retrieve_into<A: ArrayReadOps>(
         };
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
         if let Some(chunk_indices) = chunk_indices {
-            array.retrieve_chunk_subset_into(chunk_indices, subset, target)?;
+            array.retrieve_partial_chunk_into(chunk_indices, subset, target)?;
         } else {
             array.retrieve_array_subset_into(subset, target)?;
         }
@@ -197,11 +197,11 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     array.erase_chunk(&[1, 1])?;
     assert_eq!(array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1])?, None);
     assert_eq!(
-        array.retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)?,
+        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)?,
         [7, 8, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)?,
+        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)?,
         [7, 8, 12, 13]
     );
     assert_eq!(
@@ -605,12 +605,12 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     array.store_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]), &[3u8; 18])?;
     assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[1, 1])?, [3u8; 9]);
 
-    array.store_chunk_subset(
+    array.store_partial_chunk(
         &[0, 0],
         &ArraySubset::new_with_ranges(&[1..2, 1..3]),
         &[4u8, 5],
     )?;
-    array.store_chunk_subset(
+    array.store_partial_chunk(
         &[0, 0],
         &ArraySubset::new_with_ranges(&[2..3, 0..1]),
         &[6u8],
@@ -944,7 +944,7 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
 
     // Chunk [0, 0] is absent, so the fill value is returned
     assert_eq!(
-        cached.retrieve_chunk_subset::<Vec<u8>>(
+        cached.retrieve_partial_chunk::<Vec<u8>>(
             &[0, 0],
             &ArraySubset::new_with_ranges(&[0..1, 0..2])
         )?,
@@ -958,13 +958,16 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     ] {
         assert!(
             cached
-                .retrieve_chunk_subset::<Vec<u8>>(&[0, 0], &chunk_subset)
+                .retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
                 .is_err()
         );
     }
     assert!(
         cached
-            .retrieve_chunk_subset::<Vec<u8>>(&[9, 9], &ArraySubset::new_with_ranges(&[0..1, 0..2]))
+            .retrieve_partial_chunk::<Vec<u8>>(
+                &[9, 9],
+                &ArraySubset::new_with_ranges(&[0..1, 0..2])
+            )
             .is_err()
     );
 

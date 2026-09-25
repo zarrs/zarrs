@@ -50,7 +50,7 @@ where
             if chunk_subset == array_subset {
                 async_retrieve_chunk_bytes(cache, array, chunk_indices, options).await
             } else {
-                C::Value::async_retrieve_chunk_subset_bytes(
+                C::Value::async_retrieve_partial_chunk_bytes(
                     cache,
                     array,
                     chunk_indices,
@@ -109,7 +109,7 @@ where
     let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let bytes = C::Value::async_retrieve_chunk_subset_bytes(
+        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
             cache,
             array,
             &chunk_indices,
@@ -179,7 +179,7 @@ where
                 let chunk_subset = array.chunk_subset(&chunk_indices)?;
                 let overlap = chunk_subset.overlap(array_subset)?;
                 let output_subset = overlap.relative_to(array_subset_start)?;
-                let bytes = C::Value::async_retrieve_chunk_subset_bytes(
+                let bytes = C::Value::async_retrieve_partial_chunk_bytes(
                     cache,
                     array,
                     &chunk_indices,
@@ -240,14 +240,14 @@ where
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
     }
 
-    pub(in crate::array) async fn async_retrieve_chunk_subset_into_with_options(
+    pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::async_retrieve_chunk_subset_bytes(
+        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
@@ -276,14 +276,14 @@ where
             .await
     }
 
-    async fn retrieve_chunk_subset_into(
+    async fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_subset_into_with_options(
+        self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
@@ -336,12 +336,12 @@ where
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
+    pub async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
-        let bytes = C::Value::async_retrieve_chunk_subset_bytes(
+        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
@@ -353,13 +353,13 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_subset_into(
+    pub async fn async_retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_subset_into_with_options(
+        self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
@@ -524,7 +524,7 @@ mod tests {
         );
         assert_eq!(
             cached
-                .async_retrieve_chunk_subset::<Vec<u8>>(&[0], &[1..2])
+                .async_retrieve_partial_chunk::<Vec<u8>>(&[0], &[1..2])
                 .await
                 .unwrap(),
             vec![2]

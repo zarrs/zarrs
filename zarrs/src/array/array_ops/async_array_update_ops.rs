@@ -9,9 +9,9 @@ use zarrs_codec::AsyncArrayPartialEncoderTraits;
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
-    /// Async variant of [`ArrayUpdateOps::store_chunk_subset`].
+    /// Async variant of [`ArrayUpdateOps::store_partial_chunk`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_store_chunk_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+    async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,

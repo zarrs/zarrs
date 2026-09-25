@@ -23,7 +23,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///
     /// # Panics
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
-    fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,

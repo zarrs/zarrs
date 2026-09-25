@@ -107,14 +107,14 @@ where
     C: AsyncChunkCache + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_chunk_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+    pub async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
     ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_chunk_subset(chunk_indices, indexer, indexer_data)
+            .async_store_partial_chunk(chunk_indices, indexer, indexer_data)
             .await?;
         self.cache().invalidate_chunk(chunk_indices).await;
         Ok(())

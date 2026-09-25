@@ -16,7 +16,7 @@ fn chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std::error::Err
         .build(store, "/array")?;
     array.store_chunk(&[0, 0], (0u16..16).collect::<Vec<_>>())?;
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
-    array.store_chunk_subset(&[0, 0], &scattered, &[100u16, 101, 102, 103])?;
+    array.store_partial_chunk(&[0, 0], &scattered, &[100u16, 101, 102, 103])?;
     assert_eq!(
         array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
         [0, 100, 2, 3, 102, 5, 6, 7, 8, 9, 103, 11, 12, 13, 14, 101]
@@ -70,7 +70,7 @@ fn partial_encoding_sharded_scattered_write() -> Result<(), Box<dyn std::error::
     }
     for (indices, values) in writes {
         for array in [&expected, &array] {
-            array.store_chunk_subset(&[0, 0], &indices, &values)?;
+            array.store_partial_chunk(&[0, 0], &indices, &values)?;
         }
         assert_eq!(
             array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
@@ -95,7 +95,7 @@ fn partial_encoding_sharded_scattered_write_string() -> Result<(), Box<dyn std::
     let values = ["xyz", "q", "long string", "w"];
     for array in [&expected, &array] {
         array.store_chunk(&[0, 0], &original)?;
-        array.store_chunk_subset(&[0, 0], &indices, &values)?;
+        array.store_partial_chunk(&[0, 0], &indices, &values)?;
     }
     let chunk = array.retrieve_chunk::<Vec<String>>(&[0, 0])?;
     assert_eq!(chunk, expected.retrieve_chunk::<Vec<String>>(&[0, 0])?);
@@ -114,7 +114,7 @@ fn partial_encoding_sharded_rejects_out_of_bounds_scattered_write()
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 4]];
     assert!(
         array
-            .store_chunk_subset(&[0, 0], &scattered, &[100u16, 101])
+            .store_partial_chunk(&[0, 0], &scattered, &[100u16, 101])
             .is_err()
     );
     assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, original);
@@ -133,7 +133,7 @@ fn squeeze_rejects_out_of_bounds_scattered_write() -> Result<(), Box<dyn std::er
     let oob: Vec<ArrayIndices> = vec![vec![0, 7, 2]];
     assert!(
         array
-            .store_chunk_subset(&[0, 0, 0], &oob, &[999u16])
+            .store_partial_chunk(&[0, 0, 0], &oob, &[999u16])
             .is_err()
     );
     assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0, 0])?, original);
@@ -153,7 +153,7 @@ async fn async_chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std
         .await?;
     let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1]];
     array
-        .async_store_chunk_subset(&[0, 0], &scattered, &[99u16, 88])
+        .async_store_partial_chunk(&[0, 0], &scattered, &[99u16, 88])
         .await?;
     let chunk = array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?;
     assert_eq!(chunk[15], 99);
@@ -180,7 +180,7 @@ async fn async_partial_encoding_sharded_scattered_write() -> Result<(), Box<dyn 
         .await?;
     let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1], vec![2, 0], vec![0, 1]];
     array
-        .async_store_chunk_subset(&[0, 0], &scattered, &[99u16, 88, 77, 66])
+        .async_store_partial_chunk(&[0, 0], &scattered, &[99u16, 88, 77, 66])
         .await?;
     assert_eq!(
         array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?,

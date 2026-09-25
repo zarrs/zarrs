@@ -34,17 +34,17 @@ pub trait AsyncArrayReadOps: ArrayOps {
         self.async_retrieve_array_subset(&array_subset).await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_subset`].
+    /// Async variant of [`ArrayReadOps::retrieve_partial_chunk`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
+    async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_subset_into`].
+    /// Async variant of [`ArrayReadOps::retrieve_partial_chunk_into`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunk_subset_into(
+    async fn async_retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,

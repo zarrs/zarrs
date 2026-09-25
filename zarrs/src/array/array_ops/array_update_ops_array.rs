@@ -16,13 +16,13 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     for Array<TStorage>
 {
     #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    pub fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_subset_with_options(
+        self.store_partial_chunk_with_options(
             chunk_indices,
             indexer,
             indexer_data,
@@ -60,11 +60,11 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             let chunk_subset = self.chunk_subset(chunk_indices)?;
             if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
-                // This skips the internal decoding occurring in store_chunk_subset
+                // This skips the internal decoding occurring in store_partial_chunk
                 self.store_chunk_with_options(chunk_indices, subset_data, options)?;
             } else {
                 // Store the chunk subset
-                self.store_chunk_subset_with_options(
+                self.store_partial_chunk_with_options(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
@@ -94,7 +94,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                     self.data_type(),
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
-                self.store_chunk_subset_with_options(
+                self.store_partial_chunk_with_options(
                     &chunk_indices,
                     &chunk_subset_in_chunk,
                     chunk_subset_bytes,
@@ -146,7 +146,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
 }
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
-    pub(in crate::array) fn store_chunk_subset_with_options<'a, T: IntoArrayBytes<'a>>(
+    pub(in crate::array) fn store_partial_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,

@@ -14,11 +14,11 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
 
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
     assert_eq!(
-        array.retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &scattered)?,
+        array.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
         [1, 15, 4, 10]
     );
     assert_eq!(
-        array.retrieve_chunk_subset::<Vec<u16>>(
+        array.retrieve_partial_chunk::<Vec<u16>>(
             &[0, 0],
             &ArraySubset::new_with_ranges(&[0..2, 0..2])
         )?,
@@ -28,7 +28,7 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
     let oob: Vec<ArrayIndices> = vec![vec![0, 4]];
     assert!(
         array
-            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
             .is_err()
     );
     Ok(())
@@ -45,13 +45,13 @@ fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::err
     let cached = ArrayCached::new(Arc::new(array), ChunkCacheDecodedLruChunkLimit::new(4));
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![1, 1]];
     assert_eq!(
-        cached.retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &scattered)?,
+        cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
         [0, 0]
     );
     let oob: Vec<ArrayIndices> = vec![vec![0, 2]];
     assert!(
         cached
-            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &oob)
+            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
             .is_err()
     );
     Ok(())
@@ -71,7 +71,7 @@ async fn async_chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std:
     let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1]];
     assert_eq!(
         array
-            .async_retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &scattered)
+            .async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)
             .await?,
         [15, 1]
     );

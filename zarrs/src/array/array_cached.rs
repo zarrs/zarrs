@@ -36,7 +36,7 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 ///
 /// Update operations (partial writes) also delegate to the inner [`Array`]:
 ///
-/// - `store_chunk_subset` — invalidates the affected chunk.
+/// - `store_partial_chunk` — invalidates the affected chunk.
 /// - `store_array_subset` — invalidates all intersecting chunks, or the entire
 ///   cache if the affected chunks cannot be determined.
 /// - `compact_chunk` — invalidates the chunk only if compaction occurred.

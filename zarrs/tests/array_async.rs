@@ -75,17 +75,17 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.async_retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0]).await?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
     assert_eq!(array.async_retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1]).await?, None);
 
-    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2]).await.is_err());
-    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).await.is_err());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 0..2]).await?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..1, 0..2]).await?, vec![1, 2].into());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 1..2]).await?, vec![2, 6].into());
+    assert!(array.async_retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2]).await.is_err());
+    assert!(array.async_retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).await.is_err());
+    assert_eq!(array.async_retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 0..2]).await?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.async_retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..1, 0..2]).await?, vec![1, 2].into());
+    assert_eq!(array.async_retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 1..2]).await?, vec![2, 6].into());
 
-    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).await.is_err());
-    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).await.is_err());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2]).await?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2]).await?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2]).await?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.async_retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).await.is_err());
+    assert!(array.async_retrieve_partial_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).await.is_err());
+    assert_eq!(array.async_retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2]).await?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.async_retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2]).await?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.async_retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2]).await?, ndarray::array![[2], [6]].into_dyn());
 
     assert!(array.async_retrieve_chunks::<ArrayBytes>(&[0..2]).await.is_err());
     assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..0, 0..0]).await?, vec![].into());

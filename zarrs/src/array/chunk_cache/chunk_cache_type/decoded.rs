@@ -158,7 +158,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
             .map_err(cache_error)
     }
 
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
+    fn retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
@@ -224,7 +224,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
             .map_err(cache_error)
     }
 
-    async fn async_retrieve_chunk_subset_bytes<TStorage, C>(
+    async fn async_retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],

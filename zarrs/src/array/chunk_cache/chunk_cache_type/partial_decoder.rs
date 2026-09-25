@@ -59,7 +59,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         }
     }
 
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
+    fn retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
