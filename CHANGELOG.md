@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove warnings from now-stable `reshape` codec
 - **Breaking**: Bump `float8` to 0.7.0
 - **Breaking**: Bump `dlpark` to 0.8.0 and replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`
+- **Breaking**: `erase_chunks` and `retrieve_encoded_chunks`, including their async variants, now accept `&dyn Indexer`
 - Internal dependency bumps:
   - Bump `base64` to 0.23.1
   - Bump `getrandom` to 0.4.3
