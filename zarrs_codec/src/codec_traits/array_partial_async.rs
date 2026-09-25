@@ -88,6 +88,11 @@ pub trait AsyncArrayPartialDecoderTraits:
 
     /// Partially decode a chunk.
     ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError).
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode<'a>(
@@ -146,6 +151,11 @@ pub trait AsyncArrayPartialEncoderTraits:
     async fn erase(&self) -> Result<(), CodecError>;
 
     /// Partially encode a chunk.
+    ///
+    /// # Implementation Requirements
+    /// Implementations **must** reject an `indexer` that is out-of-bounds of the shape the partial
+    /// codec was created with, or that has an incompatible dimensionality, by returning
+    /// [`IndexerError`](zarrs_chunk_grid::IndexerError).
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
