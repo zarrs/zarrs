@@ -236,6 +236,21 @@ where
         Ok(compacted)
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.array().async_readable()
     }

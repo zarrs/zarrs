@@ -64,6 +64,25 @@
 //!
 //! ### Advanced Usage
 //!
+//! #### Storing Encoded Subchunks
+//! [`store_encoded_subchunk`](crate::array::ArrayUpdateOps::store_encoded_subchunk) and its
+//! `_at_level` variant append supplied payloads and update shard indexes without decoding the
+//! data subchunks. Nested writes may buffer and rewrite enclosing encoded shards. The caller
+//! must ensure the bytes match the destination codec and encoded-domain shape.
+//!
+//! ```rust,no_run
+//! # use std::sync::Arc;
+//! # use zarrs::array::Array;
+//! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
+//! # let source = Array::open(store.clone(), "/source")?;
+//! # let destination = Array::open(store, "/destination")?;
+//! if let Some(encoded) = source.retrieve_encoded_subchunk(&[0, 0])? {
+//!     // SAFETY: These arrays have matching subchunk codecs, shapes, data types, and fill values.
+//!     unsafe { destination.store_encoded_subchunk(&[0, 0], encoded.into_bytes())?; }
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
 //! #### Retrieving Encoded Subchunks
 //! Encoded subchunk bytes can be retrieved without decoding them.
 //! This is a codec generic operation, so it is usually most convenient to go through the array API:

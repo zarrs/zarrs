@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -132,6 +133,21 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             Ok(false)
         }
     }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
 
     pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())

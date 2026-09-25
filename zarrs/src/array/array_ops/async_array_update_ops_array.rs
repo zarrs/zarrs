@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::CowBytes;
 
 use futures::{StreamExt, TryStreamExt};
 
@@ -140,6 +141,21 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             Ok(false)
         }
     }
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }

@@ -189,6 +189,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`[Async]ReadableWritableStorageTraits`](crate::storage::ReadableWritableStorageTraits): store operations requiring reading *and* writing
 ///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
+///    - [`store_encoded_subchunk`](Array::store_encoded_subchunk)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
 /// `async_` prefix variants can be used with async stores (requires `async` feature).

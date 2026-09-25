@@ -1303,3 +1303,183 @@ fn encoded_writes_skip_leaf_codecs() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn array_store_encoded_subchunks_through_mappings() -> TestResult {
+    let data_type = data_type::uint16();
+    let mut reshape = ArrayBuilder::new(vec![4, 6], vec![2, 6], data_type.clone(), 0u16);
+    reshape.array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(ReshapeShape::new([nz(
+        12,
+    )
+    .into()])?))]);
+    reshape.array_to_bytes_codec(ShardingCodecBuilder::new(vec![nz(3)], &data_type).build_arc());
+    let mut squeeze = ArrayBuilder::new(vec![2, 4], vec![1, 4], data_type.clone(), 0u16);
+    squeeze.array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())]);
+    squeeze.array_to_bytes_codec(ShardingCodecBuilder::new(vec![nz(2)], &data_type).build_arc());
+    let mut cast = ArrayBuilder::new(vec![4], vec![4], data_type.clone(), 0u16);
+    let config = serde_json::from_str(r#"{"data_type":"uint8"}"#)?;
+    cast.array_to_array_codecs(vec![Arc::new(
+        zarrs::array::codec::CastValueCodec::new_with_configuration(&config)?,
+    )]);
+    cast.array_to_bytes_codec(
+        ShardingCodecBuilder::new(vec![nz(2)], &data_type::uint8()).build_arc(),
+    );
+    for (builder, level, indices, len) in [
+        (reshape, 0, vec![3, 1], 24),
+        (squeeze, 0, vec![1, 1], 8),
+        (cast, 0, vec![1], 4),
+        (transposed_nested_sharding_builder(), 1, vec![1, 3], 64),
+    ] {
+        let store = Arc::new(MemoryStore::default());
+        let source = builder.build(store.clone(), "/source")?;
+        source.store_array_subset(&source.subset_all(), &(1..=len).collect::<Vec<u16>>())?;
+        let target = builder.build_arc(store, "/target")?;
+        let cached = ArrayCached::new(target.clone(), ChunkCacheDecodedLruChunkLimit::new(2));
+        let encoded = source
+            .retrieve_encoded_subchunk_at_level(level, &indices)?
+            .unwrap();
+        cached.retrieve_array_subset::<Vec<u16>>(&cached.subset_all())?;
+        // SAFETY: Both arrays have identical codec chains and shapes.
+        unsafe {
+            cached.store_encoded_subchunk_at_level(
+                level,
+                &indices,
+                encoded.clone().into_bytes(),
+            )?;
+        }
+        assert_eq!(
+            target
+                .retrieve_encoded_subchunk_at_level(level, &indices)?
+                .unwrap(),
+            encoded
+        );
+        assert_eq!(
+            cached.retrieve_subchunk_at_level::<Vec<u16>>(level, &indices)?,
+            source.retrieve_subchunk_at_level::<Vec<u16>>(level, &indices)?
+        );
+        if level == 0 {
+            unsafe {
+                target.store_encoded_subchunk(&indices, encoded.into_bytes())?;
+            }
+        }
+        let before = target.retrieve_array_subset::<Vec<u16>>(&target.subset_all())?;
+        assert!(
+            unsafe { cached.store_encoded_subchunk_at_level(9, &indices, vec![0; 4].into()) }
+                .is_err()
+        );
+        assert_eq!(
+            cached.retrieve_array_subset::<Vec<u16>>(&cached.subset_all())?,
+            before
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_array_store_encoded_subchunks() -> TestResult {
+    use zarrs::array::chunk_cache::{AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit};
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let store = Arc::new(AsyncMemoryStore::default());
+    let builder = transposed_nested_sharding_builder();
+    let source = builder.build(store.clone(), "/source")?;
+    source
+        .async_store_chunk(&[0, 0], &(1..=64u16).collect::<Vec<_>>())
+        .await?;
+    let target = builder.build_arc(store, "/target")?;
+    let cached = ArrayCached::new(target.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    for (level, indices) in [(1, [1, 3]), (0, [0, 0])] {
+        cached.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?;
+        let payload = source
+            .async_retrieve_encoded_subchunk_at_level(level, &indices)
+            .await?
+            .unwrap();
+        // SAFETY: Both arrays have identical codec chains and shapes.
+        unsafe {
+            cached
+                .async_store_encoded_subchunk_at_level(
+                    level,
+                    &indices,
+                    payload.clone().into_bytes(),
+                )
+                .await?;
+        }
+        assert!(cached.cache().is_empty().await);
+        assert_eq!(
+            target
+                .async_retrieve_encoded_subchunk_at_level(level, &indices)
+                .await?
+                .unwrap(),
+            payload
+        );
+        if level == 0 {
+            unsafe {
+                target
+                    .async_store_encoded_subchunk(&indices, payload.into_bytes())
+                    .await?;
+            }
+        }
+        assert_eq!(
+            cached
+                .async_retrieve_subchunk_at_level::<Vec<u16>>(level, &indices)
+                .await?,
+            source
+                .async_retrieve_subchunk_at_level::<Vec<u16>>(level, &indices)
+                .await?
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn array_store_encoded_subchunks_three_levels() -> TestResult {
+    use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+    for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        let data_type = data_type::uint8();
+        let mut inner = ShardingCodecBuilder::new(vec![nz(4)], &data_type);
+        inner.index_location(location);
+        let mut middle = ShardingCodecBuilder::new(vec![nz(8)], &data_type);
+        middle
+            .index_location(location)
+            .array_to_bytes_codec(inner.build_arc());
+        #[cfg(feature = "gzip")]
+        middle.bytes_to_bytes_codecs(vec![Arc::new(zarrs::array::codec::GzipCodec::new(5)?)]);
+        let mut outer = ShardingCodecBuilder::new(vec![nz(16)], &data_type);
+        outer
+            .index_location(location)
+            .array_to_bytes_codec(middle.build_arc());
+        let mut builder = ArrayBuilder::new(vec![32], vec![32], data_type, 0u8);
+        builder.array_to_bytes_codec(outer.build_arc());
+        #[cfg(feature = "crc32c")]
+        builder.bytes_to_bytes_codecs(vec![Arc::new(zarrs::array::codec::Crc32cCodec::new())]);
+        let store = Arc::new(MemoryStore::default());
+        let source = builder.build(store.clone(), "/source")?;
+        let target = builder.build(store, "/target")?;
+        source.store_chunk(&[0], &(1..=32u8).collect::<Vec<_>>())?;
+        for (level, indices) in [(2, [3]), (2, [6]), (1, [0]), (0, [1]), (2, [0])] {
+            let encoded = source
+                .retrieve_encoded_subchunk_at_level(level, &indices)?
+                .unwrap();
+            // SAFETY: Both arrays use identical codecs and shapes.
+            unsafe {
+                target.store_encoded_subchunk_at_level(
+                    level,
+                    &indices,
+                    encoded.clone().into_bytes(),
+                )?;
+            }
+            assert_eq!(
+                target
+                    .retrieve_encoded_subchunk_at_level(level, &indices)?
+                    .unwrap(),
+                encoded
+            );
+            assert_eq!(
+                target.retrieve_subchunk_at_level::<Vec<u8>>(level, &indices)?,
+                source.retrieve_subchunk_at_level::<Vec<u8>>(level, &indices)?
+            );
+        }
+    }
+    Ok(())
+}

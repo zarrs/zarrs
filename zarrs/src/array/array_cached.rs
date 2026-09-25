@@ -31,6 +31,7 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// - `store_chunk` / `erase_chunk` — invalidates the affected chunk.
 /// - `store_chunks` / `erase_chunks` — invalidates the affected chunks.
 /// - `store_encoded_chunk` — invalidates the affected chunk.
+/// - `store_encoded_subchunk[_at_level]` — invalidates the enclosing chunk through its partial encoder.
 ///
 /// ### Update Operations
 ///

@@ -1,5 +1,5 @@
 use super::*;
-use zarrs_codec::ArrayPartialEncoderTraits;
+use zarrs_codec::{ArrayPartialEncoderTraits, CowBytes};
 
 /// Synchronous array read/write update operations.
 ///
@@ -60,6 +60,52 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///  - an underlying store error.
     fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
 
+    /// Store encoded bytes at indices of the array's outermost subchunk grid.
+    ///
+    /// Bytes are stored verbatim, including encoded fill values. Nested writes may read and
+    /// rewrite enclosing encoded subchunks. Concurrent updates to the same chunk require
+    /// external synchronisation.
+    ///
+    /// # Safety
+    /// The bytes must match the destination subchunk codec, encoded-domain shape, data type,
+    /// and fill value. See [`EncodedSubchunk`](zarrs_codec::EncodedSubchunk).
+    ///
+    /// # Errors
+    /// Returns an error for invalid indices, unavailable grids, unsupported encoders, or codec
+    /// and storage failures.
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        // SAFETY: The caller guarantees the payload matches the destination subchunk.
+        unsafe { self.store_encoded_subchunk_at_level(0, subchunk_indices, bytes) }
+    }
+
+    /// Store encoded bytes at a selected level of the array's subchunk grid hierarchy.
+    ///
+    /// Level zero is outermost. Enclosing encoded subchunks may be buffered and rewritten.
+    ///
+    /// # Safety
+    /// The bytes must match the selected subchunk codec, encoded-domain shape, data type, and fill value.
+    ///
+    /// # Errors
+    /// Returns an error for invalid addressing, unsupported encoders, or codec and storage failures.
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        let (encoder, indices) =
+            subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices)?;
+        // SAFETY: Address translation preserves the target codec and encoded domain.
+        unsafe {
+            encoder.store_encoded_subchunk_at_level(level, &indices, bytes, self.codec_options())
+        }
+        .map_err(ArrayError::CodecError)
+    }
+
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;
 
@@ -77,4 +123,19 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
+}
+
+fn subchunk_partial_encoder_and_local_indices<A: ArrayUpdateOps + ?Sized>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<(Arc<dyn ArrayPartialEncoderTraits>, ArrayIndices), ArrayError> {
+    let (chunk_indices, subset) =
+        super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
+    let encoder = array.partial_encoder(&chunk_indices)?;
+    let grid = encoder
+        .local_subchunk_grid_at_level(level, array.codec_options())?
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    let indices = zarrs_codec::enclosing_chunk_indices(&grid, &subset)?;
+    Ok((encoder, indices))
 }
