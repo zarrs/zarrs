@@ -388,6 +388,73 @@ pub trait ArrayPartialEncoderTraits:
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 
+    /// Store an encoded subchunk addressed in the level zero local grid.
+    ///
+    /// # Safety
+    /// The bytes must match the subchunk codec, encoded-domain shape, data type, and fill value.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if unsupported, or an error for invalid
+    /// indices, codec failures, or storage failures.
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        _ = (subchunk_indices, bytes, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Store an encoded subchunk at a nested level of the local grid hierarchy.
+    ///
+    /// Enclosing encoded subchunks are buffered and rewritten through their partial encoders.
+    ///
+    /// # Safety
+    /// The bytes must match the selected subchunk codec, encoded-domain shape, data type, and fill value.
+    ///
+    /// # Errors
+    /// Returns an error for unavailable levels, invalid indices, unsupported encoders, or codec
+    /// and storage failures.
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if level == 0 {
+            // SAFETY: The caller guarantees the payload matches this subchunk.
+            return unsafe { self.store_encoded_subchunk(subchunk_indices, bytes, options) };
+        }
+        let descent = plan_subchunk_descent(
+            &self.local_subchunk_grids(options)?,
+            level,
+            subchunk_indices,
+        )?;
+        let codecs = self
+            .subchunk_codecs_at_level(0)
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        let shape = self.encoded_subchunk_shape(&descent.subchunk_indices, options)?;
+        let existing = self.retrieve_encoded_subchunk_bytes(&descent.subchunk_indices, options)?;
+        let buffer = Arc::new(std::sync::Mutex::new(existing.map(CowBytes::into_vec)));
+        let encoder = codecs.partial_encoder(buffer.clone(), &shape, options)?;
+        let grid = encoder
+            .local_subchunk_grid_at_level(level - 1, options)?
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        let indices = enclosing_chunk_indices(&grid, &descent.subset)?;
+        // SAFETY: Descent preserves the target codec and encoded domain.
+        unsafe {
+            encoder.store_encoded_subchunk_at_level(level - 1, &indices, bytes, options)?;
+        }
+        let updated =
+            buffer.lock().unwrap().take().ok_or_else(|| {
+                CodecError::Other("encoded subchunk write produced no bytes".into())
+            })?;
+        // SAFETY: The enclosing bytes were produced by their partial encoder.
+        unsafe { self.store_encoded_subchunk(&descent.subchunk_indices, updated.into(), options) }
+    }
+
     /// Returns whether this encoder supports partial encoding.
     ///
     /// If this returns `true`, the encoder can efficiently handle partial encoding operations.

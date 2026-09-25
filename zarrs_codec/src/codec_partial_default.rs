@@ -316,6 +316,39 @@ where
         }
     }
 
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: crate::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.input_output_handle
+                .store_encoded_subchunk(subchunk_indices, bytes, options)
+        }
+    }
+
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: crate::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.input_output_handle.store_encoded_subchunk_at_level(
+                level,
+                subchunk_indices,
+                bytes,
+                options,
+            )
+        }
+    }
+
     fn supports_partial_encode(&self) -> bool {
         false
     }
@@ -725,6 +758,37 @@ where
                     .encode(decoded_value, self.decoded_representation.shape(), options)?;
             self.input_output_handle
                 .partial_encode(&array_subset_all, &encoded_value, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: crate::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.input_output_handle
+                .store_encoded_subchunk(subchunk_indices, bytes, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: crate::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.assert_identity_coordinates()?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.input_output_handle
+                .store_encoded_subchunk_at_level(level, subchunk_indices, bytes, options)
                 .await
         }
     }

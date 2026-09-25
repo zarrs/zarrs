@@ -239,3 +239,47 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
         self.0.supports_set_partial()
     }
 }
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncBytesPartialDecoderTraits for std::sync::Mutex<Option<Vec<u8>>> {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        crate::BytesPartialDecoderTraits::exists(self)
+    }
+
+    fn size_held(&self) -> usize {
+        crate::BytesPartialDecoderTraits::size_held(self)
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
+        crate::BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncBytesPartialEncoderTraits for std::sync::Mutex<Option<Vec<u8>>> {
+    async fn erase(&self) -> Result<(), CodecError> {
+        crate::BytesPartialEncoderTraits::erase(self)
+    }
+
+    async fn partial_encode_many<'a>(
+        &'a self,
+        offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        crate::BytesPartialEncoderTraits::partial_encode_many(self, offset_values, options)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        true
+    }
+}

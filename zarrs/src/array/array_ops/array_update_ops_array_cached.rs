@@ -139,6 +139,37 @@ where
         result
     }
 
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        let result = unsafe {
+            self.encoder
+                .store_encoded_subchunk(subchunk_indices, bytes, options)
+        };
+        self.cache.invalidate_chunk(&self.chunk_indices);
+        result
+    }
+
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        let result = unsafe {
+            self.encoder
+                .store_encoded_subchunk_at_level(level, subchunk_indices, bytes, options)
+        };
+        self.cache.invalidate_chunk(&self.chunk_indices);
+        result
+    }
+
     fn supports_partial_encode(&self) -> bool {
         self.encoder.supports_partial_encode()
     }

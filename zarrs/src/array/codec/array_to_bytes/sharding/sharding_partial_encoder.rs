@@ -415,6 +415,20 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         self.commit_subchunk_updates(&mut shard_index, updated_subchunks, options)
     }
 
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let chunks_per_shard = self.chunk_grid.grid_shape();
+        let index = super::ravel_indices(subchunk_indices, &chunks_per_shard).ok_or_else(|| {
+            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
+        })?;
+        let mut shard_index = self.shard_index.lock().unwrap();
+        self.commit_subchunk_updates(&mut shard_index, vec![(index, Some(bytes))], options)
+    }
+
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
     }

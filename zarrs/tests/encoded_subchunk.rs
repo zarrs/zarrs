@@ -493,12 +493,14 @@ async fn async_sharded_array_retrieve_encoded_subchunk() -> TestResult {
 /// fixed encoded size of a block.
 #[derive(Debug)]
 struct BlockCodec {
+    forbid_full_codec: Arc<std::sync::atomic::AtomicBool>,
     block_shape: ChunkShape,
     inner_codecs: Arc<CodecChain>,
 }
 
 #[derive(Debug)]
 struct BlockCodecBound {
+    forbid_full_codec: Arc<std::sync::atomic::AtomicBool>,
     block_shape: ChunkShape,
     inner_codecs: Arc<CodecChainBound>,
     data_type: DataType,
@@ -516,6 +518,7 @@ zarrs_plugin::impl_extension_aliases!(BlockCodec, v3: "zarrs.test.block");
 impl BlockCodec {
     fn new(block_shape: ChunkShape) -> Self {
         Self {
+            forbid_full_codec: Arc::default(),
             block_shape,
             inner_codecs: Arc::new(CodecChain::new(
                 vec![],
@@ -599,6 +602,7 @@ impl UnboundArrayToBytesCodecTraits for BlockCodec {
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(BlockCodecBound {
+            forbid_full_codec: self.forbid_full_codec.clone(),
             block_shape: self.block_shape.clone(),
             inner_codecs: self
                 .inner_codecs
@@ -669,6 +673,12 @@ impl ArrayToBytesCodecTraits for BlockCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
+        assert!(
+            !self
+                .forbid_full_codec
+                .load(std::sync::atomic::Ordering::Relaxed),
+            "unexpected leaf encode"
+        );
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
         let num_blocks = self.num_blocks(shape)?;
         let bytes = bytes.into_fixed()?;
@@ -694,6 +704,12 @@ impl ArrayToBytesCodecTraits for BlockCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        assert!(
+            !self
+                .forbid_full_codec
+                .load(std::sync::atomic::Ordering::Relaxed),
+            "unexpected leaf decode"
+        );
         let num_blocks = usize::try_from(self.num_blocks(shape)?).unwrap();
         let block_size = usize::try_from(self.block_size()?).unwrap();
         if bytes.len() != num_blocks * block_size {
@@ -1064,5 +1080,226 @@ async fn async_cached_encoded_subchunk_behind_transpose_matches_uncached() -> Te
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn partial_encoder_store_encoded_subchunks() -> TestResult {
+    use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+
+    for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        let data_type = data_type::uint8();
+        let mut sharding = ShardingCodecBuilder::new(vec![nz(16)], &data_type);
+        sharding.index_location(location);
+        #[cfg(feature = "gzip")]
+        sharding.bytes_to_bytes_codecs(vec![Arc::new(zarrs::array::codec::GzipCodec::new(5)?)]);
+        let mut builder = ArrayBuilder::new(vec![64], vec![64], data_type, 0u8);
+        builder.array_to_bytes_codec(sharding.build_arc());
+        let array = builder.build(Arc::new(MemoryStore::default()), "/")?;
+        let encoder = array.partial_encoder(&[0])?;
+        let options = CodecOptions::default();
+        let codec = encoder.subchunk_codecs_at_level(0).unwrap();
+        let shape = encoder.encoded_subchunk_shape(&[1], &options)?;
+        for values in [vec![7u8; 16], (0..16).collect(), vec![0u8; 16]] {
+            let bytes = codec.encode(ArrayBytes::new_flen(values.clone()), &shape, &options)?;
+            // SAFETY: The destination codec encoded these values with its subchunk shape.
+            unsafe {
+                encoder.store_encoded_subchunk(&[1], bytes.clone(), &options)?;
+            }
+            assert_eq!(
+                array.retrieve_encoded_subchunk(&[1])?.unwrap().bytes(),
+                bytes.as_ref()
+            );
+            assert_eq!(array.retrieve_subchunk::<Vec<u8>>(&[1])?, values);
+            assert!(array.retrieve_encoded_subchunk(&[0])?.is_none());
+            // Keep a sibling present while overwriting the target.
+            unsafe {
+                encoder.store_encoded_subchunk(&[3], bytes, &options)?;
+            }
+        }
+        let before = array.retrieve_encoded_chunk(&[0])?;
+        for indices in [vec![], vec![4], vec![0, 0]] {
+            assert!(
+                unsafe { encoder.store_encoded_subchunk(&indices, vec![0; 16].into(), &options) }
+                    .is_err()
+            );
+        }
+        assert!(
+            unsafe {
+                encoder.store_encoded_subchunk_at_level(1, &[0], vec![0; 16].into(), &options)
+            }
+            .is_err()
+        );
+        assert_eq!(array.retrieve_encoded_chunk(&[0])?, before);
+    }
+    Ok(())
+}
+
+#[test]
+fn partial_encoder_store_nested_encoded_subchunk_invalidates_caches() -> TestResult {
+    use zarrs::array::chunk_cache::{ChunkCache, ChunkCacheEncodedLruChunkLimit};
+
+    fn check<C: ChunkCache + 'static>(cache: C) -> TestResult {
+        let store = Arc::new(MemoryStore::default());
+        let source = transposed_nested_sharding_builder().build(store.clone(), "/source")?;
+        source.store_chunk(&[0, 0], &(0..64u16).collect::<Vec<_>>())?;
+        let target = transposed_nested_sharding_builder().build_arc(store, "/target")?;
+        let cached = ArrayCached::new(target.clone(), cache);
+        let options = CodecOptions::default();
+        let encoder = cached.partial_encoder(&[0, 0])?;
+        for indices in [[1, 3], [0, 0], [0, 2], [1, 3]] {
+            cached.retrieve_chunk::<Vec<u16>>(&[0, 0])?;
+            assert!(!cached.cache().is_empty());
+            let encoded = source
+                .retrieve_encoded_subchunk_at_level(1, &indices)?
+                .unwrap();
+            // SAFETY: Source and destination use the same codecs and shapes.
+            unsafe {
+                encoder.store_encoded_subchunk_at_level(
+                    1,
+                    &indices,
+                    encoded.clone().into_bytes(),
+                    &options,
+                )?;
+            }
+            assert!(cached.cache().is_empty());
+            assert_eq!(
+                target
+                    .retrieve_encoded_subchunk_at_level(1, &indices)?
+                    .unwrap(),
+                encoded
+            );
+            assert_eq!(
+                cached.retrieve_subchunk_at_level::<Vec<u16>>(1, &indices)?,
+                source.retrieve_subchunk_at_level::<Vec<u16>>(1, &indices)?
+            );
+        }
+        cached.retrieve_chunk::<Vec<u16>>(&[0, 0])?;
+        assert!(
+            unsafe {
+                encoder.store_encoded_subchunk_at_level(8, &[0, 0], vec![0; 16].into(), &options)
+            }
+            .is_err()
+        );
+        assert!(cached.cache().is_empty());
+        Ok(())
+    }
+    check(ChunkCacheDecodedLruChunkLimit::new(2))?;
+    check(ChunkCacheEncodedLruChunkLimit::new(2))?;
+    check(ChunkCachePartialDecoderLruChunkLimit::new(2))
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_partial_encoder_store_nested_encoded_subchunk() -> TestResult {
+    use zarrs::array::chunk_cache::{AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit};
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let store = Arc::new(AsyncMemoryStore::default());
+    let source = transposed_nested_sharding_builder().build(store.clone(), "/source")?;
+    source
+        .async_store_chunk(&[0, 0], &(0..64u16).collect::<Vec<_>>())
+        .await?;
+    let target = transposed_nested_sharding_builder().build_arc(store, "/target")?;
+    let cached = ArrayCached::new(target.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    let encoder = cached.async_partial_encoder(&[0, 0]).await?;
+    let options = CodecOptions::default();
+    for indices in [[1, 3], [0, 0], [0, 2], [1, 3]] {
+        cached.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?;
+        assert!(!cached.cache().is_empty().await);
+        let encoded = source
+            .async_retrieve_encoded_subchunk_at_level(1, &indices)
+            .await?
+            .unwrap();
+        // SAFETY: Source and destination use the same codecs and shapes.
+        unsafe {
+            encoder
+                .store_encoded_subchunk_at_level(
+                    1,
+                    &indices,
+                    encoded.clone().into_bytes(),
+                    &options,
+                )
+                .await?;
+        }
+        assert!(cached.cache().is_empty().await);
+        assert_eq!(
+            target
+                .async_retrieve_encoded_subchunk_at_level(1, &indices)
+                .await?
+                .unwrap(),
+            encoded
+        );
+        assert_eq!(
+            cached
+                .async_retrieve_subchunk_at_level::<Vec<u16>>(1, &indices)
+                .await?,
+            source
+                .async_retrieve_subchunk_at_level::<Vec<u16>>(1, &indices)
+                .await?
+        );
+    }
+    assert!(
+        unsafe {
+            encoder
+                .store_encoded_subchunk_at_level(8, &[0, 0], vec![0; 16].into(), &options)
+                .await
+        }
+        .is_err()
+    );
+    assert!(cached.cache().is_empty().await);
+    Ok(())
+}
+
+#[test]
+fn encoded_writes_skip_leaf_codecs() -> TestResult {
+    use std::sync::atomic::Ordering;
+    let leaf = Arc::new(BlockCodec::new(vec![nz(2)]));
+    let data_type = data_type::uint8();
+    let mut inner = ShardingCodecBuilder::new(vec![nz(4)], &data_type);
+    inner.array_to_bytes_codec(leaf.clone());
+    let mut outer = ShardingCodecBuilder::new(vec![nz(8)], &data_type);
+    outer.array_to_bytes_codec(inner.build_arc());
+    let mut builder = ArrayBuilder::new(vec![16], vec![16], data_type, 0u8);
+    builder.array_to_bytes_codec(outer.build_arc());
+    let store = Arc::new(MemoryStore::default());
+    let source = builder.build(store.clone(), "/source")?;
+    let target = builder.build(store, "/target")?;
+    source.store_chunk(&[0], &(1..=16u8).collect::<Vec<_>>())?;
+    let encoder = target.partial_encoder(&[0])?;
+    let options = CodecOptions::default();
+    leaf.forbid_full_codec.store(true, Ordering::Relaxed);
+    for (level, indices) in [(1, [3]), (1, [0]), (0, [0])] {
+        let payload = source
+            .retrieve_encoded_subchunk_at_level(level, &indices)?
+            .unwrap();
+        // SAFETY: Both arrays have identical codec chains and subchunk shapes.
+        unsafe {
+            encoder.store_encoded_subchunk_at_level(
+                level,
+                &indices,
+                payload.clone().into_bytes(),
+                &options,
+            )?;
+        }
+        assert_eq!(
+            target
+                .retrieve_encoded_subchunk_at_level(level, &indices)?
+                .unwrap(),
+            payload
+        );
+    }
+    // The leaf exposes reads but uses the default encoder, which cannot write subchunks.
+    let before = target.retrieve_encoded_chunk(&[0])?;
+    assert!(
+        unsafe { encoder.store_encoded_subchunk_at_level(2, &[0], vec![1u8, 2].into(), &options) }
+            .is_err()
+    );
+    assert_eq!(target.retrieve_encoded_chunk(&[0])?, before);
+    leaf.forbid_full_codec.store(false, Ordering::Relaxed);
+    assert_eq!(
+        target.retrieve_chunk::<Vec<u8>>(&[0])?,
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 13, 14, 15, 16]
+    );
     Ok(())
 }

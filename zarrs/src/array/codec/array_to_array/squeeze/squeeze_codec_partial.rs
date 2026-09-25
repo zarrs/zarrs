@@ -168,6 +168,35 @@ where
         }
     }
 
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self.remap_subchunk_indices(0, subchunk_indices, options)?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.inner()
+                .store_encoded_subchunk(&indices, bytes, options)
+        }
+    }
+
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self.remap_subchunk_indices(level, subchunk_indices, options)?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.inner()
+                .store_encoded_subchunk_at_level(level, &indices, bytes, options)
+        }
+    }
+
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
     }
@@ -241,6 +270,41 @@ where
             let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
                 .partial_encode(&indexer_squeezed, bytes, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self
+            .async_remap_subchunk_indices(0, subchunk_indices, options)
+            .await?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.inner()
+                .store_encoded_subchunk(&indices, bytes, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let indices = self
+            .async_remap_subchunk_indices(level, subchunk_indices, options)
+            .await?;
+        // SAFETY: Forwarding preserves the target codec and encoded domain.
+        unsafe {
+            self.inner()
+                .store_encoded_subchunk_at_level(level, &indices, bytes, options)
                 .await
         }
     }
