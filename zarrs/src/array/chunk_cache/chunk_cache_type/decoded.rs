@@ -7,8 +7,7 @@ use super::{cache_error, fill_value_bytes, validate_chunk_indices};
 use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
 use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubsetTraits, ChunkShape, CodecOptions, DataType,
-    FillValue, Indexer,
+    Array, ArrayBytes, ArrayError, ChunkShape, CodecOptions, DataType, FillValue, Indexer,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -94,7 +93,7 @@ fn cached_chunk_subset_bytes<TStorage>(
     array: &Array<TStorage>,
     chunk: ChunkCacheTypeDecoded,
     chunk_indices: &[u64],
-    chunk_subset: &dyn ArraySubsetTraits,
+    indexer: &dyn Indexer,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + 'static,
@@ -103,17 +102,17 @@ where
     if let Some(chunk) = chunk {
         Ok(chunk
             .extract_array_subset(
-                chunk_subset,
+                indexer,
                 bytemuck::must_cast_slice(&chunk_shape),
                 array.data_type(),
             )?
             .into_owned()
             .into())
     } else {
-        chunk_subset
+        indexer
             .validate(bytemuck::must_cast_slice(&chunk_shape))
             .map_err(CodecError::from)?;
-        fill_value_bytes(array, chunk_subset.num_elements())
+        fill_value_bytes(array, indexer.len())
     }
 }
 
@@ -163,7 +162,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -171,7 +170,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         let chunk = Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?;
-        cached_chunk_subset_bytes(array, chunk, chunk_indices, chunk_subset)
+        cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
     }
 }
 
@@ -229,7 +228,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -239,6 +238,6 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         let chunk =
             Self::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)
                 .await?;
-        cached_chunk_subset_bytes(array, chunk, chunk_indices, chunk_subset)
+        cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
     }
 }

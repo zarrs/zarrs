@@ -243,7 +243,7 @@ where
     pub(in crate::array) async fn async_retrieve_chunk_subset_into_with_options(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -251,7 +251,7 @@ where
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             options,
         )
         .await?;
@@ -279,13 +279,13 @@ where
     async fn retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_subset_into_with_options(
             chunk_indices,
-            chunk_subset,
+            indexer,
             output_target,
             options,
         )
@@ -339,29 +339,29 @@ where
     pub async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
         let bytes = C::Value::async_retrieve_chunk_subset_bytes(
             self.cache(),
             self.array(),
             chunk_indices,
-            chunk_subset,
+            indexer,
             self.codec_options(),
         )
         .await?;
-        T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
+        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_subset_into_with_options(
             chunk_indices,
-            chunk_subset,
+            indexer,
             output_target,
             self.codec_options(),
         )

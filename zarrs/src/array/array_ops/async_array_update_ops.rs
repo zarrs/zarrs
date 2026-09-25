@@ -14,8 +14,8 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
     async fn async_store_chunk_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
+        indexer: &dyn Indexer,
+        indexer_data: T,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayUpdateOps::store_array_subset`].

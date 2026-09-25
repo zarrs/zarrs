@@ -50,21 +50,21 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_subset_with_options(chunk_indices, chunk_subset, self.codec_options())
+        self.retrieve_chunk_subset_with_options(chunk_indices, indexer, self.codec_options())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         self.retrieve_chunk_subset_into_with_options(
             chunk_indices,
-            chunk_subset,
+            indexer,
             output_target,
             self.codec_options(),
         )
@@ -310,23 +310,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub(in crate::array) fn retrieve_chunk_subset_with_options<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
-            return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.to_array_subset(),
-                chunk_shape_u64.to_vec(),
-            ));
+        if let Some(chunk_subset) = indexer.as_array_subset() {
+            if !chunk_subset.inbounds_shape(chunk_shape_u64) {
+                return Err(ArrayError::InvalidArraySubset(
+                    chunk_subset.to_array_subset(),
+                    chunk_shape_u64.to_vec(),
+                ));
+            }
+            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
+                return self.retrieve_chunk_with_options(chunk_indices, options);
+            }
         }
 
-        let bytes = if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_shape_u64
-        {
-            return self.retrieve_chunk_with_options(chunk_indices, options);
-        } else {
+        let bytes = {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
                 .storage_transformers()
@@ -334,42 +335,47 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
-                .partial_decode(chunk_subset, options)?
+                .partial_decode(indexer, options)?
                 .into_owned()
         };
-        bytes.validate(chunk_subset.num_elements(), self.data_type())?;
-        T::from_array_bytes(bytes, &chunk_subset.shape(), self.data_type())
+        bytes.validate(indexer.len(), self.data_type())?;
+        T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
     }
 
     pub(in crate::array) fn retrieve_chunk_subset_into_with_options(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
-            return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.to_array_subset(),
-                chunk_shape_u64.to_vec(),
-            ));
+        if let Some(chunk_subset) = indexer.as_array_subset() {
+            if !chunk_subset.inbounds_shape(chunk_shape_u64) {
+                return Err(ArrayError::InvalidArraySubset(
+                    chunk_subset.to_array_subset(),
+                    chunk_shape_u64.to_vec(),
+                ));
+            }
+            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
+                return self.retrieve_chunk_into_with_options(
+                    chunk_indices,
+                    output_target,
+                    options,
+                );
+            }
         }
 
-        if chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64 {
-            self.retrieve_chunk_into_with_options(chunk_indices, output_target, options)
-        } else {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            let storage_transformer = self
-                .storage_transformers()
-                .create_readable_transformer(storage_handle)?;
-            let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
-            self.codecs_bound()
-                .partial_decoder(input_handle, &chunk_shape, options)?
-                .partial_decode_into(chunk_subset, output_target, options)?;
-            Ok(())
-        }
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_readable_transformer(storage_handle)?;
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
+        self.codecs_bound()
+            .partial_decoder(input_handle, &chunk_shape, options)?
+            .partial_decode_into(indexer, output_target, options)?;
+        Ok(())
     }
 
     pub(in crate::array) fn retrieve_chunk_if_exists_with_options<T: FromArrayBytes>(

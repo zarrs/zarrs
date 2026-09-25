@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` and `Debug` for `Tensor`
 
 ### Changed
+- **Breaking**: Chunk subset operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
   - Chunk keys from a chunk key encoding are now validated rather than being trusted
 - **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`
