@@ -620,8 +620,8 @@ fn array_chunk_subset_generic_indexer() -> Result<(), Box<dyn std::error::Error>
 /// The `squeeze` codec drops the indices of size-1 dimensions without bounds checking them, so
 /// `[0, 7, 2]` on a `[4, 1, 4]` chunk would otherwise silently alias element `[0, 0, 2]`.
 #[tokio::test]
-async fn array_chunk_subset_generic_indexer_oob_squeeze()
--> Result<(), Box<dyn std::error::Error>> {
+async fn array_chunk_subset_generic_indexer_oob_squeeze() -> Result<(), Box<dyn std::error::Error>>
+{
     use unsafe_cell_slice::UnsafeCellSlice;
     use zarrs::array::chunk_cache::{
         AsyncChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
@@ -672,7 +672,11 @@ async fn array_chunk_subset_generic_indexer_oob_squeeze()
     let partial_encoding =
         array.with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
     for array in [&array, &partial_encoding] {
-        assert!(array.store_chunk_subset(&[0, 0, 0], &oob, &[999u16]).is_err());
+        assert!(
+            array
+                .store_chunk_subset(&[0, 0, 0], &oob, &[999u16])
+                .is_err()
+        );
         assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0, 0])?, chunk);
     }
 
@@ -865,7 +869,10 @@ fn array_chunk_subset_generic_indexer_oob_codecs() -> Result<(), Box<dyn std::er
     // ... and the equivalent array subset, which takes the decode-into code path
     assert!(
         array
-            .retrieve_chunk_subset::<Vec<u16>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 4..5]))
+            .retrieve_chunk_subset::<Vec<u16>>(
+                &[0, 0],
+                &ArraySubset::new_with_ranges(&[0..1, 4..5])
+            )
             .is_err()
     );
 
@@ -873,7 +880,9 @@ fn array_chunk_subset_generic_indexer_oob_codecs() -> Result<(), Box<dyn std::er
     // name the decoded shape, not the transposed one
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![2, 8], vec![2, 8], data_type::uint16(), 0u16)
-        .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0])?))])
+        .array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
+            &[1, 0],
+        )?))])
         .build(store, "/array")?;
     array.store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())?;
     let oob: Vec<ArrayIndices> = vec![vec![3, 0]];

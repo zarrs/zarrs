@@ -158,9 +158,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         if let Some(chunk_subset) = indexer.as_array_subset() {
-            if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
-                .any(|(end_exc, shape)| end_exc > *shape)
-            {
+            if !chunk_subset.inbounds_shape(&chunk_shape) {
                 return Err(ArrayError::InvalidChunkSubset(
                     chunk_subset.to_array_subset(),
                     chunk_indices.to_vec(),

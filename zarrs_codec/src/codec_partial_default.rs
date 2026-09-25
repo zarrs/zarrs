@@ -156,8 +156,6 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        indexer.validate(self.decoded_representation.shape_u64())?;
-
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
@@ -280,8 +278,6 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        indexer.validate(self.decoded_representation.shape_u64())?;
-
         // Read the entire chunk
         let bytes_enc = self.input_output_handle.decode(options)?;
 
@@ -301,6 +297,8 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
+            // The fill value does not touch the indexer, so validate it here.
+            indexer.validate(self.decoded_representation.shape_u64())?;
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),
@@ -511,8 +509,6 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
-        indexer.validate(self.decoded_representation.shape_u64())?;
-
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
@@ -639,8 +635,6 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
-        indexer.validate(self.decoded_representation.shape_u64())?;
-
         // Read the entire chunk
         let bytes_enc = self.input_output_handle.decode(options).await?;
 
@@ -660,6 +654,8 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
+            // The fill value does not touch the indexer, so validate it here.
+            indexer.validate(self.decoded_representation.shape_u64())?;
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),

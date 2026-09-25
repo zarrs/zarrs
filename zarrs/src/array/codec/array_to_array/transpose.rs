@@ -202,14 +202,10 @@ fn get_transposed_indexer(
     // shape, but it is reported in encoded coordinates. Validate here for a useful error.
     indexer.validate(bytemuck::must_cast_slice(shape))?;
 
-    indexer
+    Ok(indexer
         .iter_indices()
-        .map(|indices| permute(&indices, order))
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| {
-            IndexerError::new_incompatible_dimensionality(indexer.dimensionality(), order.len())
-                .into()
-        })
+        .map(|indices| permute(&indices, order).expect("matching dimensionality"))
+        .collect::<Vec<_>>())
 }
 
 /// Apply a transpose permutation to array bytes.

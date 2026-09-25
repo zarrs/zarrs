@@ -18,8 +18,7 @@ use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayIndices, ArrayIndicesTinyVec,
     ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound,
-    CowBytes, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError,
-    ravel_indices,
+    CowBytes, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
@@ -254,6 +253,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             && let Some(subset) = indexer.as_array_subset()
             && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
         {
+            subset.validate(bytemuck::must_cast_slice(&self.shard_shape))?;
             partial_decode_fixed_array_subset_into(
                 &self.input_handle,
                 &self.shard_shape,
@@ -319,7 +319,6 @@ async fn partial_decode_fixed_array_subset_into(
     options: &CodecOptions,
     output_view: &mut ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
-    array_subset.validate(bytemuck::must_cast_slice(shard_shape))?;
     let fill_value = inner_codecs.fill_value();
     if array_subset.len() != output_view.num_elements() {
         return Err(InvalidNumberOfElementsError::new(
@@ -728,20 +727,13 @@ async fn partial_decode_fixed_indexer(
 
     for indices in indexer.iter_indices() {
         // Get intersected index
-        if indices.len() != shard_shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indices.len(),
-                shard_shape.len(),
-            )
-            .into());
-        }
         let chunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let chunk_index_1d =
+            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
@@ -836,20 +828,13 @@ async fn partial_decode_variable_indexer(
 
     for indices in indexer.iter_indices() {
         // Get intersected index
-        if indices.len() != shard_shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indices.len(),
-                shard_shape.len(),
-            )
-            .into());
-        }
         let chunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let chunk_index_1d =
+            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
