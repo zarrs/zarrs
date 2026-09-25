@@ -176,9 +176,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     chunk_shape,
                 ));
             }
-            if chunk_subset.shape().as_ref() == chunk_shape.as_slice()
-                && chunk_subset.start().iter().all(|&x| x == 0)
-            {
+            if super::subset_is_whole_chunk(chunk_subset, &chunk_shape) {
                 return self
                     .async_store_chunk_with_options(chunk_indices, indexer_data, options)
                     .await;

@@ -322,9 +322,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_shape_u64.to_vec(),
                 ));
             }
-            if chunk_subset.start().iter().all(|&o| o == 0)
-                && chunk_subset.shape() == chunk_shape_u64
-            {
+            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
                 return self.retrieve_chunk_with_options(chunk_indices, options);
             }
         }
@@ -360,9 +358,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_shape_u64.to_vec(),
                 ));
             }
-            if chunk_subset.start().iter().all(|&o| o == 0)
-                && chunk_subset.shape() == chunk_shape_u64
-            {
+            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
                 return self.retrieve_chunk_into_with_options(
                     chunk_indices,
                     output_target,

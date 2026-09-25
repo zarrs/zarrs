@@ -165,7 +165,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                     chunk_shape,
                 ));
             }
-            if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
+            if super::subset_is_whole_chunk(chunk_subset, &chunk_shape) {
                 return self.store_chunk_with_options(chunk_indices, indexer_data, options);
             }
         }
