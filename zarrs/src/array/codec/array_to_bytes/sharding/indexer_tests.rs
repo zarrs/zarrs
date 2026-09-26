@@ -385,7 +385,7 @@ fn expected_output(expected: &ArrayBytes, strided: bool) -> Vec<u8> {
 }
 
 /// A view of `subset` of `output`, which holds 2-byte elements.
-fn fixed_view<'a>(
+pub(super) fn fixed_view<'a>(
     output: &'a mut [u8],
     output_shape: &'a [u64],
     subset: ArraySubset,

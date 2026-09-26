@@ -5,8 +5,38 @@
 //!
 //! The [`ShardingCodecBuilder`] can help with creating a [`ShardingCodec`].
 //!
+//! ### Non-Divisible Subchunk Shapes
+//! The subchunk shape need not evenly divide the shard shape.
+//! Subchunks straddling the shard boundary are clipped to the shard shape.
+//! For example, a subchunk shape of `[12]` with a shard shape of `[30]` has subchunks with shapes `[12]`, `[12]`, and `[6]`.
+//!
+//! <div class="warning">
+//! Non-divisible subchunk shapes are proposed in <a href="https://github.com/zarr-developers/zarr-specs/pull/370">zarr-specs #370</a> (sharding 1.1-draft), but are not yet part of the specification.
+//! Implementations of version 1.0 of the sharding specification must reject such arrays.
+//! </div>
+//!
+//! Such arrays can always be opened and read, but a sharding codec otherwise refuses to encode non-divisible subchunk shapes unless permitted by
+//! [`ShardingCodecOptions::with_allow_nondivisible_subchunks`].
+//! Array creation also fails early where the shard shape is known up front.
+//! For example:
+//! ```rust
+//! # use std::sync::Arc;
+//! # use zarrs::array::{ArrayBuilder, CodecSpecificOptions, data_type};
+//! # use zarrs::array::codec::ShardingCodecOptions;
+//! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
+//! let mut builder = ArrayBuilder::new(vec![60], vec![30], data_type::uint8(), 0u8);
+//! builder.subchunk_shape(vec![12]);
+//! assert!(builder.build_metadata().is_err());
+//! builder.codec_specific_options(CodecSpecificOptions::default().with_option(
+//!     ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true),
+//! ));
+//! let array = builder.build(store, "/array")?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
 //! ### Compatible Implementations
 //! This is a core codec and should be compatible with all Zarr V3 implementations that support it.
+//! Non-divisible subchunk shapes may be incompatible with other implementations.
 //!
 //! ### Specification
 //!
@@ -85,11 +115,11 @@ use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
 use zarrs_codec::CowBytes;
 
-use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayIndices, ArrayIndicesTinyVec, BytesRepresentation, ChunkGrid, ChunkShape,
-    ChunkShapeTraits, CodecChain, CodecChainBound, DataType, FillValue, Indexer, IndexerError,
+    CodecChain, CodecChainBound, DataType, FillValue, Indexer, IndexerError,
     RecommendedConcurrency, ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
@@ -145,20 +175,32 @@ fn calculate_chunks_per_shard(
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
 ) -> Result<ChunkShape, CodecError> {
-    std::iter::zip(shard_shape, subchunk_shape)
-        .map(|(s, c)| {
-            let s = s.get();
-            let c = c.get();
-            if num::Integer::is_multiple_of(&s, &c) {
-                Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
-            } else {
-                // TODO: Permit this path if/when https://github.com/zarr-developers/zarr-specs/pull/370 merges
-                Err(CodecError::Other(
-                    format!("invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {shard_shape:?}")
-                ))
-            }
-        })
-        .collect()
+    if shard_shape.len() != subchunk_shape.len() {
+        return Err(CodecError::Other(format!(
+            "subchunk shape {subchunk_shape:?} dimensionality does not match shard shape {shard_shape:?}"
+        )));
+    }
+    // Subchunks straddling the shard boundary are clipped to the shard shape
+    // See https://github.com/zarr-developers/zarr-specs/pull/370
+    Ok(std::iter::zip(shard_shape, subchunk_shape)
+        .map(|(s, c)| s.div_ceil(*c))
+        .collect())
+}
+
+/// Return the subchunk grid of a shard, with subchunks straddling the shard boundary clipped to the shard shape.
+fn subchunk_grid(
+    shard_shape: &[NonZeroU64],
+    subchunk_shape: &[NonZeroU64],
+) -> Result<RegularBoundedChunkGrid, CodecError> {
+    Ok(RegularBoundedChunkGrid::new(
+        bytemuck::must_cast_slice(shard_shape).to_vec(),
+        subchunk_shape.to_vec(),
+    )?)
+}
+
+/// Return the number of subchunks in a shard.
+fn num_subchunks(subchunk_grid: &RegularBoundedChunkGrid) -> usize {
+    usize::try_from(subchunk_grid.grid_shape().iter().product::<u64>()).unwrap()
 }
 
 fn sharding_index_shape(chunks_per_shard: &[NonZeroU64]) -> ChunkShape {
@@ -219,15 +261,12 @@ fn get_index_byte_range(
 
 fn subchunk_byte_range(
     shard_index: Option<&[u64]>,
-    shard_shape: &[NonZeroU64],
-    chunk_shape: &[NonZeroU64],
+    subchunk_grid: &RegularBoundedChunkGrid,
     chunk_indices: &[u64],
 ) -> Result<Option<ByteRange>, CodecError> {
     if let Some(shard_index) = shard_index {
-        let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
-        let chunks_per_shard = chunks_per_shard.to_array_shape();
-
-        let shard_index_idx = ravel_indices(chunk_indices, &chunks_per_shard).ok_or_else(|| {
+        let chunks_per_shard = subchunk_grid.grid_shape();
+        let shard_index_idx = ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
             CodecError::Other(format!(
                 "subchunk indices {chunk_indices:?} are out of bounds for chunks per shard {chunks_per_shard:?}"
             ))
@@ -263,30 +302,31 @@ fn partial_decode_empty_shard<'a>(
 
 /// Selected elements in one subchunk, in their original indexer order.
 struct SubchunkIndices {
+    /// The shape of the subchunk, clipped to the shard shape.
+    subchunk_shape: ChunkShape,
     /// The indices of each element within the subchunk, flattened.
     indices: Vec<u64>,
     /// The position of each element in the shard indexer.
     positions: Vec<usize>,
-    dimensionality: usize,
 }
 
 impl SubchunkIndices {
-    fn new(dimensionality: usize) -> Self {
+    fn new(subchunk_shape: ChunkShape) -> Self {
         Self {
+            subchunk_shape,
             indices: Vec::new(),
             positions: Vec::new(),
-            dimensionality,
         }
     }
 
     fn elements(&self) -> std::slice::ChunksExact<'_, u64> {
-        self.indices.chunks_exact(self.dimensionality)
+        self.indices.chunks_exact(self.dimensionality())
     }
 }
 
 impl Indexer for SubchunkIndices {
     fn dimensionality(&self) -> usize {
-        self.dimensionality
+        self.subchunk_shape.len()
     }
 
     fn len(&self) -> u64 {
@@ -298,9 +338,9 @@ impl Indexer for SubchunkIndices {
     }
 
     fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
-        if self.dimensionality != array_shape.len() {
+        if self.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
-                self.dimensionality,
+                self.dimensionality(),
                 array_shape.len(),
             ));
         }
@@ -317,7 +357,7 @@ impl Indexer for SubchunkIndices {
     }
 
     fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
-        let dimensionality = self.dimensionality;
+        let dimensionality = self.dimensionality();
         let indices = self.indices.clone();
         Box::new((0..self.positions.len()).map(move |element| {
             indices[element * dimensionality..(element + 1) * dimensionality]
@@ -331,9 +371,9 @@ impl Indexer for SubchunkIndices {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        if self.dimensionality != array_shape.len() {
+        if self.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
-                self.dimensionality,
+                self.dimensionality(),
                 array_shape.len(),
             ));
         }
@@ -362,7 +402,7 @@ impl Indexer for SubchunkIndices {
 ///
 /// Groups are ordered by raveled subchunk index.
 fn group_indices_by_subchunk(
-    chunks_per_shard: &[u64],
+    subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     indexer: &dyn Indexer,
 ) -> BTreeMap<u64, SubchunkIndices> {
@@ -371,11 +411,16 @@ fn group_indices_by_subchunk(
         let subchunk_indices: ArrayIndicesTinyVec = std::iter::zip(&indices, subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let subchunk_index =
-            ravel_indices(&subchunk_indices, chunks_per_shard).expect("validated indexer");
-        let group = groups
-            .entry(subchunk_index)
-            .or_insert_with(|| SubchunkIndices::new(subchunk_shape.len()));
+        let subchunk_index = ravel_indices(&subchunk_indices, subchunk_grid.grid_shape())
+            .expect("validated indexer");
+        let group = groups.entry(subchunk_index).or_insert_with(|| {
+            SubchunkIndices::new(
+                subchunk_grid
+                    .chunk_shape(&subchunk_indices)
+                    .expect("matching dimensionality")
+                    .expect("validated indexer"),
+            )
+        });
         group
             .indices
             .extend(std::iter::zip(&indices, subchunk_shape).map(|(&i, &cs)| i % cs));
@@ -447,6 +492,8 @@ fn merge_indexer_subchunks(
 struct SubchunkUpdate<'a> {
     /// The raveled subchunk index within the shard.
     subchunk_index: u64,
+    /// The shape of the subchunk, clipped to the shard shape.
+    subchunk_shape: ChunkShape,
     /// The updated elements, relative to the subchunk origin.
     indexer: Box<dyn Indexer>,
     /// The updated element bytes, in `indexer` order.
@@ -459,8 +506,7 @@ struct SubchunkUpdate<'a> {
 ///
 /// The `indexer` must be validated against the shard shape.
 fn subchunk_updates<'a>(
-    chunk_grid: &RegularChunkGrid,
-    chunks_per_shard: &[u64],
+    chunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     bytes: &'a ArrayBytes<'_>,
@@ -481,8 +527,8 @@ fn subchunk_updates<'a>(
 
         iterator
             .map(|subchunk_indices: ArrayIndicesTinyVec| {
-                let subchunk_index =
-                    ravel_indices(&subchunk_indices, chunks_per_shard).expect("inbounds chunk");
+                let subchunk_index = ravel_indices(&subchunk_indices, chunk_grid.grid_shape())
+                    .expect("inbounds chunk");
                 let subchunk_subset = chunk_grid
                     .subset(&subchunk_indices)
                     .expect("matching dimensionality")
@@ -505,6 +551,7 @@ fn subchunk_updates<'a>(
                 )?;
                 Ok(SubchunkUpdate {
                     subchunk_index,
+                    subchunk_shape: subchunk_subset.chunk_shape().expect("nonempty subchunk"),
                     indexer: Box::new(overlap.relative_to(subchunk_subset.start()).unwrap()),
                     bytes,
                     fully_covered,
@@ -512,7 +559,7 @@ fn subchunk_updates<'a>(
             })
             .collect()
     } else {
-        let groups = group_indices_by_subchunk(chunks_per_shard, subchunk_shape, indexer);
+        let groups = group_indices_by_subchunk(chunk_grid, subchunk_shape, indexer);
         let bytes_shape = [indexer.len()];
         groups
             .into_iter()
@@ -524,6 +571,7 @@ fn subchunk_updates<'a>(
                     .collect();
                 Ok(SubchunkUpdate {
                     subchunk_index,
+                    subchunk_shape: group.subchunk_shape.clone(),
                     indexer: Box::new(group),
                     bytes: bytes.extract_array_subset(&positions, &bytes_shape, data_type)?,
                     // Duplicate indices are permitted, so coverage is not tracked
@@ -610,7 +658,7 @@ mod tests {
 
     use super::*;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
-    use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, data_type};
     use zarrs_chunk_grid::Indexer;
     use zarrs_codec::{
         BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
@@ -683,7 +731,7 @@ mod tests {
         unbounded: bool,
         index_at_end: bool,
         fill_value_amount: &FillValueAmount,
-        mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+        bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
         subchunk_write_order: SubchunkWriteOrder,
     ) {
         const NUM_AXES: usize = 3;
@@ -725,25 +773,15 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        if unbounded {
-            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
-        }
-        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
-            .index_location(if index_at_end {
-                ShardingIndexLocation::End
-            } else {
-                ShardingIndexLocation::Start
-            })
-            .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-            .build()
-            .with_context(
-                data_type,
-                fill_value,
-                &CodecSpecificOptions::default().with_option(
-                    ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
-                ),
-            )
-            .unwrap();
+        let codec = sharding_codec(
+            subchunk_shape,
+            data_type,
+            fill_value,
+            index_at_end,
+            subchunk_write_order,
+            bytes_to_bytes_codecs,
+            unbounded,
+        );
         let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
         let decoded = codec
@@ -860,6 +898,358 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Shard and subchunk shapes where the subchunk shape does not evenly divide the shard shape.
+    fn nondivisible_shapes() -> Vec<(Vec<u64>, Vec<u64>)> {
+        vec![
+            // One axis divisible, the other not
+            (vec![16, 15], vec![4, 4]),
+            // Subchunk larger than the shard
+            (vec![5], vec![12]),
+            (vec![7, 5, 3], vec![2, 2, 2]),
+        ]
+    }
+
+    fn to_nonzero(shape: &[u64]) -> ChunkShape {
+        shape.iter().map(|&s| NonZeroU64::new(s).unwrap()).collect()
+    }
+
+    fn sharding_codec(
+        subchunk_shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
+        index_at_end: bool,
+        subchunk_write_order: SubchunkWriteOrder,
+        mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+        unbounded: bool,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        if unbounded {
+            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
+        }
+        ShardingCodecBuilder::new(subchunk_shape, &data_type)
+            .index_location(if index_at_end {
+                ShardingIndexLocation::End
+            } else {
+                ShardingIndexLocation::Start
+            })
+            .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
+            .build()
+            .with_context(
+                data_type,
+                fill_value,
+                &CodecSpecificOptions::default().with_option(
+                    ShardingCodecOptions::default()
+                        .with_subchunk_write_order(subchunk_write_order)
+                        .with_allow_nondivisible_subchunks(true),
+                ),
+            )
+            .unwrap()
+    }
+
+    fn fill_value(data_type: &DataType) -> FillValue {
+        if data_type.is_fixed() {
+            FillValue::from(0u16)
+        } else {
+            FillValue::from("")
+        }
+    }
+
+    /// Shard data that is not the fill value, except for the first subchunk.
+    fn nondivisible_data(
+        shard_shape: &[u64],
+        subchunk_shape: &[u64],
+        data_type: &DataType,
+    ) -> ArrayBytes<'static> {
+        let first_subchunk = ArraySubset::from(
+            std::iter::zip(shard_shape, subchunk_shape).map(|(&s, &c)| 0..s.min(c)),
+        );
+        let num_elements = shard_shape.iter().product::<u64>();
+        let is_fill =
+            |i: u64| first_subchunk.contains(&crate::array::unravel_index(i, shard_shape).unwrap());
+        if data_type.is_fixed() {
+            let elements: Vec<u16> = (0..num_elements)
+                .map(|i| {
+                    if is_fill(i) {
+                        0
+                    } else {
+                        u16::try_from(i).unwrap() + 1
+                    }
+                })
+                .collect();
+            crate::array::transmute_to_bytes_vec(elements).into()
+        } else {
+            let elements: Vec<String> = (0..num_elements)
+                .map(|i| {
+                    if is_fill(i) {
+                        String::new()
+                    } else {
+                        i.to_string()
+                    }
+                })
+                .collect();
+            crate::array::Element::into_array_bytes(data_type, elements).unwrap()
+        }
+    }
+
+    #[test]
+    fn codec_sharding_round_trip_nondivisible() {
+        let data_type = data_type::uint16();
+        for (shard_shape, subchunk_shape) in nondivisible_shapes() {
+            let shard_shape_nz = to_nonzero(&shard_shape);
+            let chunks_per_shard =
+                calculate_chunks_per_shard(&shard_shape_nz, &to_nonzero(&subchunk_shape)).unwrap();
+            let bytes = nondivisible_data(&shard_shape, &subchunk_shape, &data_type);
+            for (subchunk_write_order, index_at_end, unbounded, parallel) in itertools::iproduct!(
+                [SubchunkWriteOrder::C, SubchunkWriteOrder::Unordered],
+                [true, false],
+                [true, false],
+                [true, false]
+            ) {
+                let codec = sharding_codec(
+                    to_nonzero(&subchunk_shape),
+                    data_type.clone(),
+                    fill_value(&data_type),
+                    index_at_end,
+                    subchunk_write_order,
+                    vec![],
+                    unbounded,
+                );
+                let options =
+                    CodecOptions::default().with_concurrent_target(get_concurrent_target(parallel));
+                let encoded = codec
+                    .encode(bytes.clone(), &shard_shape_nz, &options)
+                    .unwrap();
+                let decoded = codec
+                    .decode(encoded.clone(), &shard_shape_nz, &options)
+                    .unwrap();
+                assert_eq!(bytes, decoded);
+
+                // The index has one entry per (clipped) subchunk, and the fill value subchunk is empty
+                let index = codec
+                    .as_any()
+                    .downcast_ref::<ShardingCodecBound>()
+                    .unwrap()
+                    .decode_index(&encoded, chunks_per_shard.as_slice(), &options)
+                    .unwrap();
+                assert_eq!(index.len() as u64, chunks_per_shard.num_elements_u64() * 2);
+                assert_eq!(&index[..2], &[u64::MAX, u64::MAX]);
+                assert_eq!(index.iter().filter(|&&v| v == u64::MAX).count(), 2);
+
+                // Decode into a larger output
+                let output_shape: Vec<u64> = shard_shape.iter().map(|s| s + 2).collect();
+                let output_subset = ArraySubset::new_with_start_shape(
+                    vec![1; shard_shape.len()],
+                    shard_shape.clone(),
+                )
+                .unwrap();
+                let mut output =
+                    vec![0u8; usize::try_from(output_shape.iter().product::<u64>()).unwrap() * 2];
+                codec
+                    .decode_into(
+                        encoded,
+                        &shard_shape_nz,
+                        zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
+                            &mut super::indexer_tests::fixed_view(
+                                &mut output,
+                                &output_shape,
+                                output_subset.clone(),
+                            ),
+                        ),
+                        &options,
+                    )
+                    .unwrap();
+                let output: ArrayBytes = output.into();
+                assert_eq!(
+                    output
+                        .extract_array_subset(&output_subset, &output_shape, &data_type)
+                        .unwrap(),
+                    bytes
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn codec_sharding_nondivisible_encode_requires_opt_in() {
+        let data_type = data_type::uint16();
+        let shard_shape = to_nonzero(&[5]);
+        let bytes = nondivisible_data(&[5], &[2], &data_type);
+        let options = CodecOptions::default();
+        let codec = ShardingCodecBuilder::new(to_nonzero(&[2]), &data_type).build();
+        let strict = codec
+            .with_context(
+                data_type.clone(),
+                fill_value(&data_type),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        assert!(
+            strict
+                .encode(bytes.clone(), &shard_shape, &options)
+                .is_err()
+        );
+
+        let permissive = codec
+            .with_options(ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true))
+            .with_context(
+                data_type.clone(),
+                fill_value(&data_type),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let encoded = permissive
+            .encode(bytes.clone(), &shard_shape, &options)
+            .unwrap();
+        // Decoding does not require opting in, so existing data can always be read
+        assert_eq!(
+            strict.decode(encoded, &shard_shape, &options).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn codec_sharding_round_trip_nondivisible_vlen() {
+        for (shard_shape, subchunk_shape) in nondivisible_shapes() {
+            let shard_shape_nz = to_nonzero(&shard_shape);
+            let num_elements = shard_shape.iter().product::<u64>();
+            // The final element is the fill value, so the final subchunk may be empty
+            let elements: Vec<String> = (0..num_elements)
+                .map(|i| {
+                    if i + 1 == num_elements {
+                        String::new()
+                    } else {
+                        "a".repeat(usize::try_from(i % 5).unwrap() + 1)
+                    }
+                })
+                .collect();
+            let bytes =
+                crate::array::Element::into_array_bytes(&data_type::string(), elements).unwrap();
+            for index_at_end in [true, false] {
+                for unbounded in [true, false] {
+                    let options = CodecOptions::default();
+                    let codec = sharding_codec(
+                        to_nonzero(&subchunk_shape),
+                        data_type::string(),
+                        FillValue::from(""),
+                        index_at_end,
+                        SubchunkWriteOrder::C,
+                        vec![],
+                        unbounded,
+                    );
+                    let encoded = codec
+                        .encode(bytes.clone(), &shard_shape_nz, &options)
+                        .unwrap();
+                    let decoded = codec.decode(encoded, &shard_shape_nz, &options).unwrap();
+                    assert_eq!(bytes, decoded);
+                }
+            }
+        }
+    }
+
+    /// An encoded shard with non evenly divisible subchunks, and the expected partial decodes of some indexers.
+    struct NondivisiblePartialDecodeCase {
+        shard_shape: ChunkShape,
+        codec: Arc<dyn ArrayToBytesCodecTraits>,
+        encoded: CowBytes<'static>,
+        expected: Vec<(Box<dyn Indexer>, ArrayBytes<'static>)>,
+    }
+
+    /// Partial decode cases, including regions at the final shard boundary.
+    fn nondivisible_partial_decode_cases() -> Vec<NondivisiblePartialDecodeCase> {
+        let mut cases = Vec::new();
+        for data_type in [data_type::uint16(), data_type::string()] {
+            for (shard_shape, subchunk_shape) in nondivisible_shapes() {
+                let bytes = nondivisible_data(&shard_shape, &subchunk_shape, &data_type);
+                for index_at_end in [true, false] {
+                    let codec = sharding_codec(
+                        to_nonzero(&subchunk_shape),
+                        data_type.clone(),
+                        fill_value(&data_type),
+                        index_at_end,
+                        SubchunkWriteOrder::C,
+                        vec![],
+                        false,
+                    );
+                    let encoded = codec
+                        .encode(
+                            bytes.clone(),
+                            &to_nonzero(&shard_shape),
+                            &CodecOptions::default(),
+                        )
+                        .unwrap();
+                    let indexers: Vec<Box<dyn Indexer>> = vec![
+                        Box::new(ArraySubset::new_with_shape(shard_shape.clone())),
+                        Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s - 1)..s))),
+                        Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s / 2)..s))),
+                        Box::new(vec![
+                            shard_shape.iter().map(|&s| s - 1).collect::<ArrayIndices>(),
+                            vec![0; shard_shape.len()],
+                            shard_shape.iter().map(|&s| s / 2).collect(),
+                            shard_shape.iter().map(|&s| s - 1).collect(),
+                        ]),
+                    ];
+                    let expected = indexers
+                        .into_iter()
+                        .map(|indexer| {
+                            let expected = bytes
+                                .extract_array_subset(indexer.as_ref(), &shard_shape, &data_type)
+                                .unwrap()
+                                .into_owned();
+                            (indexer, expected)
+                        })
+                        .collect();
+                    cases.push(NondivisiblePartialDecodeCase {
+                        shard_shape: to_nonzero(&shard_shape),
+                        codec,
+                        encoded,
+                        expected,
+                    });
+                }
+            }
+        }
+        cases
+    }
+
+    #[test]
+    fn codec_sharding_partial_decode_nondivisible() {
+        let options = CodecOptions::default();
+        for case in nondivisible_partial_decode_cases() {
+            let partial_decoder = case
+                .codec
+                .partial_decoder(Arc::new(case.encoded), &case.shard_shape, &options)
+                .unwrap();
+            for (indexer, expected) in case.expected {
+                assert_eq!(
+                    partial_decoder
+                        .partial_decode(indexer.as_ref(), &options)
+                        .unwrap(),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn codec_sharding_async_partial_decode_nondivisible() {
+        let options = CodecOptions::default();
+        for case in nondivisible_partial_decode_cases() {
+            let partial_decoder = case
+                .codec
+                .async_partial_decoder(Arc::new(case.encoded), &case.shard_shape, &options)
+                .await
+                .unwrap();
+            for (indexer, expected) in case.expected {
+                assert_eq!(
+                    partial_decoder
+                        .partial_decode(indexer.as_ref(), &options)
+                        .await
+                        .unwrap(),
+                    expected
+                );
             }
         }
     }

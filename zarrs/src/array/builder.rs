@@ -12,14 +12,14 @@ use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
-use crate::array::{ArrayMetadataOptions, ChunkGrid};
+use crate::array::{ArrayMetadataOptions, ChunkGrid, DataType, FillValue};
 use crate::config::global_config;
 use crate::node::NodePath;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecSubchunkingTraits, BytesToBytesCodecTraits, CodecOptions,
+    CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -352,6 +352,11 @@ impl ArrayBuilder {
     ///
     /// The subchunk shape must have all non-zero elements (validated during build).
     ///
+    /// The subchunk shape must evenly divide the chunk (shard) shape, unless
+    /// [`ShardingCodecOptions::with_allow_nondivisible_subchunks`](super::codec::ShardingCodecOptions::with_allow_nondivisible_subchunks)
+    /// is set via [`codec_specific_options`](Self::codec_specific_options).
+    /// See [non-divisible subchunk shapes](crate::array::codec::array_to_bytes::sharding#non-divisible-subchunk-shapes).
+    ///
     /// # Sharding Configuration
     ///
     /// This method uses a default [`ShardingCodecBuilder`](super::codec::ShardingCodecBuilder) configuration:
@@ -465,14 +470,22 @@ impl ArrayBuilder {
     /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
     pub fn build_metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
         let codec_chain = self.build_codec_chain()?;
-        self.build_metadata_with_codec_chain(&codec_chain)
+        let (chunk_grid, data_type, fill_value) = self.build_chunk_grid_data_type_fill_value()?;
+        // `build` performs this validation when creating the array
+        codec_chain
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &self.codec_specific_options,
+            )?
+            .decoded_subchunk_grids((&chunk_grid).into())?;
+        self.build_metadata_with_codec_chain(&codec_chain, &chunk_grid, &data_type, fill_value)
     }
 
-    /// Build [`ArrayMetadataV3`] from the builder state using a pre-built codec chain.
-    fn build_metadata_with_codec_chain(
+    /// Build the chunk grid, data type, and fill value from the builder state.
+    fn build_chunk_grid_data_type_fill_value(
         &self,
-        codec_chain: &CodecChain,
-    ) -> Result<ArrayMetadataV3, ArrayCreateError> {
+    ) -> Result<(ChunkGrid, DataType, FillValue), ArrayCreateError> {
         let chunk_grid = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => chunk_grid.clone(),
             ArrayBuilderChunkGridMaybe::Metadata(array_shape, metadata) => {
@@ -495,6 +508,17 @@ impl ArrayBuilder {
                 })?
             }
         };
+        Ok((chunk_grid, data_type, fill_value))
+    }
+
+    /// Build [`ArrayMetadataV3`] from the builder state using a pre-built codec chain.
+    fn build_metadata_with_codec_chain(
+        &self,
+        codec_chain: &CodecChain,
+        chunk_grid: &ChunkGrid,
+        data_type: &DataType,
+        fill_value: FillValue,
+    ) -> Result<ArrayMetadataV3, ArrayCreateError> {
         if let Some(dimension_names) = &self.dimension_names
             && dimension_names.len() != chunk_grid.dimensionality()
         {
@@ -591,7 +615,13 @@ impl ArrayBuilder {
     ) -> Result<Array<TStorage>, ArrayCreateError> {
         let path: NodePath = path.try_into()?;
         let codec_chain = Arc::new(self.build_codec_chain()?);
-        let array_metadata_v3 = self.build_metadata_with_codec_chain(&codec_chain)?;
+        let (chunk_grid, data_type, fill_value) = self.build_chunk_grid_data_type_fill_value()?;
+        let array_metadata_v3 = self.build_metadata_with_codec_chain(
+            &codec_chain,
+            &chunk_grid,
+            &data_type,
+            fill_value,
+        )?;
         // The array is owned here, so set the options in place rather than deriving copies.
         let mut array = Array::new_with_codec_chain(
             storage,
