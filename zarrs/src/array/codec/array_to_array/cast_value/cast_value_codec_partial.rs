@@ -349,47 +349,4 @@ where
 
 // The codec alters values but not positions, so subchunk grids and indices are the same in its
 // decoded and encoded domains.
-impl<T: ?Sized> SubchunkMapping for CastValueCodecPartial<T> {
-    type Inner = T;
-
-    fn inner(&self) -> &Arc<T> {
-        &self.input_output_handle
-    }
-
-    fn map_local_subchunk_grid(
-        &self,
-        grid: &zarrs_chunk_grid::ChunkGrid,
-    ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, CodecError> {
-        Ok(Some(grid.clone()))
-    }
-}
-
-impl<T: ?Sized> SubchunkRemap for CastValueCodecPartial<T> {
-    fn remap_subchunk_indices(
-        &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        Ok(subchunk_indices.to_vec())
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncSubchunkRemap for CastValueCodecPartial<T>
-where
-    T: zarrs_storage::MaybeSend + zarrs_storage::MaybeSync,
-{
-    async fn async_remap_subchunk_indices(
-        &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        Ok(subchunk_indices.to_vec())
-    }
-}
-
-impl_subchunk_forwarding!(CastValueCodecPartial);
+impl_subchunk_forwarding!(CastValueCodecPartial, identity);

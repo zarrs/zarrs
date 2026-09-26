@@ -146,10 +146,7 @@ pub(crate) fn plan_subchunk_descent(
 ) -> Result<SubchunkDescent, CodecError> {
     debug_assert!(level > 0, "level zero does not require a descent");
     let target_grid = subchunk_grid_at_level(local_subchunk_grids, level)?;
-    if subchunk_indices.len() != target_grid.dimensionality()
-        || std::iter::zip(subchunk_indices, target_grid.grid_shape())
-            .any(|(indices, shape)| indices >= shape)
-    {
+    if !target_grid.chunk_indices_inbounds(subchunk_indices) {
         return Err(CodecError::Other(format!(
             "subchunk indices {subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
             target_grid.grid_shape()
@@ -169,4 +166,17 @@ pub(crate) fn plan_subchunk_descent(
         subchunk_indices: outer_indices,
         subset: subset.relative_to(outer_subset.start())?,
     })
+}
+
+/// The level zero subchunk enclosing a nested subchunk, buffered to be rewritten through its
+/// partial encoder.
+pub(crate) struct EnclosingSubchunkUpdate<E: ?Sized> {
+    /// The level zero subchunk indices of the enclosing subchunk.
+    pub subchunk_indices: ArrayIndices,
+    /// The encoded bytes of the enclosing subchunk, updated in place by [`encoder`](Self::encoder).
+    pub buffer: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    /// The partial encoder of the enclosing subchunk.
+    pub encoder: std::sync::Arc<E>,
+    /// The indices of the nested subchunk in the grid one level below of [`encoder`](Self::encoder).
+    pub nested_indices: ArrayIndices,
 }

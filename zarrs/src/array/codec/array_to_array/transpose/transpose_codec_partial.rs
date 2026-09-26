@@ -73,29 +73,13 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         )
     }
 
-    fn map_local_subchunk_grid_impl(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<ChunkGrid, CodecError> {
-        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        super::transpose_rectilinear_grid(&self.order_inverse, array_shape, encoded_subchunk_grid)
-            .map_err(|err| CodecError::Other(err.to_string()))
-    }
-
     /// Map subchunk indices from the outwardly mapped grid into the grid of the inner decoder.
     ///
     /// This inverts the axis permutation that [`map_local_subchunk_grid`] applies to the grid.
     /// That maps outward as `outward[i] = encoded[order_inverse[i]]`, so mapping back inward is
     /// `encoded[i] = outward[order[i]]`.
     ///
-    /// [`map_local_subchunk_grid`]: Self::map_local_subchunk_grid_impl
+    /// [`map_local_subchunk_grid`]: SubchunkMapping::map_local_subchunk_grid
     fn inner_subchunk_indices(&self, subchunk_indices: &[u64]) -> Result<Vec<u64>, CodecError> {
         permute(subchunk_indices, &self.order).ok_or_else(|| {
             CodecError::Other(format!(
@@ -377,37 +361,22 @@ impl<T: ?Sized> SubchunkMapping for TransposeCodecPartial<T> {
         &self.input_output_handle
     }
 
-    fn map_local_subchunk_grid(&self, grid: &ChunkGrid) -> Result<Option<ChunkGrid>, CodecError> {
-        self.map_local_subchunk_grid_impl(grid).map(Some)
-    }
-}
-
-impl<T: ?Sized> SubchunkRemap for TransposeCodecPartial<T> {
-    fn remap_subchunk_indices(
+    fn map_local_subchunk_grid(
         &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        self.inner_subchunk_indices(subchunk_indices)
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
+                    .to_string(),
+            ));
+        }
+
+        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        super::transpose_rectilinear_grid(&self.order_inverse, array_shape, encoded_subchunk_grid)
+            .map(Some)
+            .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncSubchunkRemap for TransposeCodecPartial<T>
-where
-    T: zarrs_storage::MaybeSend + zarrs_storage::MaybeSync,
-{
-    async fn async_remap_subchunk_indices(
-        &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        self.inner_subchunk_indices(subchunk_indices)
-    }
-}
-
-impl_subchunk_forwarding!(TransposeCodecPartial);
+impl_subchunk_forwarding!(TransposeCodecPartial, remap = Self::inner_subchunk_indices);

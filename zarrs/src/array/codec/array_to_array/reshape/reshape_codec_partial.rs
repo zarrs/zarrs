@@ -119,18 +119,6 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         }
     }
 
-    fn map_local_subchunk_grid_impl(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        reshape_rectilinear_grid(
-            &self.encoded_shape,
-            &self.decoded_shape,
-            encoded_subchunk_grid,
-        )
-        .map_err(|err| CodecError::Other(err.to_string()))
-    }
-
     /// Map subchunk indices from the outwardly mapped grid into the grid of the inner decoder.
     ///
     /// A reshape never moves elements, it only re-splits the row-major element sequence. A subchunk
@@ -146,18 +134,8 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
         subchunk_indices: &[u64],
     ) -> Result<Vec<u64>, CodecError> {
         let decoded_grid = self
-            .map_local_subchunk_grid_impl(encoded_grid)?
+            .map_local_subchunk_grid(encoded_grid)?
             .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
-        self.map_subchunk_indices(&decoded_grid, encoded_grid, subchunk_indices)
-    }
-
-    /// Locate `subchunk_indices` of `decoded_grid` in `encoded_grid` through the linear index.
-    fn map_subchunk_indices(
-        &self,
-        decoded_grid: &ChunkGrid,
-        encoded_grid: &ChunkGrid,
-        subchunk_indices: &[u64],
-    ) -> Result<Vec<u64>, CodecError> {
         let decoded_subset = decoded_grid.subset(subchunk_indices)?.ok_or_else(|| {
             CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
         })?;
@@ -362,7 +340,8 @@ impl<T: ?Sized> SubchunkMapping for ReshapeCodecPartial<T> {
     }
 
     fn map_local_subchunk_grid(&self, grid: &ChunkGrid) -> Result<Option<ChunkGrid>, CodecError> {
-        self.map_local_subchunk_grid_impl(grid)
+        reshape_rectilinear_grid(&self.encoded_shape, &self.decoded_shape, grid)
+            .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 

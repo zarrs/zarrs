@@ -101,7 +101,77 @@ pub(super) fn map_local_subchunk_grids<M: SubchunkMapping + ?Sized>(
 /// possible: the subchunking traits are also implemented directly by sharding, the chunk caches,
 /// and the partial decoder cache, so a blanket implementation over a marker trait would conflict
 /// with all of them.
+///
+/// The index mapping is supplied in one of three ways:
+/// - `impl_subchunk_forwarding!(Codec)`: the codec implements [`SubchunkRemap`] and
+///   [`AsyncSubchunkRemap`] itself, as needed when the mapping queries the wrapped decoder.
+/// - `impl_subchunk_forwarding!(Codec, remap = f)`: both are generated from
+///   `f(&self, subchunk_indices) -> Result<Vec<u64>, CodecError>`, for a mapping that depends only
+///   on the codec.
+/// - `impl_subchunk_forwarding!(Codec, identity)`: [`SubchunkMapping`] and both remaps are
+///   generated as identities over the `input_output_handle` field, for a codec that alters values
+///   but not positions.
 macro_rules! impl_subchunk_forwarding {
+    ($codec:ident, identity) => {
+        impl<T: ?Sized> $crate::array::codec::array_to_array::subchunk_forwarding::SubchunkMapping
+            for $codec<T>
+        {
+            type Inner = T;
+
+            fn inner(&self) -> &std::sync::Arc<T> {
+                &self.input_output_handle
+            }
+
+            fn map_local_subchunk_grid(
+                &self,
+                grid: &zarrs_chunk_grid::ChunkGrid,
+            ) -> Result<Option<zarrs_chunk_grid::ChunkGrid>, zarrs_codec::CodecError> {
+                Ok(Some(grid.clone()))
+            }
+        }
+
+        impl_subchunk_forwarding!(
+            $codec,
+            remap = |_, subchunk_indices: &[u64]| Ok(subchunk_indices.to_vec())
+        );
+    };
+
+    ($codec:ident, remap = $remap:expr) => {
+        impl<T: ?Sized> $crate::array::codec::array_to_array::subchunk_forwarding::SubchunkRemap
+            for $codec<T>
+        {
+            fn remap_subchunk_indices(
+                &self,
+                _level: usize,
+                subchunk_indices: &[u64],
+                _options: &zarrs_codec::CodecOptions,
+            ) -> Result<Vec<u64>, zarrs_codec::CodecError> {
+                ($remap)(self, subchunk_indices)
+            }
+        }
+
+        #[cfg(feature = "async")]
+        #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+        #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+        impl<T: ?Sized>
+            $crate::array::codec::array_to_array::subchunk_forwarding::AsyncSubchunkRemap
+            for $codec<T>
+        where
+            T: zarrs_storage::MaybeSend + zarrs_storage::MaybeSync,
+        {
+            async fn async_remap_subchunk_indices(
+                &self,
+                _level: usize,
+                subchunk_indices: &[u64],
+                _options: &zarrs_codec::CodecOptions,
+            ) -> Result<Vec<u64>, zarrs_codec::CodecError> {
+                ($remap)(self, subchunk_indices)
+            }
+        }
+
+        impl_subchunk_forwarding!($codec);
+    };
+
     ($codec:ident) => {
         const _: () = {
             use std::sync::Arc;

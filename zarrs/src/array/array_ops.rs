@@ -86,10 +86,7 @@ fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
         .subchunk_grid_at_level(level)
         .as_chunk_grid()
         .ok_or(ArrayError::MissingSubchunkGrid)?;
-    if subchunk_indices.len() != subchunk_grid.dimensionality()
-        || std::iter::zip(subchunk_indices, subchunk_grid.grid_shape())
-            .any(|(indices, shape)| indices >= shape)
-    {
+    if !subchunk_grid.chunk_indices_inbounds(subchunk_indices) {
         return Err(ArrayError::InvalidChunkGridIndicesError(
             subchunk_indices.to_vec(),
         ));
@@ -110,6 +107,16 @@ fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
     let chunk_origin = array.chunk_origin(&chunk_indices)?;
     let local_subset = subchunk_subset.relative_to(&chunk_origin)?;
     Ok((chunk_indices, local_subset))
+}
+
+/// Return the indices of the subchunk at `subset` in the chunk-local subchunk `grid` of a partial
+/// decoder or encoder.
+fn local_subchunk_indices(
+    grid: Option<ChunkGrid>,
+    subset: &ArraySubset,
+) -> Result<ArrayIndices, ArrayError> {
+    let grid = grid.ok_or(ArrayError::MissingSubchunkGrid)?;
+    Ok(zarrs_codec::enclosing_chunk_indices(&grid, subset)?)
 }
 
 mod array_mut_ops;

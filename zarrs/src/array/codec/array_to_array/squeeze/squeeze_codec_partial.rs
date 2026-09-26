@@ -40,47 +40,13 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
         }
     }
 
-    fn map_local_subchunk_grid_impl(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<ChunkGrid, CodecError> {
-        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
-        if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
-            return Err(CodecError::Other(
-                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let mut encoded_dim = 0;
-        let chunk_shapes = self
-            .shape
-            .iter()
-            .map(|dim| {
-                if dim.get() == 1 {
-                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
-                } else {
-                    let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                    encoded_dim += 1;
-                    Ok(ChunkEdgeLengths::encode(&edge_lengths))
-                }
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))
-    }
-
     /// Map subchunk indices from the outwardly mapped grid into the grid of the inner decoder.
     ///
     /// This inverts what [`map_local_subchunk_grid`] does to the grid: it splices a unit edge back
     /// in at every squeezed axis, so mapping inward drops the indices at those axes. A squeezed
     /// axis has extent one, so its index must be zero.
     ///
-    /// [`map_local_subchunk_grid`]: Self::map_local_subchunk_grid_impl
+    /// [`map_local_subchunk_grid`]: SubchunkMapping::map_local_subchunk_grid
     fn inner_subchunk_indices(&self, subchunk_indices: &[u64]) -> Result<Vec<u64>, CodecError> {
         if subchunk_indices.len() != self.shape.len() {
             return Err(CodecError::Other(format!(
@@ -366,37 +332,39 @@ impl<T: ?Sized> SubchunkMapping for SqueezeCodecPartial<T> {
         &self.input_output_handle
     }
 
-    fn map_local_subchunk_grid(&self, grid: &ChunkGrid) -> Result<Option<ChunkGrid>, CodecError> {
-        self.map_local_subchunk_grid_impl(grid).map(Some)
-    }
-}
-
-impl<T: ?Sized> SubchunkRemap for SqueezeCodecPartial<T> {
-    fn remap_subchunk_indices(
+    fn map_local_subchunk_grid(
         &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        self.inner_subchunk_indices(subchunk_indices)
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
+        if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
+            return Err(CodecError::Other(
+                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
+                    .to_string(),
+            ));
+        }
+
+        let mut encoded_dim = 0;
+        let chunk_shapes = self
+            .shape
+            .iter()
+            .map(|dim| {
+                if dim.get() == 1 {
+                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
+                } else {
+                    let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                    encoded_dim += 1;
+                    Ok(ChunkEdgeLengths::encode(&edge_lengths))
+                }
+            })
+            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        Ok(Some(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        )))
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncSubchunkRemap for SqueezeCodecPartial<T>
-where
-    T: zarrs_storage::MaybeSend + zarrs_storage::MaybeSync,
-{
-    async fn async_remap_subchunk_indices(
-        &self,
-        _level: usize,
-        subchunk_indices: &[u64],
-        _options: &CodecOptions,
-    ) -> Result<Vec<u64>, CodecError> {
-        self.inner_subchunk_indices(subchunk_indices)
-    }
-}
-
-impl_subchunk_forwarding!(SqueezeCodecPartial);
+impl_subchunk_forwarding!(SqueezeCodecPartial, remap = Self::inner_subchunk_indices);

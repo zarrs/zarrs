@@ -217,12 +217,11 @@ where
         subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let options = array.codec_options();
     let partial_decoder = array.async_partial_decoder(&chunk_indices).await?;
-    let local_subchunk_grid = partial_decoder
-        .local_subchunk_grid_at_level(level, options)
-        .await
-        .map_err(ArrayError::CodecError)?
-        .ok_or(ArrayError::MissingSubchunkGrid)?;
-    let local_indices =
-        zarrs_codec::enclosing_chunk_indices(&local_subchunk_grid, &subchunk_subset)?;
+    let local_indices = super::local_subchunk_indices(
+        partial_decoder
+            .local_subchunk_grid_at_level(level, options)
+            .await?,
+        &subchunk_subset,
+    )?;
     Ok((partial_decoder, local_indices))
 }

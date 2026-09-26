@@ -163,9 +163,9 @@ fn subchunk_partial_encoder_and_local_indices<A: ArrayUpdateOps + ?Sized>(
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let encoder = array.partial_encoder(&chunk_indices)?;
-    let grid = encoder
-        .local_subchunk_grid_at_level(level, array.codec_options())?
-        .ok_or(ArrayError::MissingSubchunkGrid)?;
-    let indices = zarrs_codec::enclosing_chunk_indices(&grid, &subset)?;
+    let indices = super::local_subchunk_indices(
+        encoder.local_subchunk_grid_at_level(level, array.codec_options())?,
+        &subset,
+    )?;
     Ok((encoder, indices))
 }
