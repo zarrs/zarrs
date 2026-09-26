@@ -334,8 +334,6 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         let fill_value = self.inner_codecs.fill_value();
         let mut shard_index = self.shard_index.lock().await;
 
-
-
         // Validate the indexer and bytes
         chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
         chunk_subset_bytes.validate(chunk_subset_indexer.len(), data_type)?;
@@ -444,10 +442,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         bytes: CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let chunks_per_shard = self.chunk_grid.grid_shape();
-        let index = super::ravel_indices(subchunk_indices, &chunks_per_shard).ok_or_else(|| {
-            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
-        })?;
+        let index = super::subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
         let mut shard_index = self.shard_index.lock().await;
         self.commit_subchunk_updates(&mut shard_index, vec![(index, Some(bytes))], options)
             .await
@@ -458,10 +453,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let chunks_per_shard = self.chunk_grid.grid_shape();
-        let index = super::ravel_indices(subchunk_indices, &chunks_per_shard).ok_or_else(|| {
-            CodecError::Other(format!("invalid subchunk indices {subchunk_indices:?}"))
-        })?;
+        let index = super::subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
         let mut shard_index = self.shard_index.lock().await;
         let entry = usize::try_from(index * 2).unwrap();
         if shard_index[entry..entry + 2] == [u64::MAX; 2] {

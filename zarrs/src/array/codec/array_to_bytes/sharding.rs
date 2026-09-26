@@ -303,19 +303,27 @@ fn get_index_byte_range(
     })
 }
 
+/// Return the linear index of the subchunk at `chunk_indices` in the shard index.
+fn subchunk_linear_index(
+    subchunk_grid: &RegularBoundedChunkGrid,
+    chunk_indices: &[u64],
+) -> Result<u64, CodecError> {
+    let chunks_per_shard = subchunk_grid.grid_shape();
+    ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
+        CodecError::Other(format!(
+            "subchunk indices {chunk_indices:?} are incompatible with or out of bounds for chunks per shard {chunks_per_shard:?}"
+        ))
+    })
+}
+
 fn subchunk_byte_offset_length(
     shard_index: Option<&[u64]>,
     subchunk_grid: &RegularBoundedChunkGrid,
     chunk_indices: &[u64],
 ) -> Result<Option<(ByteOffset, ByteLength)>, CodecError> {
     if let Some(shard_index) = shard_index {
-        let chunks_per_shard = subchunk_grid.grid_shape();
-        let shard_index_idx = ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
-            CodecError::Other(format!(
-                "subchunk indices {chunk_indices:?} are incompatible with or out of bounds for chunks per shard {chunks_per_shard:?}"
-            ))
-        })?;
-        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+        let shard_index_idx =
+            usize::try_from(subchunk_linear_index(subchunk_grid, chunk_indices)?).unwrap();
         Ok(subchunk_offset_size(shard_index, shard_index_idx))
     } else {
         Ok(None)

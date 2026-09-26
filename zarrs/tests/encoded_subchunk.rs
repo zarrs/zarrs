@@ -30,7 +30,8 @@ use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStor
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded,
-    ChunkGridDecodedRef, EncodedSubchunk, PartialDecoderCapability, PartialEncoderCapability,
+    ChunkGridDecodedRef, CodecSpecificOptions, EncodedSubchunk, PartialDecoderCapability,
+    PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
 
@@ -600,13 +601,16 @@ impl UnboundArrayToBytesCodecTraits for BlockCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(BlockCodecBound {
             forbid_full_codec: self.forbid_full_codec.clone(),
             block_shape: self.block_shape.clone(),
-            inner_codecs: self
-                .inner_codecs
-                .with_context(data_type.clone(), fill_value.clone())?,
+            inner_codecs: self.inner_codecs.with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                codec_specific_options,
+            )?,
             data_type,
             fill_value,
         }))
