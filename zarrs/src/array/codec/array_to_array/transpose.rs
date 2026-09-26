@@ -69,6 +69,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
+pub(crate) use transpose_codec::TransposeCodecBound;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::array_bytes_internal::offsets_from_usize;

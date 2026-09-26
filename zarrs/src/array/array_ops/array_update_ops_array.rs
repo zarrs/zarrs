@@ -4,11 +4,12 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
+use super::super::array_data_order::reverse_indexer;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayUpdateOps, *};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec, ArraySubsetTraits, update_array_bytes};
-use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
+use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
 use zarrs_storage::StorageHandle;
 
 #[inherent]
@@ -84,13 +85,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 &codec_concurrency,
             );
 
+            let array_subset_shape = self.shape_in_data_order(&array_subset.shape());
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
                 let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
                 let chunk_subset_bytes = subset_bytes.extract_array_subset(
-                    &chunk_subset_in_array_subset,
-                    &array_subset.shape(),
+                    &self.subset_in_data_order(chunk_subset_in_array_subset),
+                    &array_subset_shape,
                     self.data_type(),
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
@@ -182,27 +184,66 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             && self.codecs.partial_encoder_capability().partial_encode
             && self.storage.supports_set_partial()
         {
-            let partial_encoder = self.partial_encoder_with_options(chunk_indices, options)?;
+            let partial_encoder =
+                self.partial_encoder_in_data_order_with_options(chunk_indices, options)?;
             debug_assert!(
                 partial_encoder.supports_partial_encode(),
                 "partial encoder is misrepresenting its capabilities"
             );
-            Ok(partial_encoder.partial_encode(indexer, &indexer_bytes, options)?)
+            if self.reverses_axes() {
+                indexer.validate(&chunk_shape).map_err(CodecError::from)?;
+                let indexer_reversed = reverse_indexer(indexer);
+                Ok(partial_encoder.partial_encode(&*indexer_reversed, &indexer_bytes, options)?)
+            } else {
+                Ok(partial_encoder.partial_encode(indexer, &indexer_bytes, options)?)
+            }
         } else {
+            // The chunk bytes and indexer bytes are in the data order
             let chunk_bytes_old: ArrayBytes<'static> =
                 self.retrieve_chunk_with_options(chunk_indices, options)?;
             chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
 
-            let chunk_bytes_new = update_array_bytes(
-                chunk_bytes_old,
-                &chunk_shape,
-                indexer,
-                &indexer_bytes,
-                self.data_type().size(),
-            )?;
+            let chunk_bytes_new = if self.reverses_axes() {
+                indexer.validate(&chunk_shape).map_err(CodecError::from)?;
+                update_array_bytes(
+                    chunk_bytes_old,
+                    &self.shape_in_data_order(&chunk_shape),
+                    &*reverse_indexer(indexer),
+                    &indexer_bytes,
+                    self.data_type().size(),
+                )?
+            } else {
+                update_array_bytes(
+                    chunk_bytes_old,
+                    &chunk_shape,
+                    indexer,
+                    &indexer_bytes,
+                    self.data_type().size(),
+                )?
+            };
 
             self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options)
         }
+    }
+
+    /// Create a partial encoder for the chunk at `chunk_indices` that encodes data in the data order.
+    ///
+    /// Indexers passed to the partial encoder must have reversed axes if the data order is F.
+    fn partial_encoder_in_data_order_with_options(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_readable_writable_transformer(storage_handle)?;
+        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
+        Ok(self.codecs_bound_in_data_order().clone().partial_encoder(
+            input_handle,
+            &self.chunk_shape_in_data_order(self.chunk_shape(chunk_indices)?),
+            options,
+        )?)
     }
 
     pub(in crate::array) fn partial_encoder_with_options(

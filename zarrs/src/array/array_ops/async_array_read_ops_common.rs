@@ -1,8 +1,9 @@
 use futures::{StreamExt, TryStreamExt};
 
+use crate::array::array_data_order::reverse_subset;
 use crate::array::{
-    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits, Indexer,
+    ArrayBytesFixedDisjointView, ArrayDataOrder, ArrayError, ArrayIndicesTinyVec, ArrayOps,
+    ArraySubset, ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
@@ -151,6 +152,11 @@ where
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
             let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
+            // The output target has reversed axes if reading in F order
+            let chunk_subset_in_array = match array.data_order() {
+                ArrayDataOrder::C => chunk_subset_in_array,
+                ArrayDataOrder::F => reverse_subset(&chunk_subset_in_array),
+            };
 
             let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
                 .start()

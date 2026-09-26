@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
 - Implement `Clone` and `Debug` for `Tensor`
 - Support partial encoding with generic indexers in the `sharding_indexed` codec
+- Add `ArrayDataOrder` for reading array data in F (Fortran, column-major) order, e.g. for language bindings
+  - Add `ArrayOps::{data_order,with_data_order}()` and `ArrayMutOps::set_data_order()`
+  - With `ArrayDataOrder::F`, read, write, and update operations on `Array` and `ArrayCached` use data buffers in F order; subsets and indexers remain in array dimension order
+  - A leading `transpose` codec is fused with the F order transpose, and is skipped entirely if it reverses the axes (e.g. Zarr V2 arrays with `"order": "F"`)
+- Add `FromArrayBytes::{from_array_bytes_with_order,from_array_bytes_arc_with_order}()`
+  - `ndarray::Array` is constructed with an F-order layout from F-order bytes
+- Support optional data types in the `transpose` codec
 
 ### Changed
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants

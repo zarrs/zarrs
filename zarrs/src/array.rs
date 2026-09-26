@@ -23,6 +23,7 @@
 
 mod array_bytes_internal;
 mod array_cached;
+mod array_data_order;
 mod array_errors;
 mod array_metadata_options;
 mod array_ops;
@@ -95,6 +96,7 @@ pub use zarrs_metadata::{
 };
 use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
+pub use self::array_data_order::ArrayDataOrder;
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
 pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, ArrayWriteOps};
@@ -429,6 +431,8 @@ pub struct Array<TStorage: ?Sized> {
     codecs: Arc<CodecChain>,
     /// The codec chain bound to this array's data type and fill value.
     codecs_bound: Arc<CodecChainBound>,
+    /// The codec chain used to read data with [`ArrayDataOrder::F`], if the data order is F and the array has two or more dimensions.
+    codecs_bound_fortran: Option<Arc<CodecChainBound>>,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
@@ -437,6 +441,7 @@ pub struct Array<TStorage: ?Sized> {
     metadata: Arc<ArrayMetadata>,
     /// Options
     codec_options: CodecOptions,
+    data_order: ArrayDataOrder,
     metadata_options: ArrayMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
 }
@@ -453,10 +458,12 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
             codecs_bound: self.codecs_bound.clone(),
+            codecs_bound_fortran: self.codecs_bound_fortran.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
+            data_order: self.data_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -476,12 +483,83 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
             codecs_bound: self.codecs_bound.clone(),
+            codecs_bound_fortran: self.codecs_bound_fortran.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
+            data_order: self.data_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
+        }
+    }
+
+    /// Build the codec chain used to read data in F order.
+    ///
+    /// Returns [`None`] if the data order is C or F order is identical to C order (fewer than two dimensions).
+    fn build_codecs_bound_fortran(
+        codecs_bound: &CodecChainBound,
+        dimensionality: usize,
+        data_order: ArrayDataOrder,
+    ) -> Result<Option<Arc<CodecChainBound>>, CodecCreateError> {
+        if data_order == ArrayDataOrder::C || dimensionality < 2 {
+            return Ok(None);
+        }
+        #[cfg(feature = "transpose")]
+        {
+            Ok(Some(Arc::new(
+                codecs_bound
+                    .with_reversed_axes(dimensionality)
+                    .map_err(|err| CodecCreateError::Other(err.to_string()))?,
+            )))
+        }
+        #[cfg(not(feature = "transpose"))]
+        {
+            let _ = codecs_bound;
+            Err(CodecCreateError::Other(
+                "the transpose feature is required for F order data".to_string(),
+            ))
+        }
+    }
+
+    /// Return the codec chain used to decode and encode chunks in the data order.
+    ///
+    /// This is the reversed-axes codec chain if the data order is F, otherwise it is the array codec chain.
+    pub(crate) fn codecs_bound_in_data_order(&self) -> &Arc<CodecChainBound> {
+        self.codecs_bound_fortran
+            .as_ref()
+            .unwrap_or(&self.codecs_bound)
+    }
+
+    /// Returns true if array operations reverse the axes of their data (F order with two or more dimensions).
+    pub(crate) fn reverses_axes(&self) -> bool {
+        self.codecs_bound_fortran.is_some()
+    }
+
+    /// Return `chunk_shape` in the axis order used by [`codecs_bound_in_data_order`](Self::codecs_bound_in_data_order).
+    pub(crate) fn chunk_shape_in_data_order(&self, chunk_shape: ChunkShape) -> ChunkShape {
+        if self.reverses_axes() {
+            array_data_order::reverse_axes(&chunk_shape)
+        } else {
+            chunk_shape
+        }
+    }
+
+    /// Return `shape` in the axis order of array operation data.
+    pub(crate) fn shape_in_data_order(&self, shape: &[u64]) -> Vec<u64> {
+        if self.reverses_axes() {
+            array_data_order::reverse_axes(shape)
+        } else {
+            shape.to_vec()
+        }
+    }
+
+    /// Return `subset` in the axis order of array operation data.
+    pub(crate) fn subset_in_data_order(&self, subset: ArraySubset) -> ArraySubset {
+        if self.reverses_axes() {
+            array_data_order::reverse_subset(&subset)
+        } else {
+            subset
         }
     }
 
@@ -592,10 +670,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value,
             codecs,
             codecs_bound,
+            codecs_bound_fortran: None,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
             metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
+            data_order: ArrayDataOrder::C,
             metadata_options,
             metadata_erase_version,
         })
@@ -682,9 +762,11 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value,
             codecs,
             codecs_bound,
+            codecs_bound_fortran: None,
             storage_transformers,
             dimension_names: None,
             codec_options,
+            data_order: ArrayDataOrder::C,
             metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,

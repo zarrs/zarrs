@@ -30,7 +30,7 @@ pub struct TransposeCodec {
 
 /// A Transpose codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
-struct TransposeCodecBound {
+pub(crate) struct TransposeCodecBound {
     order: TransposeOrder,
     data_type: DataType,
     fill_value: FillValue,
@@ -63,6 +63,20 @@ impl TransposeCodec {
 }
 
 impl TransposeCodecBound {
+    /// Create a new transpose codec bound to `data_type` and `fill_value`.
+    pub(crate) fn new(order: TransposeOrder, data_type: DataType, fill_value: FillValue) -> Self {
+        Self {
+            order,
+            data_type,
+            fill_value,
+        }
+    }
+
+    /// Return the transpose order.
+    pub(crate) fn order(&self) -> &TransposeOrder {
+        &self.order
+    }
+
     /// Validate the shape and data type for this codec.
     fn validate(&self, shape: &[NonZeroU64]) -> Result<(), CodecError> {
         if self.order.0.len() != shape.len() {

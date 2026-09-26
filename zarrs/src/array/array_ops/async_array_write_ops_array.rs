@@ -137,12 +137,15 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                     &codec_concurrency,
                 );
 
+                let array_subset_shape = self.shape_in_data_order(array_subset.shape());
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(
-                            &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
-                            array_subset.shape(),
+                            &self.subset_in_data_order(
+                                chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
+                            ),
+                            &array_subset_shape,
                             self.data_type(),
                         )
                         .unwrap(); // FIXME: unwrap
@@ -239,8 +242,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
             self.async_erase_chunk(chunk_indices).await?;
         } else {
             let chunk_encoded = self
-                .codecs_bound()
-                .encode(chunk_bytes, &chunk_shape, options)
+                .codecs_bound_in_data_order()
+                .encode(
+                    chunk_bytes,
+                    &self.chunk_shape_in_data_order(chunk_shape),
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }

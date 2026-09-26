@@ -52,12 +52,12 @@ use std::sync::Arc;
 
 use super::chunk_cache::ChunkCache;
 use super::{
-    Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
-    ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded,
-    ChunkGridDecodedRef, ChunkKeyEncoding, ChunkShape, ChunkShapeTraits, CodecChain,
-    CodecChainBound, CodecCreateError, CodecOptions, CodecSpecificOptions, DataType, DimensionName,
-    FillValue, FromArrayBytes, IncompatibleDimensionalityError, Indexer, IntoArrayBytes, NodePath,
-    StorageTransformerChain,
+    Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayDataOrder, ArrayError, ArrayIndices,
+    ArrayMetadata, ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkKeyEncoding, ChunkShape, ChunkShapeTraits,
+    CodecChain, CodecChainBound, CodecCreateError, CodecOptions, CodecSpecificOptions, DataType,
+    DimensionName, FillValue, FromArrayBytes, IncompatibleDimensionalityError, Indexer,
+    IntoArrayBytes, NodePath, StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
 use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};
@@ -149,9 +149,11 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     )
     .map_err(zarrs_codec::CodecError::from)
     .map_err(ArrayError::from)?;
-    T::from_array_bytes(
+    // The fill value is independent of the data order
+    T::from_array_bytes_with_order(
         bytes,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
+        array.data_order(),
     )
 }

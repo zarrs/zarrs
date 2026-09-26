@@ -261,6 +261,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
 
     /// Initialises a partial decoder for the chunk at `chunk_indices`.
     ///
+    /// The partial decoder is independent of the [`data_order`](ArrayOps::data_order): it always uses C order.
+    ///
     /// # Errors
     /// Returns an [`ArrayError`] if initialisation of the partial decoder fails.
     fn partial_decoder(

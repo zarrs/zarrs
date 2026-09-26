@@ -23,9 +23,28 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         let subchunk_grids = codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())
             .map_err(|err| CodecCreateError::from(err.to_string()))?;
+        let codecs_bound_fortran = Self::build_codecs_bound_fortran(
+            &codecs_bound,
+            self.dimensionality(),
+            self.data_order,
+        )?;
         self.codecs = codecs;
         self.codecs_bound = codecs_bound;
+        self.codecs_bound_fortran = codecs_bound_fortran;
         self.subchunk_grids = subchunk_grids;
+        Ok(self)
+    }
+
+    pub fn set_data_order(
+        &mut self,
+        data_order: ArrayDataOrder,
+    ) -> Result<&mut Self, CodecCreateError> {
+        self.codecs_bound_fortran = Self::build_codecs_bound_fortran(
+            &self.codecs_bound,
+            self.dimensionality(),
+            data_order,
+        )?;
+        self.data_order = data_order;
         Ok(self)
     }
 

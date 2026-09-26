@@ -66,6 +66,10 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         &self.codec_options
     }
 
+    pub fn data_order(&self) -> ArrayDataOrder {
+        self.data_order
+    }
+
     pub fn metadata_options(&self) -> &ArrayMetadataOptions {
         &self.metadata_options
     }
@@ -79,6 +83,13 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         let mut array = self.clone();
         array.codec_options = codec_options;
         array
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn with_data_order(&self, data_order: ArrayDataOrder) -> Result<Self, CodecCreateError> {
+        let mut array = self.clone();
+        array.set_data_order(data_order)?;
+        Ok(array)
     }
 
     #[allow(clippy::return_self_not_must_use)]

@@ -71,6 +71,8 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///
     /// Partial encoding with [`ArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
     ///
+    /// The partial encoder is independent of the [`data_order`](ArrayOps::data_order): it always uses C order.
+    ///
     /// # Errors
     /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
     fn partial_encoder(

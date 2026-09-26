@@ -353,6 +353,68 @@ impl CodecChainBound {
         Ok((array_representations, bytes_representations))
     }
 
+    /// Return a codec chain that decodes chunks of `dimensionality` with their axes reversed.
+    ///
+    /// The C-order output of the returned chain is the F-order output of this chain.
+    /// This is equivalent to prepending a `transpose` codec with a reversed order.
+    /// If the first array to array codec is a `transpose` codec, the two are fused, and the `transpose` is removed entirely if the fused order is the identity (e.g. for Zarr V2 F-order arrays).
+    #[cfg(feature = "transpose")]
+    pub(crate) fn with_reversed_axes(&self, dimensionality: usize) -> Result<Self, CodecError> {
+        use crate::array::codec::TransposeOrder;
+        use crate::array::codec::array_to_array::transpose::TransposeCodecBound;
+
+        let transpose_order = |order: &[usize]| {
+            TransposeOrder::new(order).map_err(|err| CodecError::Other(err.to_string()))
+        };
+
+        let first_transpose_order = self.array_to_array.first().and_then(|codec| {
+            codec
+                .as_any()
+                .downcast_ref::<TransposeCodecBound>()
+                .map(|transpose| transpose.order().0.clone())
+        });
+
+        let mut array_to_array = self.array_to_array.clone();
+        if let Some(order) = first_transpose_order {
+            // Reversing the axes then applying `order` is `transpose(q)` with `q[k] = n-1-order[k]`
+            if order.len() != dimensionality {
+                return Err(CodecError::Other(
+                    "Length of transpose codec `order` does not match array dimensionality"
+                        .to_string(),
+                ));
+            }
+            let order_fused: Vec<usize> = order.iter().map(|&o| dimensionality - 1 - o).collect();
+            if order_fused.iter().enumerate().all(|(i, &o)| i == o) {
+                array_to_array.remove(0);
+            } else {
+                array_to_array[0] = Arc::new(TransposeCodecBound::new(
+                    transpose_order(&order_fused)?,
+                    self.data_type().clone(),
+                    self.fill_value().clone(),
+                ));
+            }
+        } else {
+            let order_reversed: Vec<usize> = (0..dimensionality).rev().collect();
+            array_to_array.insert(
+                0,
+                Arc::new(TransposeCodecBound::new(
+                    transpose_order(&order_reversed)?,
+                    self.data_type().clone(),
+                    self.fill_value().clone(),
+                )),
+            );
+        }
+
+        // The transpose codec is at the end of the decode path and supports partial reading and decoding,
+        // so adding or removing it does not change the position of the partial decoder cache.
+        Ok(Self {
+            array_to_array,
+            array_to_bytes: self.array_to_bytes.clone(),
+            bytes_to_bytes: self.bytes_to_bytes.clone(),
+            cache_index: self.cache_index,
+        })
+    }
+
     /// Get the array to array codecs
     #[must_use]
     pub fn array_to_array_codecs(&self) -> &[Arc<dyn ArrayToArrayCodecTraits>] {
@@ -1325,6 +1387,106 @@ mod tests {
             JSON_PCODEC,
             &decoded_region,
             decoded_partial_chunk_true,
+        );
+    }
+
+    #[cfg(feature = "transpose")]
+    fn codec_chain_with_reversed_axes_impl(
+        array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
+        expected_num_array_to_array: usize,
+    ) {
+        use crate::array::transmute_to_bytes_vec;
+
+        let shape: Vec<u64> = vec![2, 3, 4];
+        let shape_nz: ChunkShape = shape.iter().map(|&s| NonZeroU64::new(s).unwrap()).collect();
+        let shape_reversed_nz: ChunkShape = shape_nz.iter().rev().copied().collect();
+        let elements: Vec<u16> = (0..24).collect();
+
+        let codec_chain = CodecChain::new(array_to_array, Arc::new(BytesCodec::default()), vec![])
+            .with_context(data_type::uint16(), FillValue::from(0u16))
+            .unwrap();
+        let codec_chain_reversed = Arc::new(codec_chain.with_reversed_axes(3).unwrap());
+        assert_eq!(
+            codec_chain_reversed.array_to_array_codecs().len(),
+            expected_num_array_to_array
+        );
+
+        let encoded = codec_chain
+            .encode(
+                transmute_to_bytes_vec(elements.clone()).into(),
+                &shape_nz,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+
+        // The C-order decoding of the reversed chain is the F-order decoding of the original chain
+        let expected: Vec<u16> = ndarray::ArrayD::from_shape_vec(vec![2, 3, 4], elements.clone())
+            .unwrap()
+            .reversed_axes()
+            .iter()
+            .copied()
+            .collect();
+        let decoded = codec_chain_reversed
+            .decode(
+                encoded.clone(),
+                &shape_reversed_nz,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap()),
+            expected
+        );
+
+        // Partial decoding in reversed coordinates
+        let input_handle: Arc<dyn BytesPartialDecoderTraits> =
+            Arc::new(CowBytes::from(encoded.to_vec()));
+        let partial_decoder = codec_chain_reversed
+            .partial_decoder(input_handle, &shape_reversed_nz, &CodecOptions::default())
+            .unwrap();
+        let subset_reversed = ArraySubset::new_with_ranges(&[1..3, 0..2, 1..2]);
+        let partial = partial_decoder
+            .partial_decode(&subset_reversed, &CodecOptions::default())
+            .unwrap();
+        // Element [i, j, k] in reversed coordinates is element [k, j, i] in C coordinates
+        let expected_partial: Vec<u16> = subset_reversed
+            .indices()
+            .into_iter()
+            .map(|idx| elements[usize::try_from(idx[2] * 12 + idx[1] * 4 + idx[0]).unwrap()])
+            .collect();
+        assert_eq!(
+            crate::array::convert_from_bytes_slice::<u16>(&partial.into_fixed().unwrap()),
+            expected_partial
+        );
+    }
+
+    #[cfg(feature = "transpose")]
+    #[test]
+    fn codec_chain_with_reversed_axes_prepend() {
+        codec_chain_with_reversed_axes_impl(vec![], 1);
+    }
+
+    #[cfg(feature = "transpose")]
+    #[test]
+    fn codec_chain_with_reversed_axes_fuse_identity() {
+        use crate::array::codec::{TransposeCodec, TransposeOrder};
+        codec_chain_with_reversed_axes_impl(
+            vec![Arc::new(TransposeCodec::new(
+                TransposeOrder::new(&[2, 1, 0]).unwrap(),
+            ))],
+            0,
+        );
+    }
+
+    #[cfg(feature = "transpose")]
+    #[test]
+    fn codec_chain_with_reversed_axes_fuse_permutation() {
+        use crate::array::codec::{TransposeCodec, TransposeOrder};
+        codec_chain_with_reversed_axes_impl(
+            vec![Arc::new(TransposeCodec::new(
+                TransposeOrder::new(&[1, 0, 2]).unwrap(),
+            ))],
+            1,
         );
     }
 }

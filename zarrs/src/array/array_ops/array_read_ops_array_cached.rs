@@ -223,6 +223,8 @@ where
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let bytes = retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options)?;
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        let bytes = self.bytes_in_data_order(bytes, bytemuck::must_cast_slice(&chunk_shape))?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
     }
 
@@ -240,6 +242,7 @@ where
             indexer,
             options,
         )?;
+        let bytes = self.bytes_in_data_order(bytes, &indexer.output_shape())?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
     }
 }
@@ -258,10 +261,12 @@ where
         let options = self.codec_options();
         let bytes = retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options)?;
         let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
+        let shape = bytemuck::must_cast_slice(&shape);
+        T::from_array_bytes_arc_with_order(
+            self.bytes_in_data_order(bytes, shape)?,
+            shape,
             self.array().data_type(),
+            self.data_order(),
         )
     }
 
@@ -294,7 +299,13 @@ where
             indexer,
             options,
         )?;
-        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
+        let shape = indexer.output_shape();
+        T::from_array_bytes_arc_with_order(
+            self.bytes_in_data_order(bytes, &shape)?,
+            &shape,
+            self.array().data_type(),
+            self.data_order(),
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -319,7 +330,13 @@ where
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
         let bytes = retrieve_array_subset_bytes(self.cache(), self.array(), array_subset, options)?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
+        let shape = array_subset.shape();
+        T::from_array_bytes_arc_with_order(
+            self.bytes_in_data_order(bytes, &shape)?,
+            &shape,
+            self.array().data_type(),
+            self.data_order(),
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -338,10 +355,12 @@ where
             return Ok(None);
         };
         let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
+        let shape = bytemuck::must_cast_slice(&shape);
+        T::from_array_bytes_arc_with_order(
+            self.bytes_in_data_order(bytes, shape)?,
+            shape,
             self.array().data_type(),
+            self.data_order(),
         )
         .map(Some)
     }

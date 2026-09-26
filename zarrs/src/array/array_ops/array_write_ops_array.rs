@@ -119,11 +119,12 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                     &codec_concurrency,
                 );
 
+                let array_subset_shape = self.shape_in_data_order(array_subset.shape());
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
-                        &chunk_subset.relative_to(array_subset.start())?,
-                        array_subset.shape(),
+                        &self.subset_in_data_order(chunk_subset.relative_to(array_subset.start())?),
+                        &array_subset_shape,
                         self.data_type(),
                     )?;
                     self.store_chunk_with_options(&chunk_indices, chunk_bytes, &options)
@@ -204,8 +205,12 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
             self.erase_chunk(chunk_indices)?;
         } else {
             let chunk_encoded = self
-                .codecs_bound()
-                .encode(chunk_bytes, &chunk_shape, options)
+                .codecs_bound_in_data_order()
+                .encode(
+                    chunk_bytes,
+                    &self.chunk_shape_in_data_order(chunk_shape),
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
         }

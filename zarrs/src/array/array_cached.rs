@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use super::Array;
+use super::array_data_order::reverse_axes_of_bytes;
+use super::{Array, ArrayBytes, ArrayError};
 use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 
 /// A cached array wrapper.
@@ -16,6 +17,13 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// Most read operations (`retrieve_*`) check the cache first and populate it on
 /// a miss. The specific cache behavior depends on the cache type (encoded,
 /// decoded, or partial decoder).
+///
+/// #### Data Order
+///
+/// The chunk cache always holds chunks in C order, so it can be shared by arrays with different
+/// [`data_order`](super::ArrayOps::data_order)s. With [`ArrayDataOrder::F`](super::ArrayDataOrder::F),
+/// read operations transpose the C-order result into F order.
+/// Write operations delegate to the inner [`Array`], which encodes F-order data directly.
 ///
 /// #### Encoded Chunk Retrieval
 ///
@@ -142,6 +150,15 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
         array
     }
 
+    pub(crate) fn try_map_array<E>(
+        &self,
+        f: impl FnOnce(&mut Array<TStorage>) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        let mut array = self.clone();
+        f(Arc::make_mut(&mut array.array))?;
+        Ok(array)
+    }
+
     /// Split into the inner array and shared cache.
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
@@ -150,5 +167,22 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
 
     pub(crate) fn cache_arc(&self) -> Arc<C> {
         Arc::clone(&self.cache)
+    }
+
+    /// Convert C-order `bytes` with `shape` retrieved via the chunk cache into the array data order.
+    pub(crate) fn bytes_in_data_order(
+        &self,
+        bytes: Arc<ArrayBytes<'static>>,
+        shape: &[u64],
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        if self.array.reverses_axes() {
+            Ok(Arc::new(reverse_axes_of_bytes(
+                &bytes,
+                shape,
+                self.array.data_type(),
+            )?))
+        } else {
+            Ok(bytes)
+        }
     }
 }

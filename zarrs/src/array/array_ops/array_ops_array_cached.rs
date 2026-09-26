@@ -54,6 +54,10 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().codec_options()
     }
 
+    pub fn data_order(&self) -> ArrayDataOrder {
+        self.array().data_order()
+    }
+
     pub fn metadata_options(&self) -> &ArrayMetadataOptions {
         self.array().metadata_options()
     }
@@ -66,6 +70,14 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
     pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
         self.map_array(|array| {
             array.set_codec_options(codec_options);
+        })
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn with_data_order(&self, data_order: ArrayDataOrder) -> Result<Self, CodecCreateError> {
+        self.try_map_array(|array| {
+            array.set_data_order(data_order)?;
+            Ok(())
         })
     }
 

@@ -44,6 +44,12 @@ pub trait ArrayOps {
     /// [`ArrayMutOps::set_codec_options`] where the array is owned.
     fn codec_options(&self) -> &CodecOptions;
 
+    /// Get the data order of the buffers produced by read operations and consumed by write operations.
+    ///
+    /// Override it with [`with_data_order`](ArrayOps::with_data_order), or
+    /// [`ArrayMutOps::set_data_order`] where the array is owned.
+    fn data_order(&self) -> ArrayDataOrder;
+
     /// Get the array metadata options used by the array operations.
     ///
     /// Override them with [`with_metadata_options`](ArrayOps::with_metadata_options), or
@@ -62,6 +68,18 @@ pub trait ArrayOps {
     /// Prefer deriving once and reusing the result over deriving per operation.
     #[must_use]
     fn with_codec_options(&self, codec_options: CodecOptions) -> Self
+    where
+        Self: Sized;
+
+    /// Return this array configured to read and write data in `data_order`.
+    ///
+    /// With [`ArrayDataOrder::F`], read operations return data in F (column-major) order,
+    /// and write operations expect data in F order.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec chain for `data_order` cannot be created,
+    /// such as if F order is requested and the `transpose` feature is disabled.
+    fn with_data_order(&self, data_order: ArrayDataOrder) -> Result<Self, CodecCreateError>
     where
         Self: Sized;
 

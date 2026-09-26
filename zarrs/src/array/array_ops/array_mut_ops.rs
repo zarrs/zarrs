@@ -30,6 +30,15 @@ pub trait ArrayMutOps: ArrayOps {
         opts: &CodecSpecificOptions,
     ) -> Result<&mut Self, CodecCreateError>;
 
+    /// Set the data order of the buffers produced by read operations and consumed by write operations.
+    ///
+    /// Refer to [`ArrayOps::with_data_order`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec chain for `data_order` cannot be created.
+    fn set_data_order(&mut self, data_order: ArrayDataOrder)
+    -> Result<&mut Self, CodecCreateError>;
+
     /// Set the metadata options.
     fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self;
 

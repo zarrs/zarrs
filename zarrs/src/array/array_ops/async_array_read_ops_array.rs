@@ -9,6 +9,7 @@ use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
     optional_nesting_depth,
 };
+use super::super::array_data_order::reverse_indexer;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use super::async_array_read_ops_common::AsyncRetrieveInto;
@@ -106,7 +107,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 )
                 .map_err(CodecError::from)
                 .map_err(ArrayError::from)?;
-                T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
+                T::from_array_bytes_with_order(
+                    bytes,
+                    &array_subset_shape,
+                    self.data_type(),
+                    self.data_order(),
+                )
             }
             1 => {
                 let chunk_indices = chunks.start();
@@ -149,7 +155,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                     )
                     .await?
                 };
-                T::from_array_bytes(bytes.into_owned(), &array_subset_shape, self.data_type())
+                T::from_array_bytes_with_order(
+                    bytes.into_owned(),
+                    &array_subset_shape,
+                    self.data_type(),
+                    self.data_order(),
+                )
             }
         }
     }
@@ -312,10 +323,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            self.codecs_bound()
+            self.codecs_bound_in_data_order()
                 .decode_into(
                     CowBytes::Shared(chunk_encoded),
-                    &chunk_shape,
+                    &self.chunk_shape_in_data_order(chunk_shape),
                     output_target,
                     options,
                 )
@@ -354,15 +365,34 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .create_async_readable_transformer(storage_handle)
             .await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
-        let bytes = self
-            .codecs_bound()
-            .async_partial_decoder(input_handle, &chunk_shape, options)
-            .await?
-            .partial_decode(indexer, options)
-            .await?
-            .into_owned();
+        let partial_decoder = self
+            .codecs_bound_in_data_order()
+            .clone()
+            .async_partial_decoder(
+                input_handle,
+                &self.chunk_shape_in_data_order(chunk_shape.clone()),
+                options,
+            )
+            .await?;
+        let bytes = if self.reverses_axes() {
+            indexer
+                .validate(chunk_shape_u64)
+                .map_err(CodecError::from)?;
+            let indexer_reversed = reverse_indexer(indexer);
+            partial_decoder
+                .partial_decode(&*indexer_reversed, options)
+                .await?
+        } else {
+            partial_decoder.partial_decode(indexer, options).await?
+        }
+        .into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
-        T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
+        T::from_array_bytes_with_order(
+            bytes,
+            &indexer.output_shape(),
+            self.data_type(),
+            self.data_order(),
+        )
     }
 
     pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
@@ -394,11 +424,28 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .create_async_readable_transformer(storage_handle)
             .await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
-        self.codecs_bound()
-            .async_partial_decoder(input_handle, &chunk_shape, options)
-            .await?
-            .partial_decode_into(indexer, output_target, options)
+        let partial_decoder = self
+            .codecs_bound_in_data_order()
+            .clone()
+            .async_partial_decoder(
+                input_handle,
+                &self.chunk_shape_in_data_order(chunk_shape.clone()),
+                options,
+            )
             .await?;
+        if self.reverses_axes() {
+            indexer
+                .validate(chunk_shape_u64)
+                .map_err(CodecError::from)?;
+            let indexer_reversed = reverse_indexer(indexer);
+            partial_decoder
+                .partial_decode_into(&*indexer_reversed, output_target, options)
+                .await?;
+        } else {
+            partial_decoder
+                .partial_decode_into(indexer, output_target, options)
+                .await?;
+        }
         Ok(())
     }
 
@@ -424,18 +471,56 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
-                .codecs_bound()
-                .decode(CowBytes::Shared(chunk_encoded), &chunk_shape, options)
+                .codecs_bound_in_data_order()
+                .decode(
+                    CowBytes::Shared(chunk_encoded),
+                    &self.chunk_shape_in_data_order(chunk_shape.clone()),
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
-            Ok(Some(T::from_array_bytes(
+            Ok(Some(T::from_array_bytes_with_order(
                 bytes.into_owned(),
                 bytemuck::must_cast_slice(&chunk_shape),
                 self.data_type(),
+                self.data_order(),
             )?))
         } else {
             Ok(None)
         }
+    }
+
+    /// Async variant of [`retrieve_chunk_bytes_c_order_if_exists`](Array::retrieve_chunk_bytes_c_order_if_exists).
+    pub(in crate::array) async fn async_retrieve_chunk_bytes_c_order_if_exists(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
+        if chunk_indices.len() != self.dimensionality() {
+            return Err(ArrayError::InvalidChunkGridIndicesError(
+                chunk_indices.to_vec(),
+            ));
+        }
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_async_readable_transformer(storage_handle)
+            .await?;
+        let chunk_encoded = storage_transformer
+            .get(&self.chunk_key(chunk_indices)?)
+            .await
+            .map_err(ArrayError::StorageError)?;
+        let Some(chunk_encoded) = chunk_encoded else {
+            return Ok(None);
+        };
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let bytes = self
+            .codecs_bound()
+            .decode(CowBytes::Shared(chunk_encoded), &chunk_shape, options)
+            .map_err(ArrayError::CodecError)?
+            .into_owned();
+        bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        Ok(Some(bytes))
     }
 
     pub(in crate::array) async fn async_partial_decoder_with_options(
@@ -466,7 +551,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let nesting_depth = optional_nesting_depth(data_type);
         let array_subset_start = array_subset.start();
-        let array_subset_shape = array_subset.shape();
+        let array_subset_shape = self.shape_in_data_order(&array_subset.shape());
 
         if nesting_depth > 0 {
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
@@ -482,7 +567,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         )
                         .await?
                         .into_optional()?,
-                        chunk_subset_overlap.relative_to(array_subset_start)?,
+                        self.subset_in_data_order(
+                            chunk_subset_overlap.relative_to(array_subset_start)?,
+                        ),
                     ))
                 }
             };
@@ -512,7 +599,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         )
                         .await?
                         .into_variable()?,
-                        chunk_subset_overlap.relative_to(array_subset_start)?,
+                        self.subset_in_data_order(
+                            chunk_subset_overlap.relative_to(array_subset_start)?,
+                        ),
                     ))
                 }
             };
@@ -560,7 +649,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .collect();
             let mask_output_slices = mask_output_slices.as_slice();
             let array_subset_start = array_subset.start();
-            let array_subset_shape = array_subset.shape();
+            let array_subset_shape = self.shape_in_data_order(&array_subset.shape());
 
             let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let array_subset_start = &array_subset_start;
@@ -568,8 +657,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    let chunk_subset_in_array =
-                        chunk_subset_overlap.relative_to(array_subset_start)?;
+                    let chunk_subset_in_array = self.subset_in_data_order(
+                        chunk_subset_overlap.relative_to(array_subset_start)?,
+                    );
 
                     let mut data_view = unsafe {
                         // SAFETY: chunks represent disjoint array subsets
