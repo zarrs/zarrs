@@ -70,7 +70,6 @@ use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::{
@@ -248,10 +247,24 @@ pub(crate) fn apply_permutation<'a>(
                 .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
             Ok(ArrayBytes::from(bytes))
         }
-        (ArrayBytes::Optional(..), _) => Err(CodecError::UnsupportedDataType(
-            data_type.clone(),
-            TransposeCodec::aliases_v3().default_name.to_string(),
-        )),
+        (ArrayBytes::Optional(optional_bytes), _) => {
+            let Some(inner_data_type) = data_type.optional_inner() else {
+                return Err(CodecError::Other(
+                    "dev error: transpose data type mismatch".to_string(),
+                ));
+            };
+            let data = apply_permutation(
+                optional_bytes.data(),
+                input_shape,
+                permutation,
+                inner_data_type,
+            )?;
+            let mut order_with_bytes = permutation.to_vec();
+            order_with_bytes.push(permutation.len());
+            let mask = transpose_array(&order_with_bytes, input_shape, 1, optional_bytes.mask())
+                .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
+            Ok(data.with_optional_mask(mask))
+        }
         (_, _) => Err(CodecError::Other(
             "dev error: transpose data type mismatch".to_string(),
         )),
@@ -340,6 +353,56 @@ mod tests {
             .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
 
+        assert_eq!(bytes, decoded);
+    }
+
+    #[test]
+    fn apply_permutation_optional() {
+        // Shape [2, 3], row-major: [[0, 1, 2], [3, 4, 5]], elements 1 and 5 are null
+        let data = ArrayBytes::new_flen((0u8..6).collect::<Vec<u8>>());
+        let mask = vec![1u8, 0, 1, 1, 1, 0];
+        let original = data.with_optional_mask(mask);
+        let data_type = data_type::uint8().to_optional();
+
+        let encoded = apply_permutation(&original, &[2, 3], &[1, 0], &data_type).unwrap();
+        let ArrayBytes::Optional(encoded_optional) = &encoded else {
+            panic!("expected optional bytes");
+        };
+        assert_eq!(
+            encoded_optional.data(),
+            &ArrayBytes::new_flen(vec![0u8, 3, 1, 4, 2, 5])
+        );
+        assert_eq!(encoded_optional.mask().as_ref(), &[1u8, 1, 0, 1, 1, 0]);
+
+        let decoded = apply_permutation(&encoded, &[3, 2], &[1, 0], &data_type).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn codec_transpose_round_trip_optional_string() {
+        use crate::array::Element;
+
+        let shape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()];
+        let data_type = data_type::string().to_optional();
+        let elements: Vec<Option<&str>> = vec![
+            Some("a"),
+            None,
+            Some("ccc"),
+            Some("dddd"),
+            None,
+            Some("ffffff"),
+        ];
+        let bytes = Element::into_array_bytes(&data_type, elements).unwrap();
+
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type, FillValue::new_optional_null())
+            .unwrap();
+        let encoded = codec
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .unwrap();
+        let decoded = codec
+            .decode(encoded, &shape, &CodecOptions::default())
+            .unwrap();
         assert_eq!(bytes, decoded);
     }
 
