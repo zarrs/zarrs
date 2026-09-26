@@ -1,6 +1,29 @@
-use crate::array::transmute_to_bytes_vec;
+use zfp_rs::{ZfpField, ZfpFieldMut, ZfpScalar, ZfpScalarType};
 
 use super::ZfpEncoding;
+use crate::array::transmute_to_bytes_vec;
+
+/// Create a zfp field from C-order `shape` (zfp dimensions are ordered fastest varying first).
+fn new_field<'a, T: ZfpScalar>(data: &'a [T], shape: &[usize]) -> Option<ZfpField<'a>> {
+    match *shape {
+        [nx] => Some(ZfpField::new(data, [nx])),
+        [ny, nx] => Some(ZfpField::new(data, [nx, ny])),
+        [nz, ny, nx] => Some(ZfpField::new(data, [nx, ny, nz])),
+        [nw, nz, ny, nx] => Some(ZfpField::new(data, [nx, ny, nz, nw])),
+        _ => None,
+    }
+}
+
+/// Create a mutable zfp field from C-order `shape` (zfp dimensions are ordered fastest varying first).
+fn new_field_mut<'a, T: ZfpScalar>(data: &'a mut [T], shape: &[usize]) -> Option<ZfpFieldMut<'a>> {
+    match *shape {
+        [nx] => Some(ZfpFieldMut::new(data, [nx])),
+        [ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny])),
+        [nz, ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny, nz])),
+        [nw, nz, ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny, nz, nw])),
+        _ => None,
+    }
+}
 
 /// A zfp array holding decoded data along with the original encoding.
 ///
@@ -62,31 +85,58 @@ impl ZfpArray {
         }
     }
 
-    pub(super) fn zfp_type(&self) -> zfp_sys::zfp_type {
+    /// Returns the zfp scalar type of the array.
+    pub(super) fn scalar_type(&self) -> ZfpScalarType {
         match self {
             Self::Int8(_)
             | Self::Int16(_)
             | Self::Int32(_)
             | Self::UInt8(_)
             | Self::UInt16(_)
-            | Self::UInt32(_) => zfp_sys::zfp_type_zfp_type_int32,
-            Self::Int64(_) | Self::UInt64(_) => zfp_sys::zfp_type_zfp_type_int64,
-            Self::Float32(_) => zfp_sys::zfp_type_zfp_type_float,
-            Self::Float64(_) => zfp_sys::zfp_type_zfp_type_double,
+            | Self::UInt32(_) => ZfpScalarType::Int32,
+            Self::Int64(_) | Self::UInt64(_) => ZfpScalarType::Int64,
+            Self::Float32(_) => ZfpScalarType::Float,
+            Self::Float64(_) => ZfpScalarType::Double,
         }
     }
 
-    pub(super) fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+    /// Returns a zfp field over the array with the given C-order `shape`.
+    ///
+    /// Returns [`None`] if the shape is not 1-4 dimensional or does not match the array length.
+    pub(super) fn field(&self, shape: &[usize]) -> Option<ZfpField<'_>> {
+        if shape.iter().product::<usize>() != self.len() {
+            return None;
+        }
         match self {
             Self::Int8(v)
             | Self::Int16(v)
             | Self::Int32(v)
             | Self::UInt8(v)
             | Self::UInt16(v)
-            | Self::UInt32(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Int64(v) | Self::UInt64(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Float32(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Float64(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
+            | Self::UInt32(v) => new_field(v, shape),
+            Self::Int64(v) | Self::UInt64(v) => new_field(v, shape),
+            Self::Float32(v) => new_field(v, shape),
+            Self::Float64(v) => new_field(v, shape),
+        }
+    }
+
+    /// Returns a mutable zfp field over the array with the given C-order `shape`.
+    ///
+    /// Returns [`None`] if the shape is not 1-4 dimensional or does not match the array length.
+    pub(super) fn field_mut(&mut self, shape: &[usize]) -> Option<ZfpFieldMut<'_>> {
+        if shape.iter().product::<usize>() != self.len() {
+            return None;
+        }
+        match self {
+            Self::Int8(v)
+            | Self::Int16(v)
+            | Self::Int32(v)
+            | Self::UInt8(v)
+            | Self::UInt16(v)
+            | Self::UInt32(v) => new_field_mut(v, shape),
+            Self::Int64(v) | Self::UInt64(v) => new_field_mut(v, shape),
+            Self::Float32(v) => new_field_mut(v, shape),
+            Self::Float64(v) => new_field_mut(v, shape),
         }
     }
 

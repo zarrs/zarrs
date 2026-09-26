@@ -27,7 +27,7 @@ gzip = ["dep:flate2"] # Enable the gzip codec
 pcodec = ["dep:pco"] # Enable the pcodec codec
 sharding = [] # Enable the sharding codec (DEPRECATED, now always enabled)
 transpose = ["dep:ndarray"] # Enable the transpose codec
-zfp = ["dep:zfp-sys"] # Enable the zfp codec
+zfp = ["dep:zfp-rs"] # Enable the zfp codec
 zlib = ["dep:flate2"] # Enable the zlib codec
 zstd = ["dep:zstd"] # Enable the zstd codec
 ndarray = ["dep:ndarray"] # Adds ndarray utility functions to Array
@@ -81,7 +81,7 @@ zarrs_data_type.workspace = true
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
 zarrs_storage.workspace = true
-zfp-sys = { package = "zfp-rs-ffi", git = "https://github.com/LDeakin/zfp-rs", rev = "61d6775b60b679b257cc317ec3ba6d96085ad9cb", optional = true }
+zfp-rs = { git = "https://github.com/LDeakin/zfp-rs", rev = "61d6775b60b679b257cc317ec3ba6d96085ad9cb", optional = true }
 dlpark = { version = "0.6.0", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"

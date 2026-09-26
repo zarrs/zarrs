@@ -91,26 +91,18 @@
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 
 mod zfp_array;
-mod zfp_bitstream;
 mod zfp_codec;
-mod zfp_field;
-mod zfp_stream;
+mod zfp_config;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
-use zfp_sys::{
-    zfp_decompress, zfp_exec_policy_zfp_exec_omp, zfp_field_alloc, zfp_field_free,
-    zfp_field_set_pointer, zfp_read_header, zfp_stream_close, zfp_stream_open, zfp_stream_rewind,
-    zfp_stream_set_bit_stream, zfp_stream_set_execution,
-};
+use zfp_rs::{ZfpBitStream, ZfpHeaderMask, ZfpScalarType};
 
 use self::zfp_array::ZfpArray;
-use self::zfp_bitstream::ZfpBitstream;
-use self::zfp_field::ZfpField;
-use self::zfp_stream::ZfpStream;
+use self::zfp_config::zfp_config;
 use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
@@ -139,12 +131,12 @@ pub use zarrs_data_type::codec_traits::zfp::{
     impl_zfp_data_type_traits,
 };
 
-fn zfp_native_type_to_sys(native_type: ZfpNativeType) -> zfp_sys::zfp_type {
+const fn zfp_native_type_to_scalar_type(native_type: ZfpNativeType) -> ZfpScalarType {
     match native_type {
-        ZfpNativeType::Int32 => zfp_sys::zfp_type_zfp_type_int32,
-        ZfpNativeType::Int64 => zfp_sys::zfp_type_zfp_type_int64,
-        ZfpNativeType::Float => zfp_sys::zfp_type_zfp_type_float,
-        ZfpNativeType::Double => zfp_sys::zfp_type_zfp_type_double,
+        ZfpNativeType::Int32 => ZfpScalarType::Int32,
+        ZfpNativeType::Int64 => ZfpScalarType::Int64,
+        ZfpNativeType::Float => ZfpScalarType::Float,
+        ZfpNativeType::Double => ZfpScalarType::Double,
     }
 }
 
@@ -219,54 +211,44 @@ fn init_zfp_decoding_output(
 fn zfp_decode(
     zfp_mode: &ZfpMode,
     write_header: bool,
-    encoded_value: &mut [u8],
+    encoded_value: &[u8],
     shape: &[NonZeroU64],
     data_type: &DataType,
-    parallel: bool,
 ) -> Result<Vec<u8>, CodecError> {
     let mut array = init_zfp_decoding_output(shape, data_type)?;
-    let zfp_type = array.zfp_type();
-    let stream = ZfpStream::new(zfp_mode, zfp_type)
-        .ok_or_else(|| CodecError::from("failed to create zfp stream"))?;
-
-    let bitstream = ZfpBitstream::new(encoded_value)
-        .ok_or_else(|| CodecError::from("failed to create zfp bitstream"))?;
-    if write_header {
-        let ret = unsafe {
-            let field = zfp_field_alloc();
-            let stream = zfp_stream_open(bitstream.as_bitstream());
-            zfp_stream_open(bitstream.as_bitstream());
-            zfp_read_header(stream, field, zfp_sys::ZFP_HEADER_FULL);
-            zfp_field_set_pointer(field, array.as_mut_ptr());
-            let ret = zfp_decompress(stream, field);
-            zfp_stream_close(stream);
-            zfp_field_free(field);
-            ret
-        };
-        if ret == 0 {
-            return Err(CodecError::from("zfp decompression failed"));
-        }
-    } else {
-        let field = ZfpField::new(
-            &mut array,
-            &shape
-                .iter()
-                .map(|u| usize::try_from(u.get()).unwrap())
-                .collect::<Vec<usize>>(),
-        )
+    let scalar_type = array.scalar_type();
+    let shape = shape
+        .iter()
+        .map(|u| usize::try_from(u.get()).unwrap())
+        .collect::<Vec<usize>>();
+    let mut field = array
+        .field_mut(&shape)
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
-        let ret = unsafe {
-            zfp_stream_set_bit_stream(stream.as_zfp_stream(), bitstream.as_bitstream());
-            zfp_stream_rewind(stream.as_zfp_stream());
-            if parallel {
-                zfp_stream_set_execution(stream.as_zfp_stream(), zfp_exec_policy_zfp_exec_omp);
-            }
-            zfp_decompress(stream.as_zfp_stream(), field.as_zfp_field())
-        };
-        if ret == 0 {
-            return Err(CodecError::from("zfp decompression failed"));
+
+    let mut bitstream = ZfpBitStream::from_bytes(encoded_value);
+    let config = if write_header {
+        let header = bitstream
+            .read_header(ZfpHeaderMask::FULL)
+            .map_err(|err| CodecError::Other(format!("failed to read zfp header: {err}")))?;
+        let metadata = header
+            .metadata
+            .ok_or_else(|| CodecError::from("zfp header is missing field metadata"))?;
+        if metadata.scalar_type != scalar_type || metadata.dims != field.dims() {
+            return Err(CodecError::from(
+                "zfp header field metadata does not match the chunk representation",
+            ));
         }
-    }
+        header
+            .config
+            .ok_or_else(|| CodecError::from("zfp header is missing the compression mode"))?
+    } else {
+        zfp_config(zfp_mode, scalar_type)
+            .ok_or_else(|| CodecError::from("unsupported zfp mode for data type"))?
+    };
+
+    bitstream
+        .decompress(&config, &mut field)
+        .map_err(|err| CodecError::Other(format!("zfp decompression failed: {err}")))?;
 
     Ok(array.into_bytes())
 }

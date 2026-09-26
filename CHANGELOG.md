@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `invalidate` methods
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
+- Replace `zfp-sys` with the pure-Rust `zfp-rs` for the `zfp` and `zfpy` codecs
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
