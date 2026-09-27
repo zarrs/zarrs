@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
