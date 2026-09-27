@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
-use zfp_rs::{ZfpBitStream, ZfpHeaderMask, ZfpScalarType};
+use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
 
 use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
-    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_native_type_to_scalar_type,
+    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_dims, zfp_native_type_to_scalar_type,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -31,7 +31,7 @@ pub(crate) struct ZfpCodecBound {
     fill_value: FillValue,
     encoding: ZfpEncoding,
     scalar_type: ZfpScalarType,
-    mode: ZfpMode,
+    config: ZfpConfig,
     write_header: bool,
 }
 
@@ -168,12 +168,18 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let encoding = data_type.codec_zfp()?.zfp_encoding();
         let scalar_type = zfp_native_type_to_scalar_type(encoding.native_type());
+        let config = zfp_config(&self.mode, scalar_type).ok_or_else(|| {
+            CodecCreateError::Other(format!(
+                "zfp {:?} mode is unsupported for the {scalar_type:?} zfp scalar type",
+                self.mode
+            ))
+        })?;
         Ok(Arc::new(ZfpCodecBound {
             data_type,
             fill_value,
             encoding,
             scalar_type,
-            mode: self.mode,
+            config,
             write_header: self.write_header,
         }))
     }
@@ -216,26 +222,23 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
     ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         let bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding);
-        let shape = shape
-            .iter()
-            .map(|u| usize::try_from(u.get()).unwrap())
-            .collect::<Vec<usize>>();
+        let dims = zfp_dims(shape).ok_or_else(|| CodecError::from("failed to create zfp field"))?;
         let field = bytes_promoted
-            .field(&shape)
+            .field(dims)
             .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
-        let config = zfp_config(&self.mode, field.scalar_type())
-            .ok_or_else(|| CodecError::from("unsupported zfp mode for data type"))?;
 
-        let bufsize = config.maximum_size(field.scalar_type(), &shape);
+        let bufsize = self
+            .config
+            .maximum_size(self.scalar_type, &dims[..shape.len()]);
         let mut bitstream = ZfpBitStream::new(bufsize);
         if self.write_header {
-            let bits = bitstream.write_header(&config, &field, ZfpHeaderMask::FULL);
+            let bits = bitstream.write_header(&self.config, &field, ZfpHeaderMask::FULL);
             if bits == 0 {
                 return Err(CodecError::from("failed to write zfp header"));
             }
         }
         bitstream
-            .compress(&config, &field)
+            .compress(&self.config, &field)
             .map_err(|err| CodecError::Other(format!("zfp compression failed: {err}")))?;
         Ok(CowBytes::from(bitstream.into_vec()))
     }
@@ -246,24 +249,24 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        zfp_decode(&self.mode, self.write_header, &bytes, shape, self.encoding)
-            .map(ArrayBytes::from)
+        zfp_decode(
+            &self.config,
+            self.write_header,
+            &bytes,
+            shape,
+            self.encoding,
+        )
+        .map(ArrayBytes::from)
     }
 
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let scalar_type = self.scalar_type;
-        let config = zfp_config(&self.mode, scalar_type)
-            .ok_or_else(|| CodecError::from("unsupported zfp mode for data type"))?;
-        let shape = shape
-            .iter()
-            .map(|u| usize::try_from(u.get()).unwrap())
-            .collect::<Vec<usize>>();
-        let bufsize = config.maximum_size(scalar_type, &shape);
-
-        // If we got a valid scalar type, the data type is supported
+        let dims = zfp_dims(shape).ok_or_else(|| CodecError::from("unsupported zfp shape"))?;
+        let bufsize = self
+            .config
+            .maximum_size(self.scalar_type, &dims[..shape.len()]);
         #[allow(clippy::cast_possible_truncation)]
         Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }

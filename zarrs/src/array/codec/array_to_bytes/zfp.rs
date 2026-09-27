@@ -99,9 +99,9 @@ use std::sync::Arc;
 
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
-use zfp_rs::{ZfpBitStream, ZfpHeaderMask, ZfpScalarType};
+use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
 
-use self::zfp_array::ZfpArray;
+use self::zfp_array::{ZfpArray, zfp_dims};
 use self::zfp_config::zfp_config;
 use crate::array::{ChunkShapeTraits, convert_from_bytes_slice};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
@@ -199,23 +199,19 @@ fn init_zfp_decoding_output(shape: &[NonZeroU64], encoding: ZfpEncoding) -> ZfpA
 }
 
 fn zfp_decode(
-    zfp_mode: &ZfpMode,
+    config: &ZfpConfig,
     write_header: bool,
     encoded_value: &[u8],
     shape: &[NonZeroU64],
     encoding: ZfpEncoding,
 ) -> Result<Vec<u8>, CodecError> {
     let mut array = init_zfp_decoding_output(shape, encoding);
-    let scalar_type = array.scalar_type();
-    let shape = shape
-        .iter()
-        .map(|u| usize::try_from(u.get()).unwrap())
-        .collect::<Vec<usize>>();
-    let mut field = array
-        .field_mut(&shape)
+    let mut field = zfp_dims(shape)
+        .and_then(|dims| array.field_mut(dims))
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
 
     let mut bitstream = ZfpBitStream::from_bytes(encoded_value);
+    let header_config;
     let config = if write_header {
         let header = bitstream
             .read_header(ZfpHeaderMask::FULL)
@@ -223,21 +219,21 @@ fn zfp_decode(
         let metadata = header
             .metadata
             .ok_or_else(|| CodecError::from("zfp header is missing field metadata"))?;
-        if metadata.scalar_type != scalar_type || metadata.dims != field.dims() {
+        if metadata.scalar_type != field.scalar_type() || metadata.dims != field.dims() {
             return Err(CodecError::from(
                 "zfp header field metadata does not match the chunk representation",
             ));
         }
-        header
+        header_config = header
             .config
-            .ok_or_else(|| CodecError::from("zfp header is missing the compression mode"))?
+            .ok_or_else(|| CodecError::from("zfp header is missing the compression mode"))?;
+        &header_config
     } else {
-        zfp_config(zfp_mode, scalar_type)
-            .ok_or_else(|| CodecError::from("unsupported zfp mode for data type"))?
+        config
     };
 
     bitstream
-        .decompress(&config, &mut field)
+        .decompress(config, &mut field)
         .map_err(|err| CodecError::Other(format!("zfp decompression failed: {err}")))?;
 
     Ok(array.into_bytes())

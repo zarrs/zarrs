@@ -1,28 +1,22 @@
-use zfp_rs::{ZfpField, ZfpFieldMut, ZfpScalar, ZfpScalarType};
+use std::num::NonZeroU64;
+
+use zfp_rs::{ZfpField, ZfpFieldMut};
 
 use super::ZfpEncoding;
 use crate::array::transmute_to_bytes_vec;
 
-/// Create a zfp field from C-order `shape` (zfp dimensions are ordered fastest varying first).
-fn new_field<'a, T: ZfpScalar>(data: &'a [T], shape: &[usize]) -> Option<ZfpField<'a>> {
-    match *shape {
-        [nx] => Some(ZfpField::new(data, [nx])),
-        [ny, nx] => Some(ZfpField::new(data, [nx, ny])),
-        [nz, ny, nx] => Some(ZfpField::new(data, [nx, ny, nz])),
-        [nw, nz, ny, nx] => Some(ZfpField::new(data, [nx, ny, nz, nw])),
-        _ => None,
+/// Convert a C-order chunk `shape` to zfp dimensions (fastest varying first, zero padded).
+///
+/// Returns [`None`] if the shape is not 1-4 dimensional.
+pub(super) fn zfp_dims(shape: &[NonZeroU64]) -> Option<[usize; 4]> {
+    if shape.is_empty() || shape.len() > 4 {
+        return None;
     }
-}
-
-/// Create a mutable zfp field from C-order `shape` (zfp dimensions are ordered fastest varying first).
-fn new_field_mut<'a, T: ZfpScalar>(data: &'a mut [T], shape: &[usize]) -> Option<ZfpFieldMut<'a>> {
-    match *shape {
-        [nx] => Some(ZfpFieldMut::new(data, [nx])),
-        [ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny])),
-        [nz, ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny, nz])),
-        [nw, nz, ny, nx] => Some(ZfpFieldMut::new(data, [nx, ny, nz, nw])),
-        _ => None,
+    let mut dims = [0; 4];
+    for (dim, size) in dims.iter_mut().zip(shape.iter().rev()) {
+        *dim = usize::try_from(size.get()).unwrap();
     }
+    Some(dims)
 }
 
 /// A zfp array holding decoded data along with the original encoding.
@@ -85,59 +79,41 @@ impl ZfpArray {
         }
     }
 
-    /// Returns the zfp scalar type of the array.
-    pub(super) fn scalar_type(&self) -> ZfpScalarType {
-        match self {
-            Self::Int8(_)
-            | Self::Int16(_)
-            | Self::Int32(_)
-            | Self::UInt8(_)
-            | Self::UInt16(_)
-            | Self::UInt32(_) => ZfpScalarType::Int32,
-            Self::Int64(_) | Self::UInt64(_) => ZfpScalarType::Int64,
-            Self::Float32(_) => ZfpScalarType::Float,
-            Self::Float64(_) => ZfpScalarType::Double,
-        }
-    }
-
-    /// Returns a zfp field over the array with the given C-order `shape`.
+    /// Returns a zfp field over the array with the given zfp `dims`.
     ///
-    /// Returns [`None`] if the shape is not 1-4 dimensional or does not match the array length.
-    pub(super) fn field(&self, shape: &[usize]) -> Option<ZfpField<'_>> {
-        if shape.iter().product::<usize>() != self.len() {
-            return None;
-        }
-        match self {
+    /// Returns [`None`] if `dims` does not match the array length.
+    pub(super) fn field(&self, dims: [usize; 4]) -> Option<ZfpField<'_>> {
+        let field = match self {
             Self::Int8(v)
             | Self::Int16(v)
             | Self::Int32(v)
             | Self::UInt8(v)
             | Self::UInt16(v)
-            | Self::UInt32(v) => new_field(v, shape),
-            Self::Int64(v) | Self::UInt64(v) => new_field(v, shape),
-            Self::Float32(v) => new_field(v, shape),
-            Self::Float64(v) => new_field(v, shape),
-        }
+            | Self::UInt32(v) => ZfpField::new(v, dims),
+            Self::Int64(v) | Self::UInt64(v) => ZfpField::new(v, dims),
+            Self::Float32(v) => ZfpField::new(v, dims),
+            Self::Float64(v) => ZfpField::new(v, dims),
+        };
+        (field.num_elements() == self.len()).then_some(field)
     }
 
-    /// Returns a mutable zfp field over the array with the given C-order `shape`.
+    /// Returns a mutable zfp field over the array with the given zfp `dims`.
     ///
-    /// Returns [`None`] if the shape is not 1-4 dimensional or does not match the array length.
-    pub(super) fn field_mut(&mut self, shape: &[usize]) -> Option<ZfpFieldMut<'_>> {
-        if shape.iter().product::<usize>() != self.len() {
-            return None;
-        }
-        match self {
+    /// Returns [`None`] if `dims` does not match the array length.
+    pub(super) fn field_mut(&mut self, dims: [usize; 4]) -> Option<ZfpFieldMut<'_>> {
+        let len = self.len();
+        let field = match self {
             Self::Int8(v)
             | Self::Int16(v)
             | Self::Int32(v)
             | Self::UInt8(v)
             | Self::UInt16(v)
-            | Self::UInt32(v) => new_field_mut(v, shape),
-            Self::Int64(v) | Self::UInt64(v) => new_field_mut(v, shape),
-            Self::Float32(v) => new_field_mut(v, shape),
-            Self::Float64(v) => new_field_mut(v, shape),
-        }
+            | Self::UInt32(v) => ZfpFieldMut::new(v, dims),
+            Self::Int64(v) | Self::UInt64(v) => ZfpFieldMut::new(v, dims),
+            Self::Float32(v) => ZfpFieldMut::new(v, dims),
+            Self::Float64(v) => ZfpFieldMut::new(v, dims),
+        };
+        (field.num_elements() == len).then_some(field)
     }
 
     /// Demotes the zfp array back to its original byte representation.
