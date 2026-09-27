@@ -1,16 +1,12 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use itertools::Itertools;
-
-use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
-    FillValue,
-};
+use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, DataTypeSize, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -21,6 +17,13 @@ use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 #[derive(Debug, Clone, Default)]
 pub struct VlenV2Codec {}
 
+/// The `vlen_v2` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct VlenV2CodecBound {
+    data_type: DataType,
+    fill_value: FillValue,
+}
+
 impl VlenV2Codec {
     /// Create a new `vlen_v2` codec.
     #[must_use]
@@ -30,10 +33,6 @@ impl VlenV2Codec {
 }
 
 impl CodecTraits for VlenV2Codec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -56,22 +55,63 @@ impl CodecTraits for VlenV2Codec {
     }
 }
 
-impl ArrayCodecTraits for VlenV2Codec {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for VlenV2Codec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        if data_type.is_optional() || !matches!(data_type.size(), DataTypeSize::Variable) {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        }
+        Ok(Arc::new(VlenV2CodecBound {
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for VlenV2CodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
+
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for VlenV2CodecBound {}
 
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for VlenV2Codec {
+impl ArrayToBytesCodecTraits for VlenV2CodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
@@ -80,12 +120,10 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        bytes.validate(num_elements, data_type)?;
+        bytes.validate(num_elements, &self.data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         debug_assert_eq!(1 + num_elements, offsets.len() as u64);
@@ -97,8 +135,8 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         })?;
         data.extend_from_slice(num_elements.to_le_bytes().as_slice());
         // Interleaved length (u32, little endian) and element bytes
-        for (&curr, &next) in offsets.iter().tuple_windows() {
-            let element_bytes = &bytes[curr..next];
+        for range in offsets.element_ranges() {
+            let element_bytes = &bytes[range];
             let element_bytes_len = u32::try_from(element_bytes.len()).unwrap();
             data.extend_from_slice(&element_bytes_len.to_le_bytes());
             data.extend_from_slice(element_bytes);
@@ -109,17 +147,14 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         let num_elements_usize = usize::try_from(num_elements).unwrap();
         let (bytes, offsets) =
             super::get_interleaved_bytes_and_offsets(num_elements_usize, &bytes)?;
-        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }
@@ -128,16 +163,14 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::vlen_v2_partial_decoder::VlenV2PartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
-                data_type.clone(),
-                fill_value.clone(),
+                self.data_type.clone(),
+                self.fill_value.clone(),
             ),
         ))
     }
@@ -147,16 +180,14 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::vlen_v2_partial_decoder::AsyncVlenV2PartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
-                data_type.clone(),
-                fill_value.clone(),
+                self.data_type.clone(),
+                self.fill_value.clone(),
             ),
         ))
     }
@@ -164,21 +195,12 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     fn encoded_representation(
         &self,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
-
-        match data_type.size() {
+        match self.data_type.size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
+                self.data_type.clone(),
+                VlenV2Codec::aliases_v3().default_name.to_string(),
             )),
         }
     }

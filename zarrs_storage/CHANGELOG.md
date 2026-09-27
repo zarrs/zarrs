@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.5...HEAD)
+
+### Changed
+- **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
+- **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
+- Bump `itertools` to 0.15.0
+- Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+
+### Fixed
+- Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
+- Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
+- Count async erase operations in `PerformanceMetricsStorageAdapter`
+- Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
+- Clamp `StorageValueIO` reads at the end of a value instead of requesting an out-of-bounds byte range
+- Enable the `macros` and `rt-multi-thread` `tokio` dev dependency features so the storage adapter tests compile
+
+## [0.4.5](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.5) - 2026-07-23
+
+### Added
+- Add `AtomicWriteStorageAdapter` and `AtomicRenameStorageTraits`
+- Add `AsyncMemoryStore`
+
+## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.4) - 2026-07-05
+
+### Added
+- Add `StoreKey::root()`
+
+### Changed
+- Allow empty `StoreKey`
 
 ## [0.4.3] - 2026-03-03
 
@@ -153,7 +182,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.3...HEAD
 [0.4.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.3
 [0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.2
 [0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.1

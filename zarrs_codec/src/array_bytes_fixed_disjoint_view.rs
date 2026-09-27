@@ -22,7 +22,7 @@ pub struct ArrayBytesFixedDisjointView<'a> {
 /// Errors that can occur when creating a [`ArrayBytesFixedDisjointView`].
 #[derive(Clone, Debug, Display, Error)]
 pub enum ArrayBytesFixedDisjointViewCreateError {
-    /// The subset is out-of-bounds of the array shape.
+    /// The subset is out-of-bounds of, or has an incompatible dimensionality with, the array shape.
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
     /// The length of the bytes is not the correct length.
     InvalidBytesLength(#[from] InvalidBytesLengthError),
@@ -43,9 +43,12 @@ impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
 impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// Create a new non-overlapping view of the bytes in an array.
     ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start and
+    /// yields a view that reads and writes nothing.
+    ///
     /// # Errors
     /// Returns [`ArrayBytesFixedDisjointViewCreateError`] if
-    /// - `subset` is out-of-bounds of `shape`, or
+    /// - `subset` has an incompatible dimensionality with, or is out-of-bounds of, `shape`, or
     /// - the length of `bytes` is not the product of the elements in `shape` multiplied by `data_type_size`.
     ///
     /// # Safety
@@ -85,8 +88,10 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
 
     /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
     ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start.
+    ///
     /// # Errors
-    /// Returns [`SubsetOutOfBoundsError`] if `subset` is out-of-bounds of the parent subset.
+    /// Returns [`SubsetOutOfBoundsError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the parent subset.
     ///
     /// # Safety
     /// The `subset` represented by this view must not overlap with the `subset` of any other created views that reference the same array bytes.

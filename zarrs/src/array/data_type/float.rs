@@ -48,6 +48,13 @@ impl_bitround_codec!(Float16DataType, 2, float16, 10);
 impl_bitround_codec!(Float32DataType, 4, float32, 23);
 impl_bitround_codec!(Float64DataType, 8, float64, 52);
 
+// CastValue codec implementations for standard floats
+use zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_float;
+impl_cast_value_data_type_traits_float!(BFloat16DataType, bf16);
+impl_cast_value_data_type_traits_float!(Float16DataType, f16);
+impl_cast_value_data_type_traits_float!(Float32DataType, f32);
+impl_cast_value_data_type_traits_float!(Float64DataType, f64);
+
 // Pcodec implementations for standard floats
 use zarrs_data_type::codec_traits::impl_pcodec_data_type_traits;
 // impl_pcodec_data_type_traits!(BFloat16DataType, BF16, 1);

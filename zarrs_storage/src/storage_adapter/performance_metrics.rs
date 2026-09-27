@@ -10,7 +10,7 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
@@ -167,16 +167,16 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
 impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value)
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         let offset_values: Vec<_> = offset_values.collect();
         let bytes_written = offset_values
@@ -294,7 +294,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value).await
@@ -320,10 +320,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
+        self.keys_erased.fetch_add(1, Ordering::Relaxed);
         self.storage.erase(key).await
     }
 
     async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        self.keys_erased.fetch_add(keys.len(), Ordering::Relaxed);
         self.storage.erase_many(keys).await
     }
 
@@ -341,8 +343,26 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    #[cfg(feature = "async")]
+    use crate::storage_adapter::sync_to_async::{
+        SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+    };
     use crate::store::MemoryStore;
     use crate::store_test;
+
+    #[cfg(feature = "async")]
+    struct InlineSpawnBlocking;
+
+    #[cfg(feature = "async")]
+    impl SyncToAsyncSpawnBlocking for InlineSpawnBlocking {
+        async fn spawn_blocking<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: Send + 'static,
+        {
+            f()
+        }
+    }
 
     #[test]
     fn performance_metrics() {
@@ -359,5 +379,23 @@ mod tests {
         assert!(store.keys_erased() >= 4);
         store.reset();
         assert_eq!(store.bytes_read(), 0);
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn async_erase_performance_metrics() {
+        futures::executor::block_on(async {
+            let store = Arc::new(MemoryStore::new());
+            let store = Arc::new(SyncToAsyncStorageAdapter::new(store, InlineSpawnBlocking));
+            let store = PerformanceMetricsStorageAdapter::new(store);
+            let key = StoreKey::new("key").unwrap();
+            AsyncWritableStorageTraits::erase(&store, &key)
+                .await
+                .unwrap();
+            AsyncWritableStorageTraits::erase_many(&store, &[key.clone(), key])
+                .await
+                .unwrap();
+            assert_eq!(store.keys_erased(), 3);
+        });
     }
 }

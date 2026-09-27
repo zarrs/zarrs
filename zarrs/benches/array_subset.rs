@@ -19,7 +19,7 @@ fn array_subset_indices_iterator(c: &mut Criterion) {
             b.iter(|| {
                 array_subset.indices().into_iter().for_each(|indices| {
                     std::hint::black_box(indices.first().unwrap());
-                })
+                });
             });
         });
     }

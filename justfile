@@ -1,4 +1,4 @@
-TOOLCHAIN := "nightly"
+TOOLCHAIN := "stable"
 export RUST_BACKTRACE := "0"
 
 # Display the available recipes
@@ -12,13 +12,17 @@ build:
     cargo +{{TOOLCHAIN}} check --no-default-features
 
 # Test with all features
-test:
-    cargo +{{TOOLCHAIN}} test --all-features
-    cargo +{{TOOLCHAIN}} test --all-features --examples
+test *args:
+    cargo +{{TOOLCHAIN}} test --all-features {{args}}
+    cargo +{{TOOLCHAIN}} test --all-features --examples {{args}}
+
+# Run ignored tests
+test_ignored:
+    cargo +{{TOOLCHAIN}} test --all-features -- --ignored
 
 # Format with rustfmt
 fmt:
-    cargo +{{TOOLCHAIN}} fmt
+    cargo +nightly fmt
 
 # Lint with clippy
 clippy:
@@ -26,11 +30,11 @@ clippy:
 
 # Generate documentation
 doc:
-    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +{{TOOLCHAIN}} doc -Z unstable-options -Z rustdoc-scrape-examples --all-features --no-deps
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc -Z unstable-options -Z rustdoc-scrape-examples --all-features --no-deps
 
 # Build/test/clippy/doc/check formatting - recommended before a PR
 check: build test clippy doc
-    cargo +{{TOOLCHAIN}} fmt --all -- --check
+    cargo +nightly fmt --all -- --check
 
 # Build (WASM)
 build_wasm:

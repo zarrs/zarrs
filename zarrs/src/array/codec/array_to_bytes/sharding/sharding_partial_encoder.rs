@@ -1,25 +1,27 @@
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use zarrs_chunk_grid::ChunkGridTraits;
-use zarrs_data_type::FillValue;
+use zarrs_chunk_grid::ChunkGrid;
 
-use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
-use crate::array::chunk_grid::RegularChunkGrid;
+use super::{
+    ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, sharding_index_shape,
+    subchunk_updates,
+};
+use crate::array::chunk_grid::{RegularBoundedChunkGrid, RegularChunkGrid};
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-    DataType, IndexerError, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType,
+    transmute_to_bytes,
 };
 use zarrs_codec::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
 };
 use zarrs_storage::StorageError;
@@ -28,12 +30,10 @@ use zarrs_storage::byte_range::ByteRange;
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
     shard_shape: ChunkShape,
-    data_type: DataType,
-    fill_value: FillValue,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularChunkGrid,
-    inner_codecs: Arc<CodecChain>,
-    index_codecs: Arc<CodecChain>,
+    inner_codecs: Arc<CodecChainBound>,
+    index_codecs: Arc<CodecChainBound>,
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
     shard_index: Arc<Mutex<Vec<u64>>>,
@@ -46,12 +46,10 @@ impl ShardingPartialEncoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        data_type: DataType,
-        fill_value: FillValue,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
-        inner_codecs: Arc<CodecChain>,
-        index_codecs: Arc<CodecChain>,
+        inner_codecs: Arc<CodecChainBound>,
+        index_codecs: Arc<CodecChainBound>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
@@ -61,7 +59,7 @@ impl ShardingPartialEncoder {
 
         // Decode the index
         let shard_index = super::decode_shard_index_partial_decoder(
-            input_output_handle.clone().into_dyn_decoder().as_ref(),
+            input_output_handle.as_ref(),
             &index_codecs,
             index_location,
             &shard_shape,
@@ -82,8 +80,6 @@ impl ShardingPartialEncoder {
         Ok(Self {
             input_output_handle,
             shard_shape,
-            data_type,
-            fill_value,
             subchunk_shape,
             chunk_grid,
             inner_codecs,
@@ -96,9 +92,23 @@ impl ShardingPartialEncoder {
     }
 }
 
+impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        let subchunk_grid = ChunkGrid::new(
+            RegularBoundedChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        );
+        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
+    }
+}
+
 impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.inner_codecs.data_type()
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -114,10 +124,9 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
+        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
         super::sharding_partial_decoder_sync::partial_decode(
-            &self.input_output_handle.clone().into_dyn_decoder(),
-            &self.data_type,
-            &self.fill_value,
+            &handle,
             &self.shard_shape,
             &self.subchunk_shape,
             &self.inner_codecs,
@@ -133,10 +142,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 }
 
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
     }
@@ -149,6 +154,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
+        let data_type = self.inner_codecs.data_type();
+        let fill_value = self.inner_codecs.fill_value();
         let mut shard_index = self.shard_index.lock().unwrap();
 
         let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
@@ -168,86 +175,40 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .max()
             .expect("shards cannot be empty");
 
-        let get_subchunks = |chunk_subset| {
-            let c = self.chunk_grid.chunks_in_array_subset(chunk_subset)?;
-            Ok::<_, CodecError>(c.expect("subchunks always within shard"))
-        };
         let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
-                &self.data_type,
+                self.inner_codecs.data_type(),
                 self.subchunk_shape.num_elements_u64(),
-                &self.fill_value,
+                self.inner_codecs.fill_value(),
             )
         };
 
-        // Get all the subchunks that need to be retrieved
-        //   This only includes chunks that straddle chunk subsets.
-        //   Chunks that are entirely within a chunk subset are entirely replaced and are not read.
-        let mut subchunks_intersected = HashSet::<u64>::new();
-        let mut subchunks_indices = HashSet::<u64>::new();
-
-        let Some(chunk_subset_indexer) = chunk_subset_indexer.as_array_subset() else {
-            // TODO: Add support for generic indexers
-            return Err(CodecError::from(
-                "sharding_indexed does not yet support partial encoding with generic indexers",
-            ));
-        };
-
-        // Check the subset is within the chunk shape
-        if chunk_subset_indexer
-            .end_exc()
-            .iter()
-            .zip(&self.shard_shape)
-            .any(|(a, b)| *a > b.get())
-        {
-            Err(IndexerError::new_oob(
-                chunk_subset_indexer.end_exc(),
-                bytemuck::cast_slice(&self.shard_shape).to_vec(),
-            ))?;
+        // Validate the indexer and bytes
+        chunk_subset_indexer.validate(bytemuck::cast_slice(&self.shard_shape))?;
+        chunk_subset_bytes.validate(chunk_subset_indexer.len(), data_type)?;
+        if chunk_subset_indexer.is_empty() {
+            return Ok(());
         }
 
-        // Get the iterator over the subchunks
-        let subchunks = get_subchunks(chunk_subset_indexer)?;
-        let subchunks = subchunks.indices();
+        // Split the update into the intersected subchunks
+        let updates = subchunk_updates(
+            &self.chunk_grid,
+            &chunks_per_shard,
+            &self.subchunk_shape,
+            chunk_subset_indexer,
+            chunk_subset_bytes,
+            data_type,
+        )?;
+        let subchunks_intersected: Vec<u64> =
+            updates.iter().map(|update| update.subchunk_index).collect();
 
-        // Get all the subchunks intersected
-        subchunks_intersected.extend(subchunks.iter().map(
-            |subchunk_indices: ArrayIndicesTinyVec| {
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk")
-            },
-        ));
-
-        // Get all the subchunks that need to be updated
-        let chunk_subset_start = chunk_subset_indexer.start();
-        let chunk_subset_end_exc = chunk_subset_indexer.end_exc();
-        subchunks_indices.extend(subchunks.iter().filter_map(
-            |subchunk_indices: ArrayIndicesTinyVec| {
-                let subchunk_subset = self
-                    .chunk_grid
-                    .subset(&subchunk_indices)
-                    .expect("matching dimensionality")
-                    .expect("subchunk always within shard");
-
-                // Check if the subchunk straddles the chunk subset
-                if subchunk_subset
-                    .start()
-                    .iter()
-                    .zip(chunk_subset_start.iter())
-                    .any(|(a, b)| a < b)
-                    || subchunk_subset
-                        .end_exc()
-                        .iter()
-                        .zip(chunk_subset_end_exc.iter())
-                        .any(|(a, b)| *a > *b)
-                {
-                    let subchunk_index = ravel_indices(&subchunk_indices, &chunks_per_shard)
-                        .expect("inbounds chunk");
-                    Some(subchunk_index)
-                } else {
-                    None
-                }
-            },
-        ));
+        // Get all the subchunks that need to be retrieved
+        //   This only includes chunks that are not entirely replaced by the update.
+        let subchunks_indices: Vec<u64> = updates
+            .iter()
+            .filter(|update| !update.fully_covered)
+            .map(|update| update.subchunk_index)
+            .collect();
 
         // Get the byte ranges of the straddling subchunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
@@ -275,94 +236,70 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let subchunks_encoded = self
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
+            .map(|bytes| {
+                bytes
+                    .into_iter()
+                    .map(CowBytes::into_vec)
+                    .collect::<Vec<_>>()
+            });
 
         // Decode the straddling subchunks
-        let subchunks_decoded: HashMap<_, _> = if let Some(subchunks_encoded) = subchunks_encoded {
-            #[cfg(not(target_arch = "wasm32"))]
-            let iterator = subchunks_indices.into_par_iter();
-            #[cfg(target_arch = "wasm32")]
-            let iterator = subchunks_indices.into_iter();
+        let mut subchunks_decoded: HashMap<_, _> =
+            if let Some(subchunks_encoded) = subchunks_encoded {
+                #[cfg(not(target_arch = "wasm32"))]
+                let iterator = subchunks_indices.into_par_iter();
+                #[cfg(target_arch = "wasm32")]
+                let iterator = subchunks_indices.into_iter();
 
-            let subchunks_encoded = iterator
-                .zip(subchunks_encoded)
-                .map(|(subchunk_index, subchunk_encoded)| {
-                    Ok((
-                        subchunk_index,
-                        self.inner_codecs.decode(
-                            Cow::Owned(subchunk_encoded),
-                            &self.subchunk_shape,
-                            &self.data_type,
-                            &self.fill_value,
-                            options,
-                        )?,
-                    ))
-                })
-                .collect::<Result<Vec<_>, CodecError>>()?;
-            HashMap::from_iter(subchunks_encoded)
-        } else {
-            HashMap::new()
-        };
-
-        // Update all of the intersecting subchunks
-        let subchunks_decoded = Arc::new(Mutex::new(subchunks_decoded));
-        let subchunks = get_subchunks(chunk_subset_indexer)?;
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let iterator = subchunks.indices().into_par_iter();
-        #[cfg(target_arch = "wasm32")]
-        let mut iterator = subchunks.indices().into_iter();
-
-        let chunk_subset_start = chunk_subset_indexer.start();
-        let chunk_subset_shape = chunk_subset_indexer.shape();
-        iterator.try_for_each(|subchunk_indices: ArrayIndicesTinyVec| {
-            // Extract the subchunk bytes that overlap with the chunk subset
-            let subchunk_index =
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk");
-            let subchunk_subset = self
-                .chunk_grid
-                .subset(&subchunk_indices)
-                .expect("matching dimensionality")
-                .expect("subchunk always within shard");
-            let subchunk_subset_overlap = chunk_subset_indexer.overlap(&subchunk_subset).unwrap();
-            let subchunk_bytes = chunk_subset_bytes.extract_array_subset(
-                &subchunk_subset_overlap
-                    .relative_to(&chunk_subset_start)
-                    .unwrap(),
-                &chunk_subset_shape,
-                &self.data_type,
-            )?;
-
-            // Decode the subchunk
-            let subchunk_decoded = if let Some(subchunk_decoded) =
-                subchunks_decoded.lock().unwrap().remove(&subchunk_index)
-            {
-                subchunk_decoded.into_owned()
+                let subchunks_encoded = iterator
+                    .zip(subchunks_encoded)
+                    .map(|(subchunk_index, subchunk_encoded)| {
+                        Ok((
+                            subchunk_index,
+                            self.inner_codecs.decode(
+                                CowBytes::from(subchunk_encoded),
+                                &self.subchunk_shape,
+                                options,
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, CodecError>>()?;
+                HashMap::from_iter(subchunks_encoded)
             } else {
-                subchunk_fill_value()?
+                HashMap::new()
             };
 
-            // Update the subchunk
-            let subchunk_updated = update_array_bytes(
-                subchunk_decoded,
-                bytemuck::cast_slice(&self.subchunk_shape),
-                &subchunk_subset_overlap
-                    .relative_to(subchunk_subset.start())
-                    .unwrap(),
-                &subchunk_bytes,
-                self.data_type.size(),
-            )?;
-            subchunks_decoded
-                .lock()
-                .unwrap()
-                .insert(subchunk_index, subchunk_updated);
+        // Update all of the intersecting subchunks
+        let updates = updates
+            .into_iter()
+            .map(|update| {
+                let subchunk_decoded = subchunks_decoded.remove(&update.subchunk_index);
+                (update, subchunk_decoded)
+            })
+            .collect::<Vec<_>>();
 
-            Ok::<_, CodecError>(())
-        })?;
-        let subchunks_decoded = Arc::try_unwrap(subchunks_decoded)
-            .expect("subchunks_decoded should have one strong reference")
-            .into_inner()
-            .expect("subchunks_decoded should not be poisoned");
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = updates.into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = updates.into_iter();
+
+        let subchunks_decoded = iterator
+            .map(|(update, subchunk_decoded)| {
+                let subchunk_decoded = if let Some(subchunk_decoded) = subchunk_decoded {
+                    subchunk_decoded.into_owned()
+                } else {
+                    subchunk_fill_value()?
+                };
+                let subchunk_updated = update_array_bytes(
+                    subchunk_decoded,
+                    bytemuck::cast_slice(&self.subchunk_shape),
+                    update.indexer.as_ref(),
+                    &update.bytes,
+                    data_type.size(),
+                )?;
+                Ok((update.subchunk_index, subchunk_updated))
+            })
+            .collect::<Result<Vec<_>, CodecError>>()?;
 
         // Encode the updated subchunks
         #[cfg(not(target_arch = "wasm32"))]
@@ -372,19 +309,13 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let updated_subchunks = iterator
             .map(|(subchunk_index, subchunk_decoded)| {
-                if subchunk_decoded.is_fill_value(&self.fill_value) {
+                if subchunk_decoded.is_fill_value(fill_value) {
                     Ok((subchunk_index, None))
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(
-                            subchunk_decoded,
-                            &self.subchunk_shape,
-                            &self.data_type,
-                            &self.fill_value,
-                            options,
-                        )?
-                        .into_owned();
+                        .encode(subchunk_decoded, &self.subchunk_shape, options)?
+                        .into_static();
                     Ok((subchunk_index, Some(subchunk_encoded)))
                 }
             })
@@ -432,23 +363,18 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             self.input_output_handle.erase()?;
         } else {
             // Encode the updated shard index
-            let shard_index_bytes: ArrayBytesRaw =
-                transmute_to_bytes(shard_index.as_slice()).into();
+            let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
-                .encode(
-                    shard_index_bytes.into(),
-                    &self.index_shape,
-                    &crate::array::data_type::uint64(),
-                    &FillValue::from(u64::MAX),
-                    options,
-                )?
-                .into_owned();
+                .encode(shard_index_bytes.into(), &self.index_shape, options)?
+                .into_static();
 
             // Get the total size of the encoded subchunks
             let encoded_subchunks_size = updated_subchunks
                 .iter()
-                .filter_map(|(_, subchunk_encoded)| subchunk_encoded.as_ref().map(Vec::len))
+                .filter_map(|(_, subchunk_encoded)| {
+                    subchunk_encoded.as_ref().map(|bytes| bytes.len())
+                })
                 .sum::<usize>();
 
             // Get the suffix write size
@@ -461,7 +387,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             let mut encoded_output = Vec::with_capacity(suffix_write_size);
             for (_, subchunk_encoded) in updated_subchunks {
                 if let Some(subchunk_encoded) = subchunk_encoded {
-                    encoded_output.extend(subchunk_encoded);
+                    encoded_output.extend_from_slice(&subchunk_encoded);
                 }
             }
 
@@ -471,8 +397,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     self.input_output_handle.partial_encode_many(
                         Box::new(
                             [
-                                (0, Cow::Owned(encoded_array_index)),
-                                (offset_new_chunks, Cow::Owned(encoded_output)),
+                                (0, encoded_array_index),
+                                (offset_new_chunks, CowBytes::from(encoded_output)),
                             ]
                             .into_iter(),
                         ),
@@ -480,9 +406,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     )?;
                 }
                 ShardingIndexLocation::End => {
-                    encoded_output.extend(encoded_array_index);
+                    encoded_output.extend_from_slice(&encoded_array_index);
                     self.input_output_handle.partial_encode_many(
-                        Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
+                        Box::new([(offset_new_chunks, CowBytes::from(encoded_output))].into_iter()),
                         options,
                     )?;
                 }

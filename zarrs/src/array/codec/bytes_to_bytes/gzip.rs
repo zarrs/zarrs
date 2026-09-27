@@ -38,7 +38,6 @@ pub use zarrs_metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(GzipCodec, v3: "gzip", v2: "gzip");
 
@@ -53,7 +52,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for GzipCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: GzipCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -61,7 +60,7 @@ impl CodecTraitsV3 for GzipCodec {
 }
 
 impl CodecTraitsV2 for GzipCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: GzipCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -70,8 +69,8 @@ impl CodecTraitsV2 for GzipCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -113,7 +112,7 @@ mod tests {
         let codec = GzipCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -131,7 +130,7 @@ mod tests {
         let codec = Arc::new(GzipCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -157,7 +156,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -178,7 +176,7 @@ mod tests {
         let codec = Arc::new(GzipCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -205,7 +203,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

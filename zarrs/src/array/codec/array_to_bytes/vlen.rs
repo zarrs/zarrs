@@ -101,24 +101,23 @@ mod vlen_partial_decoder;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use bytes::Bytes;
+
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
+    ArrayBytesOffsets, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, Endianness,
     data_type,
 };
-use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
-    InvalidBytesLengthError,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    CodecTraitsV3, InvalidBytesLengthError,
 };
-use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 pub use zarrs_metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenCodec,
     v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
@@ -130,7 +129,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for VlenCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
         let configuration: VlenCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
@@ -139,91 +138,82 @@ impl CodecTraitsV3 for VlenCodec {
 }
 
 fn get_vlen_bytes_and_offsets(
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
     shape: &[NonZeroU64],
-    index_data_type: VlenIndexDataType,
-    index_codecs: &CodecChain,
-    data_codecs: &CodecChain,
+    index_codecs: &CodecChainBound,
+    data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
-) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+) -> Result<(Bytes, ArrayBytesOffsets), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
-    let (data_type, fill_value) = match index_data_type {
-        VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
-        VlenIndexDataType::UInt64 => (data_type::uint64(), FillValue::from(0u64)),
-    };
-
     // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
     }
-    let (bytes_index_len, bytes_main) = match index_location {
-        VlenIndexLocation::Start => bytes.split_at(size_of::<u64>()),
-        VlenIndexLocation::End => {
-            let (bytes_main, bytes_index_len) = bytes.split_at(bytes.len() - size_of::<u64>());
-            (bytes_index_len, bytes_main)
-        }
+    let len = bytes.len();
+    let index_len_range = match index_location {
+        VlenIndexLocation::Start => 0..size_of::<u64>(),
+        VlenIndexLocation::End => len - size_of::<u64>()..len,
     };
-    let index_len = u64::from_le_bytes(bytes_index_len.try_into().unwrap());
+    let index_len = u64::from_le_bytes(bytes[index_len_range].try_into().unwrap());
     let index_len = usize::try_from(index_len)
         .map_err(|_| CodecError::Other("index length exceeds usize::MAX".to_string()))?;
+    let main_len = len - size_of::<u64>();
+    if index_len > main_len {
+        return Err(CodecError::Other(format!(
+            "index length {index_len} exceeds the available encoded length {main_len}"
+        )));
+    }
 
-    // Get the encoded index and data
+    // Get the encoded index and data without copying
     let (index_enc, data_enc) = match index_location {
-        VlenIndexLocation::Start => bytes_main.split_at(index_len),
+        VlenIndexLocation::Start => {
+            let data_start = size_of::<u64>() + index_len;
+            (
+                bytes.slice(size_of::<u64>()..data_start),
+                bytes.slice(data_start..),
+            )
+        }
         VlenIndexLocation::End => {
-            let (bytes_data, bytes_index) = bytes_main.split_at(bytes_main.len() - index_len);
-            (bytes_index, bytes_data)
+            let index_start = main_len - index_len;
+            (
+                bytes.slice(index_start..main_len),
+                bytes.slice(..index_start),
+            )
         }
     };
 
     // Decode the index
     let mut index = index_codecs
-        .decode(
-            index_enc.into(),
-            &index_shape,
-            &data_type,
-            &fill_value,
-            options,
-        )?
+        .decode(index_enc, &index_shape, options)?
         .into_fixed()?;
+    let index_data_type = index_codecs.data_type();
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &data_type::uint64());
+        index.with_mut(|index| reverse_endianness(index, index_data_type));
     }
-    let index = match index_data_type {
-        VlenIndexDataType::UInt32 => {
-            let index = convert_from_bytes_slice::<u32>(&index);
-            offsets_u32_to_usize(index)
-        }
-        VlenIndexDataType::UInt64 => {
-            let index = convert_from_bytes_slice::<u64>(&index);
-            offsets_u64_to_usize(index)
-        }
-    };
-
-    // Get the data length
-    let Some(&data_len_expected) = index.last() else {
+    // The index is retained without copying if it is shared and aligned
+    let index = index.into_static();
+    let index = if *index_data_type == data_type::uint32() {
+        ArrayBytesOffsets::from_ne_bytes::<u32>(index)?
+    } else if *index_data_type == data_type::uint64() {
+        ArrayBytesOffsets::from_ne_bytes::<u64>(index)?
+    } else {
         return Err(CodecError::Other(
-            "Index is empty? It should have at least one element".to_string(),
+            "unsupported vlen index data type, expected uint32 or uint64".to_string(),
         ));
     };
 
     // Decode the data
+    let data_len_expected = index.last();
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
         data_codecs
-            .decode(
-                data_enc.into(),
-                &[data_len_expected],
-                &data_type::uint8(),
-                &0u8.into(),
-                options,
-            )?
+            .decode(data_enc, &[data_len_expected], options)?
             .into_fixed()?
-            .into_owned()
+            .into_bytes()
     } else {
-        vec![]
+        Bytes::new()
     };
 
     // Check the data length is as expected
@@ -234,70 +224,72 @@ fn get_vlen_bytes_and_offsets(
         )));
     }
 
-    // Validate the offsets
-    for (curr, next) in index.iter().tuple_windows() {
-        if next < curr || *next > data_len {
-            return Err(CodecError::Other(
-                "Invalid bytes offsets in vlen Offset64 encoded chunk".to_string(),
-            ));
-        }
-    }
-
     Ok((data, index))
 }
 
-// /// Convert u8 offsets to usize
-// ///
-// /// # Panics if the offsets exceed [`usize::MAX`].
-// fn offsets_u8_to_usize(offsets: Vec<u8>) -> Vec<usize> {
-//     if size_of::<u8>() == size_of::<usize>() {
-//         bytemuck::allocation::cast_vec(offsets)
-//     } else {
-//         offsets
-//             .into_iter()
-//             .map(|offset| usize::from(offset))
-//             .collect()
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
-// /// Convert u16 offsets to usize
-// ///
-// /// # Panics if the offsets exceed [`usize::MAX`].
-// fn offsets_u16_to_usize(offsets: Vec<u16>) -> Vec<usize> {
-//     if size_of::<u16>() == size_of::<usize>() {
-//         bytemuck::allocation::cast_vec(offsets)
-//     } else {
-//         offsets
-//             .into_iter()
-//             .map(|offset| usize::from(offset))
-//             .collect()
-//     }
-// }
+    use itertools::Itertools;
+    use zarrs_codec::{CodecOptions, CowBytes, UnboundArrayToBytesCodecTraits};
+    use zarrs_data_type::FillValue;
 
-/// Convert u32 offsets to usize
-///
-/// # Panics if the offsets exceed [`usize::MAX`].
-fn offsets_u32_to_usize(offsets: Vec<u32>) -> Vec<usize> {
-    if size_of::<u32>() == size_of::<usize>() {
-        bytemuck::allocation::cast_vec(offsets)
-    } else {
-        offsets
+    use super::{VlenCodec, VlenCodecConfiguration};
+    use crate::array::data_type;
+    use crate::array::element::Element;
+
+    #[test]
+    fn codec_vlen_offsets_width() -> Result<(), Box<dyn std::error::Error>> {
+        for ((index_data_type, is_u32), index_location) in [("uint32", true), ("uint64", false)]
             .into_iter()
-            .map(|offset| usize::try_from(offset).unwrap())
-            .collect()
-    }
-}
+            .cartesian_product(["start", "end"])
+        {
+            let configuration: VlenCodecConfiguration = serde_json::from_str(&format!(
+                r#"{{
+                    "data_codecs": [{{"name": "bytes"}}],
+                    "index_codecs": [{{"name": "bytes","configuration": {{ "endian": "little" }}}}],
+                    "index_data_type": "{index_data_type}",
+                    "index_location": "{index_location}"
+                }}"#
+            ))?;
+            let data_type = data_type::string();
+            let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?)
+                .with_context(data_type.clone(), FillValue::from(""))?;
 
-/// Convert u64 offsets to usize
-///
-/// # Panics if the offsets exceed [`usize::MAX`].
-fn offsets_u64_to_usize(offsets: Vec<u64>) -> Vec<usize> {
-    if size_of::<u64>() == size_of::<usize>() {
-        bytemuck::allocation::cast_vec(offsets)
-    } else {
-        offsets
-            .into_iter()
-            .map(|offset| usize::try_from(offset).unwrap())
-            .collect()
+            let elements = vec!["a", "bb", "", "dddd"];
+            let bytes = <&str>::into_array_bytes(&data_type, elements)?.into_owned();
+            let shape = [NonZeroU64::new(4).unwrap()];
+            let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
+            let encoded = CowBytes::Shared(encoded.into_bytes());
+            let encoded_range = encoded.as_ptr_range();
+            let decoded = codec.decode(encoded.clone(), &shape, &CodecOptions::default())?;
+            assert_eq!(decoded, bytes);
+            let offsets = decoded.offsets().unwrap();
+            assert_eq!(offsets.is_u32(), is_u32);
+
+            // Shared, aligned and little-endian indexes are not copied
+            let offsets_ptr = offsets.as_ne_bytes().as_ptr();
+            let index_start = if index_location == "start" {
+                8
+            } else {
+                encoded.len() - 8 - offsets.as_ne_bytes().len()
+            };
+            let index_aligned =
+                encoded[index_start..]
+                    .as_ptr()
+                    .align_offset(if is_u32 { 4 } else { 8 })
+                    == 0;
+            if index_aligned && cfg!(target_endian = "little") {
+                assert!(encoded_range.contains(&offsets_ptr));
+            } else {
+                assert!(!encoded_range.contains(&offsets_ptr));
+            }
+            // The data is never copied with a passthrough data codec chain
+            let data_ptr = decoded.into_variable()?.bytes().as_ptr();
+            assert!(encoded_range.contains(&data_ptr));
+        }
+        Ok(())
     }
 }

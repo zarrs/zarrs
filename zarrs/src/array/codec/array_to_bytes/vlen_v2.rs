@@ -36,10 +36,10 @@ pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
 pub use vlen_v2_codec::VlenV2Codec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::ArrayBytesRaw;
+use crate::array::array_bytes_internal::offsets_from_usize;
+use crate::array::{ArrayBytesOffsets, CowBytes};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
@@ -51,7 +51,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for VlenV2Codec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
 
         if metadata.configuration().is_none_or(|c| c.is_empty()) {
@@ -65,8 +65,8 @@ impl CodecTraitsV3 for VlenV2Codec {
 
 fn get_interleaved_bytes_and_offsets(
     num_elements: usize,
-    bytes: &ArrayBytesRaw,
-) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+    bytes: &CowBytes,
+) -> Result<(Vec<u8>, ArrayBytesOffsets), CodecError> {
     // Validate the bytes is long enough to contain header and element lengths
     let header_length = size_of::<u32>() * (1 + num_elements);
     if bytes.len() < header_length {
@@ -96,6 +96,7 @@ fn get_interleaved_bytes_and_offsets(
         }
     }
     offsets_out.push(bytes_out.len());
+    let offsets_out = offsets_from_usize(offsets_out)?;
 
     Ok((bytes_out, offsets_out))
 }

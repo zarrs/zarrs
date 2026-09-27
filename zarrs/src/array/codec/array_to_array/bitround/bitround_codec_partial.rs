@@ -3,10 +3,14 @@ use std::sync::Arc;
 use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
@@ -29,6 +33,18 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
             data_type: data_type.clone(),
             keepbits,
         })
+    }
+}
+
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options)
     }
 }
 
@@ -66,10 +82,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
     }
@@ -82,7 +94,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
+        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
@@ -91,6 +103,21 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
+        self.input_output_handle.local_subchunk_grids(options).await
     }
 }
 
@@ -136,10 +163,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for BitroundCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase().await
     }
@@ -152,7 +175,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
+        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle

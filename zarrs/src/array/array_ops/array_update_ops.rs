@@ -1,50 +1,37 @@
 use super::*;
 use zarrs_codec::ArrayPartialEncoderTraits;
 
-mod array;
-mod array_cached;
-
 /// Synchronous array read/write update operations.
+///
+/// These operations encode and decode with the array's
+/// [`codec_options`](ArrayOps::codec_options).
 pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
-    /// Encode `chunk_subset_data` and store in `chunk_subset` of the chunk at `chunk_indices` with default codec options.
+    /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
     ///
-    /// Use [`store_chunk_subset_opt`](ArrayUpdateOps::store_chunk_subset_opt) to control codec options.
+    /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
+    /// [`Indexer`], such as a list of chunk-relative indices.
+    ///
     /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
-    ///  - `chunk_subset` is invalid or out of bounds of the chunk,
+    ///  - `indexer` is out-of-bounds of the chunk or has an incompatible dimensionality,
+    ///  - `indexer` is not an [`ArraySubset`] and the chunk is encoded with the `sharding_indexed`
+    ///    codec while experimental partial encoding is enabled (not yet supported),
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
     ///
     /// # Panics
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
-    fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
+    fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_data,
-            self.codec_options(),
-        )
-    }
-
-    /// Explicit options version of [`store_chunk_subset`](ArrayUpdateOps::store_chunk_subset).
-    fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: T,
-        options: &CodecOptions,
+        indexer: &dyn Indexer,
+        indexer_data: T,
     ) -> Result<(), ArrayError>;
 
     /// Encode `subset_data` and store in `array_subset`.
     ///
-    /// Use [`store_array_subset_opt`](ArrayUpdateOps::store_array_subset_opt) to control codec options.
     /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::ArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
     ///
     /// # Errors
@@ -53,20 +40,14 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///  - the length of `subset_data` does not match the expected length governed by the shape of the array subset and the data type size,
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of chunks intersecting `array_subset` exceeds `usize::MAX`, or if
+    /// attempting to reference a byte beyond `usize::MAX`.
     fn store_array_subset<'a, T: IntoArrayBytes<'a>>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_array_subset_opt(array_subset, subset_data, self.codec_options())
-    }
-
-    /// Explicit options version of [`store_array_subset`](ArrayUpdateOps::store_array_subset).
-    fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: T,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Retrieve the chunk at `chunk_indices`, compact it if possible, and store the compacted chunk back.
@@ -77,11 +58,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Returns an [`ArrayError`] if
     ///  - there is a codec error, or
     ///  - an underlying store error.
-    fn compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError>;
+    fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;
@@ -99,6 +76,5 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     fn partial_encoder(
         &self,
         chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
 }

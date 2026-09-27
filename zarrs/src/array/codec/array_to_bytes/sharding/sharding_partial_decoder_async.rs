@@ -3,35 +3,39 @@ use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
-use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
-use crate::array::array_bytes_internal::merge_chunks_vlen;
+use super::{
+    ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard,
+    nested_local_subchunk_grids,
+};
+use crate::IntoConcurrentLimitIterator;
+use crate::array::array_bytes_internal::{merge_chunks_vlen, offsets_from_usize};
 use crate::array::chunk_grid::RegularChunkGrid;
-use crate::array::codec::CodecChain;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType,
-    DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArrayIndicesTinyVec, ArraySubset,
+    ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes,
+    DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
-    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Asynchronous partial decoder for the sharding codec.
-pub(crate) struct AsyncShardingPartialDecoder {
+pub struct AsyncShardingPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: DataType,
-    fill_value: FillValue,
     shard_shape: ChunkShape,
     subchunk_shape: ChunkShape,
-    inner_codecs: Arc<CodecChain>,
+    inner_codecs: Arc<CodecChainBound>,
     shard_index: Option<Vec<u64>>,
     #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
     sharding_options: ShardingCodecOptions,
@@ -40,18 +44,16 @@ pub(crate) struct AsyncShardingPartialDecoder {
 impl AsyncShardingPartialDecoder {
     /// Create a new partial decoder for the sharding codec.
     #[expect(clippy::too_many_arguments)]
-    pub(crate) async fn new(
+    pub async fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        data_type: DataType,
-        fill_value: FillValue,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
-        inner_codecs: Arc<CodecChain>,
-        index_codecs: &CodecChain,
+        inner_codecs: Arc<CodecChainBound>,
+        index_codecs: &CodecChainBound,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
-    ) -> Result<AsyncShardingPartialDecoder, CodecError> {
+    ) -> Result<Self, CodecError> {
         let shard_index = super::decode_shard_index_async_partial_decoder(
             &*input_handle,
             index_codecs,
@@ -64,8 +66,6 @@ impl AsyncShardingPartialDecoder {
 
         Ok(Self {
             input_handle,
-            data_type,
-            fill_value,
             shard_shape,
             subchunk_shape,
             inner_codecs,
@@ -77,7 +77,7 @@ impl AsyncShardingPartialDecoder {
     /// Retrieve the byte range of an encoded subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) fn subchunk_byte_range(
+    pub fn subchunk_byte_range(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
@@ -92,10 +92,10 @@ impl AsyncShardingPartialDecoder {
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
-    pub(crate) async fn retrieve_subchunk_encoded(
+    pub async fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
+    ) -> Result<Option<CowBytes<'_>>, CodecError> {
         let byte_range = self.subchunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle
@@ -107,26 +107,19 @@ impl AsyncShardingPartialDecoder {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 pub(crate) async fn partial_decode(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
-    if indexer.dimensionality() != shard_shape.len() {
-        return Err(IndexerError::new_incompatible_dimensionality(
-            indexer.dimensionality(),
-            shard_shape.len(),
-        )
-        .into());
-    }
+    indexer.validate(bytemuck::must_cast_slice(shard_shape))?;
 
+    let data_type = inner_codecs.data_type();
+    let fill_value = inner_codecs.fill_value();
     if data_type.is_optional() {
         return Err(CodecError::UnsupportedDataType(
             data_type.clone(),
@@ -139,8 +132,6 @@ pub(crate) async fn partial_decode(
             if let Some(subset) = indexer.as_array_subset() {
                 partial_decode_fixed_array_subset(
                     input_handle,
-                    data_type,
-                    fill_value,
                     shard_shape,
                     subchunk_shape,
                     inner_codecs,
@@ -152,8 +143,6 @@ pub(crate) async fn partial_decode(
             } else {
                 partial_decode_fixed_indexer(
                     input_handle,
-                    data_type,
-                    fill_value,
                     shard_shape,
                     subchunk_shape,
                     inner_codecs,
@@ -198,9 +187,25 @@ pub(crate) async fn partial_decode(
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
+    async fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        let shard_shape = bytemuck::must_cast_slice(&self.shard_shape).to_vec();
+        let subchunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(shard_shape, self.subchunk_shape.clone())
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        );
+        nested_local_subchunk_grids(subchunk_grid, &self.inner_codecs)
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.inner_codecs.data_type()
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -219,8 +224,6 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
             &self.input_handle,
-            &self.data_type,
-            &self.fill_value,
             &self.shard_shape,
             &self.subchunk_shape,
             &self.inner_codecs,
@@ -231,18 +234,50 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         .await
     }
 
+    async fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if indexer.len() != output_target.num_elements() {
+            return Err(InvalidNumberOfElementsError::new(
+                indexer.len(),
+                output_target.num_elements(),
+            )
+            .into());
+        }
+        if let DataTypeSize::Fixed(_) = self.inner_codecs.data_type().size()
+            && let Some(subset) = indexer.as_array_subset()
+            && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
+        {
+            subset.validate(bytemuck::must_cast_slice(&self.shard_shape))?;
+            partial_decode_fixed_array_subset_into(
+                &self.input_handle,
+                &self.shard_shape,
+                &self.subchunk_shape,
+                &self.inner_codecs,
+                self.shard_index.as_deref(),
+                subset,
+                options,
+                output_view,
+            )
+            .await
+        } else {
+            let decoded_value = self.partial_decode(indexer, options).await?;
+            decode_into_array_bytes_target(&decoded_value, output_target)
+        }
+    }
+
     fn supports_partial_decode(&self) -> bool {
         self.input_handle.supports_partial_decode()
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn get_subchunk_partial_decoder(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
     options: &CodecOptions,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
@@ -256,8 +291,6 @@ async fn get_subchunk_partial_decoder(
                 byte_length,
             )),
             subchunk_shape,
-            data_type,
-            fill_value,
             options,
         )
         .await
@@ -273,19 +306,132 @@ async fn get_subchunk_partial_decoder(
         })
 }
 
-#[allow(clippy::too_many_lines)]
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_fixed_array_subset(
+async fn partial_decode_fixed_array_subset_into(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
+    shard_index: Option<&[u64]>,
+    array_subset: &dyn ArraySubsetTraits,
+    options: &CodecOptions,
+    output_view: &mut ArrayBytesFixedDisjointView<'_>,
+) -> Result<(), CodecError> {
+    let fill_value = inner_codecs.fill_value();
+    if array_subset.len() != output_view.num_elements() {
+        return Err(InvalidNumberOfElementsError::new(
+            array_subset.len(),
+            output_view.num_elements(),
+        )
+        .into());
+    }
+    let Some(shard_index) = shard_index else {
+        return output_view
+            .fill(fill_value.as_ne_bytes())
+            .map_err(CodecError::from);
+    };
+    let chunks_per_shard =
+        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        subchunk_shape,
+        &chunks_per_shard,
+        options,
+    )?;
+    let shard_chunk_grid = RegularChunkGrid::new(
+        bytemuck::must_cast_slice(shard_shape).to_vec(),
+        subchunk_shape.to_vec(),
+    )
+    .map_err(Into::<IncompatibleDimensionalityError>::into)?;
+
+    let array_subset_start = array_subset.start();
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
+    let mut subchunks = Vec::with_capacity(chunks.num_elements_usize());
+    for chunk_indices in chunks.indices() {
+        let shard_index_idx =
+            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
+        let chunk_subset = shard_chunk_grid
+            .subset(&chunk_indices)
+            .expect("matching dimensionality")
+            .expect("subchunk always within shard");
+        let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
+        let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
+        let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
+        subchunks.push((
+            offset,
+            size,
+            chunk_subset,
+            chunk_subset_overlap,
+            chunk_output_overlap_subset,
+        ));
+    }
+
+    use futures::{StreamExt, TryStreamExt};
+    let decoded_subchunks = futures::stream::iter(subchunks)
+        .map(
+            |(offset, size, chunk_subset, chunk_subset_overlap, output_subset)| {
+                let options = &options;
+                async move {
+                    if offset == u64::MAX && size == u64::MAX {
+                        Ok::<_, CodecError>((None, output_subset))
+                    } else {
+                        let inner_partial_decoder = get_subchunk_partial_decoder(
+                            input_handle,
+                            subchunk_shape,
+                            inner_codecs,
+                            options,
+                            offset,
+                            size,
+                        )
+                        .await?;
+                        let decoded = inner_partial_decoder
+                            .partial_decode(
+                                &chunk_subset_overlap
+                                    .relative_to(chunk_subset.start())
+                                    .unwrap(),
+                                options,
+                            )
+                            .await?
+                            .into_fixed()?
+                            .into_vec();
+                        Ok((Some(decoded), output_subset))
+                    }
+                }
+            },
+        )
+        .buffer_unordered(subchunk_concurrent_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
+
+    for (decoded, output_subset) in decoded_subchunks {
+        // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
+        let mut subchunk_view = unsafe { output_view.subdivide(output_subset)? };
+        if let Some(decoded) = decoded {
+            subchunk_view.copy_from_slice(&decoded)?;
+        } else {
+            subchunk_view.fill(fill_value.as_ne_bytes())?;
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn partial_decode_fixed_array_subset(
+    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+    shard_shape: &[NonZeroU64],
+    subchunk_shape: &[NonZeroU64],
+    inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
+    let data_type = inner_codecs.data_type();
+    let fill_value = inner_codecs.fill_value();
     let data_type_size = data_type.fixed_size().expect("called on fixed data type");
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
@@ -343,8 +489,6 @@ async fn partial_decode_fixed_array_subset(
                 async move {
                     let inner_partial_decoder = get_subchunk_partial_decoder(
                         input_handle,
-                        data_type,
-                        fill_value,
                         subchunk_shape,
                         inner_codecs,
                         options,
@@ -377,7 +521,7 @@ async fn partial_decode_fixed_array_subset(
                             data_type,
                         )?
                         .into_fixed()?
-                        .into_owned();
+                        .into_vec();
                     Ok::<_, CodecError>((decoded_chunk, chunk_subset_overlap))
                 }
             }),
@@ -389,11 +533,9 @@ async fn partial_decode_fixed_array_subset(
     let array_subset_shape = array_subset.shape();
 
     if !results.is_empty() {
-        crate::iter_concurrent_limit!(
-            options.concurrent_target(),
-            results,
-            try_for_each,
-            |subset_and_decoded_chunk| {
+        results
+            .concurrent_limit(options.concurrent_target())
+            .try_for_each(|subset_and_decoded_chunk| {
                 let (chunk_subset_bytes, chunk_subset_overlap): (Vec<u8>, ArraySubset) =
                     subset_and_decoded_chunk?;
                 let mut output_view = unsafe {
@@ -411,8 +553,7 @@ async fn partial_decode_fixed_array_subset(
                     .copy_from_slice(&chunk_subset_bytes)
                     .expect("chunk subset bytes are the correct length");
                 Ok::<_, CodecError>(())
-            }
-        )?;
+            })?;
     }
 
     // Write filled chunks
@@ -428,11 +569,9 @@ async fn partial_decode_fixed_array_subset(
         .collect::<Vec<_>>();
     if !filled_chunks.is_empty() {
         // Write filled chunks
-        crate::iter_concurrent_limit!(
-            options.concurrent_target(),
-            filled_chunks,
-            try_for_each,
-            |chunk_subset: &ArraySubset| {
+        filled_chunks
+            .concurrent_limit(options.concurrent_target())
+            .try_for_each(|chunk_subset: &ArraySubset| {
                 let chunk_subset_overlap = array_subset.overlap(chunk_subset)?;
                 let mut output_view = unsafe {
                     // SAFETY: chunks represent disjoint array subsets
@@ -448,8 +587,7 @@ async fn partial_decode_fixed_array_subset(
                 output_view
                     .fill(fill_value.as_ne_bytes())
                     .map_err(CodecError::from)
-            }
-        )?;
+            })?;
     }
     unsafe { shard.set_len(shard_size) };
     Ok(ArrayBytes::from(shard))
@@ -462,7 +600,7 @@ async fn partial_decode_variable_array_subset(
     fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
@@ -503,8 +641,6 @@ async fn partial_decode_variable_array_subset(
                 // Partially decode the subchunk
                 let inner_partial_decoder = get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
@@ -552,18 +688,17 @@ async fn partial_decode_variable_array_subset(
     Ok(ArrayBytes::Variable(out_array_subset))
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn partial_decode_fixed_indexer(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     indexer: &dyn Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
+    let data_type = inner_codecs.data_type();
+    let fill_value = inner_codecs.fill_value();
     let data_type_size = data_type.fixed_size().expect("called on fixed data type");
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, indexer);
@@ -590,20 +725,13 @@ async fn partial_decode_fixed_indexer(
 
     for indices in indexer.iter_indices() {
         // Get intersected index
-        if indices.len() != shard_shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indices.len(),
-                shard_shape.len(),
-            )
-            .into());
-        }
         let chunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let chunk_index_1d =
+            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
@@ -615,8 +743,6 @@ async fn partial_decode_fixed_indexer(
             .entry(chunk_index_1d)
             .or_try_insert_with(get_subchunk_partial_decoder(
                 input_handle,
-                data_type,
-                fill_value,
                 subchunk_shape,
                 inner_codecs,
                 options,
@@ -631,8 +757,6 @@ async fn partial_decode_fixed_indexer(
             .get_or_insert_async(&chunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
@@ -670,7 +794,7 @@ async fn partial_decode_variable_indexer(
     fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
+    inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     indexer: &dyn Indexer,
     options: &CodecOptions,
@@ -690,7 +814,7 @@ async fn partial_decode_variable_indexer(
 
     let offsets_len = usize::try_from(indexer.len() + 1).unwrap();
     let mut bytes: Vec<u8> = Vec::new();
-    let mut offsets: Vec<usize> = Vec::with_capacity(offsets_len);
+    let mut offsets = Vec::with_capacity(offsets_len);
     offsets.push(0);
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -702,20 +826,13 @@ async fn partial_decode_variable_indexer(
 
     for indices in indexer.iter_indices() {
         // Get intersected index
-        if indices.len() != shard_shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indices.len(),
-                shard_shape.len(),
-            )
-            .into());
-        }
         let chunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let chunk_index_1d =
+            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
@@ -727,8 +844,6 @@ async fn partial_decode_variable_indexer(
             .entry(chunk_index_1d)
             .or_try_insert_with(get_subchunk_partial_decoder(
                 input_handle,
-                data_type,
-                fill_value,
                 subchunk_shape,
                 inner_codecs,
                 options,
@@ -743,8 +858,6 @@ async fn partial_decode_variable_indexer(
             .get_or_insert_async(&chunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
-                    data_type,
-                    fill_value,
                     subchunk_shape,
                     inner_codecs,
                     options,
@@ -772,8 +885,5 @@ async fn partial_decode_variable_indexer(
         offsets.push(bytes.len());
     }
 
-    Ok(ArrayBytes::new_vlen(
-        bytes,
-        ArrayBytesOffsets::new(offsets)?,
-    )?)
+    Ok(ArrayBytes::new_vlen(bytes, offsets_from_usize(offsets)?)?)
 }

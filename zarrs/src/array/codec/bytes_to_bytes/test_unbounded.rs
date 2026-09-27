@@ -9,8 +9,8 @@ pub use test_unbounded_codec::TestUnboundedCodec;
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -26,7 +26,7 @@ mod tests {
         let codec: TestUnboundedCodec = TestUnboundedCodec::new();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -43,7 +43,7 @@ mod tests {
         let codec = Arc::new(TestUnboundedCodec::new());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -69,7 +69,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -91,7 +90,7 @@ mod tests {
         let codec = Arc::new(TestUnboundedCodec::new());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -118,7 +117,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

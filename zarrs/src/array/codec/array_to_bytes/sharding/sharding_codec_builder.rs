@@ -5,7 +5,9 @@ use super::{ShardingCodec, ShardingIndexLocation};
 use crate::array::codec::Crc32cCodec;
 use crate::array::codec::{BytesCodec, CodecChain, default_array_to_bytes_codec};
 use crate::array::{ChunkShape, DataType};
-use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+};
 
 /// A [`ShardingCodec`] builder.
 ///
@@ -16,10 +18,10 @@ use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytes
 #[derive(Debug)]
 pub struct ShardingCodecBuilder {
     subchunk_shape: ChunkShape,
-    index_array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+    index_array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     index_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
-    array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+    array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
+    array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     index_location: ShardingIndexLocation,
 }
@@ -50,7 +52,7 @@ impl ShardingCodecBuilder {
     /// If left unmodified, the index will be encoded with the `bytes` codec with native endian encoding.
     pub fn index_array_to_bytes_codec(
         &mut self,
-        index_array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+        index_array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     ) -> &mut Self {
         self.index_array_to_bytes_codec = index_array_to_bytes_codec;
         self
@@ -72,7 +74,7 @@ impl ShardingCodecBuilder {
     /// If left unmodified, no array to array codecs will be applied for the subchunks.
     pub fn array_to_array_codecs(
         &mut self,
-        array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+        array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     ) -> &mut Self {
         self.array_to_array_codecs = array_to_array_codecs;
         self
@@ -84,7 +86,7 @@ impl ShardingCodecBuilder {
     /// (see [`default_array_to_bytes_codec`]).
     pub fn array_to_bytes_codec(
         &mut self,
-        array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+        array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     ) -> &mut Self {
         self.array_to_bytes_codec = array_to_bytes_codec;
         self

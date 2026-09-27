@@ -93,7 +93,7 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
+                chunk_indices,
             ))
         }
     })?;
@@ -116,7 +116,7 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     array.store_array_subset(&[0..8, 6..7], &[123.0f32; 8])?;
 
     // Store elements directly in a chunk, in this case set the last row of the bottom right chunk
-    array.store_chunk_subset(
+    array.store_partial_chunk(
         // chunk indices
         &[3, 1],
         // subset within chunk
@@ -148,6 +148,6 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = rectilinear_array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

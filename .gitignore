@@ -32,3 +32,6 @@ mutants.out
 
 # Benchmark fixture data (generated on first run)
 zarrs/benches/data/
+
+# Large generated zarr-python compatibility matrix fixtures
+zarrs/tests/data/zarr_python_compat/cast_value_matrix/

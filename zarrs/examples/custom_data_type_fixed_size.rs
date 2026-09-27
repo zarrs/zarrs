@@ -12,9 +12,9 @@
 //! }
 //! ```
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
@@ -52,11 +52,11 @@ impl From<CustomDataTypeFixedSizeElement> for FillValueMetadata {
 /// The metadata is structured the same as the data type element
 type CustomDataTypeFixedSizeMetadata = CustomDataTypeFixedSizeElement;
 
-/// The padding bytes of CustomDataTypeFixedSizeElement are not serialised.
-/// These are stripped as soon as the data is converted into ArrayBytes *before* it goes into the codec pipeline.
+/// The padding bytes of `CustomDataTypeFixedSizeElement` are not serialised.
+/// These are stripped as soon as the data is converted into `ArrayBytes` *before* it goes into the codec pipeline.
 type CustomDataTypeFixedSizeBytes = [u8; size_of::<u64>() + size_of::<f32>()];
 
-/// These defines how the CustomDataTypeFixedSizeBytes are converted TO little/big endian
+/// These defines how the `CustomDataTypeFixedSizeBytes` are converted TO little/big endian
 /// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeTraitsBytesCodec/Element/ElementOwned
 impl ToBytes for CustomDataTypeFixedSizeElement {
     type Bytes = CustomDataTypeFixedSizeBytes;
@@ -78,7 +78,7 @@ impl ToBytes for CustomDataTypeFixedSizeElement {
     }
 }
 
-/// These defines how the CustomDataTypeFixedSizeBytes are converted FROM little/big endian
+/// These defines how the `CustomDataTypeFixedSizeBytes` are converted FROM little/big endian
 /// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeTraitsBytesCodec/Element/ElementOwned
 impl FromBytes for CustomDataTypeFixedSizeElement {
     type Bytes = CustomDataTypeFixedSizeBytes;
@@ -100,7 +100,7 @@ impl FromBytes for CustomDataTypeFixedSizeElement {
     }
 }
 
-/// This defines how an in-memory CustomDataTypeFixedSizeElement is converted into ArrayBytes before encoding via the codec pipeline.
+/// This defines how an in-memory `CustomDataTypeFixedSizeElement` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeFixedSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
@@ -119,7 +119,7 @@ impl Element for CustomDataTypeFixedSizeElement {
         for element in elements {
             bytes.extend_from_slice(&element.to_ne_bytes());
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(
@@ -130,7 +130,7 @@ impl Element for CustomDataTypeFixedSizeElement {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeFixedSizeElement after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeFixedSizeElement` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeFixedSizeElement {
     fn from_array_bytes(
         data_type: &DataType,
@@ -145,7 +145,7 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
             .as_chunks::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
             .0
         {
-            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(bytes))
+            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(bytes));
         }
         Ok(elements)
     }
@@ -215,12 +215,14 @@ impl DataTypeTraits for CustomDataTypeFixedSize {
 impl BytesDataTypeTraits for CustomDataTypeFixedSize {
     fn encode<'a>(
         &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
-            if endianness != Endianness::native() {
-                let mut bytes = bytes.into_owned();
+            if endianness == Endianness::native() {
+                Ok(bytes)
+            } else {
+                let mut bytes = bytes.into_vec();
                 for bytes in bytes
                     .as_chunks_mut::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
                     .0
@@ -232,9 +234,7 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
                         *bytes = value.to_be_bytes();
                     }
                 }
-                Ok(Cow::Owned(bytes))
-            } else {
-                Ok(bytes)
+                Ok(CowBytes::from(bytes))
             }
         } else {
             Err(BytesCodecEndiannessMissingError)
@@ -243,12 +243,14 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
 
     fn decode<'a>(
         &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
+        bytes: CowBytes<'a>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
+    ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
-            if endianness != Endianness::native() {
-                let mut bytes = bytes.into_owned();
+            if endianness == Endianness::native() {
+                Ok(bytes)
+            } else {
+                let mut bytes = bytes.into_vec();
                 for bytes in bytes
                     .as_chunks_mut::<{ size_of::<u64>() + size_of::<f32>() }>()
                     .0
@@ -260,9 +262,7 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
                     };
                     *bytes = value.to_ne_bytes();
                 }
-                Ok(Cow::Owned(bytes))
-            } else {
-                Ok(bytes)
+                Ok(CowBytes::from(bytes))
             }
         } else {
             Err(BytesCodecEndiannessMissingError)

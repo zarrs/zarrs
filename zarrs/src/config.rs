@@ -61,7 +61,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// ### Experimental Partial Encoding
 /// > default: [`false`]
 ///
-/// If `true`, [`Array::store_chunk_subset`](crate::array::Array::store_chunk_subset) and [`Array::store_array_subset`](crate::array::Array::store_array_subset) and variants can use partial encoding.
+/// If `true`, [`Array::store_partial_chunk`](crate::array::Array::store_partial_chunk) and [`Array::store_array_subset`](crate::array::Array::store_array_subset) and variants can use partial encoding.
 /// This is relevant when using the sharding codec, as it enables subchunks to be written without reading and writing entire shards.
 ///
 /// This is an experimental feature for now until it has more comprehensively tested and support is added in the async API.
@@ -80,7 +80,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// > default: [`MetadataConvertVersion::Default`] (keep existing version)
 ///
 /// Determines the Zarr version of metadata created with [`Array::metadata_opt`](crate::array::Array::metadata_opt) and [`Group::metadata_opt`](crate::group::Group::metadata_opt).
-/// These methods are used internally by the `store_metadata` and `store_metadata_opt` methods of [`crate::array::Array`] and [`crate::group::Group`].
+/// These methods are used internally by the `store_metadata` methods of [`crate::array::Array`] and [`crate::group::Group`].
 ///
 /// ### Metadata Erase Version
 /// > default: [`MetadataEraseVersion::Default`] (erase existing version)

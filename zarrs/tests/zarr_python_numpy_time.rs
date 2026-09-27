@@ -450,7 +450,7 @@ fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
         data_type::numpy_datetime64(NumpyTimeUnit::Second, 1.try_into().unwrap()),
         i64::MIN,
     )
-    .build(store.clone(), "/")?;
+    .build(store, "/")?;
     array.store_metadata()?;
 
     // Test storing and retrieving raw i64 values (seconds since Unix epoch)
@@ -502,7 +502,7 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
         data_type::numpy_timedelta64(NumpyTimeUnit::Millisecond, 1.try_into().unwrap()),
         i64::MIN,
     )
-    .build(store.clone(), "/")?;
+    .build(store, "/")?;
     array.store_metadata()?;
 
     // Test storing and retrieving raw i64 values (milliseconds)

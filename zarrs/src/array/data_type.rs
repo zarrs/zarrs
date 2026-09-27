@@ -2156,6 +2156,6 @@ mod tests {
         let bytes = Element::into_array_bytes(&string(), data).unwrap();
         let (bytes, offsets) = bytes.into_variable().unwrap().into_parts();
         assert_eq!(bytes, "abbccc".as_bytes());
-        assert_eq!(*offsets, [0, 1, 3, 6]);
+        assert_eq!(offsets.iter().collect::<Vec<_>>(), [0, 1, 3, 6]);
     }
 }

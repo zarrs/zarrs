@@ -10,7 +10,7 @@ use futures::StreamExt;
 
 use crate::byte_range::ByteRangeIterator;
 use crate::{
-    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,
+    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
     ListableStorageTraits, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
@@ -106,14 +106,14 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
     WritableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.block_on(self.storage.set(key, value))
     }
 
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
         self.block_on(self.storage.set_partial_many(key, offset_values))
     }

@@ -1,0 +1,242 @@
+use inherent::inherent;
+use std::sync::Arc;
+
+use futures::{StreamExt, TryStreamExt};
+
+use super::super::concurrency::concurrency_chunks_and_codec;
+use super::{AsyncArrayUpdateOps, *};
+use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
+use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
+use zarrs_storage::StorageHandle;
+
+#[cfg(feature = "async")]
+#[inherent]
+impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArrayUpdateOps
+    for Array<TStorage>
+{
+    pub async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        chunk_indices: &[u64],
+        indexer: &dyn Indexer,
+        indexer_data: T,
+    ) -> Result<(), ArrayError> {
+        self.async_store_partial_chunk_with_options(
+            chunk_indices,
+            indexer,
+            indexer_data,
+            self.codec_options(),
+        )
+        .await
+    }
+
+    pub async fn async_store_array_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        subset_data: T,
+    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
+        // Validation
+        if array_subset.dimensionality() != self.shape().len() {
+            return Err(ArrayError::InvalidArraySubset(
+                array_subset.to_array_subset(),
+                self.shape().to_vec(),
+            ));
+        }
+
+        // Find the chunks intersecting this array subset
+        let chunks = self.chunks_in_array_subset(array_subset)?;
+        let Some(chunks) = chunks else {
+            return Err(ArrayError::InvalidArraySubset(
+                array_subset.to_array_subset(),
+                self.shape().to_vec(),
+            ));
+        };
+        let num_chunks = chunks.num_elements_usize();
+        if num_chunks == 1 {
+            let chunk_indices = chunks.start();
+            let chunk_subset = self.chunk_subset(chunk_indices)?;
+            if chunk_subset == array_subset {
+                // A fast path if the array subset matches the chunk subset
+                // This skips the internal decoding occurring in store_partial_chunk
+                self.async_store_chunk_with_options(chunk_indices, subset_data, options)
+                    .await?;
+            } else {
+                // Store the chunk subset
+                self.async_store_partial_chunk_with_options(
+                    chunk_indices,
+                    &array_subset.relative_to(chunk_subset.start())?,
+                    subset_data,
+                    options,
+                )
+                .await?;
+            }
+        } else {
+            let subset_bytes = subset_data.into_array_bytes(self.data_type())?;
+            subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
+
+            // Calculate chunk/codec concurrency
+            let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
+            let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
+            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
+                options.concurrent_target(),
+                num_chunks,
+                options,
+                &codec_concurrency,
+            );
+
+            let array_subset_start = array_subset.start();
+            let array_subset_shape = array_subset.shape();
+            let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+                let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
+                let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
+                let chunk_subset_in_array_subset =
+                    overlap.relative_to(&array_subset_start).unwrap();
+                let array_subset_in_chunk_subset =
+                    overlap.relative_to(chunk_subset.start()).unwrap();
+                let chunk_subset_bytes = subset_bytes
+                    .extract_array_subset(
+                        &chunk_subset_in_array_subset,
+                        &array_subset_shape,
+                        self.data_type(),
+                    )
+                    .unwrap(); // FIXME: unwrap
+                async move {
+                    self.async_store_partial_chunk_with_options(
+                        &chunk_indices,
+                        &array_subset_in_chunk_subset,
+                        chunk_subset_bytes,
+                        &options,
+                    )
+                    .await
+                }
+            };
+
+            futures::stream::iter(&chunks.indices())
+                .map(Ok)
+                .try_for_each_concurrent(Some(chunk_concurrent_limit), store_chunk)
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+        let options = self.codec_options();
+        let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
+        if let Some(chunk_bytes) = chunk_bytes {
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
+            if let Some(compacted_bytes) =
+                self.codecs_bound
+                    .compact(chunk_bytes.into(), &chunk_shape, options)?
+            {
+                unsafe {
+                    self.async_store_encoded_chunk(chunk_indices, compacted_bytes)
+                        .await?;
+                }
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+    pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
+        self.with_storage(self.storage.clone().readable())
+    }
+
+    pub async fn async_partial_encoder(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        self.async_partial_encoder_with_options(chunk_indices, self.codec_options())
+            .await
+    }
+}
+
+impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
+    pub(in crate::array) async fn async_store_partial_chunk_with_options<
+        'a,
+        T: IntoArrayBytes<'a> + MaybeSend,
+    >(
+        &self,
+        chunk_indices: &[u64],
+        indexer: &dyn Indexer,
+        indexer_data: T,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let chunk_shape = self
+            .chunk_grid()
+            .chunk_shape_u64(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        if let Some(chunk_subset) = indexer.as_array_subset() {
+            if !chunk_subset.inbounds_shape(&chunk_shape) {
+                return Err(ArrayError::InvalidChunkSubset(
+                    chunk_subset.to_array_subset(),
+                    chunk_indices.to_vec(),
+                    chunk_shape,
+                ));
+            }
+            if super::subset_is_whole_chunk(chunk_subset, &chunk_shape) {
+                return self
+                    .async_store_chunk_with_options(chunk_indices, indexer_data, options)
+                    .await;
+            }
+        }
+
+        let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
+        indexer_bytes.validate(indexer.len(), self.data_type())?;
+
+        if options.experimental_partial_encoding()
+            && self.codecs.partial_encoder_capability().partial_encode
+            && self.storage.supports_set_partial()
+        {
+            let partial_encoder = self
+                .async_partial_encoder_with_options(chunk_indices, options)
+                .await?;
+            debug_assert!(
+                partial_encoder.supports_partial_encode(),
+                "partial encoder is misrepresenting its capabilities"
+            );
+            partial_encoder
+                .partial_encode(indexer, &indexer_bytes, options)
+                .await?;
+            Ok(())
+        } else {
+            let chunk_bytes_old = self
+                .async_retrieve_chunk_with_options(chunk_indices, options)
+                .await?;
+
+            let chunk_bytes_new = update_array_bytes(
+                chunk_bytes_old,
+                &chunk_shape,
+                indexer,
+                &indexer_bytes,
+                self.data_type().size(),
+            )?;
+
+            self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options)
+                .await
+        }
+    }
+
+    pub(in crate::array) async fn async_partial_encoder_with_options(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+
+        // Input/output
+        let storage_transformer = self
+            .storage_transformers()
+            .create_async_readable_writable_transformer(storage_handle)
+            .await?;
+        let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
+        Ok(self
+            .codecs_bound()
+            .async_partial_encoder(input_output_handle, &chunk_shape, options)
+            .await?)
+    }
+}

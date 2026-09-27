@@ -40,13 +40,27 @@ where
 {
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = async_discover_children(storage, &prefix).await?;
+    let child_metadata_results =
+        futures::future::try_join_all(prefixes.iter().map(|prefix| async move {
+            let path: NodePath = prefix
+                .try_into()
+                .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
+            let metadata = Node::async_get_metadata(storage, &path, version).await;
+            Ok::<_, NodeCreateError>((path, metadata))
+        }))
+        .await?;
     let mut nodes: Vec<Node> = Vec::new();
-    // TODO: Asynchronously get metadata of all prefixes
-    for prefix in &prefixes {
-        let path: NodePath = prefix
-            .try_into()
-            .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = Node::async_get_metadata(storage, &path, version).await?;
+    for (path, child_metadata_result) in child_metadata_results {
+        let child_metadata = match child_metadata_result {
+            Ok(metadata) => metadata,
+            Err(NodeCreateError::MissingMetadata(_)) => {
+                log::warn!(
+                    "Object at {path} is not recognized as a component of a Zarr hierarchy. Ignoring."
+                );
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
 
         let children = if recursive {
             match child_metadata {
@@ -113,4 +127,29 @@ pub async fn async_node_exists_listable<TStorage: ?Sized + AsyncListableStorageT
             | keys.contains(&meta_key_v2_array(path))
             | keys.contains(&meta_key_v2_group(path))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::{AsyncWritableStorageTraits, StoreKey};
+
+    #[test]
+    fn get_child_nodes_ignores_unrecognized_prefixes() {
+        futures::executor::block_on(async {
+            let store = Arc::new(AsyncMemoryStore::new());
+            store
+                .set(
+                    &StoreKey::new("root/fakenode/content/zarr.json").unwrap(),
+                    vec![0].into(),
+                )
+                .await
+                .unwrap();
+
+            let path: NodePath = "/root".try_into().unwrap();
+            let nodes = async_get_child_nodes(&store, &path, true).await.unwrap();
+            assert!(nodes.is_empty());
+        });
+    }
 }

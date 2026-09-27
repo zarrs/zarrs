@@ -49,6 +49,13 @@ impl_bitround_codec!(UInt16DataType, 2, uint16);
 impl_bitround_codec!(UInt32DataType, 4, uint32);
 impl_bitround_codec!(UInt64DataType, 8, uint64);
 
+// CastValue codec implementations for standard unsigned integers
+use zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_unsigned_integer;
+impl_cast_value_data_type_traits_unsigned_integer!(UInt8DataType, u8, 8);
+impl_cast_value_data_type_traits_unsigned_integer!(UInt16DataType, u16, 16);
+impl_cast_value_data_type_traits_unsigned_integer!(UInt32DataType, u32, 32);
+impl_cast_value_data_type_traits_unsigned_integer!(UInt64DataType, u64, 64);
+
 // Pcodec implementations for standard unsigned integers (uint8 not supported)
 use zarrs_data_type::codec_traits::impl_pcodec_data_type_traits;
 impl_pcodec_data_type_traits!(UInt16DataType, U16, 1);

@@ -50,10 +50,13 @@ fn array_partial_encode_sharding(
         .bytes_to_bytes_codecs(vec![]);
     // .storage_transformers(vec![].into())
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     let get_bytes_0_0 = || {
-        let key = array.chunk_key_encoding().encode(&[0, 0]);
+        let key = array.chunk_key(&[0, 0]).unwrap();
         store.get(&key)
     };
 
@@ -70,7 +73,7 @@ fn array_partial_encode_sharding(
 
     // [1, 0]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..1], &[1u16], &opt)?;
+    array.store_array_subset(&[0..1, 0..1], &[1u16])?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     assert_eq!(store_perf.bytes_read(), 0);
@@ -84,7 +87,7 @@ fn array_partial_encode_sharding(
 
     // [0, 0]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..1], &[0u16], &opt)?;
+    array.store_array_subset(&[0..1, 0..1], &[0u16])?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -95,7 +98,7 @@ fn array_partial_encode_sharding(
 
     // [1, 2]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..2], &[1u16, 2], &opt)?;
+    array.store_array_subset(&[0..1, 0..2], &[1u16, 2])?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -110,7 +113,7 @@ fn array_partial_encode_sharding(
     // Check that the shard is entirely rewritten when possible, rather than appended
     // [3, 4]
     // [0, 0]
-    array.store_array_subset_opt(&[0..1, 0..2], &[3u16, 4], &opt)?;
+    array.store_array_subset(&[0..1, 0..2], &[3u16, 4])?;
     assert_eq!(store_perf.reads(), 1); // index + 1x subchunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -127,7 +130,7 @@ fn array_partial_encode_sharding(
 
     // [99, 4]
     // [5, 0]
-    array.store_array_subset_opt(&[0..2, 0..1], &[99u16, 5], &opt)?;
+    array.store_array_subset(&[0..2, 0..1], &[99u16, 5])?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -145,7 +148,7 @@ fn array_partial_encode_sharding(
     // [99, 4]
     // [5, 100]
     store_perf.reset();
-    array.store_array_subset_opt(&[1..2, 1..2], &[100u16], &opt)?;
+    array.store_array_subset(&[1..2, 1..2], &[100u16])?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -172,6 +175,43 @@ fn array_partial_encode_sharding_index_start() {
 #[test]
 fn array_partial_encode_sharding_index_end() {
     array_partial_encode_sharding(ShardingIndexLocation::End, vec![]).unwrap();
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn array_partial_encode_sharding_async() {
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let options = CodecOptions::default().with_experimental_partial_encoding(true);
+    for index_location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        let store = Arc::new(AsyncMemoryStore::new());
+        let mut builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint16(), 0u16);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &data_type::uint16())
+                .index_location(index_location)
+                .build(),
+        ));
+        let array = builder
+            .build(store, "/")
+            .unwrap()
+            .with_codec_options(options);
+
+        array
+            .async_store_array_subset(&[0..1, 0..2], &[1u16, 2])
+            .await
+            .unwrap();
+        array
+            .async_store_array_subset(&[0..2, 0..1], &[3u16, 4])
+            .await
+            .unwrap();
+        assert_eq!(
+            array
+                .async_retrieve_chunk::<Vec<u16>>(&[0, 0])
+                .await
+                .unwrap(),
+            vec![3, 2, 4, 0]
+        );
+    }
 }
 
 #[test]
@@ -246,17 +286,20 @@ fn array_partial_encode_sharding_compact(
         ))
         .bytes_to_bytes_codecs(vec![]);
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     let get_bytes_0_0 = || {
-        let key = array.chunk_key_encoding().encode(&[0, 0]);
+        let key = array.chunk_key(&[0, 0]).unwrap();
         store.get(&key)
     };
 
     // Step 1: Write a large compressible pattern (all same values)
     // This fills multiple subchunks with highly compressible data
     let compressible_data = vec![42u16; 16]; // Fill all 16 elements of the shard
-    array.store_chunk_opt(&[0, 0], &compressible_data, &opt)?;
+    array.store_chunk(&[0, 0], &compressible_data)?;
 
     let size_after_first_write = get_bytes_0_0()?.unwrap().len();
 
@@ -264,11 +307,11 @@ fn array_partial_encode_sharding_compact(
     // This creates gaps as the old compressed data is marked stale
     // Write to subchunk [0,0] (elements [0..2, 0..2] of the shard)
     let random_data1 = vec![100u16, 101, 102, 103];
-    array.store_array_subset_opt(&[0..2, 0..2], &random_data1, &opt)?;
+    array.store_array_subset(&[0..2, 0..2], &random_data1)?;
 
     // Write to subchunk [1,0] (elements [2..4, 0..2] of the shard)
     let random_data2 = vec![200u16, 201, 202, 203];
-    array.store_array_subset_opt(&[2..4, 0..2], &random_data2, &opt)?;
+    array.store_array_subset(&[2..4, 0..2], &random_data2)?;
 
     let size_after_overwrites = get_bytes_0_0()?.unwrap().len();
 
@@ -280,7 +323,7 @@ fn array_partial_encode_sharding_compact(
 
     // Step 3: Compact the chunk
     store_perf.reset();
-    let compaction_occurred = array.compact_chunk(&[0, 0], &opt)?;
+    let compaction_occurred = array.compact_chunk(&[0, 0])?;
 
     // Verify that compaction occurred
     assert!(
@@ -320,7 +363,7 @@ fn array_partial_encode_sharding_compact(
 
     // Step 4: Verify idempotency - compacting an already-compact shard should return false
     store_perf.reset();
-    let compaction_occurred_2 = array.compact_chunk(&[0, 0], &opt)?;
+    let compaction_occurred_2 = array.compact_chunk(&[0, 0])?;
 
     assert!(
         !compaction_occurred_2,

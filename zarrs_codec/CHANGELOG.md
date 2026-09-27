@@ -8,15 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
+- Add `UnboundArrayTo{Array,Bytes}CodecTraits`
+- Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
+- Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
+- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
-- Modify `ArrayToArrayCodecTraits`:
-  - Add `ArrayTo{Array,Bytes}CodecTraits::partial_decode_granularity` with a default implementation
-  - **Breaking**: Remove `ArrayToArrayCodecTraits::decoded_shape`
-
+- **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
+  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
+- **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
+- **Breaking**: Rename `ArrayRawBytesOffsets{OutOfBounds,Create}Error` to `ArrayBytesOffsets{OutOfBounds,Create}Error`
+- **Breaking**: `ArrayBytesOffsets` stores native-endian `u32` or `u64` offsets in a `CowBytes<'static>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
+  - Cloning shares the offset allocation rather than copying its elements
+  - Add `ArrayBytesOffsets::from_ne_bytes`, which retains shared and suitably aligned bytes without copying
+  - Add `ArrayBytesOffsets::{as_ne_bytes,into_u32_ne_bytes,into_u64_ne_bytes}`, which do not copy if the width matches
+  - `Deref<Target = [usize]>` is removed, use the new accessors instead (e.g. `element_range`, `element_ranges`, `iter`, `get`, `last`, `as_slice`, `as_u32`, `as_u64`, `into_u32_vec`, `into_u64_vec`)
+  - `ArrayBytesOffsets::new[_unchecked]` and the `TryFrom` implementations accept `u32` or `u64` offsets (via the sealed `ArrayBytesOffsetsElement` trait) rather than `usize`
+  - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
+  - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
+- **Breaking**: Bump `zarrs_storage` to 0.5.0
+- **Breaking**: Bump `zarrs_data_type` to 0.10.0
+- **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
+  - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
+  - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
+  - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
+  - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
+- **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids
+  - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
+- **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
+  - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
+- Bump `itertools` to 0.15.0
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
+- **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`
+- **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
 
 ## [0.2.1] - 2026-03-21
 

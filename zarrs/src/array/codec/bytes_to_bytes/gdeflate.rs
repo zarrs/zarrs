@@ -48,13 +48,12 @@ use std::sync::Arc;
 pub use gdeflate_codec::GDeflateCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 pub use zarrs_metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
 
@@ -64,7 +63,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for GDeflateCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
         let configuration: GDeflateCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);
@@ -75,7 +74,7 @@ impl CodecTraitsV3 for GDeflateCodec {
 const GDEFLATE_PAGE_SIZE_UNCOMPRESSED: usize = 65536;
 const GDEFLATE_STATIC_HEADER_LENGTH: usize = 2 * size_of::<u64>();
 
-fn gdeflate_decode(encoded_value: &ArrayBytesRaw<'_>) -> Result<Vec<u8>, CodecError> {
+fn gdeflate_decode(encoded_value: &CowBytes<'_>) -> Result<Vec<u8>, CodecError> {
     if encoded_value.len() < GDEFLATE_STATIC_HEADER_LENGTH {
         return Err(InvalidBytesLengthError::new(
             encoded_value.len(),
@@ -261,7 +260,6 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
 
     use super::*;
@@ -305,7 +303,7 @@ mod tests {
         let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -324,7 +322,7 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -350,7 +348,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -372,7 +369,7 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -399,7 +396,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

@@ -25,25 +25,62 @@
 //! # use zarrs::metadata_ext::codec::transpose::TransposeCodecConfiguration;
 //! # let configuration: TransposeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
+//!
+//! ### Subchunking
+//!
+//! A codec chain maps the decoded chunk grid through `transpose` before asking
+//! a downstream codec, such as `sharding`, for its subchunks. The sharding
+//! chunk shape is expressed in the transposed representation. On decode,
+//! `transpose` applies the inverse permutation to the subchunk grid:
+//!
+//! ```text
+//! decoded chunk [2, 3]           encoded chunk [3, 2]
+//! +-----------+                  +-------+
+//! | a  b  c   | -- transpose --> | a  d  |
+//! | d  e  f   |    order [1, 0]  | b  e  |
+//! +-----------+    (encode)      | c  f  |
+//!                                +-------+
+//!                                   | sharding codec
+//!                                   | chunk_shape: [1, 2]
+//!                                   | (encode)
+//!                                   v
+//! decoded subchunks [2, 1]       encoded subchunks [1, 2]
+//! +---+---+---+                  +-------+
+//! | a | b | c | <- transpose --  | a  d  |
+//! | d | e | f |    order [1, 0]  +-------+
+//! +---+---+---+    (decode)      | b  e  |
+//!                                +-------+
+//!                                | c  f  |
+//!                                +-------+
+//! ```
+//!
+//! Every rectilinear edge-length sequence is preserved, including varying
+//! edges; this codec neither splits nor combines spans. The permutation length
+//! must match both grids' dimensionality. The mapped grid is rectilinear, so a
+//! non-rectilinear grid cannot retain topology not represented by independent
+//! per-axis edge lengths. If an earlier codec has already made the grid
+//! chunk-local, transpose preserves that capability and applies the
+//! permutation when each concrete chunk grid is resolved.
 
 mod transpose_codec;
 mod transpose_codec_partial;
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
+use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
+    ArrayBytes, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer, IndexerError,
 };
 use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
 
@@ -53,7 +90,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for TransposeCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: TransposeCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
@@ -112,7 +149,7 @@ fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
 }
 
 fn transpose_vlen<'a>(
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
     offsets: &ArrayBytesOffsets,
     shape: &[usize],
     order: Vec<usize>,
@@ -129,15 +166,10 @@ fn transpose_vlen<'a>(
     let mut offsets_new = Vec::with_capacity(offsets.len());
     for idx in &ndarray_indices_transposed {
         offsets_new.push(bytes_new.len());
-        let curr = offsets[*idx];
-        let next = offsets[idx + 1];
-        bytes_new.extend_from_slice(&bytes[curr..next]);
+        bytes_new.extend_from_slice(&bytes[offsets.element_range(*idx)]);
     }
     offsets_new.push(bytes_new.len());
-    let offsets_new = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets_new)
-    };
+    let offsets_new = offsets_from_usize(offsets_new).unwrap();
     unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)
@@ -146,15 +178,10 @@ fn transpose_vlen<'a>(
 
 fn get_transposed_array_subset(
     order: &[usize],
+    shape: &[NonZeroU64],
     decoded_region: &dyn ArraySubsetTraits,
 ) -> Result<ArraySubset, CodecError> {
-    if decoded_region.dimensionality() != order.len() {
-        return Err(IndexerError::new_incompatible_dimensionality(
-            decoded_region.dimensionality(),
-            order.len(),
-        )
-        .into());
-    }
+    decoded_region.validate(bytemuck::must_cast_slice(shape))?;
 
     let start = permute(&decoded_region.start(), order).expect("matching dimensionality");
     let size = permute(&decoded_region.shape(), order).expect("matching dimensionality");
@@ -164,16 +191,17 @@ fn get_transposed_array_subset(
 
 fn get_transposed_indexer(
     order: &[usize],
+    shape: &[NonZeroU64],
     indexer: &dyn Indexer,
 ) -> Result<impl Indexer, CodecError> {
-    indexer
+    // Permuting an out-of-bounds index yields an index that is out-of-bounds of the permuted
+    // shape, but it is reported in encoded coordinates. Validate here for a useful error.
+    indexer.validate(bytemuck::must_cast_slice(shape))?;
+
+    Ok(indexer
         .iter_indices()
-        .map(|indices| permute(&indices, order))
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| {
-            IndexerError::new_incompatible_dimensionality(indexer.dimensionality(), order.len())
-                .into()
-        })
+        .map(|indices| permute(&indices, order).expect("matching dimensionality"))
+        .collect::<Vec<_>>())
 }
 
 /// Apply a transpose permutation to array bytes.
@@ -238,7 +266,9 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
-    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    };
 
     fn codec_transpose_round_trip_impl(
         json: &str,
@@ -256,25 +286,15 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
-        let codec = TransposeCodec::new_with_configuration(&configuration).unwrap();
+        let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type, fill_value)
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -309,25 +329,15 @@ mod tests {
         let bytes = Element::into_array_bytes(&data_type::string(), strings).unwrap();
 
         // Create transpose codec with order [1, 0] (swap axes)
-        let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type, fill_value)
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
 
         assert_eq!(bytes, decoded);
@@ -378,34 +388,23 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
+        let codec = codec.with_context(data_type, fill_value).unwrap();
         let encoded = codec
-            .encode(
-                bytes,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
             .unwrap();
+        let input_handle = bytes_codec
+            .partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .unwrap();
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
         let decoded_regions = [
@@ -435,44 +434,33 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_transpose_async_partial_decode() {
-        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
-
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
+            .unwrap();
+        let input_handle = bytes_codec
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let decoded_regions = [

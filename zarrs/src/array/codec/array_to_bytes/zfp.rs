@@ -103,10 +103,9 @@ use zfp_rs::{ZfpBitStream, ZfpHeaderMask, ZfpScalarType};
 
 use self::zfp_array::ZfpArray;
 use self::zfp_config::zfp_config;
-use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice};
+use crate::array::{ChunkShapeTraits, convert_from_bytes_slice};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZfpCodec,
     v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
@@ -118,7 +117,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ZfpCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZfpCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
@@ -141,13 +140,8 @@ const fn zfp_native_type_to_scalar_type(native_type: ZfpNativeType) -> ZfpScalar
 }
 
 #[allow(clippy::cast_possible_wrap)]
-fn promote_before_zfp_encoding(
-    decoded_value: &[u8],
-    data_type: &DataType,
-) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
-    let encoding = data_type.codec_zfp()?.zfp_encoding();
-
-    Ok(match encoding {
+fn promote_before_zfp_encoding(decoded_value: &[u8], encoding: ZfpEncoding) -> ZfpArray {
+    match encoding {
         ZfpEncoding::Int32 => ZfpArray::Int32(convert_from_bytes_slice::<i32>(decoded_value)),
         ZfpEncoding::Int64 => ZfpArray::Int64(convert_from_bytes_slice::<i64>(decoded_value)),
         ZfpEncoding::Float32 => ZfpArray::Float32(convert_from_bytes_slice::<f32>(decoded_value)),
@@ -196,16 +190,12 @@ fn promote_before_zfp_encoding(
                     .collect(),
             )
         }
-    })
+    }
 }
 
-fn init_zfp_decoding_output(
-    shape: &[NonZeroU64],
-    data_type: &DataType,
-) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
-    let encoding = data_type.codec_zfp()?.zfp_encoding();
+fn init_zfp_decoding_output(shape: &[NonZeroU64], encoding: ZfpEncoding) -> ZfpArray {
     let num_elements = shape.num_elements_usize();
-    Ok(ZfpArray::new_zeroed(encoding, num_elements))
+    ZfpArray::new_zeroed(encoding, num_elements)
 }
 
 fn zfp_decode(
@@ -213,9 +203,9 @@ fn zfp_decode(
     write_header: bool,
     encoded_value: &[u8],
     shape: &[NonZeroU64],
-    data_type: &DataType,
+    encoding: ZfpEncoding,
 ) -> Result<Vec<u8>, CodecError> {
-    let mut array = init_zfp_decoding_output(shape, data_type)?;
+    let mut array = init_zfp_decoding_output(shape, encoding);
     let scalar_type = array.scalar_type();
     let shape = shape
         .iter()
@@ -264,9 +254,13 @@ mod tests {
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
     use crate::array::element::ElementOwned;
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
+        data_type,
     };
-    use zarrs_codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
+    use zarrs_codec::{
+        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
+        UnboundArrayToBytesCodecTraits,
+    };
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"
@@ -308,29 +302,19 @@ mod tests {
         let bytes = T::to_array_bytes(data_type, &elements).unwrap();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(configuration).unwrap();
-        let codec = CodecChain::new(
+        let codec = Arc::new(CodecChain::new(
             vec![Arc::new(SqueezeCodec::new())],
             Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap()),
             vec![],
-        );
+        ))
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                chunk_shape,
-                data_type,
-                fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded.clone(),
-                chunk_shape,
-                data_type,
-                fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded.clone(), chunk_shape, &CodecOptions::default())
             .unwrap()
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
@@ -498,16 +482,12 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
-        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap());
+        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type, fill_value)
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ArraySubset::new_with_shape(vec![1, 2, 3]),
@@ -516,13 +496,7 @@ mod tests {
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zfp partial decoder does not hold bytes
 
@@ -562,31 +536,19 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
-        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap());
-
-        let max_encoded_size = codec
-            .encoded_representation(&chunk_shape, &data_type, &fill_value)
+        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
             .unwrap();
+
+        let max_encoded_size = codec.encoded_representation(&chunk_shape).unwrap();
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
             .await
             .unwrap();
 

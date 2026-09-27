@@ -80,7 +80,7 @@ impl zarrs_data_type::DataTypeTraitsV2 for FixedLengthUTF32DataType {
             .checked_mul(4)
             .ok_or_else(|| PluginCreateError::Other("length_bytes overflow".to_string()))?;
 
-        let length_bytes = NonZeroU64::new(length_bytes as u64).ok_or_else(|| {
+        let length_bytes = NonZeroU64::new(u64::from(length_bytes)).ok_or_else(|| {
             PluginCreateError::Other(
                 "length_bytes must be at least 4 and a multiple of 4".to_string(),
             )
@@ -175,7 +175,7 @@ impl FixedLengthUTF32DataType {
         self.length_bytes
     }
 
-    /// Returns the number of code points each element can hold (length_bytes / 4).
+    /// Returns the number of code points each element can hold (`length_bytes` / 4).
     #[must_use]
     pub const fn capacity_code_points(&self) -> NonZeroU64 {
         NonZeroU64::new(self.length_bytes.get() / 4).unwrap()
@@ -369,7 +369,7 @@ mod tests {
         // "ab" = 2 code points = 8 bytes
         let metadata = FillValueMetadata::from("ab");
         let fill_value = dt.fill_value_v3(&metadata).unwrap();
-        let expected: Vec<u8> = [b'a' as u32, b'b' as u32]
+        let expected: Vec<u8> = [u32::from(b'a'), u32::from(b'b')]
             .iter()
             .flat_map(|&c| c.to_ne_bytes())
             .collect();
@@ -389,7 +389,7 @@ mod tests {
         assert_eq!(fill_value.size(), 12);
         // First 4 bytes = 'a' in UTF-32, rest = 0
         let mut expected = vec![0u8; 12];
-        expected[..4].copy_from_slice(&(b'a' as u32).to_ne_bytes());
+        expected[..4].copy_from_slice(&u32::from(b'a').to_ne_bytes());
         assert_eq!(fill_value.as_ne_bytes(), expected);
 
         let round_trip = dt.metadata_fill_value(&fill_value).unwrap();
@@ -446,8 +446,8 @@ mod tests {
 
     #[test]
     fn bytes_codec_little_endian() {
-        use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
+        use zarrs_storage::CowBytes;
 
         let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points in native endian
@@ -456,11 +456,11 @@ mod tests {
             .iter()
             .flat_map(|&c| (c as u32).to_ne_bytes())
             .collect();
-        let bytes_cow: std::borrow::Cow<'_, [u8]> = Cow::Owned(bytes.clone());
+        let bytes_raw = CowBytes::from(bytes.clone());
 
         // Encode to little endian (same as native on LE)
         let encoded = data_type
-            .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
+            .encode(bytes_raw.clone(), Some(zarrs_metadata::Endianness::Little))
             .unwrap();
 
         // On LE, little endian should be a no-op
@@ -471,8 +471,8 @@ mod tests {
 
     #[test]
     fn bytes_codec_big_endian_swap_per_code_unit() {
-        use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
+        use zarrs_storage::CowBytes;
 
         let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points
@@ -485,7 +485,7 @@ mod tests {
         // Encode to big endian
         let encoded = data_type
             .encode(
-                Cow::Owned(native_bytes.clone()),
+                CowBytes::from(native_bytes.clone()),
                 Some(zarrs_metadata::Endianness::Big),
             )
             .unwrap();

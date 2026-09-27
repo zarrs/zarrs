@@ -368,7 +368,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
             Some("end".to_string())
         ],
     ];
-    array.store_chunk(&[0, 0], data0.clone())?;
+    array.store_chunk(&[0, 0], data0)?;
 
     // Chunk [0,1]: more None values
     let data1 = array![
@@ -392,7 +392,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
             Some("data".to_string())
         ],
     ];
-    array.store_chunk(&[0, 1], data1.clone())?;
+    array.store_chunk(&[0, 1], data1)?;
 
     // Chunk [1,0]: including unicode and special chars
     let data2 = array![
@@ -421,7 +421,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
             Some("row".to_string())
         ],
     ];
-    array.store_chunk(&[1, 0], data2.clone())?;
+    array.store_chunk(&[1, 0], data2)?;
 
     // Chunk [1,1]: alternating pattern
     let data3 = array![
@@ -450,7 +450,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
             None
         ],
     ];
-    array.store_chunk(&[1, 1], data3.clone())?;
+    array.store_chunk(&[1, 1], data3)?;
 
     // Retrieve entire array spanning all chunks
     let retrieved =
@@ -568,7 +568,7 @@ fn optional_array_bytes_multi_chunk() -> Result<(), Box<dyn std::error::Error>> 
             None
         ],
     ];
-    array.store_chunk(&[0, 0], data0.clone())?;
+    array.store_chunk(&[0, 0], data0)?;
 
     let data1 = array![
         [None, Some(vec![100, 101]), Some(vec![]), None],
@@ -586,7 +586,7 @@ fn optional_array_bytes_multi_chunk() -> Result<(), Box<dyn std::error::Error>> 
         ],
         [None, None, Some(vec![113, 114]), Some(vec![115])],
     ];
-    array.store_chunk(&[0, 1], data1.clone())?;
+    array.store_chunk(&[0, 1], data1)?;
 
     // Retrieve full array spanning both chunks
     let subset = ArraySubset::new_with_ranges(&[0..4, 0..8]);
@@ -635,7 +635,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
         ],
         [Some(None), Some(Some("end".to_string())), None, Some(None)],
     ];
-    array.store_chunk(&[0, 0], data0.clone())?;
+    array.store_chunk(&[0, 0], data0)?;
 
     let data1 = array![
         [None, Some(None), Some(Some("chunk2".to_string())), None],
@@ -653,7 +653,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
             Some(Some("entry".to_string()))
         ],
     ];
-    array.store_chunk(&[0, 1], data1.clone())?;
+    array.store_chunk(&[0, 1], data1)?;
 
     // Retrieve spanning both chunks
     let subset = ArraySubset::new_with_ranges(&[0..4, 0..8]);

@@ -98,7 +98,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
+                chunk_indices,
             ))
         }
     })?;
@@ -135,7 +135,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         let decoded_subchunk_bytes = partial_decoder.partial_decode(&subchunk_subset, &options)?;
         let ndarray = bytes_to_ndarray::<u16>(
             &subchunk_shape,
-            decoded_subchunk_bytes.into_fixed()?.into_owned(),
+            decoded_subchunk_bytes.into_fixed()?.into_vec(),
         )?;
         println!("{ndarray}\n");
     }
@@ -143,7 +143,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("The Zarr hierarchy tree is:\n{}", tree);
+    println!("The Zarr hierarchy tree is:\n{tree}");
 
     println!(
         "The keys in the store are:\n[{}]",
@@ -155,6 +155,6 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = sharded_array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

@@ -21,10 +21,9 @@ pub use zarrs_metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscShuffleMode, BloscShuffleModeNumcodecs,
 };
-use zarrs_plugin::PluginCreateError;
 
 impl CodecTraitsV3 for BloscCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -32,7 +31,7 @@ impl CodecTraitsV3 for BloscCodec {
 }
 
 impl CodecTraitsV2 for BloscCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -112,6 +111,7 @@ pub fn blosc_compress_bytes(
 }
 
 /// Validate a blosc buffer and return the decompressed size, or `None` if invalid.
+#[must_use]
 pub fn blosc_validate(src: &[u8]) -> Option<usize> {
     let mut destsize: usize = 0;
     let valid = unsafe {
@@ -123,6 +123,7 @@ pub fn blosc_validate(src: &[u8]) -> Option<usize> {
 /// # Safety
 ///
 /// Validate first
+#[must_use]
 pub fn blosc_typesize(src: &[u8]) -> Option<usize> {
     let mut typesize: usize = 0;
     let mut flags: i32 = 0;
@@ -141,6 +142,7 @@ pub fn blosc_typesize(src: &[u8]) -> Option<usize> {
 /// # Safety
 ///
 /// Validate first
+#[must_use]
 pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
     let mut uncompressed_bytes: usize = 0;
     let mut cbytes: usize = 0;

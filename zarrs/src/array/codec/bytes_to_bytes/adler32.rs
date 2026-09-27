@@ -41,7 +41,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(Adler32Codec,
     v3: "numcodecs.adler32", [],
@@ -58,7 +57,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for Adler32Codec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -66,7 +65,7 @@ impl CodecTraitsV3 for Adler32Codec {
 }
 
 impl CodecTraitsV2 for Adler32Codec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: Adler32CodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -77,8 +76,8 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -114,7 +113,7 @@ mod tests {
             let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
 
             let encoded = codec
-                .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
                 .unwrap();
             let decoded = codec
                 .decode(
@@ -151,7 +150,7 @@ mod tests {
                 Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
 
             let encoded = codec
-                .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
+                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
             let input_handle = Arc::new(encoded);
@@ -195,7 +194,7 @@ mod tests {
                 Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
 
             let encoded = codec
-                .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
+                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
             let input_handle = Arc::new(encoded);
