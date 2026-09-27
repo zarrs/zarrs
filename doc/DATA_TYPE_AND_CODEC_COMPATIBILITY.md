@@ -74,10 +74,10 @@ Results:
 | uint4 | ✗ | ✗ | ✓ | ✓ | ✓ |
 | uint64 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint8 | ✓ | ✗ | ✓ | ✓ | ✓ |
-| zarrs.optional(float32) | - | - | ✓ | ✓ | ✗ |
-| zarrs.optional(string) | - | - | ✓ | ✓ | ✗ |
-| zarrs.optional(uint8) | - | - | ✓ | ✓ | ✗ |
-| zarrs.optional(zarrs.optional(float32)) | - | - | ✓ | ✓ | ✗ |
+| zarrs.optional(float32) | - | - | ✓ | ✓ | ✓ |
+| zarrs.optional(string) | - | - | ✓ | ✓ | ✓ |
+| zarrs.optional(uint8) | - | - | ✓ | ✓ | ✓ |
+| zarrs.optional(zarrs.optional(float32)) | - | - | ✓ | ✓ | ✓ |
 
 ## Array-to-Bytes Codecs
 

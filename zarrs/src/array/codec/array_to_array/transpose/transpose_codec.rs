@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
+use zarrs_plugin::ZarrVersion;
 
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
@@ -65,12 +65,6 @@ impl TransposeCodec {
 impl TransposeCodecBound {
     /// Validate the shape and data type for this codec.
     fn validate(&self, shape: &[NonZeroU64]) -> Result<(), CodecError> {
-        if self.data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                TransposeCodec::aliases_v3().default_name.to_string(),
-            ));
-        }
         if self.order.0.len() != shape.len() {
             return Err(CodecError::Other(
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
@@ -121,12 +115,6 @@ impl UnboundArrayToArrayCodecTraits for TransposeCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
-        if data_type.is_optional() {
-            return Err(CodecCreateError::UnsupportedDataType(
-                data_type,
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
         Ok(Arc::new(TransposeCodecBound {
             order: self.order.clone(),
             data_type,
