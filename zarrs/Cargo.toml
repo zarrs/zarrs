@@ -81,7 +81,7 @@ zarrs_data_type.workspace = true
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
 zarrs_storage.workspace = true
-zfp-rs = { git = "https://github.com/LDeakin/zfp-rs", rev = "65bafeea4969b5c0bbcf408648c4ec9e2b6d5a57", optional = true }
+zfp-rs = { version = "0.2.0", optional = true }
 dlpark = { version = "0.8.0", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
