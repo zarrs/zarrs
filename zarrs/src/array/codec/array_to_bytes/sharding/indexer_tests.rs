@@ -370,7 +370,7 @@ fn expected_output(expected: &ArrayBytes, strided: bool) -> Vec<u8> {
     let expected = expected.clone().into_fixed().unwrap();
     if strided {
         expected
-            .chunks_exact(2)
+            .as_chunks::<2>().0.iter()
             .flat_map(|element| [element[0], element[1], u8::MAX, u8::MAX])
             .collect()
     } else {
