@@ -81,7 +81,7 @@ impl ZfpArray {
 
     /// Returns a zfp field over the array with the given zfp `dims`.
     ///
-    /// Returns [`None`] if `dims` does not match the array length.
+    /// Returns [`None`] if `dims` is invalid or does not match the array length.
     pub(super) fn field(&self, dims: [usize; 4]) -> Option<ZfpField<'_>> {
         let field = match self {
             Self::Int8(v)
@@ -93,13 +93,14 @@ impl ZfpArray {
             Self::Int64(v) | Self::UInt64(v) => ZfpField::new(v, dims),
             Self::Float32(v) => ZfpField::new(v, dims),
             Self::Float64(v) => ZfpField::new(v, dims),
-        };
+        }
+        .ok()?;
         (field.num_elements() == self.len()).then_some(field)
     }
 
     /// Returns a mutable zfp field over the array with the given zfp `dims`.
     ///
-    /// Returns [`None`] if `dims` does not match the array length.
+    /// Returns [`None`] if `dims` is invalid or does not match the array length.
     pub(super) fn field_mut(&mut self, dims: [usize; 4]) -> Option<ZfpFieldMut<'_>> {
         let len = self.len();
         let field = match self {
@@ -112,7 +113,8 @@ impl ZfpArray {
             Self::Int64(v) | Self::UInt64(v) => ZfpFieldMut::new(v, dims),
             Self::Float32(v) => ZfpFieldMut::new(v, dims),
             Self::Float64(v) => ZfpFieldMut::new(v, dims),
-        };
+        }
+        .ok()?;
         (field.num_elements() == len).then_some(field)
     }
 

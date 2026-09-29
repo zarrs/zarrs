@@ -132,10 +132,10 @@ pub use zarrs_data_type::codec_traits::zfp::{
 
 const fn zfp_native_type_to_scalar_type(native_type: ZfpNativeType) -> ZfpScalarType {
     match native_type {
-        ZfpNativeType::Int32 => ZfpScalarType::Int32,
-        ZfpNativeType::Int64 => ZfpScalarType::Int64,
-        ZfpNativeType::Float => ZfpScalarType::Float,
-        ZfpNativeType::Double => ZfpScalarType::Double,
+        ZfpNativeType::Int32 => ZfpScalarType::I32,
+        ZfpNativeType::Int64 => ZfpScalarType::I64,
+        ZfpNativeType::Float => ZfpScalarType::F32,
+        ZfpNativeType::Double => ZfpScalarType::F64,
     }
 }
 
@@ -248,7 +248,7 @@ mod tests {
 
     use super::*;
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
-    use crate::array::element::ElementOwned;
+    use crate::array::element::{Element, ElementOwned};
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
         data_type,
@@ -315,6 +315,33 @@ mod tests {
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
         assert_eq!(elements, decoded_elements);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfp_header_round_trip() {
+        let shape = chunk_shape();
+        let data_type = data_type::float32();
+        let elements: Vec<f32> = (0..shape.num_elements_u64()).map(|i| i.as_()).collect();
+        let bytes = f32::to_array_bytes(&data_type, &elements).unwrap();
+        let codec = ZfpCodec::new_reversible()
+            .with_write_header(true)
+            .with_context(data_type.clone(), FillValue::from(0.0f32))
+            .unwrap();
+        let options = CodecOptions::default();
+
+        let encoded = codec.encode(bytes, &shape, &options).unwrap();
+        let mut bitstream = ZfpBitStream::from_bytes(&encoded);
+        let header = bitstream.read_header(ZfpHeaderMask::FULL).unwrap();
+        let metadata = header.metadata.unwrap();
+        assert_eq!(metadata.scalar_type, ZfpScalarType::F32);
+        assert_eq!(metadata.dims, [3, 3, 3, 0]);
+
+        let decoded = codec.decode(encoded, &shape, &options).unwrap();
+        assert_eq!(
+            f32::from_array_bytes(&data_type, decoded).unwrap(),
+            elements
+        );
     }
 
     #[test]

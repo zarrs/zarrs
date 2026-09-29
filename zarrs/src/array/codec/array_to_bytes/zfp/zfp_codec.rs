@@ -229,18 +229,18 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
 
         let bufsize = self
             .config
-            .maximum_size(self.scalar_type, &dims[..shape.len()]);
+            .maximum_size(self.scalar_type, dims)
+            .ok_or_else(|| CodecError::from("failed to calculate zfp maximum size"))?;
         let mut bitstream = ZfpBitStream::new(bufsize);
         if self.write_header {
-            let bits = bitstream.write_header(&self.config, &field, ZfpHeaderMask::FULL);
-            if bits == 0 {
-                return Err(CodecError::from("failed to write zfp header"));
-            }
+            bitstream
+                .write_header(&self.config, &field.metadata(), ZfpHeaderMask::FULL)
+                .map_err(|err| CodecError::Other(format!("failed to write zfp header: {err}")))?;
         }
         bitstream
             .compress(&self.config, &field)
             .map_err(|err| CodecError::Other(format!("zfp compression failed: {err}")))?;
-        Ok(CowBytes::from(bitstream.into_vec()))
+        Ok(CowBytes::from(bitstream.into_bytes()))
     }
 
     fn decode<'a>(
@@ -266,7 +266,8 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         let dims = zfp_dims(shape).ok_or_else(|| CodecError::from("unsupported zfp shape"))?;
         let bufsize = self
             .config
-            .maximum_size(self.scalar_type, &dims[..shape.len()]);
+            .maximum_size(self.scalar_type, dims)
+            .ok_or_else(|| CodecError::from("failed to calculate zfp maximum size"))?;
         #[allow(clippy::cast_possible_truncation)]
         Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }
