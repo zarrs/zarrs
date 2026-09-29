@@ -1,7 +1,7 @@
 //! Benchmark various codecs.
 #![allow(missing_docs)]
 
-use zarrs::array::CowBytes;
+use zarrs::array::{CodecSpecificOptions, CowBytes};
 
 use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
@@ -25,7 +25,13 @@ fn codec_bytes(c: &mut Criterion) {
     let codec = BytesCodec::new(Some(Endianness::Big));
 
     let fill_value = FillValue::from(0u16);
-    let codec = codec.with_context(data_type::uint16(), fill_value).unwrap();
+    let codec = codec
+        .with_context(
+            data_type::uint16(),
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
     for size in &[32, 64, 128, 256, 512] {
         let num_elements = size * size * size;
         let shape = [num_elements.try_into().unwrap(); 1];

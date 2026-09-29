@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
+  - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
@@ -46,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
 - **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`
 - **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
+- **Breaking**: Remove `ArrayTo{Array,Bytes}CodecTraits::with_codec_specific_options`, codecs read their options in `UnboundArrayTo{Array,Bytes}CodecTraits::with_context` instead
 
 ## [0.2.1] - 2026-03-21
 

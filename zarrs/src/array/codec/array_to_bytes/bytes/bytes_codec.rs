@@ -15,8 +15,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -123,6 +123,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
             return Err(CodecCreateError::UnsupportedDataType(

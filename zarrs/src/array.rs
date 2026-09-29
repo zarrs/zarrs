@@ -213,7 +213,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///   Controls things like concurrency limits, checksum validation, and partial encoding.
 ///   Use the `_opt` method variants to supply a non-default [`CodecOptions`].
 ///
-/// - **[`CodecSpecificOptions`]** — codec-specific configuration set once and baked into the codec's state.
+/// - **[`CodecSpecificOptions`]** — codec-specific configuration applied when the codec chain is bound to the array.
 ///   Used to pass options that are specific to a particular codec, such as [`ShardingCodecOptions`](codec::ShardingCodecOptions).
 ///   Apply these via [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
 ///
@@ -427,8 +427,10 @@ pub struct Array<TStorage: ?Sized> {
     fill_value: FillValue,
     /// Specifies a list of codecs to be used for encoding and decoding chunks.
     codecs: Arc<CodecChain>,
-    /// The codec chain bound to this array's data type and fill value.
+    /// The codec chain bound to this array's data type, fill value, and codec-specific options.
     codecs_bound: Arc<CodecChainBound>,
+    /// The codec-specific options the codec chain is bound with.
+    codec_specific_options: CodecSpecificOptions,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
@@ -453,6 +455,7 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
             codecs_bound: self.codecs_bound.clone(),
+            codec_specific_options: self.codec_specific_options.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
@@ -476,6 +479,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
             codecs_bound: self.codecs_bound.clone(),
+            codec_specific_options: self.codec_specific_options.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
@@ -515,10 +519,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs = Arc::new(
             CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
         );
-        Self::new_with_codec_chain(storage, path, v3, codecs)
+        Self::new_with_codec_chain(storage, path, v3, codecs, CodecSpecificOptions::default())
     }
 
-    /// Create an array from V3 metadata and a pre-built codec chain.
+    /// Create an array from V3 metadata, a pre-built codec chain, and codec-specific options.
     ///
     /// Used by [`ArrayBuilder`](crate::array::ArrayBuilder) to preserve the original codec objects
     /// with their runtime options without round-tripping through metadata deserialisation.
@@ -527,6 +531,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         path: NodePath,
         v3: ArrayMetadataV3,
         codecs: Arc<CodecChain>,
+        codec_specific_options: CodecSpecificOptions,
     ) -> Result<Self, ArrayCreateError> {
         // Create data type from V3 metadata
         let data_type = DataType::from_metadata(&v3.data_type)
@@ -541,7 +546,11 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })?;
 
         // Create bound codecs
-        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
+        let codecs_bound = codecs.with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &codec_specific_options,
+        )?;
 
         // Create chunk grid
         let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
@@ -592,6 +601,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value,
             codecs,
             codecs_bound,
+            codec_specific_options,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
             metadata: Arc::new(ArrayMetadata::V3(v3)),
@@ -653,7 +663,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
-        let codecs_bound = codecs.with_context(data_type.clone(), fill_value.clone())?;
+        let codec_specific_options = CodecSpecificOptions::default();
+        let codecs_bound = codecs.with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &codec_specific_options,
+        )?;
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator
@@ -682,6 +697,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             fill_value,
             codecs,
             codecs_bound,
+            codec_specific_options,
             storage_transformers,
             dimension_names: None,
             codec_options,
@@ -691,14 +707,14 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })
     }
 
-    /// Reconfigure the codec chain with codec-specific options and return the updated array.
+    /// Rebind the codec chain with codec-specific options and return the updated array.
     ///
-    /// Each codec in the chain may read its own options type from `opts` and return a
-    /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
-    /// This replaces the array's codec chain with the reconfigured version.
+    /// Each codec in the chain, including codecs nested in other codecs, may read its own options type from `opts`.
+    /// Codecs that do not recognise any option are left unchanged.
+    /// This replaces any codec-specific options previously set on the array.
     ///
     /// # Errors
-    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    /// Returns a [`CodecCreateError`] if the codec chain cannot be rebound.
     ///
     /// # Example
     /// ```rust,no_run

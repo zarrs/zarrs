@@ -25,8 +25,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -152,6 +152,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let components = pack_bits_components(&data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
@@ -233,7 +234,11 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         {
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
             return Arc::new(BytesCodec::new(Some(Endianness::Little)))
-                .with_context(self.data_type.clone(), self.fill_value.clone())
+                .with_context(
+                    self.data_type.clone(),
+                    self.fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )
                 .map_err(|err| CodecError::Other(err.to_string()))?
                 .encode(bytes.clone(), shape, options);
         }
@@ -312,7 +317,11 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             return Arc::new(BytesCodec::new(Some(Endianness::Little)))
-                .with_context(self.data_type.clone(), self.fill_value.clone())
+                .with_context(
+                    self.data_type.clone(),
+                    self.fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )
                 .map_err(|err| CodecError::Other(err.to_string()))?
                 .decode(bytes.clone(), shape, options);
         }

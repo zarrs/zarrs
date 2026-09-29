@@ -24,7 +24,7 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayToArrayCodecTraits,
     ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, PartialDecoderCapability, PartialEncoderCapability,
+    ChunkGridEncodedRef, CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
     UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
@@ -147,6 +147,7 @@ impl UnboundArrayToBytesCodecTraits for DynamicLocalSubchunkCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(DynamicLocalSubchunkCodecBound {
             data_type,
@@ -403,17 +404,11 @@ impl UnboundArrayToArrayCodecTraits for LocalOnlyReshapeGridCodec {
         self
     }
 
-    fn with_codec_specific_options(
-        self: Arc<Self>,
-        _opts: &zarrs_codec::CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecCreateError> {
-        Ok(self)
-    }
-
     fn with_context(
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(LocalOnlyReshapeGridCodecBound {
             data_type,
@@ -545,17 +540,11 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
         self
     }
 
-    fn with_codec_specific_options(
-        self: Arc<Self>,
-        _opts: &zarrs_codec::CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
-        Ok(self)
-    }
-
     fn with_context(
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(TestSubchunkingCodecBound {
             data_type,
@@ -663,7 +652,7 @@ fn local_only_grid_chain(expose_subchunks: bool, reject_chunk_local: bool) -> Ar
         Arc::new(TestSubchunkingCodec { expose_subchunks }),
         vec![],
     )
-    .with_context(data_type, fill_value)
+    .with_context(data_type, fill_value, &CodecSpecificOptions::default())
     .unwrap()
 }
 

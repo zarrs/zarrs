@@ -98,7 +98,10 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
+        UnboundArrayToBytesCodecTraits,
+    };
     use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
     #[test]
@@ -137,7 +140,11 @@ mod tests {
             let data_type = data_type::bool();
             let fill_value = FillValue::from(false);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<bool> = (0..40).map(|i| i % 3 == 0).collect();
             let bytes = bool::into_array_bytes(&data_type, elements)?.into_owned();
@@ -184,7 +191,11 @@ mod tests {
             super::PackBitsCodec::new(PackBitsPaddingEncoding::None, None, Some(2)).unwrap(),
         );
 
-        assert!(codec.with_context(data_type, fill_value).is_err());
+        assert!(
+            codec
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .is_err()
+        );
     }
 
     #[test]
@@ -198,7 +209,11 @@ mod tests {
             let data_type = data_type::float32();
             let fill_value = FillValue::from(0.0f32);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<f32> = (0..40).map(|i| i as f32).collect();
             let bytes = f32::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -215,7 +230,11 @@ mod tests {
 
             // Check it matches little endian bytes
             let decoded = Arc::new(BytesCodec::little())
-                .with_context(data_type.clone(), fill_value.clone())?
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?
                 .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -240,7 +259,11 @@ mod tests {
                         super::PackBitsCodec::new(encoding, Some(first_bit), Some(last_bit))
                             .unwrap(),
                     )
-                    .with_context(data_type.clone(), fill_value.clone())?;
+                    .with_context(
+                        data_type.clone(),
+                        fill_value.clone(),
+                        &CodecSpecificOptions::default(),
+                    )?;
                     let elements: Vec<i16> = (-20..20).map(|i| (i as i16) << first_bit).collect();
                     let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
 
@@ -273,7 +296,11 @@ mod tests {
             let data_type = data_type::uint2();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<u8> = (0..4).map(|i| i as u8).collect();
             let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -302,7 +329,11 @@ mod tests {
             let data_type = data_type::uint4();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<u8> = (0..16).map(|i| i as u8).collect();
             let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -331,7 +362,11 @@ mod tests {
             let data_type = data_type::int2();
             let fill_value = FillValue::from(0i8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<i8> = (-2..2).map(|i| i as i8).collect();
             let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -360,7 +395,11 @@ mod tests {
             let data_type = data_type::int4();
             let fill_value = FillValue::from(0i8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let elements: Vec<i8> = (-8..8).map(|i| i as i8).collect();
             let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -389,7 +428,11 @@ mod tests {
             let data_type = data_type::float4_e2m1fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let bytes = ArrayBytes::new_flen((0..16).map(|i| i as u8).collect::<Vec<u8>>());
 
@@ -417,7 +460,11 @@ mod tests {
             let data_type = data_type::float6_e2m3fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 
@@ -445,7 +492,11 @@ mod tests {
             let data_type = data_type::float6_e3m2fn();
             let fill_value = FillValue::from(0u8);
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
-                .with_context(data_type.clone(), fill_value.clone())?;
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )?;
 
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 

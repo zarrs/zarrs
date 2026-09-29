@@ -9,8 +9,9 @@ use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, Element, data_type}
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayToBytesCodecNoSubchunkingTraits, CodecCreateError, CodecMetadataOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecNoSubchunkingTraits, CodecCreateError, CodecMetadataOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -84,9 +85,12 @@ impl UnboundArrayToBytesCodecTraits for CountingCodec<dyn UnboundArrayToBytesCod
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(CountingCodec {
-            inner: self.inner.with_context(data_type, fill_value)?,
+            inner: self
+                .inner
+                .with_context(data_type, fill_value, codec_specific_options)?,
             counts: self.counts.clone(),
         }))
     }
@@ -279,7 +283,7 @@ fn fixture(variable: bool, nested: bool, index_location: ShardingIndexLocation) 
         .array_to_bytes_codec(inner)
         .index_location(index_location)
         .build_arc()
-        .with_context(data_type, fill_value)
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
     Fixture {
         codec,

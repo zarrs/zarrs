@@ -14,7 +14,7 @@ use crate::array::{
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
@@ -160,6 +160,7 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let pcodec = data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();

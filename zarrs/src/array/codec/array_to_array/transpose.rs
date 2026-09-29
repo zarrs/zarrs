@@ -280,7 +280,8 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_codec::{
-        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
+        UnboundArrayToBytesCodecTraits,
     };
 
     fn codec_transpose_round_trip_impl(
@@ -300,7 +301,7 @@ mod tests {
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -343,7 +344,7 @@ mod tests {
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -395,7 +396,11 @@ mod tests {
         let bytes = Element::into_array_bytes(&data_type, elements).unwrap();
 
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type, FillValue::new_optional_null())
+            .with_context(
+                data_type,
+                FillValue::new_optional_null(),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes.clone(), &shape, &CodecOptions::default())
@@ -451,7 +456,9 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
@@ -461,6 +468,7 @@ mod tests {
             .with_context(
                 codec.encoded_data_type().clone(),
                 codec.encoded_fill_value().clone(),
+                &CodecSpecificOptions::default(),
             )
             .unwrap();
         let input_handle = bytes_codec
@@ -504,7 +512,11 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -516,6 +528,7 @@ mod tests {
             .with_context(
                 codec.encoded_data_type().clone(),
                 codec.encoded_fill_value().clone(),
+                &CodecSpecificOptions::default(),
             )
             .unwrap();
         let input_handle = bytes_codec

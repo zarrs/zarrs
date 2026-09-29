@@ -233,7 +233,9 @@ mod tests {
     use std::sync::Arc;
 
     use itertools::Itertools;
-    use zarrs_codec::{CodecOptions, CowBytes, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{
+        CodecOptions, CodecSpecificOptions, CowBytes, UnboundArrayToBytesCodecTraits,
+    };
     use zarrs_data_type::FillValue;
 
     use super::{VlenCodec, VlenCodecConfiguration};
@@ -255,8 +257,11 @@ mod tests {
                 }}"#
             ))?;
             let data_type = data_type::string();
-            let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?)
-                .with_context(data_type.clone(), FillValue::from(""))?;
+            let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?).with_context(
+                data_type.clone(),
+                FillValue::from(""),
+                &CodecSpecificOptions::default(),
+            )?;
 
             let elements = vec!["a", "bb", "", "dddd"];
             let bytes = <&str>::into_array_bytes(&data_type, elements)?.into_owned();

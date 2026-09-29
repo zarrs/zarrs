@@ -276,7 +276,7 @@ mod tests {
         data_type,
     };
     use zarrs_codec::{
-        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
+        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
         UnboundArrayToBytesCodecTraits,
     };
 
@@ -325,7 +325,11 @@ mod tests {
             Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap()),
             vec![],
         ))
-        .with_context(data_type.clone(), fill_value.clone())
+        .with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec
@@ -501,7 +505,7 @@ mod tests {
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -555,7 +559,11 @@ mod tests {
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let max_encoded_size = codec.encoded_representation(&chunk_shape).unwrap();
