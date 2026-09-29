@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Propagate codec-specific options through `CodecChain`s used as nested array-to-bytes codecs (backport of #470).
 - Correct optional sharding and transpose decoding, generic sharding indexer batches, zero concurrency, partial-encode concurrency limits and append/index overflow before mutation
 - Propagate codec-specific options through optional, vlen and nested sharding chains
 - Serialize hierarchy tests that share configuration and read Node configuration before awaiting

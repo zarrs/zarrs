@@ -357,6 +357,13 @@ impl ArrayToBytesCodecTraits for CodecChain {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &zarrs_codec::CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        Arc::new(Arc::unwrap_or_clone(self).with_codec_specific_options(opts))
+    }
+
     fn encode<'a>(
         &self,
         mut bytes: ArrayBytes<'a>,
@@ -902,6 +909,41 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
+
+    #[test]
+    #[cfg(feature = "sharding")]
+    fn nested_codec_chain_propagates_options() {
+        use crate::array::codec::array_to_bytes::sharding::{
+            ShardingCodec, ShardingCodecBuilder, ShardingCodecOptions, SubchunkWriteOrder,
+        };
+        use zarrs_codec::CodecSpecificOptions;
+
+        let shard =
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap()], &data_type::uint8())
+                .build_arc();
+        let inner = Arc::new(CodecChain::new(vec![], shard, vec![]));
+        let original = CodecChain::new(vec![], inner, vec![]);
+        let opts = CodecSpecificOptions::default().with_option(
+            ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+        );
+        let changed = original.clone().with_codec_specific_options(&opts);
+        for (chain, ordered) in [(&original, false), (&changed, true)] {
+            let inner = chain
+                .array_to_bytes
+                .as_any()
+                .downcast_ref::<CodecChain>()
+                .unwrap();
+            let shard = inner
+                .array_to_bytes
+                .as_any()
+                .downcast_ref::<ShardingCodec>()
+                .unwrap();
+            assert_eq!(
+                matches!(shard.options.subchunk_write_order(), SubchunkWriteOrder::C),
+                ordered
+            );
+        }
+    }
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
