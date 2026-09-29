@@ -286,13 +286,12 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             .map(|(chunk_shape, &array_shape, chunk_indices)| {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
-                if end > start { Some(start..end) } else { None }
-            })
-            .collect::<Option<Vec<_>>>();
-            if let Some(ranges) = ranges {
-                Ok(Some(ArraySubset::new_with_ranges(&ranges)))
-            } else {
+                start..end
+            });
+            if ranges.clone().any(|range| range.is_empty()) {
                 Ok(None)
+            } else {
+                Ok(Some(ArraySubset::from(ranges)))
             }
         } else {
             Err(IncompatibleDimensionalityError::new(
