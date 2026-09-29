@@ -54,6 +54,10 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().codec_options()
     }
 
+    pub fn codec_specific_options(&self) -> &CodecSpecificOptions {
+        self.array().codec_specific_options()
+    }
+
     pub fn metadata_options(&self) -> &ArrayMetadataOptions {
         self.array().metadata_options()
     }

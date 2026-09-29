@@ -96,7 +96,7 @@ mod tests {
 
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
-    use zarrs_codec::{CodecOptions, UnboundArrayToArrayCodecTraits};
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
@@ -125,7 +125,7 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value)
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .unwrap();
 
         let encoded = codec
@@ -154,7 +154,7 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value)
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .unwrap();
 
         assert_eq!(codec.encoded_fill_value(), &FillValue::from(3u8));

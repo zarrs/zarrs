@@ -97,7 +97,10 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
         transmute_to_bytes_vec,
     };
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
+        UnboundArrayToBytesCodecTraits,
+    };
 
     const JSON_VALID: &str = r#"{
         "level": 8,
@@ -124,7 +127,11 @@ mod tests {
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = Arc::new(codec.clone()).with_context(data_type, fill_value)?;
+        let codec = Arc::new(codec.clone()).with_context(
+            data_type,
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )?;
         let max_encoded_size = codec.encoded_representation(chunk_shape.as_slice())?;
         let encoded = codec.encode(
             bytes.clone(),
@@ -322,7 +329,7 @@ mod tests {
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
         )
-        .with_context(data_type, fill_value)
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
 
         let encoded = codec
@@ -364,7 +371,11 @@ mod tests {
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
         )
-        .with_context(data_type.clone(), fill_value.clone())
+        .with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec

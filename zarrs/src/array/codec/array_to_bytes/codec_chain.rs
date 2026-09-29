@@ -15,9 +15,9 @@ use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -98,7 +98,9 @@ pub struct CodecChainBound {
 }
 
 impl CodecChain {
-    /// Bind this codec chain to a decoded data type and fill value.
+    /// Bind this codec chain to a decoded data type, fill value, and codec-specific options.
+    ///
+    /// Each codec in the chain may read its own options type from `codec_specific_options`.
     ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if any codec cannot be bound to the derived context.
@@ -106,20 +108,36 @@ impl CodecChain {
         &self,
         mut data_type: DataType,
         mut fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<CodecChainBound>, CodecCreateError> {
         let mut array_to_array = Vec::with_capacity(self.array_to_array.len());
         for codec in &self.array_to_array {
-            let bound = codec.with_context(data_type.clone(), fill_value.clone())?;
+            let bound = codec.with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                codec_specific_options,
+            )?;
             data_type = bound.encoded_data_type().clone();
             fill_value = bound.encoded_fill_value().clone();
             array_to_array.push(bound);
         }
-        let array_to_bytes = self.array_to_bytes.with_context(data_type, fill_value)?;
+        let array_to_bytes =
+            self.array_to_bytes
+                .with_context(data_type, fill_value, codec_specific_options)?;
+        let bytes_to_bytes = self
+            .bytes_to_bytes
+            .iter()
+            .map(|codec| {
+                codec
+                    .clone()
+                    .with_codec_specific_options(codec_specific_options)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut cache_index_must = None;
         let mut cache_index_should = None;
         let mut codec_index = 0;
-        for codec in self.bytes_to_bytes.iter().rev() {
+        for codec in bytes_to_bytes.iter().rev() {
             let capability = codec.partial_decoder_capability();
             if !capability.partial_read {
                 cache_index_should = Some(codec_index);
@@ -163,7 +181,7 @@ impl CodecChain {
         Ok(Arc::new(CodecChainBound {
             array_to_array,
             array_to_bytes,
-            bytes_to_bytes: self.bytes_to_bytes.clone(),
+            bytes_to_bytes,
             cache_index,
         }))
     }
@@ -226,28 +244,6 @@ impl CodecChain {
             || Err(CodecCreateError::from("missing array to bytes codec")),
             |array_to_bytes| Ok(Self::new(array_to_array, array_to_bytes, bytes_to_bytes)),
         )
-    }
-
-    /// Return a new codec chain with each codec reconfigured using `opts`.
-    ///
-    /// Each codec in the chain is given the opportunity to read its own options type
-    /// from `opts` and return a new instance. Codecs that do not recognise any option
-    /// in `opts` are returned unchanged (default behaviour).
-    pub fn with_codec_specific_options(
-        self,
-        opts: &zarrs_codec::CodecSpecificOptions,
-    ) -> Result<Self, CodecCreateError> {
-        Ok(Self::new(
-            self.array_to_array
-                .into_iter()
-                .map(|c| c.with_codec_specific_options(opts))
-                .collect::<Result<_, _>>()?,
-            self.array_to_bytes.with_codec_specific_options(opts)?,
-            self.bytes_to_bytes
-                .into_iter()
-                .map(|c| c.with_codec_specific_options(opts))
-                .collect::<Result<_, _>>()?,
-        ))
     }
 
     /// Create codec chain metadata.
@@ -450,8 +446,14 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        Ok(CodecChain::with_context(self, data_type, fill_value)?)
+        Ok(CodecChain::with_context(
+            self,
+            data_type,
+            fill_value,
+            codec_specific_options,
+        )?)
     }
 }
 
@@ -1207,7 +1209,11 @@ mod tests {
         let not_just_bytes = codec_configurations.len() > 1;
         let codec = CodecChain::from_metadata(&codec_configurations)
             .unwrap()
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1293,7 +1299,7 @@ mod tests {
                 expected_decoded_representation,
             })],
         )
-        .with_context(data_type, fill_value)
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
 
         let encoded_input: Arc<dyn BytesPartialDecoderTraits> =

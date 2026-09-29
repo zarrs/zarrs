@@ -21,7 +21,7 @@ use zarrs::array::{
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError,
+    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError, CodecSpecificOptions,
     PartialDecoderCapability, PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
@@ -78,6 +78,7 @@ impl UnboundArrayToArrayCodecTraits for IdentityCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(IdentityCodecBound {
             data_type,

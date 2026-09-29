@@ -113,7 +113,7 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
-        ChunkGridDecoded, CodecOptions, UnboundArrayToArrayCodecTraits,
+        ChunkGridDecoded, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
     };
 
@@ -140,7 +140,7 @@ mod tests {
 
         let configuration: SqueezeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
         assert_eq!(
             codec.encoded_shape(&shape).unwrap(),
@@ -174,7 +174,11 @@ mod tests {
         expected_subchunk_grid_edge_lengths: Vec<Vec<NonZeroU64>>,
     ) {
         let codec = Arc::new(SqueezeCodec::new())
-            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .with_context(
+                data_type::uint8(),
+                FillValue::from(0u8),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let chunk_grid = ChunkGrid::new(RegularChunkGrid::new(array_shape, chunk_shape).unwrap());
         let inner_subchunk_grid =
@@ -231,7 +235,9 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
@@ -241,7 +247,11 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type, encoded_fill_value)
+            .with_context(
+                encoded_data_type,
+                encoded_fill_value,
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let input_handle = bytes_codec
             .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())

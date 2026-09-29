@@ -728,22 +728,22 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec = Arc::new(
-            ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
-                .index_location(if index_at_end {
-                    ShardingIndexLocation::End
-                } else {
-                    ShardingIndexLocation::Start
-                })
-                .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build(),
-        )
-        .with_codec_specific_options(&CodecSpecificOptions::default().with_option(
-            ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
-        ))
-        .unwrap()
-        .with_context(data_type, fill_value)
-        .unwrap();
+        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
+            .index_location(if index_at_end {
+                ShardingIndexLocation::End
+            } else {
+                ShardingIndexLocation::Start
+            })
+            .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
+            .build()
+            .with_context(
+                data_type,
+                fill_value,
+                &CodecSpecificOptions::default().with_option(
+                    ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
+                ),
+            )
+            .unwrap();
         let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
         let decoded = codec
@@ -893,7 +893,11 @@ mod tests {
                         .bytes_to_bytes_codecs(vec![Arc::new(GzipCodec::new(0).unwrap())])
                         .build(),
                 )
-                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .with_context(
+                    data_type::uint8(),
+                    FillValue::from(0u8),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
                 let encoded = codec.encode(bytes.clone(), &shard_shape, &options).unwrap();
                 let decoded = codec.decode(encoded, &shard_shape, &options).unwrap();
@@ -933,7 +937,7 @@ mod tests {
                 })
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build()
-                .with_context(data_type, fill_value)
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &shape, options).unwrap();
@@ -1003,7 +1007,11 @@ mod tests {
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
         )
-        .with_context(data_type.clone(), fill_value)
+        .with_context(
+            data_type.clone(),
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -1085,7 +1093,7 @@ mod tests {
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
         )
-        .with_context(data_type, fill_value)
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -1152,7 +1160,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -1195,7 +1203,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -1244,7 +1252,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         // Step 1: Fully encode the shard

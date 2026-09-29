@@ -118,8 +118,8 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
     };
     use zarrs_codec::{
-        BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecTraits,
-        UnboundArrayToBytesCodecTraits,
+        BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+        CodecTraits, UnboundArrayToBytesCodecTraits,
     };
 
     #[test]
@@ -173,7 +173,11 @@ mod tests {
         let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
-        let codec = Arc::new(BytesCodec::new(endianness)).with_context(data_type, fill_value)?;
+        let codec = Arc::new(BytesCodec::new(endianness)).with_context(
+            data_type,
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )?;
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
         let decoded = codec
@@ -262,7 +266,7 @@ mod tests {
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -300,7 +304,11 @@ mod tests {
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))
-            .with_context(data_type.clone(), fill_value.clone())
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec

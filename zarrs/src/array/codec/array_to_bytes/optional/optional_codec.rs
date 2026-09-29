@@ -14,8 +14,9 @@ use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
 
@@ -330,6 +331,7 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if !data_type.is_optional() {
             return Err(CodecCreateError::Other(
@@ -342,12 +344,16 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let inner_fill_value =
             OptionalCodecBound::create_fill_value_for_inner_type(inner_type.data_type());
         Ok(Arc::new(OptionalCodecBound {
-            mask_codecs: self
-                .mask_codecs
-                .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?,
-            data_codecs: self
-                .data_codecs
-                .with_context(inner_type.data_type().clone(), inner_fill_value)?,
+            mask_codecs: self.mask_codecs.with_context(
+                crate::array::data_type::bool(),
+                FillValue::from(0u8),
+                codec_specific_options,
+            )?,
+            data_codecs: self.data_codecs.with_context(
+                inner_type.data_type().clone(),
+                inner_fill_value,
+                codec_specific_options,
+            )?,
             data_type,
             fill_value,
         }))
@@ -636,7 +642,11 @@ mod tests {
         ))
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration)?)
-            .with_context(data_type.clone(), fill_value)?;
+            .with_context(
+                data_type.clone(),
+                fill_value,
+                &CodecSpecificOptions::default(),
+            )?;
 
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
@@ -830,7 +840,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -895,7 +905,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -988,7 +998,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -1057,7 +1067,7 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec

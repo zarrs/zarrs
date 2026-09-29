@@ -192,7 +192,7 @@ mod tests {
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
         ArrayPartialDecoderTraits, ChunkGridDecoded, ChunkGridEncoded, CodecOptions,
-        UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
 
     fn nz(value: u64) -> NonZeroU64 {
@@ -216,8 +216,11 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
-        let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?)
-            .with_context(data_type, fill_value)?;
+        let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?).with_context(
+            data_type,
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
         let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
@@ -419,7 +422,11 @@ mod tests {
             .collect::<Option<Vec<_>>>()
             .unwrap();
         let codec = Arc::new(ReshapeCodec::new(reshape_shape))
-            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .with_context(
+                data_type::uint8(),
+                FillValue::from(0u8),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded_shape = codec
             .encoded_shape(&decoded_shape_nonzero)
@@ -522,7 +529,11 @@ mod tests {
             ReshapeDim::InputDims(vec![2]),
             ReshapeDim::InputDims(vec![0, 1]),
         ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .with_context(
+            data_type::uint8(),
+            FillValue::from(0u8),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
         let chunk_grid = ChunkGrid::new(
             RegularChunkGrid::new(vec![2, 3, 4], vec![nz(2), nz(3), nz(4)]).unwrap(),
@@ -542,7 +553,11 @@ mod tests {
             ReshapeDim::InputDims(vec![0]),
             ReshapeDim::InputDims(vec![1, 2]),
         ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .with_context(
+            data_type::uint8(),
+            FillValue::from(0u8),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
         let decoded_chunk_grid = ChunkGrid::new(
             RectilinearChunkGrid::new(
@@ -586,7 +601,11 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
             ReshapeDim::InputDims(vec![0, 1]),
         ])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .with_context(
+            data_type::uint8(),
+            FillValue::from(0u8),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
         let decoded_chunk_grid =
             ChunkGrid::new(RegularChunkGrid::new(vec![2, 4], vec![nz(2), nz(4)]).unwrap());
@@ -776,7 +795,11 @@ mod tests {
 
         for case in cases {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
-                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .with_context(
+                    data_type::uint8(),
+                    FillValue::from(0u8),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
             let ChunkGridEncoded::Array(encoded_chunk_grid) = codec
                 .encoded_chunk_grid((&case.decoded_chunk_grid).into())
@@ -835,7 +858,11 @@ mod tests {
 
         for case in cases {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
-                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .with_context(
+                    data_type::uint8(),
+                    FillValue::from(0u8),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
 
             assert!(
@@ -858,7 +885,11 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![ReshapeDim::Size(nz(
             24,
         ))])))
-        .with_context(data_type::uint8(), FillValue::from(0u8))
+        .with_context(
+            data_type::uint8(),
+            FillValue::from(0u8),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let decoded_chunk_grid =
@@ -886,7 +917,9 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
@@ -896,7 +929,11 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type, encoded_fill_value)
+            .with_context(
+                encoded_data_type,
+                encoded_fill_value,
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let input_handle = bytes_codec
             .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
@@ -927,7 +964,9 @@ mod tests {
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
             .unwrap();
@@ -937,7 +976,11 @@ mod tests {
         let encoded_data_type = codec.encoded_data_type().clone();
         let encoded_fill_value = codec.encoded_fill_value().clone();
         let bytes_codec = bytes_codec
-            .with_context(encoded_data_type, encoded_fill_value)
+            .with_context(
+                encoded_data_type,
+                encoded_fill_value,
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded_chunk = bytes_codec
             .encode(encoded, &encoded_shape, &CodecOptions::default())

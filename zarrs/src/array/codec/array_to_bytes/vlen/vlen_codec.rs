@@ -10,8 +10,8 @@ use crate::array::{
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -163,6 +163,7 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
             return Err(CodecCreateError::UnsupportedDataType(
@@ -177,16 +178,22 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
             ));
         }
         let index_codecs = match self.index_data_type {
-            VlenIndexDataType::UInt32 => self
-                .index_codecs
-                .with_context(crate::array::data_type::uint32(), FillValue::from(0u32))?,
-            VlenIndexDataType::UInt64 => self
-                .index_codecs
-                .with_context(crate::array::data_type::uint64(), FillValue::from(0u64))?,
+            VlenIndexDataType::UInt32 => self.index_codecs.with_context(
+                crate::array::data_type::uint32(),
+                FillValue::from(0u32),
+                codec_specific_options,
+            )?,
+            VlenIndexDataType::UInt64 => self.index_codecs.with_context(
+                crate::array::data_type::uint64(),
+                FillValue::from(0u64),
+                codec_specific_options,
+            )?,
         };
-        let data_codecs = self
-            .data_codecs
-            .with_context(crate::array::data_type::uint8(), FillValue::from(0u8))?;
+        let data_codecs = self.data_codecs.with_context(
+            crate::array::data_type::uint8(),
+            FillValue::from(0u8),
+            codec_specific_options,
+        )?;
         Ok(Arc::new(VlenCodecBound {
             index_codecs,
             data_codecs,

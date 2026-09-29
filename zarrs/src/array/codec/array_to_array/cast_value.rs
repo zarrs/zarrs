@@ -46,7 +46,7 @@ pub use zarrs_data_type::codec_traits::cast_value::{
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_codec::{CodecOptions, UnboundArrayToArrayCodecTraits};
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
     use zarrs_data_type::FillValue;
 
     use super::*;
@@ -64,7 +64,9 @@ mod tests {
         let shape = [NonZeroU64::new(4).unwrap()];
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let elements = vec![0u8, 1, 127, 255];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
@@ -97,7 +99,9 @@ mod tests {
         let shape = [NonZeroU64::new(4).unwrap()];
         let data_type = data_type::int16();
         let fill_value = FillValue::from(0i16);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             127i16, 128, 129, -129,
         ]));
@@ -123,7 +127,9 @@ mod tests {
         let shape = [NonZeroU64::new(1).unwrap()];
         let data_type = data_type::uint64();
         let fill_value = FillValue::from(0u64);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![u64::MAX]));
 
         let encoded = codec
@@ -147,7 +153,9 @@ mod tests {
         let shape = [NonZeroU64::new(2).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![255.0f32, 256.0]));
 
         let encoded = codec
@@ -177,7 +185,9 @@ mod tests {
         let shape = [NonZeroU64::new(3).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             1.5f32,
             300.0,
@@ -207,7 +217,9 @@ mod tests {
         let shape = [NonZeroU64::new(1).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
-        let codec = codec.with_context(data_type, fill_value).unwrap();
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![1.0f32]));
 
         let encoded = codec
@@ -241,7 +253,11 @@ mod tests {
             .unwrap();
             let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
             let codec = codec
-                .with_context(data_type.clone(), fill_value.clone())
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
             let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
                 1.5f32, 2.5, -1.5, -2.5,
@@ -299,7 +315,11 @@ mod tests {
             .unwrap();
             let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
             let codec = codec
-                .with_context(data_type.clone(), fill_value.clone())
+                .with_context(
+                    data_type.clone(),
+                    fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
             let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
@@ -327,7 +347,11 @@ mod tests {
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
         let shape = [NonZeroU64::new(3).unwrap()];
         let codec_f32 = codec
-            .with_context(data_type::float32(), FillValue::from(0.0f32))
+            .with_context(
+                data_type::float32(),
+                FillValue::from(0.0f32),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             f32::MAX,
@@ -343,7 +367,11 @@ mod tests {
 
         // exactly 2^127 previously saturated to i128::MAX and wrapped to 255
         let codec_f64 = codec
-            .with_context(data_type::float64(), FillValue::from(0.0f64))
+            .with_context(
+                data_type::float64(),
+                FillValue::from(0.0f64),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let shape = [NonZeroU64::new(1).unwrap()];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![2.0f64.powi(127)]));
@@ -373,7 +401,11 @@ mod tests {
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
         let codec = codec
-            .with_context(data_type::float32(), FillValue::from(0.0f32))
+            .with_context(
+                data_type::float32(),
+                FillValue::from(0.0f32),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes.clone(), &shape, &CodecOptions::default())
@@ -391,7 +423,11 @@ mod tests {
         .unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
         let codec = codec
-            .with_context(data_type::float32(), FillValue::from(0.0f32))
+            .with_context(
+                data_type::float32(),
+                FillValue::from(0.0f32),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
@@ -481,7 +517,11 @@ mod tests {
                             .unwrap();
                         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
                         let codec = codec
-                            .with_context(source_dt.clone(), FillValue::new(vec![0; source_size]))
+                            .with_context(
+                                source_dt.clone(),
+                                FillValue::new(vec![0; source_size]),
+                                &CodecSpecificOptions::default(),
+                            )
                             .unwrap();
 
                         let source_bytes: Vec<u8> = (0..num_elements * source_size)

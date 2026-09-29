@@ -129,10 +129,13 @@ macro_rules! vlen_v2_codec {
                 &self,
                 data_type: crate::array::DataType,
                 fill_value: crate::array::FillValue,
+                codec_specific_options: &zarrs_codec::CodecSpecificOptions,
             ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
                 paste::paste! {
                     Ok(Arc::new([<$struct Bound>] {
-                        inner: self.inner.with_context(data_type, fill_value)?,
+                        inner: self
+                            .inner
+                            .with_context(data_type, fill_value, codec_specific_options)?,
                     }))
                 }
             }

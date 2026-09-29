@@ -20,6 +20,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
 
     /// Return a version of this codec reconfigured with the provided codec-specific options.
     ///
+    /// This is applied when a codec chain containing this codec is bound.
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
     #[expect(unused_variables)]
