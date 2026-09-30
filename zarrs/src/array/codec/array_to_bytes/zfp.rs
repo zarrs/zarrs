@@ -210,7 +210,8 @@ fn zfp_decode(
         .and_then(|dims| array.field_mut(dims))
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
 
-    let mut bitstream = ZfpBitStream::from_bytes(encoded_value);
+    let mut bitstream = ZfpBitStream::from_bytes(encoded_value)
+        .map_err(|err| CodecError::Other(format!("failed to allocate zfp bitstream: {err}")))?;
     let header_config;
     let config = if write_header {
         let header = bitstream
@@ -331,7 +332,7 @@ mod tests {
         let options = CodecOptions::default();
 
         let encoded = codec.encode(bytes, &shape, &options).unwrap();
-        let mut bitstream = ZfpBitStream::from_bytes(&encoded);
+        let mut bitstream = ZfpBitStream::from_bytes(&encoded).unwrap();
         let header = bitstream.read_header(ZfpHeaderMask::FULL).unwrap();
         let metadata = header.metadata.unwrap();
         assert_eq!(metadata.scalar_type, ZfpScalarType::F32);

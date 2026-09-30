@@ -168,12 +168,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let encoding = data_type.codec_zfp()?.zfp_encoding();
         let scalar_type = zfp_native_type_to_scalar_type(encoding.native_type());
-        let config = zfp_config(&self.mode, scalar_type).ok_or_else(|| {
-            CodecCreateError::Other(format!(
-                "zfp {:?} mode is unsupported for the {scalar_type:?} zfp scalar type",
-                self.mode
-            ))
-        })?;
+        let config = zfp_config(&self.mode, scalar_type)?;
         Ok(Arc::new(ZfpCodecBound {
             data_type,
             fill_value,
@@ -231,7 +226,8 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             .config
             .maximum_size(self.scalar_type, dims)
             .ok_or_else(|| CodecError::from("failed to calculate zfp maximum size"))?;
-        let mut bitstream = ZfpBitStream::new(bufsize);
+        let mut bitstream = ZfpBitStream::new(bufsize)
+            .map_err(|err| CodecError::Other(format!("failed to allocate zfp bitstream: {err}")))?;
         if self.write_header {
             bitstream
                 .write_header(&self.config, &field.metadata(), ZfpHeaderMask::FULL)
@@ -240,7 +236,10 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         bitstream
             .compress(&self.config, &field)
             .map_err(|err| CodecError::Other(format!("zfp compression failed: {err}")))?;
-        Ok(CowBytes::from(bitstream.into_bytes()))
+        let bytes = bitstream
+            .into_bytes()
+            .map_err(|err| CodecError::Other(format!("failed to copy zfp bitstream: {err}")))?;
+        Ok(CowBytes::from(bytes))
     }
 
     fn decode<'a>(
