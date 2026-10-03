@@ -12,14 +12,15 @@ use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
+use crate::array::codec::array_to_bytes::sharding::RequireDivisibleSubchunks;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::node::NodePath;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecSubchunkingTraits, BytesToBytesCodecTraits, CodecOptions,
+    CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -350,7 +351,7 @@ impl ArrayBuilder {
     ///
     /// If left unmodified or set to `None`, the array will not use sharding, unless configured manually via [`array_to_bytes_codec`](Self::array_to_bytes_codec).
     ///
-    /// The subchunk shape must have all non-zero elements (validated during build).
+    /// The subchunk shape must have all non-zero elements and evenly divide the chunk (shard) shape (validated during build).
     ///
     /// # Sharding Configuration
     ///
@@ -600,6 +601,20 @@ impl ArrayBuilder {
             codec_chain,
             self.codec_specific_options.clone(),
         )?;
+        // Subchunk shapes that do not evenly divide the shard shape are not yet part of the specification.
+        // Existing arrays with such subchunk shapes can still be opened.
+        let creation_options = self
+            .codec_specific_options
+            .clone()
+            .with_option(RequireDivisibleSubchunks);
+        array
+            .codecs()
+            .with_context(
+                array.data_type().clone(),
+                array.fill_value().clone(),
+                &creation_options,
+            )?
+            .decoded_subchunk_grids(array.chunk_grid().into())?;
         array.set_metadata_options(self.metadata_options);
         array.set_codec_options(self.codec_options);
         Ok(array)

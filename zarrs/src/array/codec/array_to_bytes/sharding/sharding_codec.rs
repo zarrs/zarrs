@@ -9,25 +9,28 @@ use bytes::Bytes;
 use rayon::prelude::*;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ChunkGridCreateError, ChunkGridTraits};
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
-    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
-    ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
-    compute_index_encoded_size, decode_shard_index, sharding_index_shape, sharding_partial_encoder,
+    CodecChain, RequireDivisibleSubchunks, ShardingCodecConfiguration,
+    ShardingCodecConfigurationV1, ShardingCodecOptions, ShardingIndexLocation, SubchunkWriteOrder,
+    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
+    sharding_index_shape, sharding_partial_encoder, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
+use crate::array::chunk_grid::{
+    ChunkEdgeLengths, RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid,
+};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArraySubset, BytesRepresentation, ChunkGrid,
     ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType, DataTypeSize, FillValue,
-    chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
+    transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
@@ -45,9 +48,13 @@ use zarrs_codec::{
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
+/// Return the subchunk grid of a sharded `chunk_grid`.
+///
+/// Subchunks straddling a shard boundary are clipped to the shard shape, or rejected if `require_divisible`.
 fn regular_subchunk_grid(
     chunk_grid: &ChunkGrid,
     subchunk_shape: &ChunkShape,
+    require_divisible: bool,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
     if chunk_grid.dimensionality() != subchunk_shape.len() {
         return Err(ChunkGridCreateError::new(format!(
@@ -56,6 +63,15 @@ fn regular_subchunk_grid(
             chunk_grid.dimensionality()
         )));
     }
+
+    let check_divisible = |edge_length: NonZeroU64, subchunk: NonZeroU64| {
+        if require_divisible && !edge_length.get().is_multiple_of(subchunk.get()) {
+            return Err(ChunkGridCreateError::new(format!(
+                "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {edge_length:?}"
+            )));
+        }
+        Ok(())
+    };
 
     if chunk_grid
         .name_v3()
@@ -66,17 +82,16 @@ fn regular_subchunk_grid(
             .ok_or_else(|| {
                 ChunkGridCreateError::new("chunk grid does not contain an origin chunk")
             })?;
-        if std::iter::zip(&chunk_shape, subchunk_shape)
-            .all(|(shape, subchunk)| shape.get().is_multiple_of(subchunk.get()))
-        {
-            return Ok(ChunkGrid::new(RepeatChunkGrid::new(
-                chunk_grid.grid_shape().to_vec(),
-                ChunkGrid::new(RegularChunkGrid::new(
-                    chunk_shape.iter().map(|dim| dim.get()).collect(),
-                    subchunk_shape.clone(),
-                )?),
-            )?));
+        for (&edge_length, &subchunk) in std::iter::zip(&chunk_shape, subchunk_shape) {
+            check_divisible(edge_length, subchunk)?;
         }
+        return Ok(ChunkGrid::new(RepeatChunkGrid::new(
+            chunk_grid.grid_shape().to_vec(),
+            ChunkGrid::new(RegularBoundedChunkGrid::new(
+                chunk_shape.to_array_shape(),
+                subchunk_shape.clone(),
+            )?),
+        )?));
     }
 
     let mut subchunk_grid_shape = Vec::with_capacity(chunk_grid.dimensionality());
@@ -87,15 +102,11 @@ fn regular_subchunk_grid(
         let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim)?;
         let mut global_edge_lengths = Vec::new();
         for edge_length in chunk_edge_lengths {
-            if !edge_length.get().is_multiple_of(subchunk.get()) {
-                return Err(ChunkGridCreateError::new(format!(
-                    "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {edge_length:?}"
-                )));
-            }
-            global_edge_lengths.extend(std::iter::repeat_n(
-                *subchunk,
-                (edge_length.get() / subchunk.get()) as usize,
-            ));
+            check_divisible(edge_length, *subchunk)?;
+            global_edge_lengths.extend(
+                RegularBoundedChunkGrid::new(vec![edge_length.get()], vec![*subchunk])?
+                    .chunk_edge_lengths(0)?,
+            );
         }
         let dimension_shape = global_edge_lengths
             .iter()
@@ -130,6 +141,16 @@ fn regular_subchunk_grid(
     }
 }
 
+/// Return the subset of the subchunk with the raveled `subchunk_index`, clipped to the shard shape.
+fn subchunk_subset(subchunk_grid: &RegularBoundedChunkGrid, subchunk_index: usize) -> ArraySubset {
+    let subchunk_indices = unravel_index(subchunk_index as u64, subchunk_grid.grid_shape())
+        .expect("inbounds subchunk");
+    subchunk_grid
+        .subset(&subchunk_indices)
+        .expect("matching dimensionality")
+        .expect("inbounds subchunk")
+}
+
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
 pub struct ShardingCodec {
@@ -153,6 +174,8 @@ pub struct ShardingCodecBound {
     pub(crate) index_codecs: Arc<CodecChainBound>,
     pub(crate) index_location: ShardingIndexLocation,
     pub(crate) options: ShardingCodecOptions,
+    /// Reject subchunk shapes that do not evenly divide the shard shape when creating subchunk grids.
+    pub(crate) require_divisible_subchunks: bool,
 }
 
 impl ShardingCodec {
@@ -282,6 +305,9 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
             index_codecs,
             index_location: self.index_location,
             options,
+            require_divisible_subchunks: codec_specific_options
+                .get_option::<RequireDivisibleSubchunks>()
+                .is_some(),
         }))
     }
 }
@@ -321,9 +347,13 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
             {
                 ChunkGridDecoded::None
             }
-            ChunkGridDecodedRef::Array(decoded_chunk_grid) => ChunkGridDecoded::Array(
-                regular_subchunk_grid(decoded_chunk_grid, &self.subchunk_shape)?,
-            ),
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => {
+                ChunkGridDecoded::Array(regular_subchunk_grid(
+                    decoded_chunk_grid,
+                    &self.subchunk_shape,
+                    self.require_divisible_subchunks,
+                )?)
+            }
             ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
         };
         let mut subchunk_grids = vec![subchunk_grid.clone()];
@@ -408,12 +438,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         }
 
         let shard_shape_u64 = bytemuck::must_cast_slice(shape);
+        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         match data_type.size() {
             DataTypeSize::Variable => {
                 let decode_subchunk = |chunk_index: usize| {
-                    let chunk_subset = self
-                        .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                        .expect("inbounds chunk");
+                    let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
                     // Read the offset/size
                     let offset = shard_index[chunk_index * 2];
@@ -421,7 +450,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                     let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
                         ArrayBytes::new_fill_value(
                             data_type,
-                            self.subchunk_shape.num_elements_u64(),
+                            chunk_subset.num_elements(),
                             fill_value,
                         )?
                         .into_variable()?
@@ -435,7 +464,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                         let size: usize = size.try_into().unwrap();
                         let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
                         self.inner_codecs
-                            .decode(encoded_chunk, &self.subchunk_shape, &options)?
+                            .decode(
+                                encoded_chunk,
+                                &chunk_subset.chunk_shape().expect("nonempty subchunk"),
+                                &options,
+                            )?
                             .into_variable()?
                     };
                     Ok((chunk_bytes, chunk_subset))
@@ -466,9 +499,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                     let output =
                         UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut decoded_shard);
                     let decode_chunk = |chunk_index: usize| {
-                        let chunk_subset = self
-                            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                            .expect("inbounds chunk");
+                        let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
                         let mut output_view_subchunk = unsafe {
                             // SAFETY: chunks represent disjoint array subsets
                             ArrayBytesFixedDisjointView::new(
@@ -493,9 +524,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                             let offset: usize = offset.try_into().unwrap();
                             let size: usize = size.try_into().unwrap();
                             let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
+                            let chunk_shape = output_view_subchunk
+                                .subset()
+                                .chunk_shape()
+                                .expect("nonempty subchunk");
                             self.inner_codecs.decode_into(
                                 encoded_chunk,
-                                &self.subchunk_shape,
+                                &chunk_shape,
                                 ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                                 &options,
                             )?;
@@ -651,10 +686,9 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
+        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         let decode_chunk = |chunk_index: usize| {
-            let chunk_subset = self
-                .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                .expect("inbounds chunk");
+            let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
             let output_subset_chunk = ArraySubset::new_with_start_shape(
                 std::iter::zip(
@@ -687,7 +721,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
                 self.inner_codecs.decode_into(
                     encoded_chunk,
-                    &self.subchunk_shape,
+                    &chunk_subset.chunk_shape().expect("nonempty subchunk"),
                     ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                     &options,
                 )?;
@@ -842,26 +876,6 @@ impl ShardingCodecBound {
         &self.options
     }
 
-    /// Convert a linearised chunk index to an array subset.
-    /// Returns [`None`] if `chunk_index` is out-of-bounds of `chunks_per_shard`.
-    fn chunk_index_to_subset(
-        &self,
-        chunk_index: u64,
-        chunks_per_shard: &[NonZeroU64],
-    ) -> Option<ArraySubset> {
-        let chunks_per_shard = chunk_shape_to_array_shape(chunks_per_shard);
-        let chunk_indices = unravel_index(chunk_index, chunks_per_shard.as_slice())?;
-        let chunk_start = std::iter::zip(&chunk_indices, self.subchunk_shape.as_slice())
-            .map(|(i, c)| i * c.get())
-            .collect::<Vec<_>>();
-        let shape = self.subchunk_shape.as_slice();
-        let ranges = shape
-            .iter()
-            .zip(&chunk_start)
-            .map(|(&sh, &st)| st..(st + sh.get()));
-        Some(ArraySubset::from(ranges))
-    }
-
     /// Computed the bounded size of an encoded shard from
     ///  - the chunk bytes representation, and
     ///  - the number of chunks per shard.
@@ -881,20 +895,16 @@ impl ShardingCodecBound {
         &self,
         chunk_index: usize,
         decoded_value: &ArrayBytes,
-        shard_shape: &[NonZeroU64],
-        chunks_per_shard: &[NonZeroU64],
-        subchunk_shape: &[NonZeroU64],
+        subchunk_grid: &RegularBoundedChunkGrid,
         options_inner: &CodecOptions,
     ) -> Option<Result<(usize, Bytes), CodecError>> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
-        let chunk_subset = self
-            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
-            .expect("inbounds chunk");
+        let chunk_subset = subchunk_subset(subchunk_grid, chunk_index);
 
         let bytes = decoded_value.extract_array_subset(
             &chunk_subset,
-            bytemuck::must_cast_slice(shard_shape),
+            subchunk_grid.array_shape(),
             data_type,
         );
         let bytes = match bytes {
@@ -906,9 +916,8 @@ impl ShardingCodecBound {
         if is_fill_value {
             None
         } else {
-            let encoded_chunk = self
-                .inner_codecs
-                .encode(bytes, subchunk_shape, options_inner);
+            let chunk_shape = chunk_subset.chunk_shape().expect("nonempty subchunk");
+            let encoded_chunk = self.inner_codecs.encode(bytes, &chunk_shape, options_inner);
             match encoded_chunk {
                 Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_bytes()))),
                 Err(err) => Some(Err(err)),
@@ -928,6 +937,7 @@ impl ShardingCodecBound {
     ) -> Result<Vec<u8>, CodecError> {
         // Calculate maximum possible shard size
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
+        let subchunk_grid = subchunk_grid(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
         let index_encoded_size =
             compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
@@ -975,9 +985,7 @@ impl ShardingCodecBound {
                         let maybe_chunk_encoded_with_id = self.encode_inner_by_chunk_index(
                             chunk_index,
                             decoded_value,
-                            shard_shape,
-                            chunks_per_shard.as_slice(),
-                            subchunk_shape,
+                            &subchunk_grid,
                             &options,
                         );
                         if let Some(chunk_encoded_with_id) = maybe_chunk_encoded_with_id {
@@ -1020,9 +1028,7 @@ impl ShardingCodecBound {
                         self.encode_inner_by_chunk_index(
                             chunk_index,
                             decoded_value,
-                            shard_shape,
-                            chunks_per_shard.as_slice(),
-                            subchunk_shape,
+                            &subchunk_grid,
                             &options,
                         )
                     })
@@ -1110,6 +1116,7 @@ impl ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<Vec<u8>, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
+        let subchunk_grid = subchunk_grid(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
         let index_encoded_size =
             compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
@@ -1149,9 +1156,7 @@ impl ShardingCodecBound {
                 self.encode_inner_by_chunk_index(
                     chunk_index,
                     decoded_value,
-                    shard_shape,
-                    chunks_per_shard.as_slice(),
-                    subchunk_shape,
+                    &subchunk_grid,
                     &options_inner,
                 )
             })
