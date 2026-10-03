@@ -15,25 +15,6 @@
 //! Implementations of version 1.0 of the sharding specification must reject such arrays.
 //! </div>
 //!
-//! Such arrays can always be opened and read, but a sharding codec otherwise refuses to encode non-divisible subchunk shapes unless permitted by
-//! [`ShardingCodecOptions::with_allow_nondivisible_subchunks`].
-//! Array creation also fails early where the shard shape is known up front.
-//! For example:
-//! ```rust
-//! # use std::sync::Arc;
-//! # use zarrs::array::{ArrayBuilder, CodecSpecificOptions, data_type};
-//! # use zarrs::array::codec::ShardingCodecOptions;
-//! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
-//! let mut builder = ArrayBuilder::new(vec![60], vec![30], data_type::uint8(), 0u8);
-//! builder.subchunk_shape(vec![12]);
-//! assert!(builder.build_metadata().is_err());
-//! builder.codec_specific_options(CodecSpecificOptions::default().with_option(
-//!     ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true),
-//! ));
-//! let array = builder.build(store, "/array")?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-//!
 //! ### Compatible Implementations
 //! This is a core codec and should be compatible with all Zarr V3 implementations that support it.
 //! Non-divisible subchunk shapes may be incompatible with other implementations.
@@ -941,9 +922,7 @@ mod tests {
                 data_type,
                 fill_value,
                 &CodecSpecificOptions::default().with_option(
-                    ShardingCodecOptions::default()
-                        .with_subchunk_write_order(subchunk_write_order)
-                        .with_allow_nondivisible_subchunks(true),
+                    ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
                 ),
             )
             .unwrap()
@@ -1070,44 +1049,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn codec_sharding_nondivisible_encode_requires_opt_in() {
-        let data_type = data_type::uint16();
-        let shard_shape = to_nonzero(&[5]);
-        let bytes = nondivisible_data(&[5], &[2], &data_type);
-        let options = CodecOptions::default();
-        let codec = ShardingCodecBuilder::new(to_nonzero(&[2]), &data_type).build();
-        let strict = codec
-            .with_context(
-                data_type.clone(),
-                fill_value(&data_type),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        assert!(
-            strict
-                .encode(bytes.clone(), &shard_shape, &options)
-                .is_err()
-        );
-
-        let permissive = codec
-            .with_options(ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true))
-            .with_context(
-                data_type.clone(),
-                fill_value(&data_type),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let encoded = permissive
-            .encode(bytes.clone(), &shard_shape, &options)
-            .unwrap();
-        // Decoding does not require opting in, so existing data can always be read
-        assert_eq!(
-            strict.decode(encoded, &shard_shape, &options).unwrap(),
-            bytes
-        );
     }
 
     #[test]

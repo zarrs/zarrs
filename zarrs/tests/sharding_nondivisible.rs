@@ -10,11 +10,11 @@ use std::sync::Arc;
 
 use zarrs::array::chunk_grid::{RectilinearChunkGrid, RegularChunkGrid};
 use zarrs::array::codec::array_to_array::transpose::{TransposeCodec, TransposeOrder};
-use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBuilder, ShardingCodecOptions};
+use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesCodec, OptionalCodec, VlenCodec};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayIndices, CodecChain, CodecOptions, CodecSpecificOptions, DataType,
-    Endianness, FillValue, FromArrayBytes, IntoArrayBytes, data_type,
+    Array, ArrayBuilder, ArrayIndices, CodecChain, CodecOptions, DataType, Endianness, FillValue,
+    FromArrayBytes, IntoArrayBytes, data_type,
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
@@ -22,14 +22,6 @@ use zarrs_filesystem::FilesystemStore;
 use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use zarrs_storage::store::MemoryStore;
-
-/// Permit creating arrays with non evenly divisible subchunks.
-fn enable_nondivisible_subchunks(builder: &mut ArrayBuilder) {
-    builder.codec_specific_options(
-        CodecSpecificOptions::default()
-            .with_option(ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true)),
-    );
-}
 
 fn nz(value: u64) -> NonZeroU64 {
     NonZeroU64::new(value).unwrap()
@@ -42,7 +34,6 @@ fn build_array(
     let store = Arc::new(MemoryStore::default());
     let mut builder = ArrayBuilder::new_with_chunk_grid(chunk_grid, data_type::uint16(), 0u16);
     builder.subchunk_shape(subchunk_shape);
-    enable_nondivisible_subchunks(&mut builder);
     Ok(builder.build(store, "/array")?)
 }
 
@@ -128,7 +119,6 @@ fn array_builder(layout: Option<Layout>) -> ArrayBuilder {
         data_type::uint16(),
         0u16,
     );
-    enable_nondivisible_subchunks(&mut builder);
     if let Some(layout) = layout {
         if matches!(layout, Layout::Transposed) {
             builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
@@ -386,69 +376,49 @@ fn sharding_codec_chain(data_type: &DataType) -> Arc<CodecChain> {
     ))
 }
 
-/// Store and retrieve `data` in the whole array, which is rejected unless `allow_nondivisible`.
+/// Store and retrieve `data` in the whole array.
 fn assert_store_round_trip<T>(
     array: &Array<MemoryStore>,
     data: T,
-    allow_nondivisible: bool,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: IntoArrayBytes<'static> + FromArrayBytes + Clone + PartialEq + std::fmt::Debug,
 {
     let subset = ArraySubset::new_with_shape(array.shape().to_vec());
-    let stored = array.store_array_subset(&subset, data.clone());
-    if allow_nondivisible {
-        stored?;
-        assert_eq!(array.retrieve_array_subset::<T>(&subset)?, data);
-    } else {
-        assert!(
-            stored
-                .unwrap_err()
-                .to_string()
-                .contains("must evenly divide")
-        );
-    }
+    array.store_array_subset(&subset, data.clone())?;
+    assert_eq!(array.retrieve_array_subset::<T>(&subset)?, data);
     Ok(())
 }
 
 #[test]
 fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std::error::Error>> {
     // The inner data codecs encode a 1D array with a data-dependent length (5 bytes, 3 valid elements)
-    // Array codec-specific options reach the nested sharding codecs
-    for allow_nondivisible in [false, true] {
-        let vlen = VlenCodec::new(
-            bytes_codec_chain(),
-            sharding_codec_chain(&data_type::uint8()),
-            VlenIndexDataType::UInt64,
-            VlenIndexLocation::Start,
-        );
-        let mut builder = ArrayBuilder::new(vec![4], vec![4], data_type::string(), "");
-        builder.array_to_bytes_codec(Arc::new(vlen));
-        if allow_nondivisible {
-            enable_nondivisible_subchunks(&mut builder);
-        }
-        let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
-        let data = ["a", "bb", "", "cc"].map(String::from).to_vec();
-        assert_store_round_trip(&array, data, allow_nondivisible)?;
+    let vlen = VlenCodec::new(
+        bytes_codec_chain(),
+        sharding_codec_chain(&data_type::uint8()),
+        VlenIndexDataType::UInt64,
+        VlenIndexLocation::Start,
+    );
+    let mut builder = ArrayBuilder::new(vec![4], vec![4], data_type::string(), "");
+    builder.array_to_bytes_codec(Arc::new(vlen));
+    let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
+    let data = ["a", "bb", "", "cc"].map(String::from).to_vec();
+    assert_store_round_trip(&array, data)?;
 
-        let optional = OptionalCodec::new(
-            bytes_codec_chain(),
-            sharding_codec_chain(&data_type::uint16()),
-        );
-        let mut builder = ArrayBuilder::new(
-            vec![4],
-            vec![4],
-            data_type::uint16().to_optional(),
-            FillValue::from(None::<u16>),
-        );
-        builder.array_to_bytes_codec(Arc::new(optional));
-        if allow_nondivisible {
-            enable_nondivisible_subchunks(&mut builder);
-        }
-        let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
-        let data = vec![Some(1u16), None, Some(3), Some(4)];
-        assert_store_round_trip(&array, data, allow_nondivisible)?;
-    }
+    let optional = OptionalCodec::new(
+        bytes_codec_chain(),
+        sharding_codec_chain(&data_type::uint16()),
+    );
+    let mut builder = ArrayBuilder::new(
+        vec![4],
+        vec![4],
+        data_type::uint16().to_optional(),
+        FillValue::from(None::<u16>),
+    );
+    builder.array_to_bytes_codec(Arc::new(optional));
+    let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
+    let data = vec![Some(1u16), None, Some(3), Some(4)];
+    assert_store_round_trip(&array, data)?;
     Ok(())
 }
 

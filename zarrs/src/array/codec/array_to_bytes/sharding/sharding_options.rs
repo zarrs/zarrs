@@ -24,14 +24,12 @@ pub enum SubchunkWriteOrder {
 #[non_exhaustive]
 pub struct ShardingCodecOptions {
     subchunk_write_order: SubchunkWriteOrder,
-    allow_nondivisible_subchunks: Option<bool>,
 }
 
 impl Default for ShardingCodecOptions {
     fn default() -> Self {
         Self {
             subchunk_write_order: SubchunkWriteOrder::Unordered,
-            allow_nondivisible_subchunks: None,
         }
     }
 }
@@ -57,44 +55,6 @@ impl ShardingCodecOptions {
     #[must_use]
     pub fn subchunk_write_order(&self) -> SubchunkWriteOrder {
         self.subchunk_write_order
-    }
-
-    /// Permit subchunk shapes that do not evenly divide the shard shape.
-    ///
-    /// See [non-divisible subchunk shapes](crate::array::codec::array_to_bytes::sharding#non-divisible-subchunk-shapes).
-    /// If unset, a codec keeps its existing setting when these options are applied.
-    /// Codecs created from metadata permit non-divisible subchunks, otherwise they are rejected by default.
-    #[must_use]
-    pub fn with_allow_nondivisible_subchunks(mut self, allow_nondivisible_subchunks: bool) -> Self {
-        self.allow_nondivisible_subchunks = Some(allow_nondivisible_subchunks);
-        self
-    }
-
-    /// Permit subchunk shapes that do not evenly divide the shard shape.
-    ///
-    /// See [`with_allow_nondivisible_subchunks`](Self::with_allow_nondivisible_subchunks).
-    pub fn set_allow_nondivisible_subchunks(
-        &mut self,
-        allow_nondivisible_subchunks: bool,
-    ) -> &mut Self {
-        self.allow_nondivisible_subchunks = Some(allow_nondivisible_subchunks);
-        self
-    }
-
-    /// Return whether subchunk shapes that do not evenly divide the shard shape are permitted, if set.
-    #[must_use]
-    pub fn allow_nondivisible_subchunks(&self) -> Option<bool> {
-        self.allow_nondivisible_subchunks
-    }
-
-    /// Return `options`, inheriting unset options from `self`.
-    pub(crate) fn merged(&self, options: &Self) -> Self {
-        Self {
-            allow_nondivisible_subchunks: options
-                .allow_nondivisible_subchunks
-                .or(self.allow_nondivisible_subchunks),
-            ..options.clone()
-        }
     }
 }
 

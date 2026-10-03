@@ -50,11 +50,10 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// Return the subchunk grid of a sharded `chunk_grid`.
 ///
-/// Subchunks straddling a shard boundary are clipped to the shard shape, or rejected if `require_divisible`.
+/// Subchunks straddling a shard boundary are clipped to the shard shape.
 fn regular_subchunk_grid(
     chunk_grid: &ChunkGrid,
     subchunk_shape: &ChunkShape,
-    require_divisible: bool,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
     if chunk_grid.dimensionality() != subchunk_shape.len() {
         return Err(ChunkGridCreateError::new(format!(
@@ -63,17 +62,6 @@ fn regular_subchunk_grid(
             chunk_grid.dimensionality()
         )));
     }
-
-    let check_divisible = |edge_length: NonZeroU64, subchunk: NonZeroU64| {
-        if require_divisible && !edge_length.get().is_multiple_of(subchunk.get()) {
-            Err(ChunkGridCreateError::new(nondivisible_subchunks_message(
-                subchunk_shape,
-                &edge_length,
-            )))
-        } else {
-            Ok(())
-        }
-    };
 
     if chunk_grid
         .name_v3()
@@ -84,9 +72,6 @@ fn regular_subchunk_grid(
             .ok_or_else(|| {
                 ChunkGridCreateError::new("chunk grid does not contain an origin chunk")
             })?;
-        for (&edge_length, &subchunk) in std::iter::zip(&chunk_shape, subchunk_shape) {
-            check_divisible(edge_length, subchunk)?;
-        }
         return Ok(ChunkGrid::new(RepeatChunkGrid::new(
             chunk_grid.grid_shape().to_vec(),
             ChunkGrid::new(RegularBoundedChunkGrid::new(
@@ -104,7 +89,6 @@ fn regular_subchunk_grid(
         let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim)?;
         let mut global_edge_lengths = Vec::new();
         for edge_length in chunk_edge_lengths {
-            check_divisible(edge_length, *subchunk)?;
             global_edge_lengths.extend(
                 RegularBoundedChunkGrid::new(vec![edge_length.get()], vec![*subchunk])?
                     .chunk_edge_lengths(0)?,
@@ -141,16 +125,6 @@ fn regular_subchunk_grid(
             subchunk_shape,
         )?))
     }
-}
-
-fn nondivisible_subchunks_message(
-    subchunk_shape: &[NonZeroU64],
-    shard_shape: &impl std::fmt::Debug,
-) -> String {
-    format!(
-        "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {shard_shape:?}. \
-        Use `ShardingCodecOptions::with_allow_nondivisible_subchunks` to permit clipped subchunks"
-    )
 }
 
 /// Return the subset of the subchunk with the raveled `subchunk_index`, clipped to the shard shape.
@@ -208,8 +182,6 @@ impl ShardingCodec {
 
     /// Create a new `sharding` codec from configuration.
     ///
-    /// The codec permits non-divisible subchunk shapes, see [`ShardingCodecOptions::with_allow_nondivisible_subchunks`].
-    ///
     /// # Errors
     ///
     /// Returns [`PluginCreateError`] if there is a configuration issue.
@@ -231,9 +203,6 @@ impl ShardingCodec {
                     inner_codecs,
                     index_codecs,
                     configuration.index_location,
-                )
-                .with_options(
-                    ShardingCodecOptions::default().with_allow_nondivisible_subchunks(true),
                 ))
             }
             _ => Err(PluginCreateError::Other(
@@ -243,11 +212,9 @@ impl ShardingCodec {
     }
 
     /// Return a version of this codec with the provided [`ShardingCodecOptions`].
-    ///
-    /// Options unset in `options` are retained from this codec.
     #[must_use]
     pub fn with_options(mut self, options: ShardingCodecOptions) -> Self {
-        self.options = self.options.merged(&options);
+        self.options = options;
         self
     }
 
@@ -312,10 +279,10 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
             FillValue::from(u64::MAX),
             codec_specific_options,
         )?;
-        let options = match codec_specific_options.get_option::<ShardingCodecOptions>() {
-            Some(options) => self.options.merged(options),
-            None => self.options.clone(),
-        };
+        let options = codec_specific_options
+            .get_option::<ShardingCodecOptions>()
+            .unwrap_or(&self.options)
+            .clone();
         Ok(Arc::new(ShardingCodecBound {
             subchunk_shape: self.subchunk_shape.clone(),
             inner_codecs,
@@ -361,13 +328,9 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
             {
                 ChunkGridDecoded::None
             }
-            ChunkGridDecodedRef::Array(decoded_chunk_grid) => {
-                ChunkGridDecoded::Array(regular_subchunk_grid(
-                    decoded_chunk_grid,
-                    &self.subchunk_shape,
-                    !self.allow_nondivisible_subchunks(),
-                )?)
-            }
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => ChunkGridDecoded::Array(
+                regular_subchunk_grid(decoded_chunk_grid, &self.subchunk_shape)?,
+            ),
             ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
         };
         let mut subchunk_grids = vec![subchunk_grid.clone()];
@@ -395,7 +358,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        self.validate_shard_shape(shape)?;
         let data_type = self.data_type();
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, data_type)?;
@@ -797,7 +759,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        self.validate_shard_shape(shape)?;
         Ok(Arc::new(
             sharding_partial_encoder::ShardingPartialEncoder::new(
                 input_output_handle,
@@ -819,7 +780,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        self.validate_shard_shape(shape)?;
         Ok(Arc::new(
             super::sharding_partial_encoder_async::AsyncShardingPartialEncoder::new(
                 input_output_handle,
@@ -891,27 +851,6 @@ impl ShardingCodecBound {
     #[must_use]
     pub fn options(&self) -> &ShardingCodecOptions {
         &self.options
-    }
-
-    fn allow_nondivisible_subchunks(&self) -> bool {
-        self.options.allow_nondivisible_subchunks().unwrap_or(false)
-    }
-
-    /// Check that the subchunk shape evenly divides `shard_shape`, unless non-divisible subchunks are permitted.
-    ///
-    /// Decoding does not check this, so that existing data can always be read.
-    fn validate_shard_shape(&self, shard_shape: &[NonZeroU64]) -> Result<(), CodecError> {
-        if self.allow_nondivisible_subchunks()
-            || std::iter::zip(shard_shape, self.subchunk_shape.iter())
-                .all(|(s, c)| s.get().is_multiple_of(c.get()))
-        {
-            Ok(())
-        } else {
-            Err(CodecError::Other(nondivisible_subchunks_message(
-                &self.subchunk_shape,
-                &shard_shape,
-            )))
-        }
     }
 
     /// Computed the bounded size of an encoded shard from
