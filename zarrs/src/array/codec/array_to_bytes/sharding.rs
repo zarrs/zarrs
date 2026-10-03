@@ -61,6 +61,8 @@
 //!
 //! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
 
+#[cfg(test)]
+mod indexer_tests;
 mod sharding_codec;
 mod sharding_codec_builder;
 mod sharding_options;
@@ -77,17 +79,17 @@ pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_chunk_grid::ChunkGridTraits;
+use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
 use zarrs_codec::CowBytes;
 
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayIndices, ArrayIndicesTinyVec, BytesRepresentation, ChunkGrid, ChunkShape,
-    ChunkShapeTraits, CodecChain, CodecChainBound, DataType, FillValue, Indexer,
+    ChunkShapeTraits, CodecChain, CodecChainBound, DataType, FillValue, Indexer, IndexerError,
     RecommendedConcurrency, ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
@@ -231,15 +233,23 @@ fn subchunk_byte_range(
             ))
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-        if offset == u64::MAX && size == u64::MAX {
-            Ok(None)
-        } else {
-            Ok(Some(ByteRange::new(offset..offset + size)))
-        }
+        Ok(subchunk_offset_size(shard_index, shard_index_idx)
+            .map(|(offset, size)| ByteRange::new(offset..offset + size)))
     } else {
         Ok(None)
+    }
+}
+
+/// Returns the byte offset and size of the subchunk at `subchunk_index` in a shard index.
+///
+/// Returns [`None`] if the subchunk is empty.
+fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u64, u64)> {
+    let offset = shard_index[subchunk_index * 2];
+    let size = shard_index[subchunk_index * 2 + 1];
+    if offset == u64::MAX && size == u64::MAX {
+        None
+    } else {
+        Some((offset, size))
     }
 }
 
@@ -249,6 +259,188 @@ fn partial_decode_empty_shard<'a>(
     indexer: &dyn crate::array::Indexer,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
+}
+
+/// Selected elements in one subchunk, in their original indexer order.
+struct SubchunkIndices {
+    /// The indices of each element within the subchunk, flattened.
+    indices: Vec<u64>,
+    /// The position of each element in the shard indexer.
+    positions: Vec<usize>,
+    dimensionality: usize,
+}
+
+impl SubchunkIndices {
+    fn new(dimensionality: usize) -> Self {
+        Self {
+            indices: Vec::new(),
+            positions: Vec::new(),
+            dimensionality,
+        }
+    }
+
+    fn elements(&self) -> std::slice::ChunksExact<'_, u64> {
+        self.indices.chunks_exact(self.dimensionality)
+    }
+}
+
+impl Indexer for SubchunkIndices {
+    fn dimensionality(&self) -> usize {
+        self.dimensionality
+    }
+
+    fn len(&self) -> u64 {
+        self.positions.len() as u64
+    }
+
+    fn output_shape(&self) -> Vec<u64> {
+        vec![self.len()]
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        if self.dimensionality != array_shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                self.dimensionality,
+                array_shape.len(),
+            ));
+        }
+        self.elements().try_for_each(|indices| {
+            if std::iter::zip(indices, array_shape).any(|(index, size)| index >= size) {
+                Err(IndexerError::new_oob(
+                    indices.to_vec(),
+                    array_shape.to_vec(),
+                ))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+        let dimensionality = self.dimensionality;
+        let indices = self.indices.clone();
+        Box::new((0..self.positions.len()).map(move |element| {
+            indices[element * dimensionality..(element + 1) * dimensionality]
+                .iter()
+                .copied()
+                .collect()
+        }))
+    }
+
+    fn iter_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
+        if self.dimensionality != array_shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                self.dimensionality,
+                array_shape.len(),
+            ));
+        }
+        let linearised_indices = self
+            .elements()
+            .map(|indices| {
+                ravel_indices(indices, array_shape)
+                    .ok_or_else(|| IndexerError::new_oob(indices.to_vec(), array_shape.to_vec()))
+            })
+            .collect::<Result<Vec<u64>, _>>()?;
+        Ok(Box::new(linearised_indices.into_iter()))
+    }
+
+    fn iter_contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
+        Ok(Box::new(
+            self.iter_linearised_indices(array_shape)?
+                .map(|index| (index, 1)),
+        ))
+    }
+}
+
+/// Group a validated shard indexer by subchunk, retaining duplicate coordinates.
+///
+/// Groups are ordered by raveled subchunk index.
+fn group_indices_by_subchunk(
+    chunks_per_shard: &[u64],
+    subchunk_shape: &[NonZeroU64],
+    indexer: &dyn Indexer,
+) -> BTreeMap<u64, SubchunkIndices> {
+    let mut groups: BTreeMap<u64, SubchunkIndices> = BTreeMap::new();
+    for (position, indices) in indexer.iter_indices().enumerate() {
+        let subchunk_indices: ArrayIndicesTinyVec = std::iter::zip(&indices, subchunk_shape)
+            .map(|(&i, &cs)| i / cs)
+            .collect();
+        let subchunk_index =
+            ravel_indices(&subchunk_indices, chunks_per_shard).expect("validated indexer");
+        let group = groups
+            .entry(subchunk_index)
+            .or_insert_with(|| SubchunkIndices::new(subchunk_shape.len()));
+        group
+            .indices
+            .extend(std::iter::zip(&indices, subchunk_shape).map(|(&i, &cs)| i % cs));
+        group.positions.push(position);
+    }
+    groups
+}
+
+/// Restore indexer order after independently decoding each subchunk's selected elements.
+fn merge_indexer_subchunks(
+    groups: Vec<(Vec<usize>, ArrayBytes<'static>)>,
+    num_elements: usize,
+    data_type: &DataType,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let mut num_decoded = 0;
+    for (positions, bytes) in &groups {
+        bytes.validate(positions.len() as u64, data_type)?;
+        num_decoded += positions.len();
+    }
+    if num_decoded != num_elements {
+        return Err(CodecError::Other(format!(
+            "indexer yielded {num_decoded} elements, but has a length of {num_elements}"
+        )));
+    }
+    if groups.len() == 1 {
+        // Positions within a group are ascending and cover every element, so already in order
+        let (_, bytes) = groups.into_iter().next().expect("one group");
+        return Ok(bytes);
+    }
+    if let Some(element_size) = data_type.fixed_size() {
+        let mut output = vec![0; num_elements * element_size];
+        for (positions, bytes) in groups {
+            let bytes = bytes.into_fixed()?;
+            for (element, position) in positions.into_iter().enumerate() {
+                output[position * element_size..(position + 1) * element_size]
+                    .copy_from_slice(&bytes[element * element_size..(element + 1) * element_size]);
+            }
+        }
+        Ok(output.into())
+    } else {
+        let groups = groups
+            .into_iter()
+            .map(|(positions, bytes)| Ok((positions, bytes.into_variable()?)))
+            .collect::<Result<Vec<_>, CodecError>>()?;
+        let mut elements: Vec<&[u8]> = vec![&[]; num_elements];
+        let mut bytes_len = 0;
+        for (positions, bytes) in &groups {
+            for (element, &position) in positions.iter().enumerate() {
+                let value = &bytes.bytes()[bytes.offsets().element_range(element)];
+                elements[position] = value;
+                bytes_len += value.len();
+            }
+        }
+        let mut bytes = Vec::with_capacity(bytes_len);
+        let mut offsets = Vec::with_capacity(num_elements + 1);
+        offsets.push(0);
+        for element in elements {
+            bytes.extend_from_slice(element);
+            offsets.push(bytes.len());
+        }
+        Ok(ArrayBytes::new_vlen(
+            bytes,
+            crate::array::array_bytes_internal::offsets_from_usize(offsets)?,
+        )?)
+    }
 }
 
 /// An update to a subchunk from a partial encode.
@@ -320,33 +512,19 @@ fn subchunk_updates<'a>(
             })
             .collect()
     } else {
-        // Group the indexer elements by subchunk, preserving their order
-        let mut groups: HashMap<u64, (Vec<ArrayIndices>, Vec<ArrayIndices>)> = HashMap::new();
-        for (position, indices) in indexer.iter_indices().enumerate() {
-            let subchunk_indices: ArrayIndices = indices
-                .iter()
-                .zip(subchunk_shape)
-                .map(|(&i, &cs)| i / cs)
-                .collect();
-            let subchunk_index =
-                ravel_indices(&subchunk_indices, chunks_per_shard).expect("validated indexer");
-            let indices_in_subchunk: ArrayIndices = indices
-                .iter()
-                .zip(subchunk_shape)
-                .map(|(&i, &cs)| i % cs)
-                .collect();
-            let (group_indices, group_positions) = groups.entry(subchunk_index).or_default();
-            group_indices.push(indices_in_subchunk);
-            group_positions.push(vec![position as u64]);
-        }
-
+        let groups = group_indices_by_subchunk(chunks_per_shard, subchunk_shape, indexer);
         let bytes_shape = [indexer.len()];
         groups
             .into_iter()
-            .map(|(subchunk_index, (indices, positions))| {
+            .map(|(subchunk_index, group)| {
+                let positions: Vec<ArrayIndices> = group
+                    .positions
+                    .iter()
+                    .map(|&position| vec![position as u64])
+                    .collect();
                 Ok(SubchunkUpdate {
                     subchunk_index,
-                    indexer: Box::new(indices),
+                    indexer: Box::new(group),
                     bytes: bytes.extract_array_subset(&positions, &bytes_shape, data_type)?,
                     // Duplicate indices are permitted, so coverage is not tracked
                     fully_covered: false,
@@ -359,17 +537,15 @@ fn subchunk_updates<'a>(
 fn get_concurrent_target_and_codec_options(
     inner_codecs: &CodecChainBound,
     subchunk_shape: &[NonZeroU64],
-    chunks_per_shard: &[u64],
+    num_subchunks: usize,
     options: &CodecOptions,
 ) -> Result<(usize, CodecOptions), CodecError> {
-    let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
-
     // Calculate subchunk/codec concurrency
     let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
         options.concurrent_target(),
         &RecommendedConcurrency::new_maximum(std::cmp::min(
             options.concurrent_target(),
-            num_chunks,
+            num_subchunks,
         )),
         &inner_codecs.recommended_concurrency(subchunk_shape)?,
     );
@@ -552,22 +728,22 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec = Arc::new(
-            ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
-                .index_location(if index_at_end {
-                    ShardingIndexLocation::End
-                } else {
-                    ShardingIndexLocation::Start
-                })
-                .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build(),
-        )
-        .with_codec_specific_options(&CodecSpecificOptions::default().with_option(
-            ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
-        ))
-        .unwrap()
-        .with_context(data_type, fill_value)
-        .unwrap();
+        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
+            .index_location(if index_at_end {
+                ShardingIndexLocation::End
+            } else {
+                ShardingIndexLocation::Start
+            })
+            .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
+            .build()
+            .with_context(
+                data_type,
+                fill_value,
+                &CodecSpecificOptions::default().with_option(
+                    ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
+                ),
+            )
+            .unwrap();
         let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
         let decoded = codec
@@ -717,7 +893,11 @@ mod tests {
                         .bytes_to_bytes_codecs(vec![Arc::new(GzipCodec::new(0).unwrap())])
                         .build(),
                 )
-                .with_context(data_type::uint8(), FillValue::from(0u8))
+                .with_context(
+                    data_type::uint8(),
+                    FillValue::from(0u8),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
                 let encoded = codec.encode(bytes.clone(), &shard_shape, &options).unwrap();
                 let decoded = codec.decode(encoded, &shard_shape, &options).unwrap();
@@ -757,7 +937,7 @@ mod tests {
                 })
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build()
-                .with_context(data_type, fill_value)
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &shape, options).unwrap();
@@ -827,7 +1007,11 @@ mod tests {
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
         )
-        .with_context(data_type.clone(), fill_value)
+        .with_context(
+            data_type.clone(),
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -909,7 +1093,7 @@ mod tests {
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
         )
-        .with_context(data_type, fill_value)
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
@@ -976,7 +1160,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -1019,7 +1203,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         let encoded = codec
@@ -1068,7 +1252,7 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
 
         // Step 1: Fully encode the shard

@@ -77,24 +77,10 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits>;
 
-    /// Return a version of this codec reconfigured with the provided codec-specific options.
-    ///
-    /// The default implementation returns the codec unchanged.
-    /// Override this to read your codec's options type from [`CodecSpecificOptions`].
-    ///
-    /// # Errors
-    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured.
-    #[expect(unused_variables)]
-    fn with_codec_specific_options(
-        self: Arc<Self>,
-        opts: &CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToArrayCodecTraits>, CodecCreateError> {
-        Ok(self.into_dyn())
-    }
-
-    /// Bind this codec to a decoded data type and fill value.
+    /// Bind this codec to a decoded data type, fill value, and codec-specific options.
     ///
     /// Binding eagerly validates and derives the encoded context.
+    /// A codec may read its own options type from `codec_specific_options`, and must bind any codecs it contains with the same `codec_specific_options`.
     ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
@@ -102,6 +88,7 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError>;
 }
 

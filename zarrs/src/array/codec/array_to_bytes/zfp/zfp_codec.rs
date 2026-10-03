@@ -11,8 +11,9 @@ use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -165,6 +166,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let encoding = data_type.codec_zfp()?.zfp_encoding();
         let scalar_type = zfp_native_type_to_scalar_type(encoding.native_type());

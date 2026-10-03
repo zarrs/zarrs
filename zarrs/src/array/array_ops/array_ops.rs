@@ -44,6 +44,12 @@ pub trait ArrayOps {
     /// [`ArrayMutOps::set_codec_options`] where the array is owned.
     fn codec_options(&self) -> &CodecOptions;
 
+    /// Get the codec-specific options the codec chain is bound with.
+    ///
+    /// Override them with [`Array::with_codec_specific_options`], or
+    /// [`ArrayMutOps::set_codec_specific_options`] where the array is owned.
+    fn codec_specific_options(&self) -> &CodecSpecificOptions;
+
     /// Get the array metadata options used by the array operations.
     ///
     /// Override them with [`with_metadata_options`](ArrayOps::with_metadata_options), or

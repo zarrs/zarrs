@@ -13,7 +13,7 @@ use zarrs::array::{
     DataType, ElementOwned, Indexer, IndexerError, data_type,
 };
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions, CodecSpecificOptions,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;
@@ -251,7 +251,13 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
-    let bound_codec = codec.with_context(data_type.clone(), fill_value).unwrap();
+    let bound_codec = codec
+        .with_context(
+            data_type.clone(),
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(
@@ -300,7 +306,13 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
-    let bound_codec = codec.with_context(data_type.clone(), fill_value).unwrap();
+    let bound_codec = codec
+        .with_context(
+            data_type.clone(),
+            fill_value,
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(

@@ -9,11 +9,13 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::builder::ArrayBuilderFillValue;
+#[cfg(feature = "bitround")]
+use zarrs::array::codec::BitroundCodec;
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-use zarrs::array::codec::{
-    BitroundCodec, CastValueCodec, ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder,
-};
+use zarrs::array::codec::{CastValueCodec, ReshapeCodec, SqueezeCodec};
+#[cfg(feature = "transpose")]
+use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
@@ -21,7 +23,7 @@ use zarrs::array::{
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError,
+    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError, CodecSpecificOptions,
     PartialDecoderCapability, PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
@@ -78,6 +80,7 @@ impl UnboundArrayToArrayCodecTraits for IdentityCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(IdentityCodecBound {
             data_type,
@@ -234,6 +237,7 @@ pub(crate) fn plain_sharding() -> Case {
 pub(crate) fn cases() -> Vec<Case> {
     vec![
         plain_sharding(),
+        #[cfg(feature = "bitround")]
         Case {
             name: "bitround",
             codec: Some(Arc::new(
@@ -312,6 +316,7 @@ pub(crate) fn cases() -> Vec<Case> {
             absent_chunk_indices: vec![0, 0],
             local_subchunk_shape: vec![nz(1), nz(2)],
         },
+        #[cfg(feature = "transpose")]
         Case {
             name: "transpose",
             codec: Some(Arc::new(TransposeCodec::new(

@@ -119,13 +119,13 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
         self.cache.as_ref()
     }
 
-    /// Reconfigure the codec chain with codec-specific options.
+    /// Rebind the codec chain with codec-specific options.
     ///
     /// Refer to [`Array::with_codec_specific_options`] for details. The chunk cache is shared
     /// with the original.
     ///
     /// # Errors
-    /// Returns a [`CodecCreateError`] if a codec cannot be reconfigured or rebound.
+    /// Returns a [`CodecCreateError`] if the codec chain cannot be rebound.
     pub fn with_codec_specific_options(
         &self,
         opts: &CodecSpecificOptions,

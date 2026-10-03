@@ -13,12 +13,12 @@ use super::{
     nested_local_subchunk_grids,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{merge_chunks_vlen, offsets_from_usize};
+use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArrayIndicesTinyVec, ArraySubset,
-    ArraySubsetTraits, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes,
-    DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, ravel_indices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits,
+    ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType, DataTypeSize,
+    IncompatibleDimensionalityError, Indexer, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
@@ -127,60 +127,45 @@ pub(crate) async fn partial_decode(
         ));
     }
 
+    let Some(subset) = indexer.as_array_subset() else {
+        return partial_decode_indexer(
+            input_handle,
+            shard_shape,
+            subchunk_shape,
+            inner_codecs,
+            shard_index,
+            indexer,
+            options,
+        )
+        .await;
+    };
+
     match data_type.size() {
         DataTypeSize::Fixed(_data_type_size) => {
-            if let Some(subset) = indexer.as_array_subset() {
-                partial_decode_fixed_array_subset(
-                    input_handle,
-                    shard_shape,
-                    subchunk_shape,
-                    inner_codecs,
-                    shard_index,
-                    subset,
-                    options,
-                )
-                .await
-            } else {
-                partial_decode_fixed_indexer(
-                    input_handle,
-                    shard_shape,
-                    subchunk_shape,
-                    inner_codecs,
-                    shard_index,
-                    indexer,
-                    options,
-                )
-                .await
-            }
+            partial_decode_fixed_array_subset(
+                input_handle,
+                shard_shape,
+                subchunk_shape,
+                inner_codecs,
+                shard_index,
+                subset,
+                options,
+            )
+            .await
         }
         DataTypeSize::Variable => {
-            if let Some(subset) = indexer.as_array_subset() {
-                partial_decode_variable_array_subset(
-                    input_handle,
-                    data_type,
-                    fill_value,
-                    shard_shape,
-                    subchunk_shape,
-                    inner_codecs,
-                    shard_index,
-                    subset,
-                    options,
-                )
-                .await
-            } else {
-                partial_decode_variable_indexer(
-                    input_handle,
-                    data_type,
-                    fill_value,
-                    shard_shape,
-                    subchunk_shape,
-                    inner_codecs,
-                    shard_index,
-                    indexer,
-                    options,
-                )
-                .await
-            }
+            partial_decode_variable_array_subset(
+                input_handle,
+                data_type,
+                fill_value,
+                shard_shape,
+                subchunk_shape,
+                inner_codecs,
+                shard_index,
+                subset,
+                options,
+            )
+            .await
         }
     }
 }
@@ -248,21 +233,34 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             .into());
         }
         if let DataTypeSize::Fixed(_) = self.inner_codecs.data_type().size()
-            && let Some(subset) = indexer.as_array_subset()
             && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
         {
-            subset.validate(bytemuck::must_cast_slice(&self.shard_shape))?;
-            partial_decode_fixed_array_subset_into(
-                &self.input_handle,
-                &self.shard_shape,
-                &self.subchunk_shape,
-                &self.inner_codecs,
-                self.shard_index.as_deref(),
-                subset,
-                options,
-                output_view,
-            )
-            .await
+            indexer.validate(bytemuck::must_cast_slice(&self.shard_shape))?;
+            if let Some(subset) = indexer.as_array_subset() {
+                partial_decode_fixed_array_subset_into(
+                    &self.input_handle,
+                    &self.shard_shape,
+                    &self.subchunk_shape,
+                    &self.inner_codecs,
+                    self.shard_index.as_deref(),
+                    subset,
+                    options,
+                    output_view,
+                )
+                .await
+            } else {
+                partial_decode_fixed_indexer_into(
+                    &self.input_handle,
+                    &self.shard_shape,
+                    &self.subchunk_shape,
+                    &self.inner_codecs,
+                    self.shard_index.as_deref(),
+                    indexer,
+                    options,
+                    output_view,
+                )
+                .await
+            }
         } else {
             let decoded_value = self.partial_decode(indexer, options).await?;
             decode_into_array_bytes_target(&decoded_value, output_target)
@@ -330,14 +328,14 @@ async fn partial_decode_fixed_array_subset_into(
             .fill(fill_value.as_ne_bytes())
             .map_err(CodecError::from);
     };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
     let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
         inner_codecs,
         subchunk_shape,
-        &chunks_per_shard,
+        chunks_per_shard.num_elements_usize(),
         options,
     )?;
+    let chunks_per_shard = chunks_per_shard.to_array_shape();
     let shard_chunk_grid = RegularChunkGrid::new(
         bytemuck::must_cast_slice(shard_shape).to_vec(),
         subchunk_shape.to_vec(),
@@ -353,8 +351,7 @@ async fn partial_decode_fixed_array_subset_into(
         let shard_index_idx =
             ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
+        let offset_size = super::subchunk_offset_size(shard_index, shard_index_idx);
         let chunk_subset = shard_chunk_grid
             .subset(&chunk_indices)
             .expect("matching dimensionality")
@@ -363,8 +360,7 @@ async fn partial_decode_fixed_array_subset_into(
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
         let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
         subchunks.push((
-            offset,
-            size,
+            offset_size,
             chunk_subset,
             chunk_subset_overlap,
             chunk_output_overlap_subset,
@@ -374,12 +370,10 @@ async fn partial_decode_fixed_array_subset_into(
     use futures::{StreamExt, TryStreamExt};
     let decoded_subchunks = futures::stream::iter(subchunks)
         .map(
-            |(offset, size, chunk_subset, chunk_subset_overlap, output_subset)| {
+            |(offset_size, chunk_subset, chunk_subset_overlap, output_subset)| {
                 let options = &options;
                 async move {
-                    if offset == u64::MAX && size == u64::MAX {
-                        Ok::<_, CodecError>((None, output_subset))
-                    } else {
+                    if let Some((offset, size)) = offset_size {
                         let inner_partial_decoder = get_subchunk_partial_decoder(
                             input_handle,
                             subchunk_shape,
@@ -400,6 +394,8 @@ async fn partial_decode_fixed_array_subset_into(
                             .into_fixed()?
                             .into_vec();
                         Ok((Some(decoded), output_subset))
+                    } else {
+                        Ok::<_, CodecError>((None, output_subset))
                     }
                 }
             },
@@ -462,13 +458,10 @@ async fn partial_decode_fixed_array_subset(
                 .expect("subchunk always within shard");
 
             // Read the offset/size
-            let offset = shard_index[chunk_index * 2];
-            let size = shard_index[chunk_index * 2 + 1];
-            if offset == u64::MAX && size == u64::MAX {
-                (chunk_subset, None)
-            } else {
-                (chunk_subset, Some((offset, size)))
-            }
+            (
+                chunk_subset,
+                super::subchunk_offset_size(shard_index, chunk_index),
+            )
         })
         .collect::<Vec<_>>();
 
@@ -624,20 +617,12 @@ async fn partial_decode_variable_array_subset(
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let array_subset_start = &array_subset_start;
         async move {
-            let offset = shard_index[shard_index_idx * 2];
-            let size = shard_index[shard_index_idx * 2 + 1];
+            let offset_size = super::subchunk_offset_size(shard_index, shard_index_idx);
 
             // Get the subset of bytes from the chunk which intersect the array
             let chunk_subset_overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
 
-            let chunk_subset_bytes = if offset == u64::MAX && size == u64::MAX {
-                ArrayBytes::new_fill_value(
-                    data_type,
-                    chunk_subset_overlap.num_elements(),
-                    fill_value,
-                )?
-                .into_variable()?
-            } else {
+            let chunk_subset_bytes = if let Some((offset, size)) = offset_size {
                 // Partially decode the subchunk
                 let inner_partial_decoder = get_subchunk_partial_decoder(
                     input_handle,
@@ -658,6 +643,13 @@ async fn partial_decode_variable_array_subset(
                     .await?
                     .into_owned()
                     .into_variable()?
+            } else {
+                ArrayBytes::new_fill_value(
+                    data_type,
+                    chunk_subset_overlap.num_elements(),
+                    fill_value,
+                )?
+                .into_variable()?
             };
             Ok::<_, CodecError>((
                 chunk_subset_bytes,
@@ -688,7 +680,7 @@ async fn partial_decode_variable_array_subset(
     Ok(ArrayBytes::Variable(out_array_subset))
 }
 
-async fn partial_decode_fixed_indexer(
+async fn partial_decode_indexer(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
@@ -699,63 +691,28 @@ async fn partial_decode_fixed_indexer(
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs.fill_value();
-    let data_type_size = data_type.fixed_size().expect("called on fixed data type");
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, indexer);
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    // let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
-    //     &inner_codecs,
-    //     &chunk_representation,
-    //     &chunks_per_shard,
-    //     options,
-    // )?;
+    let groups = super::group_indices_by_subchunk(&chunks_per_shard, subchunk_shape, indexer);
+    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        subchunk_shape,
+        groups.len(),
+        options,
+    )?;
+    use futures::{StreamExt, TryStreamExt};
+
     let options = &options;
-
-    let output_len = usize::try_from(indexer.len() * data_type_size as u64).unwrap();
-    let mut output: Vec<u8> = Vec::with_capacity(output_len);
-
-    #[cfg(not(target_arch = "wasm32"))]
-    let subchunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
-    #[cfg(target_arch = "wasm32")]
-    let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
-    );
-
-    for indices in indexer.iter_indices() {
-        // Get intersected index
-        let chunk_index: ArrayIndices = indices
-            .iter()
-            .zip(subchunk_shape)
-            .map(|(&i, &cs)| i / cs)
-            .collect();
-        let chunk_index_1d =
-            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
-
-        // Get the partial decoder
-        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let inner_partial_decoder = subchunk_partial_decoders
-            .entry(chunk_index_1d)
-            .or_try_insert_with(get_subchunk_partial_decoder(
-                input_handle,
-                subchunk_shape,
-                inner_codecs,
-                options,
-                offset,
-                size,
-            ))
-            .await
-            .map_err(Arc::unwrap_or_clone)?
-            .into_value();
-        #[cfg(target_arch = "wasm32")]
-        let inner_partial_decoder = subchunk_partial_decoders
-            .get_or_insert_async(&chunk_index_1d, async {
-                get_subchunk_partial_decoder(
+    let decoded = futures::stream::iter(groups)
+        .map(|(subchunk_index, group)| async move {
+            let shard_index_idx = usize::try_from(subchunk_index).unwrap();
+            let bytes = if let Some((offset, size)) =
+                super::subchunk_offset_size(shard_index, shard_index_idx)
+            {
+                let decoder = get_subchunk_partial_decoder(
                     input_handle,
                     subchunk_shape,
                     inner_codecs,
@@ -763,127 +720,110 @@ async fn partial_decode_fixed_indexer(
                     offset,
                     size,
                 )
-                .await
-            })
-            .await?;
-
-        // Get the element index
-        let indices_in_subchunk: ArrayIndices = indices
-            .iter()
-            .zip(subchunk_shape)
-            .map(|(&i, &cs)| i - (i / cs) * cs.get())
-            .collect();
-
-        let element_bytes = inner_partial_decoder
-            .partial_decode(&[indices_in_subchunk], options)
-            .await?
-            .into_fixed()
-            .expect("fixed data");
-        output.extend_from_slice(&element_bytes);
-    }
-
-    debug_assert_eq!(output.len(), output_len);
-
-    Ok(output.into())
+                .await?;
+                decoder.partial_decode(&group, options).await?.into_owned()
+            } else {
+                ArrayBytes::new_fill_value(data_type, group.len(), fill_value)?
+            };
+            Ok::<_, CodecError>((group.positions, bytes))
+        })
+        .buffer_unordered(subchunk_concurrent_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
+    super::merge_indexer_subchunks(decoded, usize::try_from(indexer.len()).unwrap(), data_type)
 }
 
+/// Decode the elements of `indexer` into `output_view` by scattering each subchunk group directly.
+///
+/// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_variable_indexer(
+async fn partial_decode_fixed_indexer_into<'a>(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
     indexer: &dyn Indexer,
     options: &CodecOptions,
-) -> Result<ArrayBytes<'static>, CodecError> {
+    output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+) -> Result<(), CodecError> {
+    use futures::{StreamExt, TryStreamExt};
+
+    let fill_value = inner_codecs.fill_value();
     let Some(shard_index) = shard_index else {
-        return super::partial_decode_empty_shard(data_type, fill_value, indexer);
+        return output_view
+            .fill(fill_value.as_ne_bytes())
+            .map_err(CodecError::from);
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    // let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
-    //     &inner_codecs,
-    //     &chunk_representation,
-    //     &chunks_per_shard,
-    //     options,
-    // )?;
+    let groups = super::group_indices_by_subchunk(&chunks_per_shard, subchunk_shape, indexer);
+    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        subchunk_shape,
+        groups.len(),
+        options,
+    )?;
     let options = &options;
-
-    let offsets_len = usize::try_from(indexer.len() + 1).unwrap();
-    let mut bytes: Vec<u8> = Vec::new();
-    let mut offsets = Vec::with_capacity(offsets_len);
-    offsets.push(0);
-
-    #[cfg(not(target_arch = "wasm32"))]
-    let subchunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
-    #[cfg(target_arch = "wasm32")]
-    let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
-    );
-
-    for indices in indexer.iter_indices() {
-        // Get intersected index
-        let chunk_index: ArrayIndices = indices
-            .iter()
-            .zip(subchunk_shape)
-            .map(|(&i, &cs)| i / cs)
-            .collect();
-        let chunk_index_1d =
-            ravel_indices(&chunk_index, &chunks_per_shard).expect("validated indexer");
-
-        // Get the partial decoder
-        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let inner_partial_decoder = subchunk_partial_decoders
-            .entry(chunk_index_1d)
-            .or_try_insert_with(get_subchunk_partial_decoder(
+    let subchunk_decoder = |subchunk_index: u64| async move {
+        let shard_index_idx = usize::try_from(subchunk_index).unwrap();
+        if let Some((offset, size)) = super::subchunk_offset_size(shard_index, shard_index_idx) {
+            get_subchunk_partial_decoder(
                 input_handle,
                 subchunk_shape,
                 inner_codecs,
                 options,
                 offset,
                 size,
-            ))
+            )
             .await
-            .map_err(Arc::unwrap_or_clone)?
-            .into_value();
-        #[cfg(target_arch = "wasm32")]
-        let inner_partial_decoder = subchunk_partial_decoders
-            .get_or_insert_async(&chunk_index_1d, async {
-                get_subchunk_partial_decoder(
-                    input_handle,
-                    subchunk_shape,
-                    inner_codecs,
+            .map(Some)
+        } else {
+            Ok(None)
+        }
+    };
+
+    if groups.len() == 1 {
+        // Positions within a group are ascending and cover every element, so decode in place
+        let (subchunk_index, group) = groups.into_iter().next().expect("one group");
+        return if let Some(decoder) = subchunk_decoder(subchunk_index).await? {
+            decoder
+                .partial_decode_into(
+                    &group,
+                    ArrayBytesDecodeIntoTarget::Fixed(output_view),
                     options,
-                    offset,
-                    size,
                 )
                 .await
-            })
-            .await?;
-
-        // Get the element index
-        let indices_in_subchunk: ArrayIndices = indices
-            .iter()
-            .zip(subchunk_shape)
-            .map(|(&i, &cs)| i - (i / cs) * cs.get())
-            .collect();
-
-        let (element_bytes, element_offsets) = inner_partial_decoder
-            .partial_decode(&[indices_in_subchunk], options)
-            .await?
-            .into_variable()?
-            .into_parts();
-        debug_assert_eq!(element_offsets.len(), 2);
-        bytes.extend_from_slice(&element_bytes);
-        offsets.push(bytes.len());
+        } else {
+            output_view
+                .fill(fill_value.as_ne_bytes())
+                .map_err(CodecError::from)
+        };
     }
 
-    Ok(ArrayBytes::new_vlen(bytes, offsets_from_usize(offsets)?)?)
+    futures::stream::iter(groups)
+        .map(|(subchunk_index, group)| async move {
+            let bytes = if let Some(decoder) = subchunk_decoder(subchunk_index).await? {
+                Some(
+                    decoder
+                        .partial_decode(&group, options)
+                        .await?
+                        .into_owned()
+                        .into_fixed()?,
+                )
+            } else {
+                None
+            };
+            Ok::<_, CodecError>((group.positions, bytes))
+        })
+        .buffer_unordered(subchunk_concurrent_limit)
+        .try_for_each(|(positions, bytes)| {
+            let result = if let Some(bytes) = bytes {
+                output_view.copy_elements_from_slice(&positions, &bytes)
+            } else {
+                output_view.fill_elements(&positions, fill_value.as_ne_bytes())
+            };
+            futures::future::ready(result)
+        })
+        .await
 }

@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`
+- Add `ArrayOps::codec_specific_options()`
 - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
 - Add `Tensor::into_dlpack()` for exporting a `Tensor<'static>` as a versioned DLPack managed tensor (requires the `dlpack` feature)
 - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
@@ -59,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
+- **Breaking**: Apply codec-specific options when binding a codec chain rather than by reconfiguring its codecs
+  - `CodecChain::with_context` takes `CodecSpecificOptions`
+  - `Array::{with,set}_codec_specific_options` replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
+  - `ArrayBuilder::from_array` retains the codec-specific options of the array
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity
@@ -102,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `float8` to 0.7.0
 - **Breaking**: Bump `dlpark` to 0.8.0 and replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`
 - **Breaking**: `erase_chunks` and `retrieve_encoded_chunks`, including their async variants, now accept `&dyn Indexer`
+- Avoid an intermediate allocation in `RegularBoundedChunkGrid::subset`
 - Internal dependency bumps:
   - Bump `base64` to 0.23.1
   - Bump `getrandom` to 0.4.3
@@ -118,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
 - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
+- **Breaking**: Remove `CodecChain::with_codec_specific_options`, pass `CodecSpecificOptions` to `CodecChain::with_context` instead
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
 - **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
@@ -134,11 +141,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 - **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
 - `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Codec-specific options now propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
+- `ArrayBuilder` applies codec-specific options before validating the codec chain
 - Reuse the input allocation (if posible) when appending/stripping the checksum in the `crc32c`, `adler32`, and `fletcher32` codecs
 - Avoid copying each encoded inner chunk in the `sharding_indexed` codec
 - Avoid redundant copy in `shuffle` codec
 - Validate that tensor bytes cover the shape and data type during DLPack export
 - Pass the encoded shape and data type to the partial decoder cache in a codec chain
+- Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

@@ -262,31 +262,27 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
         &self,
         data_type: DataType,
         fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        let inner_codecs = self.inner_codecs.with_context(data_type, fill_value)?;
-        let index_codecs = self
-            .index_codecs
-            .with_context(crate::array::data_type::uint64(), FillValue::from(u64::MAX))?;
+        let inner_codecs =
+            self.inner_codecs
+                .with_context(data_type, fill_value, codec_specific_options)?;
+        let index_codecs = self.index_codecs.with_context(
+            crate::array::data_type::uint64(),
+            FillValue::from(u64::MAX),
+            codec_specific_options,
+        )?;
+        let options = codec_specific_options
+            .get_option::<ShardingCodecOptions>()
+            .unwrap_or(&self.options)
+            .clone();
         Ok(Arc::new(ShardingCodecBound {
             subchunk_shape: self.subchunk_shape.clone(),
             inner_codecs,
             index_codecs,
             index_location: self.index_location,
-            options: self.options.clone(),
+            options,
         }))
-    }
-
-    fn with_codec_specific_options(
-        self: Arc<Self>,
-        opts: &CodecSpecificOptions,
-    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecCreateError> {
-        if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
-            let mut codec = self;
-            Arc::make_mut(&mut codec).options = sharding_opts.clone();
-            Ok(codec)
-        } else {
-            Ok(self.into_dyn())
-        }
     }
 }
 

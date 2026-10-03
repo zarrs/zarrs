@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::codec::{TransposeCodec, TransposeOrder};
+use zarrs::array::codec::BytesCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayCodecTraits, ArrayCreateError, ArrayToBytesCodecTraits,
     CodecOptions, FillValue, data_type,
@@ -39,9 +39,8 @@ fn codec_binding_error_propagates_from_array_builder() {
         data_type::uint8().to_optional(),
         FillValue::from(None::<u8>),
     );
-    builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
-        TransposeOrder::new(&[1, 0]).unwrap(),
-    ))]);
+    // The `bytes` codec does not support optional data types
+    builder.array_to_bytes_codec(Arc::new(BytesCodec::default()));
 
     assert!(matches!(
         builder.build(Arc::new(MemoryStore::new()), "/array"),

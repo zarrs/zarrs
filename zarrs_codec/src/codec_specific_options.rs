@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 /// Codec-specific options.
 ///
-/// This is a type map for codec-specific runtime configuration that is set once and baked into
-/// a codec's state (e.g. when opening or creating an array).
+/// This is a type map for codec-specific runtime configuration that is applied when codecs are bound
+/// to a data type and fill value (e.g. when opening or creating an array).
+/// Codecs containing codec chains bind them with the same options, so options reach nested codecs.
 /// It is distinct from [`CodecOptions`](super::CodecOptions), which carries per-operation settings passed at each encode/decode call.
 ///
 /// Codecs may define their own options type (e.g. `ShardingCodecOptions`) and retrieve it via [`get_option`](CodecSpecificOptions::get_option).
