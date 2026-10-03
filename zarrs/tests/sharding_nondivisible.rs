@@ -18,6 +18,7 @@ use zarrs::array::{
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
+use zarrs_filesystem::FilesystemStore;
 use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use zarrs_storage::store::MemoryStore;
@@ -447,6 +448,34 @@ fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std
         let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
         let data = vec![Some(1u16), None, Some(3), Some(4)];
         assert_store_round_trip(&array, data, allow_nondivisible)?;
+    }
+    Ok(())
+}
+
+/// Arrays written by zarr-python (`tests/data/sharding_nondivisible.py`) can be read.
+#[test]
+fn sharding_nondivisible_zarr_python_compat() -> Result<(), Box<dyn std::error::Error>> {
+    for name in ["1d", "2d", "larger_than_shard", "nested", "rectilinear"] {
+        let path = format!("tests/data/zarr_python_compat/sharding_nondivisible_{name}.zarr");
+        let array = Array::open(Arc::new(FilesystemStore::new(path)?), "/")?;
+        // The elements are the linearised indices, `0..N`
+        let subsets = [
+            array.subset_all(),
+            // A selection crossing clipped subchunks and shard boundaries
+            ArraySubset::from(array.shape().iter().map(|&s| 1..s - 1)),
+        ];
+        for subset in subsets {
+            let expected: Vec<u16> = subset
+                .linearised_indices(array.shape())?
+                .into_iter()
+                .map(u16::try_from)
+                .collect::<Result<_, _>>()?;
+            assert_eq!(
+                array.retrieve_array_subset::<Vec<u16>>(&subset)?,
+                expected,
+                "{name}"
+            );
+        }
     }
     Ok(())
 }
