@@ -331,7 +331,11 @@ mod tests {
         let bytes = f32::to_array_bytes(&data_type, &elements).unwrap();
         let codec = ZfpCodec::new_reversible()
             .with_write_header(true)
-            .with_context(data_type.clone(), FillValue::from(0.0f32))
+            .with_context(
+                data_type.clone(),
+                FillValue::from(0.0f32),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let options = CodecOptions::default();
 
