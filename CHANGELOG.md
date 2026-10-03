@@ -95,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Also fix a missing negation in the `partial_encoder` rule, which stated the opposite of what was meant
 - `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
+- Replace `zfp-sys` with the pure-Rust `zfp-rs` for the `zfp` and `zfpy` codecs
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
