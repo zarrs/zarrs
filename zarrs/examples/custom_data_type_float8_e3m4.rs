@@ -2,9 +2,8 @@
 //!
 //! It accepts float compatible fill values.
 
-use core::f32;
-use std::borrow::Cow;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -110,9 +109,9 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float8_e3m4_to_float32(val: u8) -> f32 {
-    let sign = (val & 0b10000000) as u32;
-    let biased_exponent = ((val >> 4) & 0b111) as i16;
-    let mantissa = (val & 0b1111) as u32;
+    let sign = u32::from(val & 0b10000000);
+    let biased_exponent = i16::from((val >> 4) & 0b111);
+    let mantissa = u32::from(val & 0b1111);
 
     let f32_bits = if biased_exponent == 0 {
         // Subnormal
@@ -153,7 +152,7 @@ impl CustomDataTypeFloat8e3m4Element {
     }
 }
 
-/// This defines how an in-memory CustomDataTypeFloat8e3m4Element is converted into ArrayBytes before encoding via the codec pipeline.
+/// This defines how an in-memory `CustomDataTypeFloat8e3m4Element` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeFloat8e3m4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
@@ -171,7 +170,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
         for element in elements {
             bytes.push(element.0);
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(
@@ -182,7 +181,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeFloat8e3m4Element after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeFloat8e3m4Element` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeFloat8e3m4Element {
     fn from_array_bytes(
         data_type: &DataType,
@@ -194,7 +193,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
         let mut elements = Vec::with_capacity(bytes_len);
         // NOTE: Could memcpy here
         for byte in bytes.iter() {
-            elements.push(CustomDataTypeFloat8e3m4Element(*byte))
+            elements.push(CustomDataTypeFloat8e3m4Element(*byte));
         }
         Ok(elements)
     }

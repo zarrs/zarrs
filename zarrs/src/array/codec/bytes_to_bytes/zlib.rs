@@ -42,7 +42,6 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZlibCodec,
     v3: "numcodecs.zlib", [],
@@ -60,7 +59,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ZlibCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZlibCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -68,7 +67,7 @@ impl CodecTraitsV3 for ZlibCodec {
 }
 
 impl CodecTraitsV2 for ZlibCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZlibCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
@@ -77,9 +76,9 @@ impl CodecTraitsV2 for ZlibCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::num::NonZeroU64;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
@@ -103,7 +102,7 @@ mod tests {
         let codec = ZlibCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -128,7 +127,7 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
@@ -150,7 +149,6 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -179,7 +177,7 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
@@ -202,7 +200,6 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

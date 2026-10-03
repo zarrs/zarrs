@@ -1,6 +1,23 @@
-use crate::array::transmute_to_bytes_vec;
+use std::num::NonZeroU64;
+
+use zfp_rs::{ZfpField, ZfpFieldMut};
 
 use super::ZfpEncoding;
+use crate::array::transmute_to_bytes_vec;
+
+/// Convert a C-order chunk `shape` to zfp dimensions (fastest varying first, zero padded).
+///
+/// Returns [`None`] if the shape is not 1-4 dimensional.
+pub(super) fn zfp_dims(shape: &[NonZeroU64]) -> Option<[usize; 4]> {
+    if shape.is_empty() || shape.len() > 4 {
+        return None;
+    }
+    let mut dims = [0; 4];
+    for (dim, size) in dims.iter_mut().zip(shape.iter().rev()) {
+        *dim = usize::try_from(size.get()).unwrap();
+    }
+    Some(dims)
+}
 
 /// A zfp array holding decoded data along with the original encoding.
 ///
@@ -62,32 +79,43 @@ impl ZfpArray {
         }
     }
 
-    pub(super) fn zfp_type(&self) -> zfp_sys::zfp_type {
-        match self {
-            Self::Int8(_)
-            | Self::Int16(_)
-            | Self::Int32(_)
-            | Self::UInt8(_)
-            | Self::UInt16(_)
-            | Self::UInt32(_) => zfp_sys::zfp_type_zfp_type_int32,
-            Self::Int64(_) | Self::UInt64(_) => zfp_sys::zfp_type_zfp_type_int64,
-            Self::Float32(_) => zfp_sys::zfp_type_zfp_type_float,
-            Self::Float64(_) => zfp_sys::zfp_type_zfp_type_double,
-        }
-    }
-
-    pub(super) fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
-        match self {
+    /// Returns a zfp field over the array with the given zfp `dims`.
+    ///
+    /// Returns [`None`] if `dims` is invalid or does not match the array length.
+    pub(super) fn field(&self, dims: [usize; 4]) -> Option<ZfpField<'_>> {
+        let field = match self {
             Self::Int8(v)
             | Self::Int16(v)
             | Self::Int32(v)
             | Self::UInt8(v)
             | Self::UInt16(v)
-            | Self::UInt32(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Int64(v) | Self::UInt64(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Float32(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
-            Self::Float64(v) => v.as_mut_ptr().cast::<std::ffi::c_void>(),
+            | Self::UInt32(v) => ZfpField::new(v, dims),
+            Self::Int64(v) | Self::UInt64(v) => ZfpField::new(v, dims),
+            Self::Float32(v) => ZfpField::new(v, dims),
+            Self::Float64(v) => ZfpField::new(v, dims),
         }
+        .ok()?;
+        (field.num_elements() == self.len()).then_some(field)
+    }
+
+    /// Returns a mutable zfp field over the array with the given zfp `dims`.
+    ///
+    /// Returns [`None`] if `dims` is invalid or does not match the array length.
+    pub(super) fn field_mut(&mut self, dims: [usize; 4]) -> Option<ZfpFieldMut<'_>> {
+        let len = self.len();
+        let field = match self {
+            Self::Int8(v)
+            | Self::Int16(v)
+            | Self::Int32(v)
+            | Self::UInt8(v)
+            | Self::UInt16(v)
+            | Self::UInt32(v) => ZfpFieldMut::new(v, dims),
+            Self::Int64(v) | Self::UInt64(v) => ZfpFieldMut::new(v, dims),
+            Self::Float32(v) => ZfpFieldMut::new(v, dims),
+            Self::Float64(v) => ZfpFieldMut::new(v, dims),
+        }
+        .ok()?;
+        (field.num_elements() == len).then_some(field)
     }
 
     /// Demotes the zfp array back to its original byte representation.

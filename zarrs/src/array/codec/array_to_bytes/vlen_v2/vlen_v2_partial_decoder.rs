@@ -4,8 +4,11 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
-use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
-use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
+use crate::array::{ArrayBytes, CowBytes, DataType, FillValue};
+use zarrs_codec::{
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
+    CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
@@ -36,7 +39,7 @@ impl VlenV2PartialDecoder {
 }
 
 fn decode_vlen_bytes<'a>(
-    bytes: Option<ArrayBytesRaw>,
+    bytes: Option<CowBytes>,
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,
@@ -50,10 +53,15 @@ fn decode_vlen_bytes<'a>(
             &bytes, &offsets, indexer, shape,
         )?))
     } else {
-        // Chunk is empty, all decoded regions are empty
+        // Chunk is empty, all decoded regions are empty. The fill value does not touch the
+        // indexer, so validate it here.
+        indexer.validate(bytemuck::must_cast_slice(shape))?;
         ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
     }
 }
+
+/// The `vlen_*` codecs encode a chunk as a whole, so they have no subchunks.
+impl ArrayPartialDecoderNoSubchunkingTraits for VlenV2PartialDecoder {}
 
 impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
@@ -115,6 +123,9 @@ impl AsyncVlenV2PartialDecoder {
         }
     }
 }
+
+#[cfg(feature = "async")]
+impl ArrayPartialDecoderNoSubchunkingTraits for AsyncVlenV2PartialDecoder {}
 
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

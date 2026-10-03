@@ -1,0 +1,270 @@
+use std::num::NonZeroU64;
+use std::sync::Arc;
+
+use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_data_type::{DataType, FillValue};
+
+use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
+use crate::{
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
+    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, decode_into_array_bytes_target,
+};
+
+/// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
+pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
+    /// Return the decoded subchunk grids created by this codec.
+    ///
+    /// Grids are ordered from outermost to innermost. An empty vector indicates
+    /// that the codec does not expose subchunks. A [`ChunkGridDecoded::None`] or
+    /// [`ChunkGridDecoded::ChunkLocal`] entry preserves the level in the hierarchy
+    /// when it cannot be resolved globally.
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grids(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
+
+    /// Return the outermost decoded subchunk grid created by this codec.
+    ///
+    /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
+    /// An empty hierarchy is returned as [`ChunkGridDecoded::None`].
+    ///
+    /// # Errors
+    /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
+        Ok(self
+            .decoded_subchunk_grids(decoded_chunk_grid)?
+            .into_iter()
+            .next()
+            .unwrap_or(ChunkGridDecoded::None))
+    }
+}
+
+/// Marker trait for array-to-bytes codecs that do not expose subchunk grids.
+pub trait ArrayToBytesCodecNoSubchunkingTraits {}
+
+impl<T> ArrayToBytesCodecSubchunkingTraits for T
+where
+    T: ArrayCodecTraits + ArrayToBytesCodecNoSubchunkingTraits + ?Sized,
+{
+    fn decoded_subchunk_grids(
+        &self,
+        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
+        Ok(Vec::new())
+    }
+}
+#[cfg(feature = "async")]
+use crate::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
+
+/// Traits for array to bytes codecs.
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
+    /// Return a dynamic version of the codec.
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits>;
+
+    /// Bind this codec to a decoded data type, fill value, and codec-specific options.
+    ///
+    /// A codec may read its own options type from `codec_specific_options`, and must bind any codecs it contains with the same `codec_specific_options`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+        codec_specific_options: &CodecSpecificOptions,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError>;
+}
+
+/// Runtime traits for an array-to-bytes codec bound to a data type and fill value.
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fmt::Debug {
+    /// Return a dynamic version of the bound codec.
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
+
+    /// Returns the size of the encoded representation given a size of the decoded representation.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
+    fn encoded_representation(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentation, CodecError>;
+
+    /// Encode a chunk.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with the decoded representation.
+    fn encode<'a>(
+        &self,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<CowBytes<'a>, CodecError>;
+
+    /// Decode a chunk.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or the decoded output is incompatible with the decoded representation.
+    fn decode<'a>(
+        &self,
+        bytes: CowBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError>;
+
+    /// Compact a chunk to remove any extraneous data.
+    ///
+    /// The default implementation returns the input `bytes` unchanged.
+    ///
+    /// Returns `Ok(None)` if no compaction was performed.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with the decoded representation.
+    #[allow(unused_variables)]
+    fn compact<'a>(
+        &self,
+        bytes: CowBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Option<CowBytes<'a>>, CodecError> {
+        Ok(None)
+    }
+
+    /// Decode into a subset of a preallocated output.
+    ///
+    /// This method is intended for internal use by Array.
+    /// It works for fixed length data types and optional data types.
+    ///
+    /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
+    /// Chunk elements are written to the subset of the output in C order.
+    ///
+    /// For optional data types, provide an `ArrayBytesDecodeIntoTarget` with a `mask` set to `Some`.
+    /// For non-optional data types, convert a fixed view to target using `.into()` or create with `mask: None`.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
+    fn decode_into(
+        &self,
+        bytes: CowBytes<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let bytes = self.decode(bytes, shape, options)?;
+        decode_into_array_bytes_target(&bytes, output_target)
+    }
+
+    /// Returns whether decoding valid encoded bytes produces identical fixed bytes in native
+    /// in-memory order.
+    ///
+    /// The result may depend on the decoded representation. The default implementation is
+    /// conservative and returns `false`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
+    #[expect(unused_variables)]
+    fn is_decode_passthrough(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
+        Ok(false)
+    }
+
+    /// Initialise a partial decoder.
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    fn partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    /// Initialise a partial encoder.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    #[cfg(feature = "async")]
+    /// Initialise an asynchronous partial decoder.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
+
+    #[cfg(feature = "async")]
+    /// Initialise an asynchronous partial encoder.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
+}

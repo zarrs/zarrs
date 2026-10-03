@@ -22,7 +22,7 @@ pub struct ArrayBytesFixedDisjointView<'a> {
 /// Errors that can occur when creating a [`ArrayBytesFixedDisjointView`].
 #[derive(Clone, Debug, Display, Error)]
 pub enum ArrayBytesFixedDisjointViewCreateError {
-    /// The subset is out-of-bounds of the array shape.
+    /// The subset is out-of-bounds of, or has an incompatible dimensionality with, the array shape.
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
     /// The length of the bytes is not the correct length.
     InvalidBytesLength(#[from] InvalidBytesLengthError),
@@ -43,9 +43,12 @@ impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
 impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// Create a new non-overlapping view of the bytes in an array.
     ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start and
+    /// yields a view that reads and writes nothing.
+    ///
     /// # Errors
     /// Returns [`ArrayBytesFixedDisjointViewCreateError`] if
-    /// - `subset` is out-of-bounds of `shape`, or
+    /// - `subset` has an incompatible dimensionality with, or is out-of-bounds of, `shape`, or
     /// - the length of `bytes` is not the product of the elements in `shape` multiplied by `data_type_size`.
     ///
     /// # Safety
@@ -85,8 +88,10 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
 
     /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
     ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start.
+    ///
     /// # Errors
-    /// Returns [`SubsetOutOfBoundsError`] if `subset` is out-of-bounds of the parent subset.
+    /// Returns [`SubsetOutOfBoundsError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the parent subset.
     ///
     /// # Safety
     /// The `subset` represented by this view must not overlap with the `subset` of any other created views that reference the same array bytes.
@@ -220,6 +225,98 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
 
         Ok(())
     }
+
+    /// Copy elements into the view at `positions`.
+    ///
+    /// Element `i` of `bytes` is written to element `positions[i]` of the view, where positions index the elements of the view in C order.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if
+    /// - the length of `bytes` is not the length of `positions` multiplied by the data type size, or
+    /// - a position is out-of-bounds of the view.
+    pub fn copy_elements_from_slice(
+        &mut self,
+        positions: &[usize],
+        bytes: &[u8],
+    ) -> Result<(), CodecError> {
+        let size = self.data_type_size;
+        if bytes.len() != positions.len() * size {
+            return Err(InvalidBytesLengthError::new(bytes.len(), positions.len() * size).into());
+        }
+        for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
+            let offset = self.element_offset(position)?;
+            unsafe {
+                self.bytes
+                    .index_mut(offset..offset + size)
+                    .copy_from_slice(element);
+            }
+        }
+        Ok(())
+    }
+
+    /// Fill the elements of the view at `positions` with the fill value.
+    ///
+    /// Positions index the elements of the view in C order.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if
+    /// - the length of the `fill_value` does not match the data type size, or
+    /// - a position is out-of-bounds of the view.
+    pub fn fill_elements(
+        &mut self,
+        positions: &[usize],
+        fill_value: &[u8],
+    ) -> Result<(), CodecError> {
+        let size = self.data_type_size;
+        if fill_value.len() != size {
+            return Err(InvalidBytesLengthError::new(fill_value.len(), size).into());
+        }
+        for &position in positions {
+            let offset = self.element_offset(position)?;
+            unsafe {
+                self.bytes
+                    .index_mut(offset..offset + size)
+                    .copy_from_slice(fill_value);
+            }
+        }
+        Ok(())
+    }
+
+    /// Return the byte offset in the underlying bytes of the element at `position` in the view.
+    fn element_offset(&self, position: usize) -> Result<usize, IndexerError> {
+        let position = position as u64;
+        if position >= self.num_elements() {
+            return Err(IndexerError::new_oob(
+                vec![position],
+                vec![self.num_elements()],
+            ));
+        }
+        let index = if self.contiguous_linearised_indices.len() == 1 {
+            // The view is a single contiguous block
+            let (start, _) = self
+                .contiguous_linearised_indices
+                .iter()
+                .next()
+                .expect("one block");
+            start + position
+        } else {
+            let mut remainder = position;
+            let mut stride = 1;
+            let mut index = 0;
+            for ((&start, &len), &dim) in std::iter::zip(
+                std::iter::zip(self.subset.start(), self.subset.shape()),
+                self.shape,
+            )
+            .rev()
+            {
+                index += (start + remainder % len) * stride;
+                remainder /= len;
+                stride *= dim;
+            }
+            index
+        };
+        Ok(usize::try_from(index).unwrap() * self.data_type_size)
+    }
 }
 
 #[cfg(test)]
@@ -314,5 +411,49 @@ mod tests {
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
         assert_eq!(&bytes, &[0, 11, 12, 3, 24, 25, 6, 255, 255]);
+    }
+
+    #[test]
+    fn disjoint_view_elements() {
+        let shape = vec![3, 3];
+
+        // Contiguous view
+        let mut bytes = vec![0u8; 9];
+        {
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut bytes),
+                    1,
+                    &shape,
+                    ArraySubset::new_with_ranges(&[1..3, 0..3]),
+                )
+            }
+            .unwrap();
+            view.copy_elements_from_slice(&[5, 0, 2], &[15, 10, 12])
+                .unwrap();
+            view.fill_elements(&[1, 3], &[255]).unwrap();
+        }
+        assert_eq!(&bytes, &[0, 0, 0, 10, 255, 12, 255, 0, 15]);
+
+        // Non-contiguous view
+        let mut bytes = vec![0u8; 9];
+        {
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut bytes),
+                    1,
+                    &shape,
+                    ArraySubset::new_with_ranges(&[0..2, 1..3]),
+                )
+            }
+            .unwrap();
+            view.copy_elements_from_slice(&[3, 0], &[14, 11]).unwrap();
+            view.fill_elements(&[2, 1], &[255]).unwrap();
+            assert!(view.copy_elements_from_slice(&[4], &[1]).is_err()); // OOB
+            assert!(view.copy_elements_from_slice(&[0], &[1, 2]).is_err()); // wrong length
+            assert!(view.fill_elements(&[4], &[1]).is_err()); // OOB
+            assert!(view.fill_elements(&[0], &[1, 2]).is_err()); // invalid fill value
+        }
+        assert_eq!(&bytes, &[0, 11, 255, 0, 255, 14, 0, 0, 0]);
     }
 }

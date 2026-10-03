@@ -35,8 +35,10 @@ pub struct ContiguousIndices {
 impl ContiguousIndices {
     /// Create a new contiguous indices iterator.
     ///
+    /// An empty `subset` is always in-bounds unless it has an incompatible dimensionality.
+    ///
     /// # Errors
-    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
     pub fn new(subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
@@ -44,29 +46,19 @@ impl ContiguousIndices {
                 array_shape.len(),
             ));
         }
+        if subset.is_empty() {
+            // An empty subset references no elements, so it is always in-bounds and yields
+            // no contiguous indices.
+            return Ok(Self {
+                subset_contiguous_start: subset,
+                contiguous_elements: 0,
+            });
+        }
         if std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape) {
             return Err(IndexerError::new_oob(
                 subset.end_exc(),
                 array_shape.to_vec(),
             ));
-        }
-
-        if subset.is_empty() {
-            if std::iter::zip(subset.start().iter(), array_shape)
-                .any(|(start, shape)| start >= shape)
-            {
-                // The empty subset is out-of-bounds.
-                return Err(IndexerError::new_oob(
-                    subset.start().to_vec(),
-                    array_shape.to_vec(),
-                ));
-            }
-
-            // The empty subset is in-bounds, not an error.
-            return Ok(Self {
-                subset_contiguous_start: subset,
-                contiguous_elements: 0,
-            });
         }
 
         let mut contiguous = true;

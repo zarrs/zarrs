@@ -1,29 +1,19 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
-use zfp_sys::{
-    zfp_compress,
-    zfp_stream_maximum_size,
-    zfp_stream_rewind,
-    zfp_stream_set_bit_stream,
-    zfp_write_header,
-    // zfp_exec_policy_zfp_exec_omp, zfp_stream_set_execution
-};
+use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
 
-use super::zfp_bitstream::ZfpBitstream;
-use super::zfp_field::ZfpField;
-use super::zfp_stream::ZfpStream;
 use super::{
-    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, promote_before_zfp_encoding,
-    zfp_decode, zfp_native_type_to_sys,
+    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
+    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_dims, zfp_native_type_to_scalar_type,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
+    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -32,6 +22,17 @@ use zarrs_metadata_ext::codec::zfp::ZfpMode;
 #[derive(Clone, Copy, Debug)]
 pub struct ZfpCodec {
     mode: ZfpMode,
+    write_header: bool,
+}
+
+/// A `zfp` codec implementation.
+#[derive(Clone, Debug)]
+pub(crate) struct ZfpCodecBound {
+    data_type: DataType,
+    fill_value: FillValue,
+    encoding: ZfpEncoding,
+    scalar_type: ZfpScalarType,
+    config: ZfpConfig,
     write_header: bool,
 }
 
@@ -129,10 +130,6 @@ impl ZfpCodec {
 }
 
 impl CodecTraits for ZfpCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -155,23 +152,61 @@ impl CodecTraits for ZfpCodec {
     }
 }
 
-impl ArrayCodecTraits for ZfpCodec {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for ZfpCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+        _codec_specific_options: &CodecSpecificOptions,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        let encoding = data_type.codec_zfp()?.zfp_encoding();
+        let scalar_type = zfp_native_type_to_scalar_type(encoding.native_type());
+        let config = zfp_config(&self.mode, scalar_type)?;
+        Ok(Arc::new(ZfpCodecBound {
+            data_type,
+            fill_value,
+            encoding,
+            scalar_type,
+            config,
+            write_header: self.write_header,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for ZfpCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: zfp supports multi thread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for ZfpCodec {
+impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for ZfpCodecBound {}
+
+impl ArrayToBytesCodecTraits for ZfpCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
@@ -180,85 +215,47 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
-        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, data_type)?;
-        let zfp_type = bytes_promoted.zfp_type();
-        let field = ZfpField::new(
-            &mut bytes_promoted,
-            &shape
-                .iter()
-                .map(|u| usize::try_from(u.get()).unwrap())
-                .collect::<Vec<usize>>(),
-        )
-        .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
-        let stream = ZfpStream::new(&self.mode, zfp_type)
-            .ok_or_else(|| CodecError::from("failed to create zfp stream"))?;
-
-        let bufsize = unsafe {
-            // SAFETY: zfp stream and field are valid
-            zfp_stream_maximum_size(stream.as_zfp_stream(), field.as_zfp_field())
-        };
-        let mut encoded_value: Vec<u8> = vec![0; bufsize];
-
-        let bitstream = ZfpBitstream::new(&mut encoded_value)
+        let bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding);
+        let dims = zfp_dims(shape).ok_or_else(|| CodecError::from("failed to create zfp field"))?;
+        let field = bytes_promoted
+            .field(dims)
             .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
-        unsafe {
-            // SAFETY: zfp stream and bitstream are valid
-            zfp_stream_set_bit_stream(stream.as_zfp_stream(), bitstream.as_bitstream());
-            zfp_stream_rewind(stream.as_zfp_stream()); // needed?
-        }
+
+        let bufsize = self
+            .config
+            .maximum_size(self.scalar_type, dims)
+            .ok_or_else(|| CodecError::from("failed to calculate zfp maximum size"))?;
+        let mut bitstream = ZfpBitStream::new(bufsize)
+            .map_err(|err| CodecError::Other(format!("failed to allocate zfp bitstream: {err}")))?;
         if self.write_header {
-            unsafe {
-                // SAFETY: zfp stream and field are valid
-                zfp_write_header(
-                    stream.as_zfp_stream(),
-                    field.as_zfp_field(),
-                    zfp_sys::ZFP_HEADER_FULL,
-                );
-            };
+            bitstream
+                .write_header(&self.config, &field.metadata(), ZfpHeaderMask::FULL)
+                .map_err(|err| CodecError::Other(format!("failed to write zfp header: {err}")))?;
         }
-
-        // FIXME
-        // if parallel {
-        //     // Number of threads is set automatically
-        //     unsafe {
-        //         zfp_stream_set_execution(zfp.as_zfp_stream(), zfp_exec_policy_zfp_exec_omp);
-        //     }
-        // }
-
-        // Compress array
-        let size = unsafe {
-            // SAFETY: zfp stream and field are valid
-            zfp_compress(stream.as_zfp_stream(), field.as_zfp_field())
-        };
-
-        if size == 0 {
-            Err(CodecError::from("zfp compression failed"))
-        } else {
-            encoded_value.truncate(size);
-            Ok(Cow::Owned(encoded_value))
-        }
+        bitstream
+            .compress(&self.config, &field)
+            .map_err(|err| CodecError::Other(format!("zfp compression failed: {err}")))?;
+        let bytes = bitstream
+            .into_bytes()
+            .map_err(|err| CodecError::Other(format!("failed to copy zfp bitstream: {err}")))?;
+        Ok(CowBytes::from(bytes))
     }
 
     fn decode<'a>(
         &self,
-        bytes: ArrayBytesRaw<'a>,
+        bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         zfp_decode(
-            &self.mode,
+            &self.config,
             self.write_header,
-            &mut bytes.to_vec(), // FIXME: Does zfp **really** need the encoded value as mutable?
+            &bytes,
             shape,
-            data_type,
-            false, // FIXME
+            self.encoding,
         )
         .map(ArrayBytes::from)
     }
@@ -266,35 +263,12 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let encoding = data_type.codec_zfp()?.zfp_encoding();
-        let zfp_type = zfp_native_type_to_sys(encoding.native_type());
-
-        let bufsize = {
-            let field = unsafe {
-                // SAFETY: zfp_stream_maximum_size does not use the data in the field, so it can be empty
-                ZfpField::new_empty(
-                    zfp_type,
-                    &shape
-                        .iter()
-                        .map(|u| usize::try_from(u.get()).unwrap())
-                        .collect::<Vec<usize>>(),
-                )
-            }
-            .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
-
-            let stream = ZfpStream::new(&self.mode, zfp_type)
-                .ok_or_else(|| CodecError::from("failed to create zfp stream"))?;
-
-            unsafe {
-                // SAFETY: zfp stream and field are valid
-                zfp_stream_maximum_size(stream.as_zfp_stream(), field.as_zfp_field())
-            }
-        };
-
-        // If we got a valid zfp_type, the data type is supported
+        let dims = zfp_dims(shape).ok_or_else(|| CodecError::from("unsupported zfp shape"))?;
+        let bufsize = self
+            .config
+            .maximum_size(self.scalar_type, dims)
+            .ok_or_else(|| CodecError::from("failed to calculate zfp maximum size"))?;
         #[allow(clippy::cast_possible_truncation)]
         Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }

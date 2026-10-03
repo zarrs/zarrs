@@ -10,7 +10,7 @@ use super::{
     StorePrefixes,
 };
 use crate::byte_range::ByteRange;
-use crate::{AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator};
+use crate::{AsyncMaybeBytesIterator, CowBytes, MaybeBytes, OffsetBytesIterator};
 
 /// Async readable storage traits.
 #[cfg_attr(
@@ -175,7 +175,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError>;
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError>;
 
     /// Store bytes from an offset and value.
     ///
@@ -185,7 +185,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
         &self,
         key: &StoreKey,
         offset: u64,
-        value: Bytes,
+        value: CowBytes<'_>,
     ) -> Result<(), StorageError> {
         self.set_partial_many(key, Box::new([(offset, value)].into_iter()))
             .await
@@ -256,11 +256,11 @@ where
     T: AsyncReadableStorageTraits + AsyncWritableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn writable(self: Arc<Self>) -> Arc<dyn AsyncWritableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -280,11 +280,11 @@ where
     T: AsyncReadableStorageTraits + AsyncListableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -307,15 +307,15 @@ where
     T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits + 'static,
 {
     fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 

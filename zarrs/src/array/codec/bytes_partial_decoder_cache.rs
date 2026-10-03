@@ -1,8 +1,6 @@
 //! A cache for partial decoders.
 
-use std::borrow::Cow;
-
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -25,7 +23,7 @@ impl BytesPartialDecoderCache {
     ) -> Result<Self, CodecError> {
         let cache = input_handle
             .partial_decode(ByteRange::FromStart(0, None), options)?
-            .map(Cow::into_owned);
+            .map(CowBytes::into_vec);
         Ok(Self { cache })
     }
 
@@ -41,7 +39,7 @@ impl BytesPartialDecoderCache {
         let cache = input_handle
             .partial_decode(ByteRange::FromStart(0, None), options)
             .await?
-            .map(Cow::into_owned);
+            .map(CowBytes::into_vec);
         Ok(Self { cache })
     }
 }
@@ -59,13 +57,13 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
             Some(bytes) => Some(
                 extract_byte_ranges(bytes, decoded_regions)
                     .map_err(CodecError::InvalidByteRangeError)?
                     .into_iter()
-                    .map(Cow::Owned)
+                    .map(CowBytes::from)
                     .collect(),
             ),
             None => None,
@@ -93,7 +91,7 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
     }
 

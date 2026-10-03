@@ -4,9 +4,10 @@ use auto_impl::auto_impl;
 
 use super::byte_range::{ByteRange, ByteRangeIterator};
 use super::{
-    Bytes, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError,
+    MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
+use crate::CowBytes;
 
 /// Readable storage traits.
 #[auto_impl(Arc)]
@@ -135,7 +136,20 @@ pub fn store_set_partial_many<T: ReadableWritableStorageTraits>(
     }
 
     // Write the store key
-    store.set(key, bytes_out.freeze())
+    store.set(key, bytes_out.into())
+}
+
+/// Storage that can atomically rename one key to another.
+///
+/// Implementations must replace `destination` atomically if it already exists. The source and
+/// destination must be on the same storage system.
+#[auto_impl(Arc)]
+pub trait AtomicRenameStorageTraits: MaybeSend + MaybeSync {
+    /// Atomically rename `source` to `destination`.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if the rename fails.
+    fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError>;
 }
 
 /// Writable storage traits.
@@ -145,13 +159,18 @@ pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError>;
+    fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError>;
 
     /// Store bytes from an offset and value.
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    fn set_partial(&self, key: &StoreKey, offset: u64, value: Bytes) -> Result<(), StorageError> {
+    fn set_partial(
+        &self,
+        key: &StoreKey,
+        offset: u64,
+        value: CowBytes<'_>,
+    ) -> Result<(), StorageError> {
         self.set_partial_many(key, Box::new([(offset, value)].into_iter()))
     }
 
@@ -159,10 +178,10 @@ pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    fn set_partial_many(
-        &self,
+    fn set_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        offset_values: OffsetBytesIterator,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError>;
 
     /// Erase a [`StoreKey`].
@@ -207,11 +226,11 @@ where
     T: ReadableStorageTraits + WritableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -229,11 +248,11 @@ where
     T: ReadableStorageTraits + ListableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 
@@ -256,15 +275,15 @@ where
     T: ReadableWritableStorageTraits + ListableStorageTraits + 'static,
 {
     fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn readable_listable(self: Arc<Self>) -> Arc<dyn ReadableListableStorageTraits> {
-        self.clone()
+        self
     }
 
     fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
-        self.clone()
+        self
     }
 }
 

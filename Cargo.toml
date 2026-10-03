@@ -13,7 +13,6 @@ members = [
     "zarrs_plugin",
     "zarrs_storage",
     "zarrs_filesystem",
-    "zarrs_object_store",
     "zarrs_conformance",
 ]
 
@@ -30,13 +29,14 @@ module_name_repetitions = "allow"
 missing_panics_doc = "warn"
 missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
+single_range_in_vec_init = "allow"
 
 [workspace.dependencies.zarrs_chunk_grid]
 version = "0.6.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]
-version = "0.2.0"
+version = "0.3.0"
 path = "zarrs_chunk_key_encoding"
 
 [workspace.dependencies.zarrs_codec]
@@ -44,7 +44,7 @@ version = "0.3.1"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.9.1"
+version = "0.10.0"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]
@@ -52,27 +52,20 @@ version = "0.7.2" # Nothing depends on 0.7.4 yet
 path = "zarrs_metadata"
 
 [workspace.dependencies.zarrs_metadata_ext]
-version = "0.4.4"
+version = "0.4.5"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]
-version = "0.4.1"
+version = "0.4.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.4.3"
+version = "0.5.0"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.3.9"
+version = "0.4.0"
 path = "zarrs_filesystem"
-
-[workspace.dependencies.zarrs_object_store]
-version = "0.6.2"
-path = "zarrs_object_store"
-
-[workspace.dependencies.object_store]
-version = "0.13"
 
 [workspace.dependencies.half]
 version = "2.4.1"
@@ -80,6 +73,12 @@ features = ["bytemuck"]
 
 [workspace.dependencies.num]
 version = "0.4.1"
+
+[workspace.dependencies.cowbytes]
+version = "0.1.2"
+
+[workspace.dependencies.bytes]
+version = "1.9.0"
 
 [workspace.dependencies.inventory]
 version = "0.3.21"

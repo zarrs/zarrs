@@ -21,6 +21,7 @@ use std::sync::Arc;
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
+pub use array_to_array::cast_value::*;
 pub use array_to_array::fixedscaleoffset::*;
 pub use array_to_array::reshape::*;
 pub use array_to_array::squeeze::*;
@@ -28,7 +29,7 @@ pub use array_to_array::squeeze::*;
 pub use array_to_array::transpose::*;
 // Array to bytes
 pub use array_to_bytes::bytes::*;
-pub use array_to_bytes::codec_chain::CodecChain;
+pub use array_to_bytes::codec_chain::{CodecChain, CodecChainBound};
 pub use array_to_bytes::optional::*;
 pub use array_to_bytes::packbits::*;
 #[cfg(feature = "pcodec")]
@@ -87,7 +88,7 @@ pub use zarrs_codec as api;
 #[must_use]
 pub fn default_array_to_bytes_codec(
     data_type: &zarrs_data_type::DataType,
-) -> Arc<dyn zarrs_codec::ArrayToBytesCodecTraits> {
+) -> Arc<dyn zarrs_codec::UnboundArrayToBytesCodecTraits> {
     // Special handling for optional types
     if let Some(opt) = data_type.as_optional() {
         // Create mask codec chain using PackBitsCodec

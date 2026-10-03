@@ -23,6 +23,7 @@ mod store_prefix;
 
 pub mod byte_range;
 use byte_range::{ByteOffset, InvalidByteRangeError};
+pub use cowbytes::CowBytes;
 pub use maybe::{MaybeSend, MaybeSync};
 
 #[cfg(feature = "async")]
@@ -48,7 +49,7 @@ pub use self::storage_async::{
 };
 pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
-    discover_children, store_set_partial_many, ListableStorageTraits,
+    discover_children, store_set_partial_many, AtomicRenameStorageTraits, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
@@ -122,7 +123,7 @@ type AsyncBytesIterator<'a> = futures::stream::BoxStream<'a, Result<Bytes, Stora
 /// An asynchronous iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
 pub type AsyncMaybeBytesIterator<'a> = Option<AsyncBytesIterator<'a>>;
 
-/// This trait combines [`Iterator<Item = (Bytes, ByteOffset)>`] and [`MaybeSend`],
+/// This trait combines [`Iterator<Item = (ByteOffset, T)>`] and [`MaybeSend`],
 /// as they cannot be combined together directly in function signatures.
 pub trait MaybeSendOffsetBytesIterator<T>: Iterator<Item = (ByteOffset, T)> + MaybeSend {}
 
@@ -131,8 +132,8 @@ impl<I, T> MaybeSendOffsetBytesIterator<T> for I where
 {
 }
 
-/// A [`Bytes`] and [`ByteOffset`] iterator.
-pub type OffsetBytesIterator<'a, T = Bytes> = Box<dyn MaybeSendOffsetBytesIterator<T> + 'a>;
+/// A [`CowBytes`] and [`ByteOffset`] iterator.
+pub type OffsetBytesIterator<'a, T = CowBytes<'a>> = Box<dyn MaybeSendOffsetBytesIterator<T> + 'a>;
 
 /// [`StoreKeys`] and [`StorePrefixes`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]

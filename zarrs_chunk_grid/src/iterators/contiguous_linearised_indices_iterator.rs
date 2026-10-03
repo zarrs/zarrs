@@ -36,7 +36,7 @@ impl ContiguousLinearisedIndices {
     ///
     /// # Errors
     ///
-    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
     pub fn new(subset: ArraySubset, array_shape: Vec<u64>) -> Result<Self, IndexerError> {
         let inner = ContiguousIndices::new(subset, &array_shape)?;
         Ok(Self { inner, array_shape })

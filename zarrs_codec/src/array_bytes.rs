@@ -1,7 +1,6 @@
 use std::ops::IndexMut;
 
 use derive_more::derive::Display;
-use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
@@ -15,10 +14,36 @@ use crate::{
 };
 
 mod array_bytes_offsets;
-pub use array_bytes_offsets::{ArrayBytesOffsets, ArrayBytesRawOffsetsCreateError};
+pub use array_bytes_offsets::{
+    ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesOffsetsElement,
+    ArrayBytesOffsetsIter, ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice,
+};
 
-mod array_bytes_raw;
-pub use array_bytes_raw::ArrayBytesRaw;
+fn offsets_from_usize(
+    offsets: Vec<usize>,
+) -> Result<ArrayBytesOffsets, ArrayBytesOffsetsCreateError> {
+    if offsets.iter().copied().max().unwrap_or(0) <= u32::MAX as usize {
+        #[cfg(target_pointer_width = "32")]
+        let offsets = bytemuck::allocation::cast_vec::<usize, u32>(offsets);
+        #[cfg(not(target_pointer_width = "32"))]
+        let offsets = offsets
+            .into_iter()
+            .map(|offset| u32::try_from(offset).unwrap())
+            .collect::<Vec<_>>();
+        ArrayBytesOffsets::new(offsets)
+    } else {
+        #[cfg(target_pointer_width = "64")]
+        let offsets = bytemuck::allocation::cast_vec::<usize, u64>(offsets);
+        #[cfg(not(target_pointer_width = "64"))]
+        let offsets = offsets
+            .into_iter()
+            .map(|offset| u64::try_from(offset).unwrap())
+            .collect::<Vec<_>>();
+        ArrayBytesOffsets::new(offsets)
+    }
+}
+
+pub use zarrs_storage::CowBytes;
 
 mod array_bytes_variable_length;
 pub use array_bytes_variable_length::ArrayBytesVariableLength;
@@ -33,7 +58,7 @@ pub enum ArrayBytes<'a> {
     /// Bytes for a fixed length array.
     ///
     /// These represent elements in C-contiguous order (i.e. row-major order) where the last dimension varies the fastest.
-    Fixed(ArrayBytesRaw<'a>),
+    Fixed(CowBytes<'a>),
     /// Bytes and element byte offsets for a variable length array.
     Variable(ArrayBytesVariableLength<'a>),
     /// Bytes for an optional array (data with a validity mask).
@@ -46,7 +71,7 @@ pub enum ArrayBytes<'a> {
 /// An error raised if variable length array bytes offsets are out of bounds.
 #[derive(Clone, Debug, Display, Error)]
 #[display("Offset {offset} is out of bounds for bytes of length {len}")]
-pub struct ArrayBytesRawOffsetsOutOfBoundsError {
+pub struct ArrayBytesOffsetsOutOfBoundsError {
     offset: usize,
     len: usize,
 }
@@ -78,18 +103,18 @@ impl<'a> ArrayBytes<'a> {
     /// Create a new fixed length array bytes from `bytes`.
     ///
     /// `bytes` must be C-contiguous.
-    pub fn new_flen(bytes: impl Into<ArrayBytesRaw<'a>>) -> Self {
+    pub fn new_flen(bytes: impl Into<CowBytes<'a>>) -> Self {
         Self::Fixed(bytes.into())
     }
 
     /// Create a new variable length array bytes from `bytes` and `offsets`.
     ///
     /// # Errors
-    /// Returns a [`ArrayBytesRawOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
+    /// Returns a [`ArrayBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
     pub fn new_vlen(
-        bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
-    ) -> Result<Self, ArrayBytesRawOffsetsOutOfBoundsError> {
+        bytes: impl Into<CowBytes<'a>>,
+        offsets: ArrayBytesOffsets,
+    ) -> Result<Self, ArrayBytesOffsetsOutOfBoundsError> {
         ArrayBytesVariableLength::new(bytes, offsets).map(Self::Variable)
     }
 
@@ -98,8 +123,8 @@ impl<'a> ArrayBytes<'a> {
     /// # Safety
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_vlen_unchecked(
-        bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: ArrayBytesOffsets<'a>,
+        bytes: impl Into<CowBytes<'a>>,
+        offsets: ArrayBytesOffsets,
     ) -> Self {
         Self::Variable(unsafe { ArrayBytesVariableLength::new_unchecked(bytes, offsets) })
     }
@@ -108,7 +133,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// This creates an `Optional` variant that contains the current array bytes and the provided mask.
     #[must_use]
-    pub fn with_optional_mask(self, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
+    pub fn with_optional_mask(self, mask: impl Into<CowBytes<'a>>) -> Self {
         Self::Optional(ArrayBytesOptional::new(self, mask))
     }
 
@@ -166,14 +191,11 @@ impl<'a> ArrayBytes<'a> {
             }
             DataTypeSize::Variable => {
                 let num_elements = usize::try_from(num_elements).unwrap();
-                let offsets = unsafe {
-                    // SAFETY: The offsets are monotonically increasing.
-                    ArrayBytesOffsets::new_unchecked(
-                        (0..=num_elements)
-                            .map(|i| i * fill_value.size())
-                            .collect::<Vec<_>>(),
-                    )
-                };
+                let mut offsets = Vec::with_capacity(num_elements + 1);
+                for i in 0..=num_elements {
+                    offsets.push(i * fill_value.size());
+                }
+                let offsets = offsets_from_usize(offsets).unwrap();
                 Ok(unsafe {
                     // SAFETY: The last offset is equal to the length of the bytes
                     Self::new_vlen_unchecked(fill_value.as_ne_bytes().repeat(num_elements), offsets)
@@ -186,7 +208,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns an [`ExpectedFixedLengthBytesError`] if the bytes are not fixed.
-    pub fn into_fixed(self) -> Result<ArrayBytesRaw<'a>, ExpectedFixedLengthBytesError> {
+    pub fn into_fixed(self) -> Result<CowBytes<'a>, ExpectedFixedLengthBytesError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
             Self::Variable(..) | Self::Optional(..) => Err(ExpectedFixedLengthBytesError),
@@ -232,7 +254,7 @@ impl<'a> ArrayBytes<'a> {
 
     /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size bytes.
     #[must_use]
-    pub fn offsets(&self) -> Option<&ArrayBytesOffsets<'a>> {
+    pub fn offsets(&self) -> Option<&ArrayBytesOffsets> {
         match self {
             Self::Fixed(..) => None,
             Self::Variable(ArrayBytesVariableLength { offsets, .. }) => Some(offsets),
@@ -244,11 +266,11 @@ impl<'a> ArrayBytes<'a> {
     #[must_use]
     pub fn into_owned(self) -> ArrayBytes<'static> {
         match self {
-            Self::Fixed(bytes) => ArrayBytes::Fixed(bytes.into_owned().into()),
+            Self::Fixed(bytes) => ArrayBytes::Fixed(bytes.into_static()),
             Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
                 ArrayBytes::Variable(ArrayBytesVariableLength {
-                    bytes: bytes.into_owned().into(),
-                    offsets: offsets.into_owned(),
+                    bytes: bytes.into_static(),
+                    offsets,
                 })
             }
             Self::Optional(optional_bytes) => ArrayBytes::Optional(optional_bytes.into_owned()),
@@ -299,7 +321,7 @@ impl<'a> ArrayBytes<'a> {
     /// Extract a subset of the array bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` is incompatible with `subset`.
+    /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` has an incompatible dimensionality with, or is out-of-bounds of, `array_shape`.
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].
@@ -316,25 +338,17 @@ impl<'a> ArrayBytes<'a> {
                 let mut bytes_length = 0;
                 for index in &indices {
                     let index = usize::try_from(*index).unwrap();
-                    let curr = offsets[index];
-                    let next = offsets[index + 1];
-                    debug_assert!(next >= curr);
-                    bytes_length += next - curr;
+                    bytes_length += offsets.element_range(index).len();
                 }
                 let mut ss_bytes = Vec::with_capacity(bytes_length);
                 let mut ss_offsets = Vec::with_capacity(usize::try_from(1 + num_elements).unwrap());
                 for index in &indices {
                     let index = usize::try_from(*index).unwrap();
-                    let curr = offsets[index];
-                    let next = offsets[index + 1];
                     ss_offsets.push(ss_bytes.len());
-                    ss_bytes.extend_from_slice(&bytes[curr..next]);
+                    ss_bytes.extend_from_slice(&bytes[offsets.element_range(index)]);
                 }
                 ss_offsets.push(ss_bytes.len());
-                let ss_offsets = unsafe {
-                    // SAFETY: The offsets are monotonically increasing.
-                    ArrayBytesOffsets::new_unchecked(ss_offsets)
-                };
+                let ss_offsets = offsets_from_usize(ss_offsets).unwrap();
                 let array_bytes = unsafe {
                     // SAFETY: The last offset is equal to the length of the bytes
                     ArrayBytes::new_vlen_unchecked(ss_bytes, ss_offsets)
@@ -373,10 +387,7 @@ impl<'a> ArrayBytes<'a> {
 }
 
 /// Validate fixed length array bytes for a given array size.
-fn validate_bytes_flen(
-    bytes: &ArrayBytesRaw,
-    array_size: usize,
-) -> Result<(), InvalidBytesLengthError> {
+fn validate_bytes_flen(bytes: &CowBytes, array_size: usize) -> Result<(), InvalidBytesLengthError> {
     if bytes.len() == array_size {
         Ok(())
     } else {
@@ -386,7 +397,7 @@ fn validate_bytes_flen(
 
 /// Validate variable length array bytes for an array with `num_elements`.
 fn validate_bytes_vlen(
-    bytes: &ArrayBytesRaw,
+    bytes: &CowBytes,
     offsets: &ArrayBytesOffsets,
     num_elements: u64,
 ) -> Result<(), CodecError> {
@@ -396,10 +407,10 @@ fn validate_bytes_vlen(
     let len = bytes.len();
     let mut offset_last = 0;
     for offset in offsets.iter() {
-        if *offset < offset_last || *offset > len {
+        if offset < offset_last || offset > len {
             return Err(CodecError::InvalidVariableSizedArrayOffsets);
         }
-        offset_last = *offset;
+        offset_last = offset;
     }
     if offset_last == len {
         Ok(())
@@ -478,9 +489,8 @@ fn update_bytes_vlen_array_subset<'a>(
     // Get the current and new length of the bytes in the chunk subset
     let size_subset_new = update
         .offsets()
-        .iter()
-        .tuple_windows()
-        .map(|(curr, next)| next - curr)
+        .element_ranges()
+        .map(|range| range.len())
         .sum::<usize>();
     let size_subset_old = {
         let chunk_indices = update_subset.linearised_indices(input_shape).unwrap();
@@ -488,7 +498,7 @@ fn update_bytes_vlen_array_subset<'a>(
             .iter()
             .map(|index| {
                 let index = usize::try_from(index).unwrap();
-                input_offsets[index + 1] - input_offsets[index]
+                input_offsets.element_range(index).len()
             })
             .sum::<usize>()
     };
@@ -513,20 +523,13 @@ fn update_bytes_vlen_array_subset<'a>(
             let subset_index =
                 ravel_indices(&subset_indices, &update_subset_shape).expect("inbounds indices");
             let subset_index = usize::try_from(subset_index).unwrap();
-            let start = update_offsets[subset_index];
-            let end = update_offsets[subset_index + 1];
-            bytes_new.extend_from_slice(&update_bytes[start..end]);
+            bytes_new.extend_from_slice(&update_bytes[update_offsets.element_range(subset_index)]);
         } else {
-            let start = input_offsets[chunk_index];
-            let end = input_offsets[chunk_index + 1];
-            bytes_new.extend_from_slice(&input_bytes[start..end]);
+            bytes_new.extend_from_slice(&input_bytes[input_offsets.element_range(chunk_index)]);
         }
     }
     offsets_new.push(bytes_new.len());
-    let offsets_new = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets_new)
-    };
+    let offsets_new = offsets_from_usize(offsets_new).unwrap();
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytesVariableLength::new_unchecked(bytes_new, offsets_new)
@@ -535,10 +538,10 @@ fn update_bytes_vlen_array_subset<'a>(
 }
 
 fn update_bytes_vlen_indexer<'a>(
-    input_bytes: &ArrayBytesRaw,
+    input_bytes: &CowBytes,
     input_offsets: &ArrayBytesOffsets,
     input_shape: &[u64],
-    update_bytes: &ArrayBytesRaw,
+    update_bytes: &CowBytes,
     update_offsets: &ArrayBytesOffsets,
     update_indexer: &dyn Indexer,
 ) -> Result<ArrayBytes<'a>, IndexerError> {
@@ -547,9 +550,8 @@ fn update_bytes_vlen_indexer<'a>(
     debug_assert_eq!(
         updated_size_new,
         update_offsets
-            .iter()
-            .tuple_windows()
-            .map(|(curr, next)| next - curr)
+            .element_ranges()
+            .map(|range| range.len())
             .sum::<usize>()
     );
 
@@ -560,7 +562,7 @@ fn update_bytes_vlen_indexer<'a>(
     let mut updated_size_old = 0;
     for (update_index, input_index) in update_indices.enumerate() {
         let input_index = usize::try_from(input_index).unwrap();
-        updated_size_old += input_offsets[input_index + 1] - input_offsets[input_index];
+        updated_size_old += input_offsets.element_range(input_index).len();
         element_indices_update[input_index] = Some(update_index);
     }
 
@@ -573,20 +575,13 @@ fn update_bytes_vlen_indexer<'a>(
     for input_index in 0..num_elements {
         offsets_new.push(bytes_new.len());
         if let Some(update_index) = element_indices_update[input_index] {
-            let start = update_offsets[update_index];
-            let end = update_offsets[update_index + 1];
-            bytes_new.extend_from_slice(&update_bytes[start..end]);
+            bytes_new.extend_from_slice(&update_bytes[update_offsets.element_range(update_index)]);
         } else {
-            let start = input_offsets[input_index];
-            let end = input_offsets[input_index + 1];
-            bytes_new.extend_from_slice(&input_bytes[start..end]);
+            bytes_new.extend_from_slice(&input_bytes[input_offsets.element_range(input_index)]);
         }
     }
     offsets_new.push(bytes_new.len());
-    let offsets_new = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets_new)
-    };
+    let offsets_new = offsets_from_usize(offsets_new).unwrap();
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)
@@ -600,7 +595,7 @@ fn update_bytes_vlen_indexer<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_subset` and `data_type_size`,
-/// - `update_subset` is not within the bounds of `shape`
+/// - `update_subset` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 fn update_array_bytes_array_subset<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -622,7 +617,7 @@ fn update_array_bytes_array_subset<'a>(
             ArrayBytes::Fixed(update_bytes),
             DataTypeSize::Fixed(data_type_size),
         ) => {
-            let mut bytes = bytes.into_owned();
+            let mut bytes = bytes.into_vec();
             let mut output_view: ArrayBytesFixedDisjointView<'_> = unsafe {
                 // SAFETY: Only one view is created, so it is disjoint
                 ArrayBytesFixedDisjointView::new(
@@ -652,7 +647,7 @@ fn update_array_bytes_array_subset<'a>(
             )?;
 
             // Update the mask (it's a fixed-size bool array, 1 byte per element)
-            let mut mask = mask.into_owned();
+            let mut mask = mask.into_vec();
             let mut mask_view: ArrayBytesFixedDisjointView<'_> = unsafe {
                 // SAFETY: Only one view is created, so it is disjoint
                 ArrayBytesFixedDisjointView::new(
@@ -681,7 +676,7 @@ fn update_array_bytes_array_subset<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
-/// - `update_indexer` is not within the bounds of `shape`
+/// - `update_indexer` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 fn update_array_bytes_indexer<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -710,7 +705,7 @@ fn update_array_bytes_indexer<'a>(
             ArrayBytes::Fixed(update_bytes),
             DataTypeSize::Fixed(data_type_size),
         ) => {
-            let mut bytes = bytes.into_owned();
+            let mut bytes = bytes.into_vec();
             let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, data_type_size)?;
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
@@ -740,7 +735,7 @@ fn update_array_bytes_indexer<'a>(
             )?;
 
             // Update the mask (it's a fixed-size bool array, 1 byte per element)
-            let mut mask = mask.into_owned();
+            let mut mask = mask.into_vec();
             let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, 1)?; // 1 byte per bool
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
@@ -769,7 +764,7 @@ fn update_array_bytes_indexer<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
-/// - `update_indexer` is not within the bounds of `shape`
+/// - `update_indexer` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 ///
 /// # Panics
 /// Panics if the indexer references bytes beyond [`usize::MAX`].
@@ -859,7 +854,7 @@ pub fn decode_into_array_bytes_target(
 //                 ArrayBytes::<'b>::new_flen(bytes)
 //             },
 //             Self::Variable(bytes, offsets) => {
-//                 let bytes: ArrayBytesRaw<'b> = bytes.to_vec().into();
+//                 let bytes: CowBytes<'b> = bytes.to_vec().into();
 //                 let offsets: ArrayBytesOffsets<'b> = offsets.to_vec().into();
 //                 ArrayBytes::new_vlen(bytes, offsets)
 //             }
@@ -888,6 +883,12 @@ impl From<Vec<u8>> for ArrayBytes<'_> {
     }
 }
 
+impl<'a> From<std::borrow::Cow<'a, [u8]>> for ArrayBytes<'a> {
+    fn from(bytes: std::borrow::Cow<'a, [u8]>) -> Self {
+        ArrayBytes::new_flen(CowBytes::from(bytes))
+    }
+}
+
 impl<'a, const N: usize> From<&'a [u8; N]> for ArrayBytes<'a> {
     fn from(bytes: &'a [u8; N]) -> Self {
         ArrayBytes::new_flen(bytes)
@@ -899,14 +900,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn offsets_from_usize_uses_narrowest_width() {
+        let input = vec![0, u32::MAX as usize];
+        #[cfg(target_pointer_width = "32")]
+        let input_ptr = input.as_ptr().cast::<u32>();
+        let offsets = offsets_from_usize(input).unwrap();
+        assert!(offsets.is_u32());
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(offsets.as_u32().unwrap().as_ptr(), input_ptr);
+
+        #[cfg(target_pointer_width = "64")]
+        {
+            let input = vec![0, u32::MAX as usize + 1];
+            let input_ptr = input.as_ptr().cast::<u64>();
+            let offsets = offsets_from_usize(input).unwrap();
+            assert!(offsets.is_u64());
+            assert_eq!(offsets.as_u64().unwrap().as_ptr(), input_ptr);
+        }
+    }
+
+    #[test]
     fn array_bytes_vlen() {
         let data = [0u8, 1, 2, 3, 4];
-        assert!(ArrayBytes::new_vlen(&data, vec![0].try_into().unwrap()).is_ok());
-        assert!(ArrayBytes::new_vlen(&data, vec![0, 5].try_into().unwrap()).is_ok());
-        assert!(ArrayBytes::new_vlen(&data, vec![0, 5, 5].try_into().unwrap()).is_ok());
-        assert!(ArrayBytes::new_vlen(&data, vec![0, 5, 6].try_into().unwrap()).is_err());
-        assert!(ArrayBytes::new_vlen(&data, vec![0, 1, 3, 5].try_into().unwrap()).is_ok());
-        assert!(ArrayBytes::new_vlen(&data, vec![0, 1, 3, 6].try_into().unwrap()).is_err());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32].try_into().unwrap()).is_ok());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32, 5].try_into().unwrap()).is_ok());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32, 5, 5].try_into().unwrap()).is_ok());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32, 5, 6].try_into().unwrap()).is_err());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32, 1, 3, 5].try_into().unwrap()).is_ok());
+        assert!(ArrayBytes::new_vlen(&data, vec![0u32, 1, 3, 6].try_into().unwrap()).is_err());
     }
 
     #[test]

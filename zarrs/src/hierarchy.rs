@@ -415,9 +415,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[test]
     fn hierarchy_try_from_async_array() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let array_builder =
             ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
@@ -443,9 +441,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_group() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
         let group_path = "/group";
         let group_builder = GroupBuilder::new();
         let group = group_builder.build(store.clone(), group_path).unwrap();
@@ -470,17 +466,16 @@ mod tests {
         let hierarchy = Hierarchy::try_from_async_group(&group).await;
         assert!(hierarchy.is_ok());
         let hierarchy = hierarchy.unwrap();
-        assert!(
-            "/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string()
+        assert_eq!(
+            "/\n  group\n    subgroup\n      array [10, 10] float32\n",
+            hierarchy.to_string()
         );
     }
 
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_invalid_async_group() {
-        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
-            object_store::memory::InMemory::new(),
-        ));
+        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let root = Group::new_with_metadata(
             store.clone(),
@@ -564,7 +559,7 @@ mod tests {
         .expect("Unexpected issue when greating a Group for testing.");
 
         let arrayv2 = Array::new_with_metadata(
-            store.clone(),
+            store,
             "/groupv2/arrayv2",
             ArrayMetadata::V2(ArrayMetadataV2::new(
                 vec![1],
@@ -582,7 +577,10 @@ mod tests {
 
         let h = Hierarchy::try_from_group(&groupv2);
         assert!(h.is_ok());
-        assert!("/\n  groupv2\n    arrayv2 [1] Simple(\"<f8\")\n" == h.unwrap().tree());
+        assert_eq!(
+            "/\n  groupv2\n    arrayv2 [1] Simple(\"<f8\")\n",
+            h.unwrap().tree()
+        );
     }
 
     #[test]
@@ -650,9 +648,8 @@ mod tests {
     async fn hierarchy_async_open() {
         use zarrs_storage::AsyncReadableWritableListableStorage;
 
-        let store: AsyncReadableWritableListableStorage = Arc::new(
-            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
-        );
+        let store: AsyncReadableWritableListableStorage =
+            Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let _group = async_helper_create_dataset(&store).await;
 

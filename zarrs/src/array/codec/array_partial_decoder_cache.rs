@@ -1,9 +1,11 @@
 //! A cache for partial decoders.
 
-use crate::array::{ArrayBytes, ArraySubset, ChunkShape, DataType};
+use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
+use zarrs_codec::{
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::StorageError;
 
 /// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
@@ -11,6 +13,7 @@ pub(crate) struct ArrayPartialDecoderCache {
     shape: ChunkShape,
     data_type: DataType,
     cache: ArrayBytes<'static>,
+    local_subchunk_grids: Vec<Option<ChunkGrid>>,
 }
 
 impl ArrayPartialDecoderCache {
@@ -24,6 +27,7 @@ impl ArrayPartialDecoderCache {
         data_type: DataType,
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
+        let local_subchunk_grids = input_handle.local_subchunk_grids(options)?;
         let bytes = input_handle
             .partial_decode(
                 &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
@@ -34,6 +38,7 @@ impl ArrayPartialDecoderCache {
             shape,
             data_type,
             cache: bytes,
+            local_subchunk_grids,
         })
     }
 
@@ -48,6 +53,7 @@ impl ArrayPartialDecoderCache {
         data_type: DataType,
         options: &CodecOptions,
     ) -> Result<ArrayPartialDecoderCache, CodecError> {
+        let local_subchunk_grids = input_handle.local_subchunk_grids(options).await?;
         let bytes = input_handle
             .partial_decode(
                 &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
@@ -59,7 +65,17 @@ impl ArrayPartialDecoderCache {
             shape,
             data_type,
             cache: bytes,
+            local_subchunk_grids,
         })
+    }
+}
+
+impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        Ok(self.local_subchunk_grids.clone())
     }
 }
 
@@ -88,6 +104,18 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     fn supports_partial_decode(&self) -> bool {
         true
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+    async fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        Ok(self.local_subchunk_grids.clone())
     }
 }
 

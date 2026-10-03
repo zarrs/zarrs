@@ -1,4 +1,4 @@
-use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{ArraySubsetTraits, ravel_indices};
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::{CodecError, CodecOptions};
@@ -16,7 +16,7 @@ pub(super) struct CoalescedGroup {
 
 /// Collect the 1-D ravelled indices of all inner chunks overlapping `array_subset`.
 pub(super) fn collect_chunk_indices(
-    shard_chunk_grid: &RegularChunkGrid,
+    shard_chunk_grid: &RegularBoundedChunkGrid,
     array_subset: &dyn ArraySubsetTraits,
     chunks_per_shard: &[u64],
 ) -> Result<Vec<u64>, CodecError> {

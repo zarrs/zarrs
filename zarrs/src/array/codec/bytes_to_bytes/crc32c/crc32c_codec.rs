@@ -1,17 +1,17 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfigurationLocation;
 use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
+use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -45,10 +45,6 @@ impl Crc32cCodec {
 }
 
 impl CodecTraits for Crc32cCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -91,37 +87,42 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
-        let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        match self.0 {
+        let encoded_value = match self.0 {
             Crc32cCodecConfigurationLocation::End => {
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 encoded_value.extend_from_slice(&checksum);
+                encoded_value
             }
             Crc32cCodecConfigurationLocation::Start => {
-                encoded_value.extend_from_slice(&checksum);
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
+                let data_len = encoded_value.len();
+                encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
+                encoded_value.copy_within(..data_len, CHECKSUM_SIZE);
+                encoded_value[..CHECKSUM_SIZE].copy_from_slice(&checksum);
+                encoded_value
             }
-        }
-        Ok(Cow::Owned(encoded_value))
+        };
+        Ok(CowBytes::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
+            let data_len = encoded_value.len() - CHECKSUM_SIZE;
             let (data, checksum_stored): (&[u8], [u8; CHECKSUM_SIZE]) = match self.0 {
                 Crc32cCodecConfigurationLocation::End => (
-                    &encoded_value[..encoded_value.len() - CHECKSUM_SIZE],
-                    encoded_value[encoded_value.len() - CHECKSUM_SIZE..]
-                        .try_into()
-                        .unwrap(),
+                    &encoded_value[..data_len],
+                    encoded_value[data_len..].try_into().unwrap(),
                 ),
                 Crc32cCodecConfigurationLocation::Start => (
                     &encoded_value[CHECKSUM_SIZE..],
@@ -136,7 +137,13 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
                 }
             }
 
-            Ok(Cow::Owned(data.to_vec()))
+            // Strip the checksum, which is free for borrowed and shared bytes.
+            Ok(match self.0 {
+                Crc32cCodecConfigurationLocation::End => encoded_value.slice(0..data_len),
+                Crc32cCodecConfigurationLocation::Start => {
+                    encoded_value.slice(CHECKSUM_SIZE..CHECKSUM_SIZE + data_len)
+                }
+            })
         } else {
             Err(CodecError::Other(
                 "crc32c decoder expects a 32 bit input".to_string(),

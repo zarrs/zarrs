@@ -75,6 +75,55 @@ impl IncompatibleDimensionError {
     }
 }
 
+/// A chunk grid creation/configuration error.
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum ChunkGridCreateError {
+    /// Plugin creation error.
+    #[error(transparent)]
+    PluginCreateError(#[from] PluginCreateError),
+    /// Incompatible dimension error.
+    #[error(transparent)]
+    IncompatibleDimensionError(#[from] IncompatibleDimensionError),
+    /// Incompatible dimensionality error.
+    #[error(transparent)]
+    IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),
+    /// Any other error.
+    #[error("{0}")]
+    Other(String),
+}
+
+impl ChunkGridCreateError {
+    /// Create a new [`ChunkGridCreateError`].
+    #[must_use]
+    pub fn new(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+
+    /// Create a new [`ChunkGridCreateError::Other`].
+    #[must_use]
+    pub fn other(error: impl ToString) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<&str> for ChunkGridCreateError {
+    fn from(error: &str) -> Self {
+        Self::Other(error.to_string())
+    }
+}
+
+impl From<String> for ChunkGridCreateError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
+}
+
+impl From<Arc<serde_json::Error>> for ChunkGridCreateError {
+    fn from(error: Arc<serde_json::Error>) -> Self {
+        Self::PluginCreateError(PluginCreateError::from(error))
+    }
+}
+
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
 pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
@@ -100,7 +149,7 @@ impl ExtensionName for ChunkGrid {
 
 /// A chunk grid plugin.
 #[derive(derive_more::Deref)]
-pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape>);
+pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape, ChunkGridCreateError>);
 inventory::collect!(ChunkGridPlugin);
 
 impl ChunkGridPlugin {
@@ -111,7 +160,8 @@ impl ChunkGridPlugin {
 }
 
 /// A runtime chunk grid plugin for dynamic registration.
-pub type ChunkGridRuntimePlugin = RuntimePlugin2<ChunkGrid, MetadataV3, ArrayShape>;
+pub type ChunkGridRuntimePlugin =
+    RuntimePlugin2<ChunkGrid, MetadataV3, ArrayShape, ChunkGridCreateError>;
 
 /// A handle to a registered chunk grid plugin.
 pub type ChunkGridRuntimeRegistryHandle = Arc<ChunkGridRuntimePlugin>;
@@ -168,11 +218,11 @@ impl ChunkGrid {
     ///
     /// # Errors
     ///
-    /// Returns a [`PluginCreateError`] if the metadata is invalid or not associated with a registered chunk grid plugin.
+    /// Returns a [`ChunkGridCreateError`] if the metadata is invalid or not associated with a registered chunk grid plugin.
     pub fn from_metadata(
         metadata: &MetadataV3,
         array_shape: &[u64],
-    ) -> Result<Self, PluginCreateError> {
+    ) -> Result<Self, ChunkGridCreateError> {
         let name = metadata.name();
 
         // Check runtime registry first (higher priority)
@@ -196,10 +246,11 @@ impl ChunkGrid {
                 return plugin.create(metadata, &array_shape.to_vec());
             }
         }
-        Err(
-            PluginUnsupportedError::new(metadata.name().to_string(), "chunk grid".to_string())
-                .into(),
-        )
+        Err(PluginCreateError::Unsupported(PluginUnsupportedError::new(
+            metadata.name().to_string(),
+            "chunk grid".to_string(),
+        ))
+        .into())
     }
 }
 
@@ -214,11 +265,11 @@ pub unsafe trait ChunkGridTraits:
     /// Create a chunk grid from Zarr V3 metadata and an array shape.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    /// Returns [`ChunkGridCreateError`] if the plugin cannot be created.
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError>
+    ) -> Result<ChunkGrid, ChunkGridCreateError>
     where
         Self: Sized;
 
@@ -460,9 +511,13 @@ impl<T> ChunkGridTraitsIterators for T where T: ChunkGridTraits {}
 
 /// Ravel ND indices to a linearised index.
 ///
-/// Returns [`None`] if any `indices` are out-of-bounds of `shape`.
+/// Returns [`None`] if `indices` and `shape` have a different length, or if any `indices` are
+/// out-of-bounds of `shape`.
 #[must_use]
 pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
+    if indices.len() != shape.len() {
+        return None;
+    }
     let mut index: u64 = 0;
     let mut count = 1;
     for (i, s) in std::iter::zip(indices, shape).rev() {
@@ -548,5 +603,31 @@ unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
             spare_capacity.as_mut_ptr().cast::<T>(),
             spare_capacity.len(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ravel_indices_valid() {
+        assert_eq!(ravel_indices(&[], &[]), Some(0));
+        assert_eq!(ravel_indices(&[3], &[5]), Some(3));
+        assert_eq!(ravel_indices(&[1, 2], &[3, 4]), Some(6));
+        assert_eq!(ravel_indices(&[2, 3], &[3, 4]), Some(11));
+    }
+
+    #[test]
+    fn ravel_indices_out_of_bounds() {
+        assert_eq!(ravel_indices(&[5], &[5]), None);
+        assert_eq!(ravel_indices(&[1, 4], &[3, 4]), None);
+    }
+
+    #[test]
+    fn ravel_indices_dimensionality_mismatch() {
+        assert_eq!(ravel_indices(&[1], &[3, 4]), None);
+        assert_eq!(ravel_indices(&[1, 1, 1], &[3, 4]), None);
+        assert_eq!(ravel_indices(&[0], &[]), None);
     }
 }

@@ -3,7 +3,7 @@ name = "zarrs_codec"
 version = "0.3.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.92"
 description = "The codec API for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_codec"
@@ -14,12 +14,14 @@ categories = ["encoding"]
 
 [dependencies]
 async-trait = "0.1.74"
-bytemuck = { version = "1.14.0", features = ["must_cast"] }
+bytemuck = { version = "1.14.0", features = ["must_cast", "extern_crate_alloc"] }
+bytes.workspace = true
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 futures = "0.3.29"
 inventory.workspace = true
-itertools = "0.14.0"
+itertools = "0.15.0"
 rayon = "1.10.0"
+serde_json = "1.0.71"
 thiserror.workspace = true
 unsafe_cell_slice = "0.2.0"
 zarrs_chunk_grid.workspace = true

@@ -1,19 +1,15 @@
 use super::*;
-use crate::array::ArrayBytes;
-use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
-use crate::iter_concurrent_limit;
+use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError};
-use zarrs_storage::MaybeSync;
-
-mod array;
-mod array_cached;
-mod common;
+use zarrs_storage::{Bytes, MaybeSync};
 
 /// Synchronous array read operations.
+///
+/// These operations decode with the array's [`codec_options`](ArrayOps::codec_options).
 pub trait ArrayReadOps: ArrayOps + MaybeSync {
-    /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist with default codec options.
+    /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -24,34 +20,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// # Panics
     /// Panics if the number of elements in the chunk exceeds `usize::MAX`.
     fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64]) -> Result<T, ArrayError> {
-        self.retrieve_chunk_opt(chunk_indices, self.codec_options())
-    }
-
-    /// Read and decode the chunk at `chunk_indices` with explicit codec options.
-    /// Explicit options version of [`retrieve_chunk`](ArrayReadOps::retrieve_chunk).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        if let Some(chunk) = self.retrieve_chunk_if_exists_opt::<T>(chunk_indices, options)? {
-            Ok(chunk)
-        } else {
-            let chunk_shape = self.chunk_shape(chunk_indices)?;
-            let bytes = ArrayBytes::new_fill_value(
-                self.data_type(),
-                chunk_shape.iter().map(|&x| x.get()).product::<u64>(),
-                self.fill_value(),
-            )
-            .map_err(CodecError::from)
-            .map_err(ArrayError::from)?;
-            T::from_array_bytes(
-                bytes,
-                bytemuck::must_cast_slice(&chunk_shape),
-                self.data_type(),
-            )
-        }
+        let chunk = self.retrieve_chunk_if_exists::<T>(chunk_indices)?;
+        super::chunk_or_fill_value(self, chunk_indices, chunk)
     }
 
     /// Read and decode the chunk at `chunk_indices` into a preallocated `output_target`.
@@ -69,7 +39,6 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Read and decode the chunks at `chunks` into their bytes.
@@ -86,68 +55,48 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunks_opt(chunks, self.codec_options())
-    }
-
-    /// Read and decode the chunks in `chunks` with explicit codec options.
-    /// Explicit options version of [`retrieve_chunks`](ArrayReadOps::retrieve_chunks).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_opt<T: FromArrayBytes>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
         let array_subset = self.chunks_subset(chunks)?;
-        self.retrieve_array_subset_opt(&array_subset, options)
+        self.retrieve_array_subset(&array_subset)
     }
 
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
+    /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into their bytes.
+    ///
+    /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
+    /// [`Indexer`], such as a list of chunk-relative indices.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if:
     ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
+    ///  - the indexer is out-of-bounds of the chunk or has an incompatible dimensionality,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
     ///
     /// # Panics
-    /// Will panic if the number of elements in `chunk_subset` is `usize::MAX` or larger.
-    fn retrieve_chunk_subset<T: FromArrayBytes>(
+    /// Will panic if the number of elements in `indexer` is `usize::MAX` or larger.
+    fn retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, self.codec_options())
-    }
-
-    /// Read and decode a subset of the chunk at `chunk_indices` with explicit codec options.
-    /// Explicit options version of [`retrieve_chunk_subset`](ArrayReadOps::retrieve_chunk_subset).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
+        indexer: &dyn Indexer,
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into a preallocated `output_target`.
+    /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into a preallocated `output_target`.
     ///
-    /// Only supports fixed-length data types (including optional types with fixed inner types).
+    /// `indexer` is relative to the chunk. Only supports fixed-length data types (including
+    /// optional types with fixed inner types).
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if:
     ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
+    ///  - the indexer is out-of-bounds of the chunk or has an incompatible dimensionality,
     ///  - the data type is variable-length,
-    ///  - the number of elements in `output_target` does not match `chunk_subset`,
+    ///  - the number of elements in `output_target` does not match `indexer`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
-    fn retrieve_chunk_subset_into(
+    fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Read and decode the `array_subset` of array into its bytes.
@@ -165,20 +114,9 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.retrieve_array_subset_opt(array_subset, self.codec_options())
-    }
-
-    /// Read and decode the array subset with explicit codec options.
-    /// Explicit options version of [`retrieve_array_subset`](ArrayReadOps::retrieve_array_subset).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    fn retrieve_array_subset_opt<T: FromArrayBytes>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode the chunk at `chunk_indices` into its bytes if it exists with default codec options.
+    /// Read and decode the chunk at `chunk_indices` into its bytes if it exists.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -191,127 +129,112 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<T>, ArrayError> {
-        self.retrieve_chunk_if_exists_opt(chunk_indices, self.codec_options())
-    }
-
-    /// Read and decode the chunk at `chunk_indices` if it exists with explicit codec options.
-    /// Explicit options version of [`retrieve_chunk_if_exists`](ArrayReadOps::retrieve_chunk_if_exists).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<Option<T>, ArrayError>;
 
     /// Retrieve the encoded bytes of a chunk.
     ///
     /// # Errors
-    /// Returns an [`StorageError`] if there is an underlying store error.
-    #[allow(clippy::missing_panics_doc)]
-    fn retrieve_encoded_chunk(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, StorageError> {
-        self.retrieve_encoded_chunk_opt(chunk_indices, self.codec_options())
-    }
+    /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
+    fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError>;
 
-    /// Retrieve the encoded bytes of a chunk with explicit codec options.
+    /// Retrieve the encoded bytes of the chunks selected by `chunks`.
+    ///
+    /// `chunks` indexes the chunk grid. It may be an [`ArraySubset`] or any other [`Indexer`],
+    /// such as a list of chunk indices.
+    ///
+    /// The chunks are in order of the chunk indices returned by `chunks.iter_indices()`.
     ///
     /// # Errors
-    /// Returns an [`StorageError`] if there is an underlying store error.
-    #[allow(clippy::missing_panics_doc)]
-    fn retrieve_encoded_chunk_opt(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Vec<u8>>, StorageError>;
-
-    /// Retrieve the encoded bytes of the chunks in `chunks`.
-    ///
-    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
+    /// Returns an [`ArrayError`] if `chunks` is out-of-bounds of the chunk grid or has an incompatible dimensionality, a chunk key cannot be encoded, or there is an underlying store error.
     fn retrieve_encoded_chunks(
         &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
-        self.retrieve_encoded_chunks_opt(chunks, self.codec_options())
+        chunks: &dyn Indexer,
+    ) -> Result<Vec<Option<Bytes>>, ArrayError> {
+        chunks
+            .validate(self.chunk_grid_shape())
+            .map_err(CodecError::from)?;
+        let concurrent_limit = self.codec_options().concurrent_target();
+        let retrieve = |chunk_indices: crate::array::ArrayIndicesTinyVec| {
+            self.retrieve_encoded_chunk(&chunk_indices)
+        };
+        // `Indexer::iter_indices` is a sequential iterator, so collect it for parallel iteration.
+        chunks
+            .iter_indices()
+            .collect::<Vec<_>>()
+            .concurrent_limit(concurrent_limit)
+            .map(retrieve)
+            .collect()
     }
 
-    /// Retrieve the encoded bytes of the chunks in `chunks` with explicit codec options.
-    ///
-    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
+    /// Read and decode the subchunk at `subchunk_indices`.
     ///
     /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    fn retrieve_encoded_chunks_opt(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
-        iter_concurrent_limit!(
-            options.concurrent_target(),
-            chunks.indices(),
-            map,
-            |chunk_indices| self.retrieve_encoded_chunk_opt(&chunk_indices, options)
-        )
-        .collect()
-    }
-
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// Only supported for arrays where the array-to-bytes codec is `sharding_indexed` and there
-    /// are no array-to-array or bytes-to-bytes codecs.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if the array is not exclusively sharded, the subchunk indices are
-    /// invalid, decoding the shard index fails, or there is an underlying store error.
-    fn retrieve_encoded_subchunk(
+    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, the subchunk indices
+    /// are invalid, there is a codec decoding error, or there is an underlying store error.
+    fn retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
-    ) -> Result<Option<Vec<u8>>, ArrayError>;
-
-    /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
-    ///
-    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if the subchunk indices are invalid, there is a codec decoding
-    /// error, or there is an underlying store error.
-    fn retrieve_subchunk_opt<T: FromArrayBytes>(
-        &self,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
-        self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
+        self.retrieve_subchunk_at_level(0, subchunk_indices)
     }
 
-    /// Read and decode the subchunks at `subchunks` with explicit codec options.
+    /// Read and decode the subchunk at `subchunk_indices` from `level`.
     ///
-    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if any subchunk indices are invalid, there is a codec decoding
-    /// error, or there is an underlying store error.
-    fn retrieve_subchunks_opt<T: FromArrayBytes>(
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// the subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<T, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid_at_level(level)
+            .as_chunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+        self.retrieve_array_subset(&array_subset)
+    }
+
+    /// Read and decode the subchunks at `subchunks`.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the array does not have a subchunk grid, any subchunk indices
+    /// are invalid, there is a codec decoding error, or there is an underlying store error.
+    fn retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let array_subset = self
-            .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
-        self.retrieve_array_subset_opt(&array_subset, options)
+        self.retrieve_subchunks_at_level(0, subchunks)
+    }
+
+    /// Read and decode subchunks from `level`.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid,
+    /// any subchunk indices are invalid, a codec fails, or there is an underlying store error.
+    fn retrieve_subchunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        subchunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        let subchunk_grid = self
+            .subchunk_grid_at_level(level)
+            .as_chunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
+        self.retrieve_array_subset(&array_subset)
     }
 
     /// Read and decode the `array_subset` of array into a preallocated `output_target`.
@@ -327,22 +250,13 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match `array_subset`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of chunks intersecting `array_subset` exceeds `usize::MAX`.
     fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Result<(), ArrayError> {
-        self.retrieve_array_subset_into_opt(array_subset, output_target, self.codec_options())
-    }
-
-    /// Read and decode an array subset into a preallocated target with explicit codec options.
-    /// Explicit options version of [`retrieve_array_subset_into`](ArrayReadOps::retrieve_array_subset_into).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    fn retrieve_array_subset_into_opt(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
     ) -> Result<(), ArrayError>;
 
     /// Initialises a partial decoder for the chunk at `chunk_indices`.
@@ -352,16 +266,36 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn partial_decoder(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        self.partial_decoder_opt(chunk_indices, self.codec_options())
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Return the chunk-local subchunk grid for a chunk, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid cannot be resolved.
+    fn local_subchunk_grid(&self, chunk_indices: &[u64]) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.local_subchunk_grid_at_level(0, chunk_indices)
     }
 
-    /// Initialises a partial decoder for the chunk at `chunk_indices` with explicit codec options.
-    /// Explicit options version of [`partial_decoder`](ArrayReadOps::partial_decoder).
-    #[allow(clippy::missing_errors_doc)]
-    fn partial_decoder_opt(
+    /// Return the chunk-local subchunk grid at `level` for a chunk, if available.
+    ///
+    /// The returned grid is relative to the decoded chunk at `chunk_indices`.
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid hierarchy cannot be resolved.
+    fn local_subchunk_grid_at_level(
         &self,
+        level: usize,
         chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        Ok(self
+            .partial_decoder(chunk_indices)?
+            .local_subchunk_grids(self.codec_options())
+            .map_err(ArrayError::CodecError)?
+            .into_iter()
+            .nth(level)
+            .flatten())
+    }
 }

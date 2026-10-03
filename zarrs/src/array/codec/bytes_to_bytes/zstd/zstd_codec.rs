@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -6,7 +5,7 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
@@ -75,10 +74,6 @@ impl ZstdCodec {
 }
 
 impl CodecTraits for ZstdCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -125,39 +120,39 @@ impl BytesToBytesCodecTraits for ZstdCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
         compressor.include_checksum(self.checksum)?;
         // compressor.include_contentsize(true);
         // compressor.set_pledged_src_size(Some(decoded_value.len()))?; // unpublished
         let result = compressor.compress(&decoded_value)?;
-        Ok(Cow::Owned(result))
+        Ok(CowBytes::from(result))
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
             // Bulk decompression
             let result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
-            Ok(Cow::Owned(result))
+            Ok(CowBytes::from(result))
         } else {
             // Streaming decompression (slower)
             zstd::decode_all(std::io::Cursor::new(&encoded_value))
                 .map_err(CodecError::from)
-                .map(Cow::Owned)
+                .map(CowBytes::from)
         }
     }
 
     fn decode_into(
         &self,
-        encoded_value: ArrayBytesRaw<'_>,
+        encoded_value: CowBytes<'_>,
         decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
@@ -215,7 +210,7 @@ mod tests {
         let codec = ZstdCodec::new(1, false);
         let decoded = b"decode directly into this buffer".repeat(32);
         let encoded = codec
-            .encode(Cow::Borrowed(&decoded), &CodecOptions::default())
+            .encode(CowBytes::from(decoded.as_slice()), &CodecOptions::default())
             .unwrap();
 
         let mut output = vec![0; decoded.len()];
@@ -269,9 +264,9 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new(1, false));
         let decoded = b"parallel decode into".repeat(128);
         let encoded = codec
-            .encode(Cow::Borrowed(&decoded), &CodecOptions::default())
+            .encode(CowBytes::from(decoded.as_slice()), &CodecOptions::default())
             .unwrap()
-            .into_owned();
+            .into_vec();
 
         std::thread::scope(|scope| {
             for _ in 0..4 {
@@ -282,7 +277,7 @@ mod tests {
                     let mut output = vec![0; decoded.len()];
                     codec
                         .decode_into(
-                            Cow::Borrowed(encoded),
+                            CowBytes::from(encoded.as_slice()),
                             &BytesRepresentation::FixedSize(decoded.len() as u64),
                             &mut output,
                             &CodecOptions::default(),

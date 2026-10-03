@@ -126,7 +126,7 @@ impl NodePath {
         }
 
         let joined = if self.is_root() {
-            format!("/{}", relative)
+            format!("/{relative}")
         } else {
             format!("{}/{}", self.as_str(), relative)
         };

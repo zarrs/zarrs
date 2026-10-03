@@ -76,7 +76,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     (0..2).into_par_iter().try_for_each(|i| {
         let chunk_indices: Vec<u64> = vec![0, i];
         let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
         })?;
         array.store_chunk(
             &chunk_indices,
@@ -127,7 +127,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store chunk subset
     let ndarray_chunk_subset: Array2<f32> = array![[-7.4, -7.5, -7.6, -7.7],];
-    array.store_chunk_subset(
+    array.store_partial_chunk(
         // chunk indices
         &[1, 1],
         // subset within chunk
@@ -135,7 +135,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         ndarray_chunk_subset,
     )?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
-    println!("store_chunk_subset [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
+    println!("store_partial_chunk [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
 
     // Erase a chunk
     array.erase_chunk(&[0, 0])?;
@@ -160,13 +160,13 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
 
 fn main() {
     if let Err(err) = array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

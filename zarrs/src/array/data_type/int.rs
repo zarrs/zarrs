@@ -49,6 +49,13 @@ impl_bitround_codec!(Int16DataType, 2, int16);
 impl_bitround_codec!(Int32DataType, 4, int32);
 impl_bitround_codec!(Int64DataType, 8, int64);
 
+// CastValue codec implementations for standard integers
+use zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_signed_integer;
+impl_cast_value_data_type_traits_signed_integer!(Int8DataType, i8, 8);
+impl_cast_value_data_type_traits_signed_integer!(Int16DataType, i16, 16);
+impl_cast_value_data_type_traits_signed_integer!(Int32DataType, i32, 32);
+impl_cast_value_data_type_traits_signed_integer!(Int64DataType, i64, 64);
+
 // Pcodec implementations for standard integers (int8 not supported)
 use zarrs_data_type::codec_traits::impl_pcodec_data_type_traits;
 impl_pcodec_data_type_traits!(Int16DataType, I16, 1);

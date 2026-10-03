@@ -27,6 +27,7 @@ mod array_errors;
 mod array_metadata_options;
 mod array_ops;
 mod element;
+mod element_layout;
 mod from_array_bytes;
 mod into_array_bytes;
 mod tensor;
@@ -41,11 +42,9 @@ pub mod data_type;
 pub mod storage_transformer;
 
 #[cfg(feature = "dlpack")]
-mod array_dlpack_ext;
-mod array_sharded_ext;
+mod tensor_dlpack;
 
 use std::borrow::Cow;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use self::array_cached::ArrayCached;
@@ -57,26 +56,30 @@ use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 use crate::node::NodePath;
 pub use zarrs_chunk_grid::{
     ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
-    ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape,
-    ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError, Indexer,
-    IndexerError, iterators,
+    ArraySubsetTraits, ChunkGrid, ChunkGridCreateError, ChunkGridTraits, ChunkGridTraitsIterators,
+    ChunkShape, ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError,
+    Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
+use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
-    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
-    ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
-    StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
+    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
+    ArrayBytesOffsetsElement, ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError,
+    ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
+    ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
+    ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, CowBytes,
+    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 pub use zarrs_data_type::{
     DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3, FillValue,
@@ -90,9 +93,7 @@ pub use zarrs_metadata::v3::{
 pub use zarrs_metadata::{
     ArrayMetadata, ChunkKeySeparator, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
 };
-use zarrs_plugin::{
-    ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, PluginCreateError, ZarrVersion,
-};
+use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
@@ -100,7 +101,7 @@ pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, A
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
-pub use self::codec::CodecChain;
+pub use self::codec::{CodecChain, CodecChainBound};
 pub use self::element::{Element, ElementError, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
@@ -129,11 +130,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - the metadata is in invalid in some other way.
 ///
 /// ## Array Metadata
-/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) or [`store_metadata_opt`](Array::store_metadata_opt) if an array is newly created or its metadata has been mutated.
+/// Array metadata **must be explicitly stored** with [`store_metadata`](Array::store_metadata) if an array is newly created or its metadata has been mutated.
 ///
 /// The underlying metadata of an [`Array`] can be accessed with [`metadata`](Array::metadata) or [`metadata_opt`](Array::metadata_opt).
-/// The latter accepts [`ArrayMetadataOptions`] that can be used to convert array metadata from Zarr V2 to V3, for example.
-/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata) / [`store_metadata_opt`](Array::store_metadata_opt).
+/// The latter applies the array's [`ArrayMetadataOptions`], which can convert array metadata from Zarr V2 to V3, for example.
+/// Use [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`] to control them.
+/// [`metadata_opt`](Array::metadata_opt) is used internally by [`store_metadata`](Array::store_metadata).
 /// Use [`serde_json::to_string`] or [`serde_json::to_string_pretty`] on [`ArrayMetadata`] to convert it to a JSON string.
 ///
 /// ### Immutable Array Metadata / Properties
@@ -145,6 +147,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`codecs`](Array::codecs)
 ///  - [`storage_transformers`](Array::storage_transformers)
 ///  - [`path`](Array::path)
+///  - [`dimensionality`](Array::dimensionality), see [Array Dimensionality](#array-dimensionality) below
 ///
 /// ### Mutable Array Metadata
 /// Do not forget to store metadata after mutation.
@@ -152,9 +155,16 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`attributes`](Array::attributes) / [`attributes_mut`](Array::attributes_mut)
 ///  - [`dimension_names`](Array::dimension_names) / [`set_dimension_names`](Array::set_dimension_names)
 ///
+/// ### Array Dimensionality
+/// The dimensionality of an array is **fixed** for the lifetime of an [`Array`].
+/// It is established when the array is created or opened, and the data type, codec chain, chunk grid, chunk keys and dimension names are all bound to it.
+///
+/// An array can be resized within its dimensionality, but it cannot gain or lose dimensions:
+/// [`set_shape`](Array::set_shape) and [`set_shape_and_chunk_grid`](Array::set_shape_and_chunk_grid) return [`ArrayCreateError::ChangedDimensionality`] if the new shape has a different number of dimensions.
+///
 /// ### `zarrs` Metadata
 /// By default, the `zarrs` version and a link to its source code is written to the `_zarrs` attribute in array metadata when calling [`store_metadata`](Array::store_metadata).
-/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata) or call [`store_metadata_opt`](Array::store_metadata_opt) with an explicit [`ArrayMetadataOptions`].
+/// Override this behaviour globally with [`Config::set_include_zarrs_metadata`](crate::config::Config::set_include_zarrs_metadata), or per array with [`Array::with_metadata_options`] / [`ArrayMutOps::set_metadata_options`].
 ///
 /// ## Array Data
 /// Array operations are divided into several categories based on the traits implemented for the backing [storage](crate::storage).
@@ -163,7 +173,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_chunk_if_exists`](Array::retrieve_chunk_if_exists)
 ///    - [`retrieve_chunk`](Array::retrieve_chunk)
 ///    - [`retrieve_chunks`](Array::retrieve_chunks)
-///    - [`retrieve_chunk_subset`](Array::retrieve_chunk_subset)
+///    - [`retrieve_partial_chunk`](Array::retrieve_partial_chunk)
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
@@ -176,7 +186,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`erase_chunk`](Array::erase_chunk)
 ///    - [`erase_chunks`](Array::erase_chunks)
 ///  - [`[Async]ReadableWritableStorageTraits`](crate::storage::ReadableWritableStorageTraits): store operations requiring reading *and* writing
-///    - [`store_chunk_subset`](Array::store_chunk_subset)
+///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
@@ -190,7 +200,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - Raw bytes variants: [`ArrayBytes`]
 /// - Typed element variants: e.g. `Vec<T>` where `T: Element`
 /// - `ndarray` variants: `ndarray::ArrayD<T>` where `T: Element` (requires `ndarray` feature)
-/// - `dlpack` variants: `RawBytesDlPack` where `T: Element` (requires `dlpack` feature)
+/// - `dlpack` variants: [`Tensor`], where a `Tensor<'static>` is convertible into a `DLPack` managed tensor (requires `dlpack` feature)
 ///
 /// Similarly, array `store_*` methods are generic over the input type.
 ///
@@ -203,7 +213,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///   Controls things like concurrency limits, checksum validation, and partial encoding.
 ///   Use the `_opt` method variants to supply a non-default [`CodecOptions`].
 ///
-/// - **[`CodecSpecificOptions`]** — codec-specific configuration set once and baked into the codec's state.
+/// - **[`CodecSpecificOptions`]** — codec-specific configuration applied when the codec chain is bound to the array.
 ///   Used to pass options that are specific to a particular codec, such as [`ShardingCodecOptions`](codec::ShardingCodecOptions).
 ///   Apply these via [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
 ///
@@ -225,6 +235,23 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`chunk_subset_bounded`](Array::chunk_subset_bounded)
 ///  - [`chunks_subset`](Array::chunks_subset) / [`chunks_subset_bounded`](Array::chunks_subset_bounded)
 ///  - [`chunks_in_array_subset`](Array::chunks_in_array_subset)
+///
+/// Codec-defined subchunk grids are ordered from outermost to innermost. Query them with
+/// [`subchunk_grids`](Array::subchunk_grids),
+/// [`subchunk_grid_at_level`](Array::subchunk_grid_at_level), and
+/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level).
+/// The [`subchunk_grid`](Array::subchunk_grid) and [`subchunk_shape`](Array::subchunk_shape) methods select level zero.
+///
+/// A level is a [`ChunkGridDecoded`], which distinguishes a grid resolvable for the whole array
+/// ([`Array`](ChunkGridDecoded::Array)) from one that is only resolvable per chunk
+/// ([`ChunkLocal`](ChunkGridDecoded::ChunkLocal), see
+/// [`local_subchunk_grid`](ArrayReadOps::local_subchunk_grid)) and from an absent grid
+/// ([`None`](ChunkGridDecoded::None)).
+/// Use [`as_chunk_grid`](ChunkGridDecoded::as_chunk_grid) when only the globally resolvable case
+/// is of interest.
+///
+/// Note that the chunk grid is not considered a subchunk grid.
+/// For a typical `sharding_indexed` encoded array, the level zero subchunk grid will be aligned to the subchunks within each shard.
 ///
 /// An [`ArraySubset`] spanning the entire array can be retrieved with [`subset_all`](Array::subset_all).
 ///
@@ -267,7 +294,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ## Optimising Writes
 /// For optimum write performance, an array should be written using [`store_chunk`](Array::store_chunk) or [`store_chunks`](Array::store_chunks) where possible.
 ///
-/// [`store_chunk_subset`](Array::store_chunk_subset) and [`store_array_subset`](Array::store_array_subset) may incur decoding overhead, and they require careful usage if executed in parallel (see [Parallel Writing](#parallel-writing) below).
+/// [`store_partial_chunk`](Array::store_partial_chunk) and [`store_array_subset`](Array::store_array_subset) may incur decoding overhead, and they require careful usage if executed in parallel (see [Parallel Writing](#parallel-writing) below).
 /// However, these methods will use a fast path and avoid decoding if the subset covers entire chunks.
 ///
 /// ### Direct IO (Linux)
@@ -280,27 +307,32 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ### Parallel Writing
 /// `zarrs` does not currently offer a "synchronisation" API for locking chunks or array subsets.
 ///
-/// **It is the responsibility of `zarrs` consumers to ensure that chunks are not written to concurrently**.
+/// **It is the responsibility of `zarrs` consumers to ensure that a chunk is not written to concurrently with any other read or write of that chunk**.
+///
+/// Reads and writes of *different* chunks may proceed concurrently.
 ///
 /// If a chunk is written more than once, its element values depend on whichever operation wrote to the chunk last.
-/// The [`store_chunk_subset`](Array::store_chunk_subset) and [`store_array_subset`](Array::store_array_subset) methods and their variants internally retrieve, update, and store chunks.
-/// So do [`partial_encoder`](Array::partial_encoder)s, which may used internally by the above methods.
+/// The [`store_partial_chunk`](Array::store_partial_chunk) and [`store_array_subset`](Array::store_array_subset) methods and their variants internally retrieve, update, and store chunks.
+/// So do [`partial_encoder`](Array::partial_encoder)s, which may be used internally by the above methods.
 ///
 /// It is the responsibility of `zarrs` consumers to ensure that:
 ///   - [`store_array_subset`](Array::store_array_subset) is not called concurrently on array subsets sharing chunks,
-///   - [`store_chunk_subset`](Array::store_chunk_subset) is not called concurrently on the same chunk,
-///   - [`partial_encoder`](Array::partial_encoder)s are created or used concurrently for the same chunk,
+///   - [`store_partial_chunk`](Array::store_partial_chunk) is not called concurrently on the same chunk,
+///   - [`partial_encoder`](Array::partial_encoder)s are not created or used concurrently for the same chunk,
 ///   - or any combination of the above are called concurrently on the same chunk.
 ///
 /// **Partial writes to a chunk may be lost if these rules are not respected.**
 ///
+/// Retrieving a chunk while it is being written is unsupported for the same reason, but fails differently: the retrieval may observe the chunk in any state, including a partially written one.
+/// With an [`ArrayCached`], it may also leave the pre-write value cached indefinitely, because the write invalidates the cache before the retrieval inserts into it.
+///
 /// ## Optimising Reads
 /// It is fastest to load arrays using [`retrieve_chunk`](Array::retrieve_chunk) or [`retrieve_chunks`](Array::retrieve_chunks) where possible.
-/// In contrast, the [`retrieve_chunk_subset`](Array::retrieve_chunk_subset) and [`retrieve_array_subset`](Array::retrieve_array_subset) may use partial decoders which can be less efficient with some codecs/stores.
+/// In contrast, the [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) and [`retrieve_array_subset`](Array::retrieve_array_subset) may use partial decoders which can be less efficient with some codecs/stores.
 /// Like their write counterparts, these methods will use a fast path if subsets cover entire chunks.
 ///
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
-/// For this reason, retrieving multiple subsets in a chunk with [`retrieve_chunk_subset`](Array::store_chunk_subset) is very inefficient and strongly discouraged.
+/// For this reason, retrieving multiple subsets in a chunk with [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) is very inefficient and strongly discouraged.
 /// For example, consider that a compressed chunk may need to be retrieved and decoded in its entirety even if only a small part of the data is needed.
 /// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::ArrayPartialDecoderTraits::partial_decode).
 /// The underlying codec chain will use a cache where efficient to optimise multiple partial decoding requests (see [`CodecChain`]).
@@ -317,8 +349,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
 /// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk_opt`](ArrayReadOps::retrieve_subchunk_opt)
-///  - [`retrieve_subchunks_opt`](ArrayReadOps::retrieve_subchunks_opt)
+///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///
@@ -358,10 +390,10 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The key traits for each extension type are:
 /// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`], [`DataTypeTraitsV3`]
 /// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
-///   - Array-to-array codecs: [`ArrayCodecTraits`] + [`ArrayToArrayCodecTraits`]
+///   - Array-to-array codecs: [`UnboundArrayToArrayCodecTraits`] and bound [`ArrayToArrayCodecTraits`]
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
-///   - Array-to-bytes codecs: [`ArrayCodecTraits`] + [`ArrayToBytesCodecTraits`]
+///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
 ///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
 ///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
@@ -387,24 +419,51 @@ pub struct Array<TStorage: ?Sized> {
     data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
-    /// The subchunk grid for sharded arrays.
-    subchunk_grid: Option<ChunkGrid>,
+    /// The subchunk grid hierarchy exposed by the codec chain, outermost first.
+    subchunk_grids: Vec<zarrs_codec::ChunkGridDecoded>,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
     fill_value: FillValue,
     /// Specifies a list of codecs to be used for encoding and decoding chunks.
     codecs: Arc<CodecChain>,
+    /// The codec chain bound to this array's data type, fill value, and codec-specific options.
+    codecs_bound: Arc<CodecChainBound>,
+    /// The codec-specific options the codec chain is bound with.
+    codec_specific_options: CodecSpecificOptions,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
     dimension_names: Option<Vec<DimensionName>>,
-    /// Metadata used to create the array
-    metadata: ArrayMetadata,
+    /// Metadata used to create the array.
+    metadata: Arc<ArrayMetadata>,
     /// Options
     codec_options: CodecOptions,
     metadata_options: ArrayMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
+}
+
+impl<TStorage: ?Sized> Clone for Array<TStorage> {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+            path: self.path.clone(),
+            data_type: self.data_type.clone(),
+            chunk_grid: self.chunk_grid.clone(),
+            subchunk_grids: self.subchunk_grids.clone(),
+            chunk_key_encoding: self.chunk_key_encoding.clone(),
+            fill_value: self.fill_value.clone(),
+            codecs: self.codecs.clone(),
+            codecs_bound: self.codecs_bound.clone(),
+            codec_specific_options: self.codec_specific_options.clone(),
+            storage_transformers: self.storage_transformers.clone(),
+            dimension_names: self.dimension_names.clone(),
+            metadata: self.metadata.clone(),
+            codec_options: self.codec_options,
+            metadata_options: self.metadata_options,
+            metadata_erase_version: self.metadata_erase_version,
+        }
+    }
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
@@ -415,10 +474,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path: self.path.clone(),
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
-            subchunk_grid: self.subchunk_grid.clone(),
+            subchunk_grids: self.subchunk_grids.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
+            codecs_bound: self.codecs_bound.clone(),
+            codec_specific_options: self.codec_specific_options.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
@@ -458,10 +519,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs = Arc::new(
             CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
         );
-        Self::new_with_codec_chain(storage, path, v3, codecs)
+        Self::new_with_codec_chain(storage, path, v3, codecs, CodecSpecificOptions::default())
     }
 
-    /// Create an array from V3 metadata and a pre-built codec chain.
+    /// Create an array from V3 metadata, a pre-built codec chain, and codec-specific options.
     ///
     /// Used by [`ArrayBuilder`](crate::array::ArrayBuilder) to preserve the original codec objects
     /// with their runtime options without round-tripping through metadata deserialisation.
@@ -470,10 +531,26 @@ impl<TStorage: ?Sized> Array<TStorage> {
         path: NodePath,
         v3: ArrayMetadataV3,
         codecs: Arc<CodecChain>,
+        codec_specific_options: CodecSpecificOptions,
     ) -> Result<Self, ArrayCreateError> {
         // Create data type from V3 metadata
         let data_type = DataType::from_metadata(&v3.data_type)
             .map_err(ArrayCreateError::DataTypeCreateError)?;
+
+        // Create fill value from V3 metadata
+        let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
+            ArrayCreateError::InvalidFillValueMetadata {
+                data_type_name: v3.data_type.name().to_string(),
+                fill_value_metadata: v3.fill_value.clone(),
+            }
+        })?;
+
+        // Create bound codecs
+        let codecs_bound = codecs.with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &codec_specific_options,
+        )?;
 
         // Create chunk grid
         let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
@@ -484,15 +561,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
-
-        // Create fill value from V3 metadata
-        let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
-            ArrayCreateError::InvalidFillValueMetadata {
-                data_type_name: v3.data_type.name().to_string(),
-                fill_value_metadata: v3.fill_value.clone(),
-            }
-        })?;
+        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create storage transformers
         let storage_transformers =
@@ -527,13 +596,15 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
-            subchunk_grid,
+            subchunk_grids,
             chunk_key_encoding,
             fill_value,
             codecs,
+            codecs_bound,
+            codec_specific_options,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
-            metadata: ArrayMetadata::V3(v3),
+            metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
             metadata_options,
             metadata_erase_version,
@@ -556,9 +627,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
         // Create chunk grid from V2 chunks
         let chunk_grid = ChunkGrid::new(
-            RegularChunkGrid::new(v2.shape.clone(), v2.chunks.clone()).map_err(|err| {
-                ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(err.to_string()))
-            })?,
+            RegularChunkGrid::new(v2.shape.clone(), v2.chunks.clone())
+                .map_err(|e| ArrayCreateError::ChunkGridCreateError(e.into()))?,
         );
 
         // Create fill value from V2 metadata directly
@@ -593,7 +663,13 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
+        let codec_specific_options = CodecSpecificOptions::default();
+        let codecs_bound = codecs.with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &codec_specific_options,
+        )?;
+        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -616,31 +692,29 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
-            subchunk_grid,
+            subchunk_grids,
             chunk_key_encoding,
             fill_value,
             codecs,
+            codecs_bound,
+            codec_specific_options,
             storage_transformers,
             dimension_names: None,
             codec_options,
-            metadata: ArrayMetadata::V2(v2),
+            metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,
         })
     }
 
-    /// Set the codec options.
-    #[must_use]
-    pub fn with_codec_options(mut self, codec_options: CodecOptions) -> Self {
-        self.codec_options = codec_options;
-        self
-    }
-
-    /// Reconfigure the codec chain with codec-specific options and return the updated array.
+    /// Rebind the codec chain with codec-specific options and return the updated array.
     ///
-    /// Each codec in the chain may read its own options type from `opts` and return a
-    /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
-    /// This replaces the array's codec chain with the reconfigured version.
+    /// Each codec in the chain, including codecs nested in other codecs, may read its own options type from `opts`.
+    /// Codecs that do not recognise any option are left unchanged.
+    /// This replaces any codec-specific options previously set on the array.
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec chain cannot be rebound.
     ///
     /// # Example
     /// ```rust,no_run
@@ -655,17 +729,13 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// let array = array.with_codec_specific_options(&opts);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[must_use]
-    pub fn with_codec_specific_options(mut self, opts: &CodecSpecificOptions) -> Self {
-        self.codecs = Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts));
-        self
-    }
-
-    /// Set the metadata options.
-    #[must_use]
-    pub fn with_metadata_options(mut self, metadata_options: ArrayMetadataOptions) -> Self {
-        self.metadata_options = metadata_options;
-        self
+    pub fn with_codec_specific_options(
+        &self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<Self, CodecCreateError> {
+        let mut array = self.clone();
+        array.set_codec_specific_options(opts)?;
+        Ok(array)
     }
 
     /// Set the array shape and chunk grid from chunk grid metadata.
@@ -673,8 +743,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// This method allows setting both the array shape and chunk grid simultaneously.
     /// Some chunk grids depend on the array shape (e.g. `rectilinear`), so this method ensures that the chunk grid is correctly configured for the new array shape.
     ///
+    /// The dimensionality of an array is fixed once it has been created or opened, so
+    /// `array_shape` must have the same length as the current [`shape`](ArrayOps::shape).
+    ///
     /// # Errors
     /// Returns an [`ArrayCreateError`] if:
+    ///  - `array_shape` changes the array dimensionality,
     ///  - the chunk grid is not compatible with `array_shape`, or
     ///  - the chunk grid metadata is invalid.
     ///
@@ -694,21 +768,31 @@ impl<TStorage: ?Sized> Array<TStorage> {
             chunk_grid_metadata.into();
         let chunk_grid_metadata = chunk_grid_metadata.to_metadata()?;
 
+        // The dimensionality of an array is fixed once it exists: the codec chain, chunk keys and
+        // dimension names are all bound to it. Checked before any mutation.
+        if array_shape.len() != self.dimensionality() {
+            return Err(ArrayCreateError::ChangedDimensionality(
+                array_shape.len(),
+                self.dimensionality(),
+            ));
+        }
+
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid =
-            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, self.codecs.as_ref());
+        self.subchunk_grids = self
+            .codecs_bound
+            .decoded_subchunk_grids((&self.chunk_grid).into())?;
 
         // Update metadata based on version
-        match &mut self.metadata {
+        match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
                 metadata.chunk_grid = chunk_grid_metadata;
             }
             ArrayMetadata::V2(metadata) => {
                 let err = || {
-                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
+                    ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::Other(
                         "Only regular chunk grids are supported in Zarr V2".to_string(),
                     ))
                 };
@@ -723,11 +807,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     array_shape.clone(),
                     regular_chunk_grid_configuration.chunk_shape,
                 )
-                .map_err(|_| {
-                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
-                        "Chunk grid is not compatible with array shape".to_string(),
-                    ))
-                })?;
+                .map_err(|e| ArrayCreateError::ChunkGridCreateError(e.into()))?;
                 metadata.shape = array_shape;
                 metadata.chunks = regular_chunk_grid.chunk_shape().to_vec();
             }
@@ -741,44 +821,21 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .expect("data type and fill value are compatible")
     }
 
-    /// Calculate the recommended codec concurrency.
-    fn recommended_codec_concurrency(
-        &self,
-        chunk_shape: &[NonZeroU64],
-        data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, ArrayError> {
-        Ok(self
-            .codecs()
-            .recommended_concurrency(chunk_shape, data_type)?)
-    }
-
     /// Convert the array to Zarr V3.
     ///
     /// # Errors
     /// Returns a [`ArrayMetadataV2ToV3Error`] if the metadata is not compatible with Zarr V3 metadata.
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
-        match self.metadata {
-            ArrayMetadata::V2(metadata) => {
-                let metadata: ArrayMetadata = array_metadata_v2_to_v3(&metadata)?.into();
-                Ok(Self {
-                    storage: self.storage,
-                    path: self.path,
-                    data_type: self.data_type,
-                    chunk_grid: self.chunk_grid,
-                    subchunk_grid: self.subchunk_grid,
-                    chunk_key_encoding: self.chunk_key_encoding,
-                    fill_value: self.fill_value,
-                    codecs: self.codecs,
-                    storage_transformers: self.storage_transformers,
-                    dimension_names: self.dimension_names,
-                    metadata,
-                    codec_options: self.codec_options,
-                    metadata_options: self.metadata_options,
-                    metadata_erase_version: self.metadata_erase_version,
-                })
-            }
-            ArrayMetadata::V3(_) => Ok(self),
-        }
+        let ArrayMetadata::V2(metadata) = &*self.metadata else {
+            return Ok(self);
+        };
+        let mut metadata = array_metadata_v2_to_v3(metadata)?;
+        // Zarr V2 metadata has no dimension names to convert, so take the array's.
+        metadata.dimension_names.clone_from(&self.dimension_names);
+        Ok(Self {
+            metadata: Arc::new(ArrayMetadata::V3(metadata)),
+            ..self
+        })
     }
 
     /// Reject the array if it contains unsupported extensions or additional fields with `"must_understand": true`.
@@ -1001,8 +1058,8 @@ fn create_codec_chain_from_v2(
 ) -> Result<CodecChain, crate::convert::ArrayMetadataV2ToV3Error> {
     use crate::convert::ArrayMetadataV2ToV3Error;
 
-    let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
-    let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
+    let mut array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>> = vec![];
+    let mut array_to_bytes: Option<Arc<dyn UnboundArrayToBytesCodecTraits>> = None;
     let mut bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>> = vec![];
 
     // Insert transpose for F-order arrays
@@ -1029,7 +1086,7 @@ fn create_codec_chain_from_v2(
     if let Some(filters) = filters {
         for filter in filters {
             let codec = Codec::from_metadata(filter)
-                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+                .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
                 Codec::ArrayToArray(c) => {
@@ -1075,7 +1132,7 @@ fn create_codec_chain_from_v2(
             bytes_to_bytes.push(Arc::new(blosc));
         } else {
             let codec = Codec::from_metadata(compressor)
-                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+                .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
                 Codec::ArrayToArray(c) => {
@@ -1095,7 +1152,7 @@ fn create_codec_chain_from_v2(
         #[cfg(not(feature = "blosc"))]
         {
             let codec = Codec::from_metadata(compressor)
-                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+                .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
                 Codec::ArrayToArray(c) => {
@@ -1134,6 +1191,8 @@ fn create_codec_chain_from_v2(
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
@@ -1150,10 +1209,31 @@ mod tests {
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
-        let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
+        let stored_metadata = array.metadata_opt();
 
         let array_other = Array::open(store, array_path).unwrap();
         assert_eq!(array_other.metadata(), &stored_metadata);
+    }
+
+    #[test]
+    fn array_clone_shares_metadata_copy_on_write() {
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+        let mut clone = array.clone();
+
+        assert!(Arc::ptr_eq(&array.metadata, &clone.metadata));
+
+        clone.set_shape(vec![16, 16]).unwrap();
+        clone
+            .attributes_mut()
+            .insert("test".to_string(), "apple".into());
+
+        assert!(!Arc::ptr_eq(&array.metadata, &clone.metadata));
+        assert_eq!(array.shape(), &[8, 8]);
+        assert!(array.attributes().is_empty());
+        assert_eq!(clone.shape(), &[16, 16]);
+        assert_eq!(clone.attributes().get("test"), Some(&"apple".into()));
     }
 
     #[test]
@@ -1186,6 +1266,148 @@ mod tests {
                 &serde_json::Value::String("apple".to_string())
             ))
         );
+    }
+
+    /// Setting dimension names must reach the metadata document, otherwise `store_metadata`
+    /// would silently drop them.
+    #[test]
+    fn array_set_dimension_names_reaches_metadata() {
+        use zarrs_metadata::IntoDimensionName;
+
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        array
+            .set_dimension_names(Some(vec![
+                "y".into_dimension_name(),
+                "x".into_dimension_name(),
+            ]))
+            .unwrap();
+        assert_eq!(
+            array.dimension_names(),
+            &Some(vec!["y".into_dimension_name(), "x".into_dimension_name()])
+        );
+        match array.metadata() {
+            ArrayMetadata::V3(metadata) => {
+                assert_eq!(
+                    metadata.dimension_names,
+                    Some(vec!["y".into_dimension_name(), "x".into_dimension_name()])
+                );
+            }
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+
+        // Clearing them writes through too
+        array.set_dimension_names(None).unwrap();
+        match array.metadata() {
+            ArrayMetadata::V3(metadata) => assert_eq!(metadata.dimension_names, None),
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+    }
+
+    /// Dimension names that do not match the array dimensionality are rejected on creation, so
+    /// they must not be reachable through the mutators either.
+    #[test]
+    fn array_set_dimension_names_rejects_invalid() {
+        use zarrs_metadata::IntoDimensionName;
+
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .dimension_names(["y", "x"].into())
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        // Wrong number of names
+        assert_eq!(
+            array
+                .set_dimension_names(Some(vec![
+                    "z".into_dimension_name(),
+                    "y".into_dimension_name(),
+                    "x".into_dimension_name(),
+                ]))
+                .unwrap_err()
+                .to_string(),
+            "the number of dimension names 3 does not match array dimensionality 2"
+        );
+    }
+
+    /// The dimensionality of an array is fixed once it has been created or opened.
+    #[test]
+    fn array_dimensionality_is_fixed() {
+        let mut array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
+            .dimension_names(["y", "x"].into())
+            .build(Arc::new(MemoryStore::new()), "/array")
+            .unwrap();
+
+        assert_eq!(
+            array.set_shape(vec![4, 4, 4]).unwrap_err().to_string(),
+            "cannot change the array dimensionality from 2 to 3"
+        );
+        assert_eq!(
+            unsafe { array.set_shape_and_chunk_grid(vec![4, 4, 4], vec![2, 2, 2]) }
+                .unwrap_err()
+                .to_string(),
+            "cannot change the array dimensionality from 2 to 3"
+        );
+
+        // Rejected before the array is modified
+        assert_eq!(array.shape(), &[8, 8]);
+        assert_eq!(array.dimensionality(), 2);
+        assert_eq!(array.chunk_grid_shape(), &[2, 2]);
+
+        // Resizing within the same dimensionality is still permitted
+        array.set_shape(vec![16, 16]).unwrap();
+        assert_eq!(array.shape(), &[16, 16]);
+        unsafe { array.set_shape_and_chunk_grid(vec![4, 4], vec![2, 2]) }.unwrap();
+        assert_eq!(array.shape(), &[4, 4]);
+    }
+
+    /// Zarr V2 metadata has no dimension names field, but a Zarr V2 array may still be written as
+    /// Zarr V3, so setting them must be permitted and must survive the conversion.
+    #[test]
+    fn array_v2_set_dimension_names_survives_v3_conversion() {
+        use zarrs_metadata::IntoDimensionName;
+        use zarrs_metadata::v2::{ArrayMetadataV2, DataTypeMetadataV2};
+
+        let metadata = ArrayMetadataV2::new(
+            vec![10, 10],
+            vec![std::num::NonZeroU64::new(5).unwrap(); 2],
+            DataTypeMetadataV2::Simple("<i4".to_string()),
+            FillValueMetadata::from(0),
+            None, // compressor
+            None, // filters
+        );
+        let mut array = Array::new_with_metadata(
+            Arc::new(MemoryStore::new()),
+            "/",
+            ArrayMetadata::V2(metadata),
+        )
+        .unwrap();
+
+        let names = vec!["y".into_dimension_name(), "x".into_dimension_name()];
+        array.set_dimension_names(Some(names.clone())).unwrap();
+        assert_eq!(array.dimension_names(), &Some(names.clone()));
+
+        // Written as Zarr V3, the names are carried into the converted metadata
+        let converted = array
+            .with_metadata_options(
+                ArrayMetadataOptions::default()
+                    .with_metadata_convert_version(MetadataConvertVersion::V3),
+            )
+            .metadata_opt();
+        match converted {
+            ArrayMetadata::V3(metadata) => {
+                assert_eq!(metadata.dimension_names, Some(names.clone()));
+            }
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
+
+        // As does `to_v3`
+        let array_v3 = array.to_v3().unwrap();
+        match array_v3.metadata() {
+            ArrayMetadata::V3(metadata) => assert_eq!(metadata.dimension_names, Some(names)),
+            ArrayMetadata::V2(_) => panic!("expected V3 metadata"),
+        }
     }
 
     #[test]
@@ -1352,12 +1574,13 @@ mod tests {
         // Store V2 and V3 metadata
         for version in [MetadataConvertVersion::Default, MetadataConvertVersion::V3] {
             array_out
-                .store_metadata_opt(
-                    &ArrayMetadataOptions::default()
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
                         .with_metadata_convert_version(version)
                         .with_include_zarrs_metadata(false)
                         .with_convert_aliased_extension_names(true),
                 )
+                .store_metadata()
                 .unwrap();
         }
     }
@@ -1482,10 +1705,12 @@ mod tests {
 
         println!(
             "{:?}",
-            array_in.metadata_opt(
-                &ArrayMetadataOptions::default()
-                    .with_metadata_convert_version(MetadataConvertVersion::V3)
-            )
+            array_in
+                .with_metadata_options(
+                    ArrayMetadataOptions::default()
+                        .with_metadata_convert_version(MetadataConvertVersion::V3)
+                )
+                .metadata_opt()
         );
 
         println!("{array_in:?}");

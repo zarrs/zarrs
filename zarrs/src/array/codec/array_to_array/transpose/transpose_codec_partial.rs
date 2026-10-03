@@ -4,16 +4,24 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::{ArrayBytes, DataType, FillValue};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
+use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
-use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{
+    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
+    shape: ChunkShape,
     data_type: DataType,
     /// Forward permutation order (for encoding).
     order: Vec<usize>,
@@ -26,7 +34,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        _shape: &[NonZeroU64],
+        shape: &[NonZeroU64],
         data_type: &DataType,
         _fill_value: &FillValue,
         order: Vec<usize>,
@@ -34,6 +42,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         let order_inverse = inverse_permutation(&order);
         Self {
             input_output_handle,
+            shape: shape.to_vec(),
             data_type: data_type.clone(),
             order,
             order_inverse,
@@ -64,6 +73,52 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             &self.data_type,
         )
     }
+
+    fn map_local_subchunk_grid(
+        &self,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<ChunkGrid, CodecError> {
+        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
+                    .to_string(),
+            ));
+        }
+
+        let chunk_shapes = self
+            .order_inverse
+            .iter()
+            .map(|&encoded_dim| {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            })
+            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        Ok(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        ))
+    }
+}
+
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
@@ -88,13 +143,14 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed =
+                get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             let encoded_value = self
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_decode(&indexer_transposed, options)
         }
@@ -109,10 +165,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for TransposeCodecPartial<T>
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
     }
@@ -125,14 +177,15 @@ where
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed =
+                get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             self.input_output_handle.partial_encode(
                 &array_subset_transposed,
                 &encoded_value,
                 options,
             )
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
         }
@@ -140,6 +193,29 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)
+            .await?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
     }
 }
 
@@ -168,14 +244,15 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed =
+                get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             let encoded_value = self
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)
                 .await?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_decode(&indexer_transposed, options)
                 .await
@@ -194,10 +271,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for TransposeCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase().await
     }
@@ -210,12 +283,13 @@ where
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let array_subset_transposed =
+                get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             self.input_output_handle
                 .partial_encode(&array_subset_transposed, &encoded_value, options)
                 .await
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
                 .await

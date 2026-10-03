@@ -1,14 +1,39 @@
 //! Internal utilities for handling array bytes.
 
 use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use itertools::Itertools;
 
 use super::{ArraySubset, DataType, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
-    ArrayBytesOptional, ArrayBytesVariableLength, CodecError,
+    ArrayBytesOffsetsCreateError, ArrayBytesOptional, ArrayBytesVariableLength, CodecError,
 };
+
+pub(crate) fn offsets_from_usize(
+    offsets: Vec<usize>,
+) -> Result<ArrayBytesOffsets, ArrayBytesOffsetsCreateError> {
+    if offsets.iter().copied().max().unwrap_or(0) <= u32::MAX as usize {
+        #[cfg(target_pointer_width = "32")]
+        let offsets = bytemuck::allocation::cast_vec::<usize, u32>(offsets);
+        #[cfg(not(target_pointer_width = "32"))]
+        let offsets = offsets
+            .into_iter()
+            .map(|offset| u32::try_from(offset).unwrap())
+            .collect::<Vec<_>>();
+        ArrayBytesOffsets::new(offsets)
+    } else {
+        #[cfg(target_pointer_width = "64")]
+        let offsets = bytemuck::allocation::cast_vec::<usize, u64>(offsets);
+        #[cfg(not(target_pointer_width = "64"))]
+        let offsets = offsets
+            .into_iter()
+            .map(|offset| u64::try_from(offset).unwrap())
+            .collect::<Vec<_>>();
+        ArrayBytesOffsets::new(offsets)
+    }
+}
 
 /// Count the nesting depth of optional types.
 /// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
@@ -34,6 +59,20 @@ pub(crate) fn build_nested_optional_target<'a>(
     } else {
         ArrayBytesDecodeIntoTarget::Fixed(data_view)
     }
+}
+
+/// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
+///
+/// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
+/// [`build_nested_optional_target`].
+pub(crate) fn wrap_optional_masks<'a>(
+    bytes: ArrayBytes<'a>,
+    masks: Vec<Vec<u8>>,
+) -> ArrayBytes<'a> {
+    masks
+        .into_iter()
+        .rev()
+        .fold(bytes, ArrayBytes::with_optional_mask)
 }
 
 /// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
@@ -87,12 +126,9 @@ pub(crate) fn merge_chunks_vlen<'a>(
         let chunk_offsets = chunk_bytes.offsets();
         debug_assert_eq!(chunk_offsets.len() as u64, chunk_subset.num_elements() + 1);
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-        for (subset_idx, (curr, next)) in
-            indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
-        {
-            debug_assert!(next >= curr);
+        for (subset_idx, range) in indices.iter().zip_eq(chunk_offsets.element_ranges()) {
             let subset_idx = usize::try_from(subset_idx).unwrap();
-            element_sizes[subset_idx] = next - curr;
+            element_sizes[subset_idx] = range.len();
         }
     }
 
@@ -100,14 +136,12 @@ pub(crate) fn merge_chunks_vlen<'a>(
     // TODO: Parallel cum sum
     let mut offsets = Vec::with_capacity(element_sizes.len() + 1);
     offsets.push(0); // first offset is always zero
-    offsets.extend(element_sizes.iter().scan(0, |acc, &sz| {
-        *acc += sz;
-        Some(*acc)
-    }));
-    let offsets = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(offsets)
-    };
+    let mut offset = 0;
+    for size in element_sizes {
+        offset += size;
+        offsets.push(offset);
+    }
+    let offsets = offsets_from_usize(offsets).unwrap();
 
     // Write bytes
     // TODO: Go parallel
@@ -115,13 +149,9 @@ pub(crate) fn merge_chunks_vlen<'a>(
     for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
         let (chunk_bytes, chunk_offsets) = chunk_bytes.into_parts();
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-        for (subset_idx, (&chunk_curr, &chunk_next)) in
-            indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
-        {
+        for (subset_idx, chunk_range) in indices.iter().zip_eq(chunk_offsets.element_ranges()) {
             let subset_idx = usize::try_from(subset_idx).unwrap();
-            let subset_curr = offsets[subset_idx];
-            let subset_next = offsets[subset_idx + 1];
-            bytes[subset_curr..subset_next].copy_from_slice(&chunk_bytes[chunk_curr..chunk_next]);
+            bytes[offsets.element_range(subset_idx)].copy_from_slice(&chunk_bytes[chunk_range]);
         }
     }
 
@@ -204,6 +234,56 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
     Ok(result.into_optional()?)
 }
 
+/// Merge cached variable-length chunk bytes into an array subset.
+///
+/// Dispatches to [`merge_chunks_vlen_optional`] or [`merge_chunks_vlen`] depending on the optional
+/// nesting depth of `data_type`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the chunks don't have the optional structure implied by `data_type`.
+///
+/// # Panics
+/// Panics if a chunk does not hold variable-length bytes, or if `array_shape` exceeds `usize::MAX`
+/// elements.
+pub(crate) fn merge_cached_chunks_vlen(
+    chunk_bytes_and_subsets: Vec<(Arc<ArrayBytes<'static>>, ArraySubset)>,
+    array_shape: &[u64],
+    data_type: &DataType,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let nesting_depth = optional_nesting_depth(data_type);
+    if nesting_depth > 0 {
+        let chunks = chunk_bytes_and_subsets
+            .into_iter()
+            .map(|(bytes, subset)| {
+                (
+                    Arc::unwrap_or_clone(bytes)
+                        .into_optional()
+                        .expect("run on vlen data"),
+                    subset,
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
+            chunks,
+            array_shape,
+            nesting_depth,
+        )?))
+    } else {
+        let chunks = chunk_bytes_and_subsets
+            .into_iter()
+            .map(|(bytes, subset)| {
+                (
+                    Arc::unwrap_or_clone(bytes)
+                        .into_variable()
+                        .expect("run on vlen data"),
+                    subset,
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, array_shape)))
+    }
+}
+
 /// Extract decoded variable-length regions from bytes and offsets using an indexer.
 ///
 /// # Errors
@@ -213,7 +293,7 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
 /// Panics if indices in the indexer exceed [`usize::MAX`].
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
-    offsets: &[usize],
+    offsets: &ArrayBytesOffsets,
     indexer: &dyn Indexer,
     array_shape: &[NonZeroU64],
 ) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
@@ -222,28 +302,44 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     let mut region_bytes_len = 0;
     for index in &indices {
         let index = usize::try_from(*index).unwrap();
-        let curr = offsets[index];
-        let next = offsets[index + 1];
-        debug_assert!(next >= curr);
-        region_bytes_len += next - curr;
+        region_bytes_len += offsets.element_range(index).len();
     }
     let mut region_offsets = Vec::with_capacity(usize::try_from(indexer.len() + 1).unwrap());
     let mut region_bytes = Vec::with_capacity(region_bytes_len);
     for index in &indices {
         region_offsets.push(region_bytes.len());
         let index = usize::try_from(*index).unwrap();
-        let curr = offsets[index];
-        let next = offsets[index + 1];
-        region_bytes.extend_from_slice(&bytes[curr..next]);
+        region_bytes.extend_from_slice(&bytes[offsets.element_range(index)]);
     }
     region_offsets.push(region_bytes.len());
-    let region_offsets = unsafe {
-        // SAFETY: The offsets are monotonically increasing.
-        ArrayBytesOffsets::new_unchecked(region_offsets)
-    };
+    let region_offsets = offsets_from_usize(region_offsets).unwrap();
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytesVariableLength::new_unchecked(region_bytes, region_offsets)
     };
     Ok(array_bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::offsets_from_usize;
+
+    #[test]
+    fn offsets_from_usize_reuses_matching_allocation() {
+        #[cfg(target_pointer_width = "64")]
+        {
+            let input = vec![0, u32::MAX as usize + 1];
+            let input_ptr = input.as_ptr().cast::<u64>();
+            let offsets = offsets_from_usize(input).unwrap();
+            assert_eq!(offsets.as_u64().unwrap().as_ptr(), input_ptr);
+        }
+
+        #[cfg(target_pointer_width = "32")]
+        {
+            let input = vec![0, 1];
+            let input_ptr = input.as_ptr().cast::<u32>();
+            let offsets = offsets_from_usize(input).unwrap();
+            assert_eq!(offsets.as_u32().unwrap().as_ptr(), input_ptr);
+        }
+    }
 }

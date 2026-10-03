@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -37,10 +37,6 @@ impl Default for TestUnboundedCodec {
 }
 
 impl CodecTraits for TestUnboundedCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -83,18 +79,18 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }
 
@@ -131,7 +127,6 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
 
     use super::*;
 
@@ -139,7 +134,7 @@ mod tests {
     fn default_decode_into() {
         let codec = TestUnboundedCodec::new();
         let options = CodecOptions::default();
-        let encoded = Cow::Borrowed(&b"decoded"[..]);
+        let encoded = CowBytes::from(&b"decoded"[..]);
         let mut output = [0; 7];
 
         assert_eq!(

@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rayon::prelude::*;
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
+use rayon_iter_concurrent_limit::ConcurrentLimit;
 use zarrs::array::codec::{ShardingCodecOptions, SubchunkWriteOrder, ZstdCodec};
 use zarrs::array::{Array, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset};
 use zarrs::filesystem::FilesystemStore;
@@ -214,9 +214,12 @@ fn bench_read_disparate_parallel(c: &mut Criterion) {
 
     group.bench_function("disparate_parallel", |b| {
         b.iter(|| {
-            iter_concurrent_limit!(concurrency, &subsets, for_each, |subset: &ArraySubset| {
-                let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(subset).unwrap();
-            });
+            subsets
+                .par_iter()
+                .concurrent_limit(concurrency)
+                .for_each(|subset: &ArraySubset| {
+                    let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(subset).unwrap();
+                });
         });
     });
     let mut preallocated: Vec<_> = subsets
@@ -226,14 +229,12 @@ fn bench_read_disparate_parallel(c: &mut Criterion) {
         .collect();
     group.bench_function("disparate_parallel_preallocated", |b| {
         b.iter(|| {
-            iter_concurrent_limit!(
-                concurrency,
-                &mut preallocated,
-                for_each,
-                |(subset, output): &mut (ArraySubset, Vec<u8>)| {
+            preallocated
+                .par_iter_mut()
+                .concurrent_limit(concurrency)
+                .for_each(|(subset, output): &mut (ArraySubset, Vec<u8>)| {
                     retrieve_array_subset_into(&array, subset, output);
-                }
-            );
+                });
         });
     });
 

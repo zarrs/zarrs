@@ -3,8 +3,8 @@
 //! It accepts uint compatible fill values.
 
 use std::any::Any;
-use std::borrow::Cow;
 use std::sync::Arc;
+use zarrs::array::CowBytes;
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -144,7 +144,7 @@ impl CustomDataTypeUInt4Element {
     }
 }
 
-/// This defines how an in-memory CustomDataTypeUInt4Element is converted into ArrayBytes before encoding via the codec pipeline.
+/// This defines how an in-memory `CustomDataTypeUInt4Element` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // Check if the data type matches our custom data type
@@ -163,7 +163,7 @@ impl Element for CustomDataTypeUInt4Element {
         for element in elements {
             bytes.push(element.0);
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::Fixed(CowBytes::from(bytes)))
     }
 
     fn into_array_bytes(
@@ -174,7 +174,7 @@ impl Element for CustomDataTypeUInt4Element {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeUInt4Element after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeUInt4Element` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeUInt4Element {
     fn from_array_bytes(
         data_type: &DataType,
@@ -185,7 +185,7 @@ impl ElementOwned for CustomDataTypeUInt4Element {
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt4Element>());
         for byte in bytes.iter() {
-            elements.push(CustomDataTypeUInt4Element(*byte))
+            elements.push(CustomDataTypeUInt4Element(*byte));
         }
         Ok(elements)
     }

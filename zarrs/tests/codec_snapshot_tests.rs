@@ -41,7 +41,9 @@ use zarrs::array::{
     data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
-use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
 
@@ -182,9 +184,9 @@ pub struct TestConfig {
     /// Chunk shape (outer chunks for sharding)
     pub chunk_shape: Vec<u64>,
     /// Optional array-to-array codecs
-    pub array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+    pub array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     /// Optional array-to-bytes codec (None = use default for data type)
-    pub array_to_bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
+    pub array_to_bytes_codec: Option<Arc<dyn UnboundArrayToBytesCodecTraits>>,
     /// Optional bytes-to-bytes codecs
     pub bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     /// Chunk grid name for snapshot naming (e.g., "regular", "rectangular")
@@ -607,10 +609,11 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
 
             // Build bytes and offsets for vlen encoding
             let mut bytes = Vec::new();
-            let mut offsets = vec![0usize];
+            let mut offsets = Vec::new();
+            offsets.push(0);
             for s in &strings {
                 bytes.extend(s.as_bytes());
-                offsets.push(bytes.len());
+                offsets.push(u64::try_from(bytes.len()).unwrap());
             }
 
             let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
@@ -625,10 +628,11 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
 
             // Build bytes and offsets for vlen encoding
             let mut bytes = Vec::new();
-            let mut offsets = vec![0usize];
+            let mut offsets = Vec::new();
+            offsets.push(0);
             for b in &byte_arrays {
                 bytes.extend(b);
-                offsets.push(bytes.len());
+                offsets.push(u64::try_from(bytes.len()).unwrap());
             }
 
             let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
@@ -803,6 +807,16 @@ impl SnapshotPath {
         }
         None
     }
+
+    /// Return whether this test path has any unsupported marker.
+    #[must_use]
+    pub fn has_unsupported(&self, base_dir: &Path) -> bool {
+        base_dir
+            .join("unsupported")
+            .join(self.relative_path())
+            .read_dir()
+            .is_ok_and(|mut entries| entries.next().is_some())
+    }
 }
 
 /// Status of an existing snapshot
@@ -844,9 +858,12 @@ pub fn generate_array_metadata(config: &TestConfig) -> Option<serde_json::Value>
         builder.bytes_to_bytes_codecs(config.bytes_to_bytes_codecs.clone());
     }
 
-    let array = builder.build(store, "/").ok()?;
     let metadata_options = ArrayMetadataOptions::default().with_include_zarrs_metadata(false);
-    let metadata = array.metadata_opt(&metadata_options);
+    let array = builder
+        .build(store, "/")
+        .ok()?
+        .with_metadata_options(metadata_options);
+    let metadata = array.metadata_opt();
 
     serde_json::to_value(metadata).ok()
 }
@@ -886,18 +903,22 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     }
 
     // Build the array
-    let array = match builder.build(store.clone(), "/") {
+    let array = match builder.build(store, "/") {
         Ok(a) => a,
         Err(e) => {
-            return CodecTestResult::Unsupported {
-                reason: format!("Array creation failed: {e}"),
+            let reason = if let zarrs::array::ArrayCreateError::CodecsCreateError(e) = e {
+                format!("Codec creation failed: {e}")
+            } else {
+                format!("Array creation failed: {e}")
             };
+            return CodecTestResult::Unsupported { reason };
         }
     };
 
     // Store metadata (without zarrs-specific metadata for cleaner snapshots)
     let metadata_options = ArrayMetadataOptions::default().with_include_zarrs_metadata(false);
-    if let Err(e) = array.store_metadata_opt(&metadata_options) {
+    let array = array.with_metadata_options(metadata_options);
+    if let Err(e) = array.store_metadata() {
         return CodecTestResult::Unsupported {
             reason: format!("Metadata storage failed: {e}"),
         };
@@ -1231,7 +1252,9 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                         );
                     }
                     None => {
-                        panic!(
+                        assert!(
+                            reason.starts_with("Codec creation failed:")
+                                && snapshot_path.has_unsupported(&snapshots),
                             "Test {display_path} is unsupported ({reason}). Run with UPDATE_SNAPSHOTS=1 to record this."
                         );
                     }
@@ -1303,8 +1326,8 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 /// A codec instance that can be any of the three codec categories
 pub enum CodecInstance {
-    ArrayToArray(Arc<dyn ArrayToArrayCodecTraits>),
-    ArrayToBytes(Arc<dyn ArrayToBytesCodecTraits>),
+    ArrayToArray(Arc<dyn UnboundArrayToArrayCodecTraits>),
+    ArrayToBytes(Arc<dyn UnboundArrayToBytesCodecTraits>),
     BytesToBytes(Arc<dyn BytesToBytesCodecTraits>),
 }
 

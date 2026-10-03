@@ -8,11 +8,11 @@ use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions};
+use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToArrayCodecTraits};
 
 /// Test sync partial encoding for array-to-array codecs in isolation
 fn test_array_to_array_codec_sync_partial_encoding<
-    T: ArrayToArrayCodecTraits + Send + Sync + 'static,
+    T: UnboundArrayToArrayCodecTraits + Send + Sync + 'static,
 >(
     codec: Arc<T>,
     codec_name: &str,
@@ -34,9 +34,12 @@ fn test_array_to_array_codec_sync_partial_encoding<
     // Set the codec being tested
     builder.array_to_array_codecs(vec![codec]);
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
-    let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
+    let chunk_key = array.chunk_key(&[0, 0]).unwrap();
 
     // Verify the chunk doesn't exist initially
     assert!(store.get(&chunk_key).unwrap().is_none());
@@ -46,9 +49,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     // Store a subset of elements
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10.0f32, 20.0, 30.0, 40.0];
-    array
-        .store_array_subset_opt(&subset, &elements, &opt)
-        .unwrap();
+    array.store_array_subset(&subset, &elements).unwrap();
 
     // Verify that data was written
     let writes_after_store = store_perf.writes();
@@ -77,9 +78,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     let subset2 = ArraySubset::new_with_ranges(&[0..2, 0..2]);
     let elements2 = vec![100f32, 200.0, 300.0, 400.0];
 
-    array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
-        .unwrap();
+    array.store_array_subset(&subset2, &elements2).unwrap();
 
     let writes_after_partial = store_perf.writes();
     let bytes_written_after_partial = store_perf.bytes_written();
@@ -121,7 +120,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    let partial_encoder = array.partial_encoder(&[0, 0]).unwrap();
     assert!(partial_encoder.exists().unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
@@ -155,9 +154,12 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     // Set the codec being tested
     builder.bytes_to_bytes_codecs(vec![codec]);
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
-    let chunk_key = array.chunk_key_encoding().encode(&[0, 0]);
+    let chunk_key = array.chunk_key(&[0, 0]).unwrap();
 
     // Verify the chunk doesn't exist initially
     assert!(store.get(&chunk_key).unwrap().is_none());
@@ -169,9 +171,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let initial_reads = store_perf.reads();
     let initial_bytes_read = store_perf.bytes_read();
 
-    array
-        .store_array_subset_opt(&subset, &elements, &opt)
-        .unwrap();
+    array.store_array_subset(&subset, &elements).unwrap();
 
     let writes_after_store = store_perf.writes();
     let bytes_written_after_store = store_perf.bytes_written();
@@ -202,9 +202,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let subset2 = ArraySubset::new_with_ranges(&[0..2, 0..2]);
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
-    array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
-        .unwrap();
+    array.store_array_subset(&subset2, &elements2).unwrap();
 
     let writes_after_partial = store_perf.writes();
     let bytes_written_after_partial = store_perf.bytes_written();
@@ -267,7 +265,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    let partial_encoder = array.partial_encoder(&[0, 0]).unwrap();
     assert!(partial_encoder.exists().unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
@@ -278,6 +276,26 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
 }
 
 // Array-to-Array Codec Tests
+
+#[test]
+fn test_cast_value_sync_partial_encoding() {
+    use zarrs::array::codec::CastValueCodec;
+    use zarrs::metadata_ext::codec::cast_value::CastValueCodecConfiguration;
+
+    let config: CastValueCodecConfiguration = serde_json::from_str(
+        r#"{
+            "data_type": "float64",
+            "scalar_map": {
+                "encode": [[100.0, 101.0]],
+                "decode": [[101.0, 100.0]]
+            }
+        }"#,
+    )
+    .unwrap();
+    let codec = Arc::new(CastValueCodec::new_with_configuration(&config).unwrap());
+
+    test_array_to_array_codec_sync_partial_encoding(codec, "cast_value", true).unwrap();
+}
 
 #[cfg(feature = "bitround")]
 #[test]
@@ -478,7 +496,7 @@ fn test_codec_chain_sync_partial_encoding() {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
-    let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
+    let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store));
 
     let array_path = "/test_chain";
     let mut builder = ArrayBuilder::new(
@@ -506,15 +524,16 @@ fn test_codec_chain_sync_partial_encoding() {
         builder.bytes_to_bytes_codecs(vec![gzip_codec]);
     }
 
-    let array = builder.build(store_perf.clone(), array_path).unwrap();
+    let array = builder
+        .build(store_perf.clone(), array_path)
+        .unwrap()
+        .with_codec_options(opt);
 
     // Test storing data with the codec chain
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10f32, 20f32, 30f32, 40f32];
 
-    array
-        .store_array_subset_opt(&subset, &elements, &opt)
-        .unwrap();
+    array.store_array_subset(&subset, &elements).unwrap();
 
     let writes_after_store = store_perf.writes();
     let bytes_written_after_store = store_perf.bytes_written();
@@ -538,9 +557,7 @@ fn test_codec_chain_sync_partial_encoding() {
     let subset2 = ArraySubset::new_with_ranges(&[0..2, 0..2]);
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
-    array
-        .store_array_subset_opt(&subset2, &elements2, &opt)
-        .unwrap();
+    array.store_array_subset(&subset2, &elements2).unwrap();
 
     let writes_after_partial = store_perf.writes();
     let bytes_written_after_partial = store_perf.bytes_written();
@@ -564,7 +581,7 @@ fn test_codec_chain_sync_partial_encoding() {
     );
 
     // Test partial encoder methods
-    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    let partial_encoder = array.partial_encoder(&[0, 0]).unwrap();
     assert!(partial_encoder.exists().unwrap());
     let encoder_size_held = partial_encoder.size_held();
     println!("Codec chain partial encoder size_held(): {encoder_size_held}");

@@ -1,10 +1,9 @@
 //! Test for runtime codec registration.
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use serial_test::serial;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytesRaw, BytesRepresentation, data_type};
+use zarrs::array::{Array, ArrayBuilder, BytesRepresentation, CowBytes, data_type};
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
@@ -22,10 +21,6 @@ struct TestPassthroughCodec;
 zarrs_plugin::impl_extension_aliases!(TestPassthroughCodec, v3: "test.passthrough", v2: "test.passthrough");
 
 impl CodecTraits for TestPassthroughCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
@@ -70,18 +65,18 @@ impl BytesToBytesCodecTraits for TestPassthroughCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: ArrayBytesRaw<'a>,
+        decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: ArrayBytesRaw<'a>,
+        encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }
 
@@ -114,7 +109,7 @@ fn codec_runtime_registration() {
     if let Codec::BytesToBytes(codec) = codec {
         let data = vec![1u8, 2, 3, 4, 5];
         let encoded = codec
-            .encode(Cow::Borrowed(&data), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&data), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(
@@ -179,7 +174,7 @@ fn codec_runtime_registration_array_roundtrip() {
     assert!(unregister_codec_v3(&handle));
 
     // Opening the array after unregistering should fail because the codec is no longer available
-    let open_result: Result<Array<MemoryStore>, _> = Array::open(store.clone(), array_path);
+    let open_result: Result<Array<MemoryStore>, _> = Array::open(store, array_path);
     assert!(
         open_result.is_err(),
         "Opening array should fail after codec is unregistered"

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Add `TError` and `TMatch` generics to `[Runtime]Plugin[2]`
+
 ## [0.4.1] - 2026-02-02
 
 ### Added

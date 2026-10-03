@@ -13,9 +13,8 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::node::Node;
 
     // Create a store
-    let mut store: AsyncReadableWritableListableStorage = Arc::new(
-        zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
-    );
+    let mut store: AsyncReadableWritableListableStorage =
+        Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {
@@ -75,7 +74,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         async move {
             let chunk_indices: Vec<u64> = vec![0, i];
             let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
             })?;
             array
                 .async_store_chunk(
@@ -131,7 +130,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store chunk subset
     array
-        .async_store_chunk_subset(
+        .async_store_partial_chunk(
             // chunk indices
             &[1, 1],
             // subset within chunk
@@ -140,7 +139,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
     let data_all: ArrayD<f32> = array.async_retrieve_array_subset(&subset_all).await?;
-    println!("async_store_chunk_subset [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
+    println!("async_store_partial_chunk [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
 
     // Erase a chunk
     array.async_erase_chunk(&[0, 0]).await?;
@@ -165,7 +164,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::async_open(store, "/").await.unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
@@ -173,6 +172,6 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() {
     if let Err(err) = async_array_write_read().await {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits, CodecOptions,
-};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
 
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
@@ -53,17 +51,17 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0])?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1])?, None);
 
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
 
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
 
     assert!(array.retrieve_chunks::<ArrayBytes>(&[0..2]).is_err());
     assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());
@@ -118,14 +116,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, array_path)
     .unwrap();
 
-    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
-    assert_eq!(
-        array
-            .codecs()
-            .partial_decode_granularity(&chunk_shape)
-            .unwrap(),
-        [NonZeroU64::new(2).unwrap(); 2]
-    );
+    assert!(array.subchunk_grid().as_chunk_grid().is_none());
 
     array_sync_read(&array)?;
 
@@ -156,13 +147,14 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = builder.build(store, array_path).unwrap();
 
-    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
         array
-            .codecs()
-            .partial_decode_granularity(&chunk_shape)
+            .subchunk_grid()
+            .as_chunk_grid()
+            .unwrap()
+            .chunk_shape(&vec![0; array.dimensionality()])
             .unwrap(),
-        [NonZeroU64::new(1).unwrap(); 2]
+        Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
 
     array_sync_read(&array)?;
@@ -392,7 +384,7 @@ fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
     array.store_chunk(&[0, 0], &chunk)?;
     assert_eq!(
         array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0])?,
-        chunk.clone().into_dyn()
+        chunk.into_dyn()
     );
 
     let subset = ndarray::array![
@@ -445,7 +437,7 @@ fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // check reshape is registered
-    let _array = Array::open(store.clone(), "/")?;
+    let _array = Array::open(store, "/")?;
 
     Ok(())
 }
@@ -612,8 +604,8 @@ fn array_sync_read_into_optional(array: &Array<MemoryStore>) -> Result<(), Box<d
     let expected = array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4])?;
     let expected_opt = expected.into_optional()?;
     let (expected_data, expected_mask) = expected_opt.into_parts();
-    assert_eq!(data, expected_data.into_fixed()?.into_owned());
-    assert_eq!(mask, expected_mask.into_owned());
+    assert_eq!(data, expected_data.into_fixed()?.into_vec());
+    assert_eq!(mask, expected_mask.into_vec());
 
     // Verify mask values directly (1 = valid/Some, 0 = None)
     // Row 0: Some(1) Some(2)  None    Some(4)

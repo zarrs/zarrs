@@ -43,7 +43,6 @@ pub use zarrs_metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
     ZstdCompressionLevel,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZstdCodec, v3: "zstd", v2: "zstd");
 
@@ -58,7 +57,7 @@ inventory::submit! {
 }
 
 impl CodecTraitsV3 for ZstdCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration: ZstdCodecConfigurationV1 = metadata.to_typed_configuration()?;
         let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
         Ok(Codec::BytesToBytes(Arc::new(codec)))
@@ -66,17 +65,21 @@ impl CodecTraitsV3 for ZstdCodec {
 }
 
 impl CodecTraitsV2 for ZstdCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-        let configuration: ZstdCodecConfigurationNumcodecs = metadata.to_typed_configuration()?;
-        let codec = ZstdCodec::new(configuration.level.into(), false);
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
+        // Support both the plain `numcodecs` configuration (`{"level": ..}`) and the
+        // newer configuration with an additional `checksum` field (e.g. as written by
+        // recent `zarr-python`/`numcodecs` releases), see
+        // https://github.com/zarr-developers/numcodecs/issues/424
+        let configuration: ZstdCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = ZstdCodec::new_with_configuration(&configuration)?;
         Ok(Codec::BytesToBytes(Arc::new(codec)))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -89,6 +92,26 @@ mod tests {
 }"#;
 
     #[test]
+    fn codec_zstd_v2_numcodecs_level_only() {
+        // Legacy `numcodecs` configuration: no `checksum` field.
+        let metadata: MetadataV2 = serde_json::from_str(r#"{"id": "zstd", "level": 6}"#).unwrap();
+        let codec = <ZstdCodec as CodecTraitsV2>::create(&metadata).unwrap();
+        assert!(matches!(codec, Codec::BytesToBytes(_)));
+    }
+
+    #[test]
+    fn codec_zstd_v2_with_checksum() {
+        // Configuration as written by recent `numcodecs`/`zarr-python` releases, which
+        // includes an additional `checksum` field (e.g. the janelia-cosem-datasets bucket
+        // on S3). This previously failed with a "unknown field `checksum`" error because
+        // `CodecTraitsV2::create` only accepted `ZstdCodecConfigurationNumcodecs`.
+        let metadata: MetadataV2 =
+            serde_json::from_str(r#"{"id": "zstd", "checksum": false, "level": 6}"#).unwrap();
+        let codec = <ZstdCodec as CodecTraitsV2>::create(&metadata).unwrap();
+        assert!(matches!(codec, Codec::BytesToBytes(_)));
+    }
+
+    #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_zstd_round_trip1() {
         let elements: Vec<u16> = (0..32).collect();
@@ -99,7 +122,7 @@ mod tests {
         let codec = ZstdCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
             .unwrap();
         let decoded = codec
             .decode(encoded, &bytes_representation, &CodecOptions::default())
@@ -118,7 +141,7 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -144,7 +167,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()
@@ -166,7 +188,7 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -193,7 +215,6 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .clone()
             .as_chunks::<2>()
             .0
             .iter()

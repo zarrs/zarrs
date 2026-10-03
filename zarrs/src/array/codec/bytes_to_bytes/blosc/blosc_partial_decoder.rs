@@ -1,8 +1,7 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use super::{blosc_decompress_bytes_partial, blosc_typesize, blosc_validate};
-use crate::array::ArrayBytesRaw;
+use crate::array::CowBytes;
 use crate::array::codec::bytes_to_bytes::blosc::blosc_nbytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
@@ -34,7 +33,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -49,7 +48,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
                         let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
                         let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
                         blosc_decompress_bytes_partial(&encoded_value, start, end - start, typesize)
-                            .map(Cow::Owned)
+                            .map(CowBytes::from)
                             .map_err(|err| CodecError::from(err.to_string()))
                     })
                     .collect::<Result<Vec<_>, CodecError>>()?;
@@ -93,7 +92,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -108,7 +107,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
                         let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
                         let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
                         blosc_decompress_bytes_partial(&encoded_value, start, end - start, typesize)
-                            .map(Cow::Owned)
+                            .map(CowBytes::from)
                             .map_err(|err| CodecError::from(err.to_string()))
                     })
                     .collect::<Result<Vec<_>, CodecError>>()?;

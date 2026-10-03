@@ -28,11 +28,10 @@ use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionError,
     IncompatibleDimensionalityError,
 };
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
@@ -58,6 +57,12 @@ pub struct RegularChunkGridCreateError(ArrayShape, ChunkShape);
 impl From<RegularChunkGridCreateError> for IncompatibleDimensionalityError {
     fn from(value: RegularChunkGridCreateError) -> Self {
         Self::new(value.1.len(), value.0.len())
+    }
+}
+
+impl From<RegularChunkGridCreateError> for ChunkGridCreateError {
+    fn from(value: RegularChunkGridCreateError) -> Self {
+        IncompatibleDimensionalityError::from(value).into()
     }
 }
 
@@ -108,14 +113,9 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     fn create(
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
-    ) -> Result<ChunkGrid, PluginCreateError> {
+    ) -> Result<ChunkGrid, ChunkGridCreateError> {
         let configuration: RegularChunkGridConfiguration = metadata.to_typed_configuration()?;
-        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
-            .map_err(|_| {
-                PluginCreateError::from(
-                    "regular chunk shape and array shape have inconsistent dimensionality",
-                )
-            })?;
+        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)?;
         Ok(ChunkGrid::new(chunk_grid))
     }
 
@@ -353,7 +353,6 @@ mod tests {
         );
     }
 
-    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];
@@ -364,8 +363,7 @@ mod tests {
         ];
 
         {
-            let chunk_grid =
-                RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
+            let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
             assert_eq!(chunk_grid.dimensionality(), 3);
             assert_eq!(chunk_grid.chunk_shape(), chunk_shape.as_slice());
             assert_eq!(
@@ -400,7 +398,7 @@ mod tests {
             );
         }
 
-        assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());
+        assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape).is_err());
     }
 
     #[test]
@@ -433,7 +431,7 @@ mod tests {
         let array_shape: ArrayShape = vec![10, 12];
         let chunk_shape: ChunkShape =
             vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(5).unwrap()];
-        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
+        let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
         let chunk_grid: ChunkGrid = chunk_grid.into();
 
         assert_eq!(chunk_grid.grid_shape(), &[4, 3]);
@@ -454,10 +452,7 @@ mod tests {
 
         // Interior chunk [2, 1]: origin [6, 5], fully within array
         assert_eq!(chunk_grid.chunk_origin(&[2, 1]).unwrap(), Some(vec![6, 5]));
-        assert_eq!(
-            chunk_grid.chunk_shape(&[2, 1]).unwrap(),
-            Some(chunk_shape.clone())
-        );
+        assert_eq!(chunk_grid.chunk_shape(&[2, 1]).unwrap(), Some(chunk_shape));
 
         // Array indices at exact array boundary → map to chunk at grid boundary
         assert_eq!(

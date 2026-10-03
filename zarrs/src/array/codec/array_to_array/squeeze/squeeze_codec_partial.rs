@@ -1,13 +1,18 @@
 use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
-use crate::array::{DataType, FillValue};
+use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
+use crate::array::{ChunkGrid, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_codec::{
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits,
+};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Squeeze codec.
@@ -31,6 +36,59 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
             shape: shape.to_vec(),
             data_type: data_type.clone(),
         }
+    }
+
+    fn map_local_subchunk_grid(
+        &self,
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<ChunkGrid, CodecError> {
+        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
+        if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
+            return Err(CodecError::Other(
+                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
+                    .to_string(),
+            ));
+        }
+
+        let mut encoded_dim = 0;
+        let chunk_shapes = self
+            .shape
+            .iter()
+            .map(|dim| {
+                if dim.get() == 1 {
+                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
+                } else {
+                    let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                    encoded_dim += 1;
+                    Ok(ChunkEdgeLengths::encode(&edge_lengths))
+                }
+            })
+            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
+        Ok(ChunkGrid::new(
+            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+                .map_err(|err| CodecError::Other(err.to_string()))?,
+        ))
+    }
+}
+
+impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
+where
+    T: ArrayPartialDecoderSubchunkingTraits,
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
     }
 }
 
@@ -75,10 +133,6 @@ impl<T: ?Sized> ArrayPartialEncoderTraits for SqueezeCodecPartial<T>
 where
     T: ArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
     }
@@ -102,6 +156,29 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderSubchunkingTraits,
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.input_output_handle
+            .local_subchunk_grids(options)
+            .await?
+            .into_iter()
+            .map(|grid| {
+                grid.map(|grid| self.map_local_subchunk_grid(&grid))
+                    .transpose()
+            })
+            .collect()
     }
 }
 
@@ -154,10 +231,6 @@ impl<T: ?Sized> AsyncArrayPartialEncoderTraits for SqueezeCodecPartial<T>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
-    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
-        self.clone()
-    }
-
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase().await
     }

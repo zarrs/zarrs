@@ -1,14 +1,16 @@
 use serde_json::Value;
 use thiserror::Error;
-use zarrs_codec::CodecError;
+use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_codec::{CodecCreateError, CodecError};
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
+use zarrs_chunk_key_encoding::ChunkKeyEncodingError;
 use zarrs_plugin::PluginCreateError;
-use zarrs_storage::StorageError;
+use zarrs_storage::{StorageError, StoreKeyError};
 
 /// An array creation error.
 #[derive(Clone, Debug, Error)]
@@ -47,15 +49,15 @@ pub enum ArrayCreateError {
         /// The fill value metadata.
         fill_value_metadata: FillValueMetadata,
     },
-    /// Error creating codecs.
+    /// Error creating, reconfiguring, or binding codecs.
     #[error(transparent)]
-    CodecsCreateError(PluginCreateError),
+    CodecsCreateError(#[from] CodecCreateError),
     /// Storage transformer creation error.
     #[error(transparent)]
     StorageTransformersCreateError(PluginCreateError),
     /// Chunk grid create error.
     #[error(transparent)]
-    ChunkGridCreateError(PluginCreateError),
+    ChunkGridCreateError(#[from] ChunkGridCreateError),
     /// Chunk key encoding create error.
     #[error(transparent)]
     ChunkKeyEncodingCreateError(PluginCreateError),
@@ -65,9 +67,9 @@ pub enum ArrayCreateError {
     /// The number of dimension names does not match the array dimensionality.
     #[error("the number of dimension names {0} does not match array dimensionality {1}")]
     InvalidDimensionNames(usize, usize),
-    /// Invalid subchunk shape (contains zero).
-    #[error("invalid subchunk shape {0:?}: all elements must be non-zero")]
-    InvalidSubchunkShape(super::ArrayShape),
+    /// The dimensionality of an array cannot be changed after it is created or opened.
+    #[error("cannot change the array dimensionality from {1} to {0}")]
+    ChangedDimensionality(usize, usize),
     /// Storage error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
@@ -89,6 +91,12 @@ pub enum ArrayError {
     /// A store error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
+    /// An invalid store key, e.g. produced by a custom chunk key encoding.
+    #[error(transparent)]
+    InvalidStoreKey(#[from] StoreKeyError),
+    /// A chunk key encoding failed to encode chunk grid indices.
+    #[error(transparent)]
+    ChunkKeyEncodingError(#[from] ChunkKeyEncodingError),
     /// A codec error.
     #[error(transparent)]
     CodecError(#[from] CodecError),
@@ -98,6 +106,11 @@ pub enum ArrayError {
     /// Invalid chunk grid indices.
     #[error("invalid chunk grid indices: {_0:?}")]
     InvalidChunkGridIndicesError(Vec<u64>),
+    /// The array does not have a subchunk grid.
+    #[error(
+        "array does not have a subchunk grid, or the chunk grid/codec configuration makes the subchunk grid unresolvable"
+    )]
+    MissingSubchunkGrid,
     /// Incompatible dimensionality.
     #[error(transparent)]
     IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),

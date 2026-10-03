@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use super::{cache_error, validate_chunk_indices};
-use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder};
+use crate::array::chunk_cache::{
+    ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
+};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions,
-    chunk_shape_to_array_shape,
+    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, chunk_shape_to_array_shape,
 };
 use zarrs_codec::ArrayPartialDecoderTraits;
 use zarrs_storage::ReadableStorageTraits;
@@ -13,7 +14,9 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
+}
 
+impl SealedSync for ChunkCacheTypePartialDecoder {
     fn partial_decoder<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
@@ -27,7 +30,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
         validate_chunk_indices(array, chunk_indices)?;
         cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                array.partial_decoder_opt(chunk_indices, options)
+                array.partial_decoder_with_options(chunk_indices, options)
             })
             .map_err(cache_error)
     }
@@ -56,11 +59,11 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
         }
     }
 
-    fn retrieve_chunk_subset_bytes<TStorage, C>(
+    fn retrieve_partial_chunk_bytes<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
+        indexer: &dyn Indexer,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
@@ -68,7 +71,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         Ok(Self::partial_decoder(cache, array, chunk_indices, options)?
-            .partial_decode(chunk_subset, options)?
+            .partial_decode(indexer, options)?
             .into_owned()
             .into())
     }

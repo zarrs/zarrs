@@ -36,7 +36,6 @@ use zarrs_codec::Codec;
 pub use zarrs_metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationNumcodecs, Crc32cCodecConfigurationV1,
 };
-use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c", v2: "crc32c");
 
@@ -46,7 +45,7 @@ inventory::submit! {
 }
 
 impl zarrs_codec::CodecTraitsV3 for Crc32cCodec {
-    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV3) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = if metadata.name() == "numcodecs.crc32c" {
             Crc32cCodecConfiguration::Numcodecs(
                 metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
@@ -62,7 +61,7 @@ impl zarrs_codec::CodecTraitsV3 for Crc32cCodec {
 }
 
 impl zarrs_codec::CodecTraitsV2 for Crc32cCodec {
-    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    fn create(metadata: &MetadataV2) -> Result<Codec, zarrs_codec::CodecCreateError> {
         let configuration = Crc32cCodecConfiguration::Numcodecs(
             metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
         );
@@ -75,8 +74,8 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
+    use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -87,6 +86,8 @@ mod tests {
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
+    const JSON2: &str = r#"{"location":"start"}"#;
+    const JSON3: &str = r#"{"location":"end"}"#;
 
     #[test]
     fn codec_crc32c_configuration_none() {
@@ -104,27 +105,33 @@ mod tests {
         let bytes = elements;
         let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
 
-        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(JSON1).unwrap();
-        let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
+        for json in [JSON1, JSON2, JSON3] {
+            let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(json).unwrap();
+            let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
 
-        let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded = codec
-            .decode(
-                encoded.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(bytes, decoded.to_vec());
+            let encoded = codec
+                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+                .unwrap();
+            let decoded = codec
+                .decode(
+                    encoded.clone(),
+                    &bytes_representation,
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+            assert_eq!(bytes, decoded.to_vec());
 
-        // Check that the checksum is correct
-        let checksum: &[u8; 4] = &encoded[encoded.len() - size_of::<u32>()..encoded.len()]
-            .try_into()
-            .unwrap();
-        println!("checksum {checksum:?}");
-        assert_eq!(checksum, &[20, 133, 9, 65]);
+            // Check that the checksum is correct
+            let checksum: &[u8; 4] = if json.contains("start") {
+                &encoded[..size_of::<u32>()].try_into().unwrap()
+            } else {
+                &encoded[encoded.len() - size_of::<u32>()..]
+                    .try_into()
+                    .unwrap()
+            };
+            println!("checksum {checksum:?}");
+            assert_eq!(checksum, &[20, 133, 9, 65]);
+        }
     }
 
     #[test]
@@ -137,7 +144,7 @@ mod tests {
         let codec = Arc::new(Crc32cCodec::new_with_configuration(&codec_configuration));
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [ByteRange::FromStart(3, Some(2))];
         let input_handle = Arc::new(encoded);
@@ -177,7 +184,7 @@ mod tests {
         let codec = Arc::new(Crc32cCodec::new_with_configuration(&codec_configuration));
 
         let encoded = codec
-            .encode(Cow::Owned(bytes), &CodecOptions::default())
+            .encode(CowBytes::from(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = [ByteRange::FromStart(3, Some(2))];
         let input_handle = Arc::new(encoded);
