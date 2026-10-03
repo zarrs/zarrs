@@ -205,6 +205,10 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         Ok(bytes)
     }
 
+    fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
+        Ok(true)
+    }
+
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,

@@ -5,7 +5,7 @@ use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use crate::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, RecommendedConcurrency,
+    CodecSpecificOptions, CodecTraits, CowBytes, InvalidBytesLengthError, RecommendedConcurrency,
 };
 
 /// Traits for bytes to bytes codecs.
@@ -66,6 +66,50 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError>;
+
+    /// Decode chunk bytes into a preallocated output buffer.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails, the decoded size is incompatible with
+    /// `decoded_representation`, or `output` is too small.
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        options: &CodecOptions,
+    ) -> Result<usize, CodecError> {
+        let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
+        let decoded_len = decoded_value.len();
+        match decoded_representation {
+            BytesRepresentation::FixedSize(size)
+                if decoded_len != usize::try_from(*size).unwrap() =>
+            {
+                return Err(InvalidBytesLengthError::new(
+                    decoded_len,
+                    usize::try_from(*size).unwrap(),
+                )
+                .into());
+            }
+            BytesRepresentation::BoundedSize(size)
+                if decoded_len > usize::try_from(*size).unwrap() =>
+            {
+                return Err(InvalidBytesLengthError::new(
+                    decoded_len,
+                    usize::try_from(*size).unwrap(),
+                )
+                .into());
+            }
+            BytesRepresentation::FixedSize(_)
+            | BytesRepresentation::BoundedSize(_)
+            | BytesRepresentation::UnboundedSize => {}
+        }
+        if output.len() < decoded_len {
+            return Err(InvalidBytesLengthError::new(output.len(), decoded_len).into());
+        }
+        output[..decoded_len].copy_from_slice(&decoded_value);
+        Ok(decoded_len)
+    }
 
     /// Initialises a partial decoder.
     ///

@@ -80,6 +80,7 @@ mod sharding_codec_builder;
 mod sharding_options;
 #[cfg(feature = "async")]
 mod sharding_partial_decoder_async;
+mod sharding_partial_decoder_common;
 mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 #[cfg(feature = "async")]
@@ -182,6 +183,7 @@ fn subchunk_grid(
 }
 
 /// Return the number of subchunks in a shard.
+#[cfg(feature = "async")]
 fn num_subchunks(subchunk_grid: &RegularBoundedChunkGrid) -> usize {
     usize::try_from(subchunk_grid.grid_shape().iter().product::<u64>()).unwrap()
 }
@@ -637,15 +639,63 @@ async fn decode_shard_index_async_partial_decoder(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "async")]
     use std::sync::{Arc, Mutex};
 
     use super::*;
+    #[cfg(feature = "async")]
+    use crate::array::CowBytes;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, data_type};
     use zarrs_chunk_grid::Indexer;
     use zarrs_codec::{
         BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
     };
+    #[cfg(feature = "async")]
+    use zarrs_storage::StorageError;
+    #[cfg(feature = "async")]
+    use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
+
+    #[cfg(feature = "async")]
+    struct AsyncCountingPartialDecoder {
+        bytes: Vec<u8>,
+        byte_ranges: Arc<Mutex<Vec<ByteRange>>>,
+    }
+
+    #[cfg(feature = "async")]
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl zarrs_codec::AsyncBytesPartialDecoderTraits for AsyncCountingPartialDecoder {
+        async fn exists(&self) -> Result<bool, StorageError> {
+            Ok(true)
+        }
+
+        fn size_held(&self) -> usize {
+            self.bytes.len()
+        }
+
+        async fn partial_decode_many<'a>(
+            &'a self,
+            decoded_regions: ByteRangeIterator<'a>,
+            _options: &CodecOptions,
+        ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
+            let decoded_regions = decoded_regions.collect::<Vec<_>>();
+            self.byte_ranges
+                .lock()
+                .unwrap()
+                .extend_from_slice(&decoded_regions);
+            Ok(Some(
+                extract_byte_ranges(&self.bytes, Box::new(decoded_regions.into_iter()))?
+                    .into_iter()
+                    .map(CowBytes::from)
+                    .collect(),
+            ))
+        }
+
+        fn supports_partial_decode(&self) -> bool {
+            true
+        }
+    }
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {
@@ -1473,6 +1523,49 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn codec_sharding_async_partial_decode_coalesces_adjacent_subchunks() {
+        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = data_type::uint8();
+        let fill_value = FillValue::from(0u8);
+        let bytes =
+            ArrayBytes::from((0..chunk_shape.num_elements_usize() as u8).collect::<Vec<_>>());
+        let codec = Arc::new(
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type).build(),
+        );
+        let codec = codec
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
+        let options = CodecOptions::default().with_concurrent_target(4);
+        let encoded = codec
+            .encode(bytes.clone(), &chunk_shape, &options)
+            .unwrap()
+            .into_vec();
+        let byte_ranges = Arc::new(Mutex::new(Vec::new()));
+        let input_handle: Arc<dyn zarrs_codec::AsyncBytesPartialDecoderTraits> =
+            Arc::new(AsyncCountingPartialDecoder {
+                bytes: encoded,
+                byte_ranges: Arc::clone(&byte_ranges),
+            });
+        let partial_decoder = codec
+            .async_partial_decoder(input_handle, &chunk_shape, &options)
+            .await
+            .unwrap();
+        byte_ranges.lock().unwrap().clear();
+
+        let decoded = partial_decoder
+            .partial_decode(
+                &ArraySubset::new_with_shape(chunk_shape.to_array_shape()),
+                &options,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(decoded, bytes);
+        assert_eq!(byte_ranges.lock().unwrap().len(), 1);
     }
 
     #[cfg(feature = "gzip")]

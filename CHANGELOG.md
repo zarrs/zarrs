@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
+- Coalesce adjacent inner-chunk byte ranges into a single I/O read in sync and async sharding partial decoders
+- Bump `unsafe_cell_slice` to 0.2.2
+- **Breaking**: Bump `zarrs_codec` to 0.3.1
+  - Decode fixed-size bytes-to-bytes codec output directly into contiguous preallocated array output when the array-to-bytes and all array-to-array codecs declare decode pass-through
+  - Decode mixed array-to-array codec chains into preallocated output through `ArrayToArrayCodecTraits::decode_into`
+  - Reuse Zstd decompression contexts for direct decoding into preallocated output
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`

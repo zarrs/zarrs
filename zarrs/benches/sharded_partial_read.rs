@@ -1,7 +1,7 @@
 //! Benchmark sharded array reads: full vs partial shard reads.
 //!
-//! Array data is written to `benches/data/sharded_partial_read/` on the first run and reused
-//! on subsequent runs. Delete that directory to regenerate the data.
+//! Array data is written below Cargo's target temporary directory on the first run and reused on
+//! subsequent runs. Delete that directory to regenerate the data.
 //!
 //! Set [`USE_MEMORY_STORE`] to `true` to benchmark with an in-memory store instead of the
 //! filesystem store.
@@ -11,41 +11,29 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use zarrs::array::ArraySubset;
+use rayon::prelude::*;
+use rayon_iter_concurrent_limit::ConcurrentLimit;
+use zarrs::array::codec::{ShardingCodecOptions, SubchunkWriteOrder, ZstdCodec};
+use zarrs::array::{Array, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset};
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
+use zarrs::storage::{ReadableStorage, ReadableStorageTraits, ReadableWritableListableStorage};
 
 /// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
 const USE_MEMORY_STORE: bool = false;
 
 // Array dimensions matching the Python snippet
-const SHAPE: [u64; 4] = [8192, 4, 128, 128];
-const SHARD_SHAPE: [u64; 4] = [4096, 4, 128, 128];
+const SHAPE: [u64; 4] = [1024 * 12, 4, 128, 128];
+const SHARD_SHAPE: [u64; 4] = [1024, 4, 128, 128];
 const CHUNK_SHAPE: [u64; 4] = [1, 1, 128, 128];
 
 /// Elements per shard (f64 = 8 bytes each)
+const ELEMENT_SIZE: u64 = std::mem::size_of::<f64>() as u64;
 const SHARD_ELEMENTS: u64 = SHARD_SHAPE[0] * SHARD_SHAPE[1] * SHARD_SHAPE[2] * SHARD_SHAPE[3];
-const SHARD_BYTES: u64 = SHARD_ELEMENTS * 8;
+const SHARD_BYTES: u64 = SHARD_ELEMENTS * ELEMENT_SIZE;
 
 fn data_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("benches")
-        .join("data")
-        .join("sharded_partial_read")
-}
-
-/// Generate pseudo-random f64 values via a simple LCG (no external crate needed).
-fn random_data(n: usize) -> Vec<f64> {
-    let mut state: u64 = 0x123456789abcdef0;
-    (0..n)
-        .map(|_| {
-            state = state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (state >> 11) as f64 * (1.0 / (1u64 << 53) as f64) * 2.0 - 1.0
-        })
-        .collect()
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sharded_partial_read_v2")
 }
 
 fn make_store() -> ReadableWritableListableStorage {
@@ -65,13 +53,17 @@ fn populate_array(store: ReadableWritableListableStorage) {
         zarrs::array::data_type::float64(),
         0.0f64,
     )
+    .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(5, false))])
     .subchunk_shape(CHUNK_SHAPE.to_vec())
+    .codec_specific_options(zarrs_codec::CodecSpecificOptions::default().with_option(
+        ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+    ))
     .build(store, "/")
     .unwrap();
     array.store_metadata().unwrap();
 
     let total_elements = SHAPE.iter().product::<u64>() as usize;
-    let data = random_data(total_elements);
+    let data = (0..total_elements).map(|e| e as f64).collect::<Vec<_>>();
     array
         .store_array_subset(
             &ArraySubset::new_with_shape(SHAPE.to_vec()),
@@ -96,12 +88,34 @@ fn open_store() -> ReadableStorage {
     }
 }
 
-/// Full array read: both shards, shard-boundary-aligned.
+fn retrieve_array_subset_into(
+    array: &Array<dyn ReadableStorageTraits>,
+    subset: &ArraySubset,
+    output: &mut [u8],
+) {
+    let shape = subset.shape();
+    let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(output);
+    let mut view = unsafe {
+        // SAFETY: this is the only view over output and covers it exactly.
+        ArrayBytesFixedDisjointView::new(
+            output_slice,
+            ELEMENT_SIZE as usize,
+            shape,
+            ArraySubset::new_with_shape(shape.to_vec()),
+        )
+        .unwrap()
+    };
+    array
+        .retrieve_array_subset_into(subset, ArrayBytesDecodeIntoTarget::Fixed(&mut view))
+        .unwrap();
+}
+
+/// Full array read: all shards, shard-boundary-aligned.
 fn bench_read_full(c: &mut Criterion) {
     let store = open_store();
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
-    let full_bytes = SHARD_BYTES * 2; // 2 shards
+    let full_bytes = SHAPE.iter().product::<u64>() * ELEMENT_SIZE;
     let subset = ArraySubset::new_with_shape(SHAPE.to_vec());
 
     group.throughput(Throughput::Bytes(full_bytes));
@@ -109,6 +123,10 @@ fn bench_read_full(c: &mut Criterion) {
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
         });
+    });
+    let mut output = vec![0; full_bytes as usize];
+    group.bench_function("full_array_preallocated", |b| {
+        b.iter(|| retrieve_array_subset_into(&array, &subset, &mut output));
     });
 
     group.finish();
@@ -120,14 +138,18 @@ fn bench_read_partial_aligned(c: &mut Criterion) {
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
     let byte_count = SHARD_BYTES;
+    let subset =
+        ArraySubset::new_with_ranges(&[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]]);
 
     group.throughput(Throughput::Bytes(byte_count));
     group.bench_function("partial_shard_aligned", |b| {
         b.iter(|| {
-            let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]])
-                .unwrap();
+            let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
         });
+    });
+    let mut output = vec![0; byte_count as usize];
+    group.bench_function("partial_shard_aligned_preallocated", |b| {
+        b.iter(|| retrieve_array_subset_into(&array, &subset, &mut output));
     });
 
     group.finish();
@@ -138,19 +160,81 @@ fn bench_read_partial_unaligned(c: &mut Criterion) {
     let store = open_store();
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
-    let byte_count = (SHARD_SHAPE[0] - 1) * SHAPE[1] * SHAPE[2] * SHAPE[3] * 8;
+    let byte_count = (SHARD_SHAPE[0] - 1) * SHAPE[1] * SHAPE[2] * SHAPE[3] * ELEMENT_SIZE;
+    let subset = ArraySubset::new_with_ranges(&[
+        0..(SHARD_SHAPE[0] - 1),
+        0..SHAPE[1],
+        0..SHAPE[2],
+        0..SHAPE[3],
+    ]);
 
     group.throughput(Throughput::Bytes(byte_count));
     group.bench_function("partial_shard_unaligned", |b| {
         b.iter(|| {
-            let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[
-                    0..(SHARD_SHAPE[0] - 1),
-                    0..SHAPE[1],
-                    0..SHAPE[2],
-                    0..SHAPE[3],
-                ])
-                .unwrap();
+            let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+        });
+    });
+    let mut output = vec![0; byte_count as usize];
+    group.bench_function("partial_shard_unaligned_preallocated", |b| {
+        b.iter(|| retrieve_array_subset_into(&array, &subset, &mut output));
+    });
+
+    group.finish();
+}
+
+/// Disparate in-bounds chunk reads of size 128 in dim 0, fetched in parallel.
+///
+/// Subsets are at dim-0 positions 0, 512, 1024, … (stride 512, width 128), covering
+/// the full extents of dims 1–3.  Each subset spans `[128, 4, 128, 128]` elements.
+fn bench_read_disparate_parallel(c: &mut Criterion) {
+    const CHUNK_SIZE: u64 = 128;
+    const STRIDE: u64 = 512;
+    const N_CHUNKS: u64 = (SHAPE[0] - CHUNK_SIZE) / STRIDE + 1;
+
+    let store = open_store();
+    let array = zarrs::array::Array::open(store, "/").unwrap();
+    let mut group = c.benchmark_group("sharded_partial_read");
+
+    let chunk_bytes = CHUNK_SIZE * SHAPE[1] * SHAPE[2] * SHAPE[3] * ELEMENT_SIZE;
+    group.throughput(Throughput::Bytes(chunk_bytes * N_CHUNKS));
+
+    let subsets: Vec<ArraySubset> = (0..N_CHUNKS)
+        .map(|k| {
+            let start = k * STRIDE;
+            ArraySubset::new_with_ranges(&[
+                start..start + CHUNK_SIZE,
+                0..SHAPE[1],
+                0..SHAPE[2],
+                0..SHAPE[3],
+            ])
+        })
+        .collect();
+
+    let concurrency = std::thread::available_parallelism().map_or(4, |n| n.get());
+
+    group.bench_function("disparate_parallel", |b| {
+        b.iter(|| {
+            subsets
+                .par_iter()
+                .concurrent_limit(concurrency)
+                .for_each(|subset: &ArraySubset| {
+                    let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(subset).unwrap();
+                });
+        });
+    });
+    let mut preallocated: Vec<_> = subsets
+        .iter()
+        .cloned()
+        .map(|subset| (subset, vec![0; chunk_bytes as usize]))
+        .collect();
+    group.bench_function("disparate_parallel_preallocated", |b| {
+        b.iter(|| {
+            preallocated
+                .par_iter_mut()
+                .concurrent_limit(concurrency)
+                .for_each(|(subset, output): &mut (ArraySubset, Vec<u8>)| {
+                    retrieve_array_subset_into(&array, subset, output);
+                });
         });
     });
 
@@ -162,5 +246,6 @@ criterion_group!(
     bench_read_full,
     bench_read_partial_aligned,
     bench_read_partial_unaligned,
+    bench_read_disparate_parallel,
 );
 criterion_main!(benches);
