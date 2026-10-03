@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support partial encoding with generic indexers in the `sharding_indexed` codec
 - Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
+  - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants

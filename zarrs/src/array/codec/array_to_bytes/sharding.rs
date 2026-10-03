@@ -13,6 +13,7 @@
 //! <div class="warning">
 //! Non-divisible subchunk shapes are proposed in <a href="https://github.com/zarr-developers/zarr-specs/pull/370">zarr-specs #370</a> (sharding 1.1-draft), but are not yet part of the specification.
 //! Implementations of version 1.0 of the sharding specification must reject such arrays.
+//! Existing arrays can be opened, but [`ArrayBuilder::build`](crate::array::ArrayBuilder::build) does not create them.
 //! </div>
 //!
 //! ### Compatible Implementations
@@ -105,6 +106,7 @@ use crate::array::{
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
+pub(crate) use sharding_options::RequireDivisibleSubchunks;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, ChunkGridDecoded, Codec,

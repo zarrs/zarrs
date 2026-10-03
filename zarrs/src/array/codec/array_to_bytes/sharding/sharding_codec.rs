@@ -15,10 +15,10 @@ use zarrs_chunk_grid::{ChunkGridCreateError, ChunkGridTraits};
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
-    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
-    ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
-    compute_index_encoded_size, decode_shard_index, sharding_index_shape, sharding_partial_encoder,
-    subchunk_grid,
+    CodecChain, RequireDivisibleSubchunks, ShardingCodecConfiguration,
+    ShardingCodecConfigurationV1, ShardingCodecOptions, ShardingIndexLocation, SubchunkWriteOrder,
+    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
+    sharding_index_shape, sharding_partial_encoder, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
@@ -50,10 +50,11 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// Return the subchunk grid of a sharded `chunk_grid`.
 ///
-/// Subchunks straddling a shard boundary are clipped to the shard shape.
+/// Subchunks straddling a shard boundary are clipped to the shard shape, or rejected if `require_divisible`.
 fn regular_subchunk_grid(
     chunk_grid: &ChunkGrid,
     subchunk_shape: &ChunkShape,
+    require_divisible: bool,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
     if chunk_grid.dimensionality() != subchunk_shape.len() {
         return Err(ChunkGridCreateError::new(format!(
@@ -62,6 +63,15 @@ fn regular_subchunk_grid(
             chunk_grid.dimensionality()
         )));
     }
+
+    let check_divisible = |edge_length: NonZeroU64, subchunk: NonZeroU64| {
+        if require_divisible && !edge_length.get().is_multiple_of(subchunk.get()) {
+            return Err(ChunkGridCreateError::new(format!(
+                "invalid subchunk shape {subchunk_shape:?}, it must evenly divide shard shape {edge_length:?}"
+            )));
+        }
+        Ok(())
+    };
 
     if chunk_grid
         .name_v3()
@@ -72,6 +82,9 @@ fn regular_subchunk_grid(
             .ok_or_else(|| {
                 ChunkGridCreateError::new("chunk grid does not contain an origin chunk")
             })?;
+        for (&edge_length, &subchunk) in std::iter::zip(&chunk_shape, subchunk_shape) {
+            check_divisible(edge_length, subchunk)?;
+        }
         return Ok(ChunkGrid::new(RepeatChunkGrid::new(
             chunk_grid.grid_shape().to_vec(),
             ChunkGrid::new(RegularBoundedChunkGrid::new(
@@ -89,6 +102,7 @@ fn regular_subchunk_grid(
         let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim)?;
         let mut global_edge_lengths = Vec::new();
         for edge_length in chunk_edge_lengths {
+            check_divisible(edge_length, *subchunk)?;
             global_edge_lengths.extend(
                 RegularBoundedChunkGrid::new(vec![edge_length.get()], vec![*subchunk])?
                     .chunk_edge_lengths(0)?,
@@ -160,6 +174,8 @@ pub struct ShardingCodecBound {
     pub(crate) index_codecs: Arc<CodecChainBound>,
     pub(crate) index_location: ShardingIndexLocation,
     pub(crate) options: ShardingCodecOptions,
+    /// Reject subchunk shapes that do not evenly divide the shard shape when creating subchunk grids.
+    pub(crate) require_divisible_subchunks: bool,
 }
 
 impl ShardingCodec {
@@ -289,6 +305,9 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
             index_codecs,
             index_location: self.index_location,
             options,
+            require_divisible_subchunks: codec_specific_options
+                .get_option::<RequireDivisibleSubchunks>()
+                .is_some(),
         }))
     }
 }
@@ -328,9 +347,13 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
             {
                 ChunkGridDecoded::None
             }
-            ChunkGridDecodedRef::Array(decoded_chunk_grid) => ChunkGridDecoded::Array(
-                regular_subchunk_grid(decoded_chunk_grid, &self.subchunk_shape)?,
-            ),
+            ChunkGridDecodedRef::Array(decoded_chunk_grid) => {
+                ChunkGridDecoded::Array(regular_subchunk_grid(
+                    decoded_chunk_grid,
+                    &self.subchunk_shape,
+                    self.require_divisible_subchunks,
+                )?)
+            }
             ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
         };
         let mut subchunk_grids = vec![subchunk_grid.clone()];

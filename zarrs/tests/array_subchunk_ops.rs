@@ -6,8 +6,8 @@ use std::sync::Arc;
 use zarrs::array::chunk_grid::{RectangularChunkGrid, RectilinearChunkGrid};
 use zarrs::array::codec::array_to_array::transpose::{TransposeCodec, TransposeOrder};
 use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBuilder, ShardingIndexLocation};
-use zarrs::array::{Array, ArrayBuilder, data_type};
-use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
+use zarrs::array::{Array, ArrayBuilder, ArrayCreateError, ArrayMetadata, data_type};
+use zarrs_chunk_grid::{ArraySubset, ChunkGrid, ChunkGridCreateError};
 use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridDimensionConfiguration;
 use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
 use zarrs_storage::store::MemoryStore;
@@ -90,12 +90,36 @@ fn subchunk_grid_regular_outer_covers_full_repeated_shard_extent()
 
 #[test]
 #[allow(clippy::single_range_in_vec_init)]
-fn subchunk_grid_clips_non_even_sharding_chunk_shape() -> Result<(), Box<dyn std::error::Error>> {
+fn subchunk_grid_rejects_non_even_sharding_chunk_shape() -> Result<(), Box<dyn std::error::Error>> {
+    let store = Arc::new(MemoryStore::default());
     let mut builder = ArrayBuilder::new(vec![10], vec![5], data_type::uint16(), 0u16);
     builder.subchunk_shape(vec![3]);
-    let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
-    assert_eq!(array.subchunk_shape(), None);
+    let err = builder.build(store.clone(), "/array").unwrap_err();
+
+    assert!(matches!(
+        err,
+        ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::Other(ref str)) if str.contains("must evenly divide shard shape")
+    ));
+    assert!(err.to_string().contains("must evenly divide shard shape"));
+
+    // An existing array with a non evenly divisible subchunk shape can be opened
+    let metadata = ArrayMetadata::V3(builder.build_metadata()?);
+    let array = Array::new_with_metadata(store, "/array", metadata)?;
     assert_subchunk_grid(&array, &[10], &[4], &[nz(3), nz(2), nz(3), nz(2)])?;
+
+    // Including nested sharding codecs, where the [3] subchunks do not evenly divide the [4] subchunks
+    let data_type = data_type::uint16();
+    let mut builder = ArrayBuilder::new(vec![8], vec![8], data_type.clone(), 0u16);
+    builder.array_to_bytes_codec(
+        ShardingCodecBuilder::new(vec![nz(4)], &data_type)
+            .array_to_bytes_codec(ShardingCodecBuilder::new(vec![nz(3)], &data_type).build_arc())
+            .build_arc(),
+    );
+    assert!(
+        builder
+            .build(Arc::new(MemoryStore::default()), "/array")
+            .is_err()
+    );
 
     Ok(())
 }

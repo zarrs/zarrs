@@ -58,6 +58,12 @@ impl ShardingCodecOptions {
     }
 }
 
+/// An internal option rejecting subchunk shapes that do not evenly divide the shard shape.
+///
+/// Set when creating new arrays, since such subchunk shapes are not yet part of the specification.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RequireDivisibleSubchunks;
+
 #[cfg(test)]
 mod tests {
     use crate::array::codec::array_to_bytes::sharding::sharding_options::SubchunkWriteOrder;

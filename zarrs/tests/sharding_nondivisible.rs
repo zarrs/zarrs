@@ -13,8 +13,8 @@ use zarrs::array::codec::array_to_array::transpose::{TransposeCodec, TransposeOr
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesCodec, OptionalCodec, VlenCodec};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayIndices, CodecChain, CodecOptions, DataType, Endianness, FillValue,
-    FromArrayBytes, IntoArrayBytes, data_type,
+    Array, ArrayBuilder, ArrayIndices, ArrayMetadata, CodecChain, CodecOptions, DataType,
+    Endianness, FillValue, FromArrayBytes, IntoArrayBytes, data_type,
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
@@ -27,6 +27,15 @@ fn nz(value: u64) -> NonZeroU64 {
     NonZeroU64::new(value).unwrap()
 }
 
+/// Create an array from metadata, since `ArrayBuilder::build` rejects non evenly divisible subchunks.
+fn build_from_metadata<TStorage: ?Sized>(
+    builder: &ArrayBuilder,
+    store: Arc<TStorage>,
+) -> Result<Array<TStorage>, Box<dyn std::error::Error>> {
+    let metadata = ArrayMetadata::V3(builder.build_metadata()?);
+    Ok(Array::new_with_metadata(store, "/array", metadata)?)
+}
+
 fn build_array(
     chunk_grid: impl Into<ChunkGrid>,
     subchunk_shape: Vec<u64>,
@@ -34,7 +43,7 @@ fn build_array(
     let store = Arc::new(MemoryStore::default());
     let mut builder = ArrayBuilder::new_with_chunk_grid(chunk_grid, data_type::uint16(), 0u16);
     builder.subchunk_shape(subchunk_shape);
-    Ok(builder.build(store, "/array")?)
+    build_from_metadata(&builder, store)
 }
 
 #[test]
@@ -137,9 +146,7 @@ fn sharded_array<TStorage: ?Sized>(
     partial_encoding: bool,
 ) -> Result<Array<TStorage>, Box<dyn std::error::Error>> {
     let options = CodecOptions::default().with_experimental_partial_encoding(partial_encoding);
-    Ok(array_builder(Some(layout))
-        .build(store, "/array")?
-        .with_codec_options(options))
+    Ok(build_from_metadata(&array_builder(Some(layout)), store)?.with_codec_options(options))
 }
 
 /// An unsharded reference array.
