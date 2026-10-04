@@ -7,8 +7,8 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    copy_decoded_bytes_into,
 };
 use zarrs_metadata::Configuration;
 
@@ -145,11 +145,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         // decodes to more than `output.len()` bytes. Decode with allocation to report an accurate
         // error.
         let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
-        if decoded_value.len() != output.len() {
-            return Err(InvalidBytesLengthError::new(decoded_value.len(), output.len()).into());
-        }
-        output.copy_from_slice(&decoded_value);
-        Ok(())
+        Ok(copy_decoded_bytes_into(&decoded_value, output)?)
     }
 
     fn encoded_representation(

@@ -81,11 +81,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
-        if decoded_value.len() != output.len() {
-            return Err(InvalidBytesLengthError::new(decoded_value.len(), output.len()).into());
-        }
-        output.copy_from_slice(&decoded_value);
-        Ok(())
+        Ok(copy_decoded_bytes_into(&decoded_value, output)?)
     }
 
     /// Initialises a partial decoder.
@@ -168,5 +164,40 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
             *decoded_representation,
             self.into_dyn(),
         )))
+    }
+}
+
+/// Copy `decoded_value` into `output`, which must be the same length.
+///
+/// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode into an allocation.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the length of `decoded_value` is not the length of `output`.
+pub fn copy_decoded_bytes_into(
+    decoded_value: &[u8],
+    output: &mut [u8],
+) -> Result<(), InvalidBytesLengthError> {
+    if decoded_value.len() != output.len() {
+        return Err(InvalidBytesLengthError::new(
+            decoded_value.len(),
+            output.len(),
+        ));
+    }
+    output.copy_from_slice(decoded_value);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_decoded_bytes_into_length() {
+        let mut output = [0; 3];
+        copy_decoded_bytes_into(&[1, 2, 3], &mut output).unwrap();
+        assert_eq!(output, [1, 2, 3]);
+        assert!(copy_decoded_bytes_into(&[1, 2], &mut output).is_err());
+        assert!(copy_decoded_bytes_into(&[1, 2, 3, 4], &mut output).is_err());
+        assert_eq!(output, [1, 2, 3]);
     }
 }
