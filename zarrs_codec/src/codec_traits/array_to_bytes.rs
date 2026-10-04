@@ -161,6 +161,8 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// For optional data types, provide an `ArrayBytesDecodeIntoTarget` with a `mask` set to `Some`.
     /// For non-optional data types, convert a fixed view to target using `.into()` or create with `mask: None`.
     ///
+    /// On error, the output target may have been partially written.
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(

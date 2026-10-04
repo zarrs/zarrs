@@ -70,6 +70,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Decode chunk bytes into a preallocated output buffer.
     ///
     /// The decoded bytes must fill `output` exactly.
+    /// On error, `output` may have been partially written.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the decoded length is not the length of `output`.

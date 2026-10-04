@@ -30,6 +30,23 @@ use zarrs_metadata::v3::MetadataV3;
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
 
+/// Decode `bytes` through `codecs` in reverse order.
+///
+/// `decoded_representations` are the decoded representations of `codecs`, in the same order.
+fn decode_bytes_to_bytes<'a>(
+    codecs: &[Arc<dyn BytesToBytesCodecTraits>],
+    decoded_representations: &[BytesRepresentation],
+    mut bytes: CowBytes<'a>,
+    options: &CodecOptions,
+) -> Result<CowBytes<'a>, CodecError> {
+    for (codec, decoded_representation) in
+        std::iter::zip(codecs.iter().rev(), decoded_representations.iter().rev())
+    {
+        bytes = codec.decode(bytes, decoded_representation, options)?;
+    }
+    Ok(bytes)
+}
+
 fn cumulative_boundaries(edge_lengths: &[NonZeroU64]) -> Vec<u64> {
     let mut offset = 0;
     let mut boundaries = Vec::with_capacity(edge_lengths.len() + 1);
@@ -591,30 +608,41 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        mut bytes: CowBytes<'_>,
+        bytes: CowBytes<'_>,
         shape: &[NonZeroU64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        mut output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
+        let num_bytes_to_bytes = self.bytes_to_bytes.len();
 
-        if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
-            // Fast path if no bytes to bytes or array to array codecs
-            return self.array_to_bytes.decode_into(
+        // Fast path: the last bytes to bytes codec to decode writes directly into the output
+        // when the array to bytes codec can decode in place and the output is contiguous
+        if self.array_to_bytes.supports_decode_in_place()
+            && self.array_to_array.is_empty()
+            && let Some((last, rest)) = self.bytes_to_bytes.split_first()
+            && let BytesRepresentation::FixedSize(decoded_size) = bytes_representations[0]
+            && let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+            && let Some(output) = output.as_mut_slice()
+            && output.len() as u64 == decoded_size
+        {
+            let bytes = decode_bytes_to_bytes(
+                rest,
+                &bytes_representations[1..num_bytes_to_bytes],
                 bytes,
-                &array_representations.last().unwrap().0,
-                output_target,
                 options,
-            );
+            )?;
+            last.decode_into(bytes, &bytes_representations[0], output, options)?;
+            return self.array_to_bytes.decode_in_place(output);
         }
 
         // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
+        let bytes = decode_bytes_to_bytes(
+            &self.bytes_to_bytes,
+            &bytes_representations[..num_bytes_to_bytes],
+            bytes,
+            options,
+        )?;
 
         // Fast path if no array to array codecs
         if self.array_to_array.is_empty() {
@@ -992,11 +1020,193 @@ impl ArrayCodecTraits for CodecChainBound {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::num::NonZeroU64;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
     use crate::array::codec::BytesCodec;
-    use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
+    use crate::array::codec::array_to_bytes::bytes::non_native_endianness;
+    use crate::array::{
+        ArrayBytesFixedDisjointView, ArraySubset, ArraySubsetTraits, ChunkShapeTraits, Endianness,
+        data_type,
+    };
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    /// An identity bytes to bytes codec that counts which decode method is called.
+    #[derive(Debug, Default)]
+    struct TestDirectDecode {
+        decode_calls: AtomicUsize,
+        decode_into_calls: AtomicUsize,
+        output_ptr: AtomicUsize,
+    }
+
+    impl TestDirectDecode {
+        fn calls(&self) -> (usize, usize) {
+            (
+                self.decode_calls.load(Ordering::Relaxed),
+                self.decode_into_calls.load(Ordering::Relaxed),
+            )
+        }
+    }
+
+    impl ExtensionName for TestDirectDecode {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl CodecTraits for TestDirectDecode {
+        fn configuration(
+            &self,
+            _version: ZarrVersion,
+            _options: &CodecMetadataOptions,
+        ) -> Option<Configuration> {
+            None
+        }
+
+        fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+            PartialDecoderCapability {
+                partial_read: false,
+                partial_decode: false,
+            }
+        }
+
+        fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+            PartialEncoderCapability {
+                partial_encode: false,
+            }
+        }
+    }
+
+    #[cfg_attr(
+        all(feature = "async", not(target_arch = "wasm32")),
+        async_trait::async_trait
+    )]
+    #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+    impl BytesToBytesCodecTraits for TestDirectDecode {
+        fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
+            self
+        }
+
+        fn recommended_concurrency(
+            &self,
+            _decoded_representation: &BytesRepresentation,
+        ) -> Result<RecommendedConcurrency, CodecError> {
+            Ok(RecommendedConcurrency::new_maximum(1))
+        }
+
+        fn encoded_representation(
+            &self,
+            decoded_representation: &BytesRepresentation,
+        ) -> BytesRepresentation {
+            *decoded_representation
+        }
+
+        fn encode<'a>(
+            &self,
+            decoded_value: CowBytes<'a>,
+            _options: &CodecOptions,
+        ) -> Result<CowBytes<'a>, CodecError> {
+            Ok(decoded_value)
+        }
+
+        fn decode<'a>(
+            &self,
+            encoded_value: CowBytes<'a>,
+            _decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<CowBytes<'a>, CodecError> {
+            self.decode_calls.fetch_add(1, Ordering::Relaxed);
+            Ok(encoded_value)
+        }
+
+        fn decode_into(
+            &self,
+            encoded_value: CowBytes<'_>,
+            decoded_representation: &BytesRepresentation,
+            output: &mut [u8],
+            _options: &CodecOptions,
+        ) -> Result<(), CodecError> {
+            self.decode_into_calls.fetch_add(1, Ordering::Relaxed);
+            self.output_ptr
+                .store(output.as_mut_ptr() as usize, Ordering::Relaxed);
+            assert_eq!(
+                *decoded_representation,
+                BytesRepresentation::FixedSize(output.len() as u64)
+            );
+            assert_eq!(encoded_value.len(), output.len());
+            output.copy_from_slice(&encoded_value);
+            Ok(())
+        }
+    }
+
+    /// Decode `values` encoded with `endianness` through a chain of the `bytes` codec and
+    /// `num_bytes_to_bytes` counting codecs.
+    ///
+    /// The chunk has `chunk_shape` and is decoded into the subset of an array of `array_shape`
+    /// at the origin. Returns the output array elements and the codecs.
+    fn decode_into_test_chain(
+        endianness: Endianness,
+        num_bytes_to_bytes: usize,
+        chunk_shape: &[u64],
+        array_shape: &[u64],
+        values: &[u16],
+    ) -> (Vec<u16>, Vec<Arc<TestDirectDecode>>) {
+        let encoded: Vec<u8> = values
+            .iter()
+            .flat_map(|v| {
+                if endianness == Endianness::Little {
+                    v.to_le_bytes()
+                } else {
+                    v.to_be_bytes()
+                }
+            })
+            .collect();
+        let counters: Vec<_> = (0..num_bytes_to_bytes)
+            .map(|_| Arc::new(TestDirectDecode::default()))
+            .collect();
+        let codec = CodecChain::new(
+            vec![],
+            Arc::new(BytesCodec::new(Some(endianness))),
+            counters
+                .iter()
+                .map(|c| Arc::clone(c) as Arc<dyn BytesToBytesCodecTraits>)
+                .collect(),
+        )
+        .with_context(
+            data_type::uint16(),
+            FillValue::from(0u16),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+        let chunk_shape_nz: ChunkShape = chunk_shape
+            .iter()
+            .map(|&s| NonZeroU64::new(s).unwrap())
+            .collect();
+        let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+        let mut output = vec![0u16; num_elements];
+        {
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                    size_of::<u16>(),
+                    array_shape,
+                    ArraySubset::new_with_shape(chunk_shape.to_vec()),
+                )
+            }
+            .unwrap();
+            codec
+                .decode_into(
+                    CowBytes::from(encoded.as_slice()),
+                    &chunk_shape_nz,
+                    (&mut view).into(),
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+        }
+        (output, counters)
+    }
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
@@ -1284,6 +1494,64 @@ mod tests {
             &decoded_region,
             decoded_partial_chunk_true,
         );
+    }
+
+    #[test]
+    fn codec_chain_decode_into_bytes_direct() {
+        let values: Vec<u16> = (0..8).collect();
+        let (output, codecs) = decode_into_test_chain(Endianness::native(), 1, &[8], &[8], &values);
+        assert_eq!(output, values);
+        assert_eq!(codecs[0].calls(), (0, 1));
+        assert_eq!(
+            codecs[0].output_ptr.load(Ordering::Relaxed),
+            output.as_ptr() as usize
+        );
+    }
+
+    #[test]
+    fn codec_chain_decode_into_bytes_direct_multiple_bytes_to_bytes() {
+        let values: Vec<u16> = (0..8).collect();
+        let (output, codecs) = decode_into_test_chain(Endianness::native(), 3, &[8], &[8], &values);
+        assert_eq!(output, values);
+        // Only the last codec to decode (the first in the chain) decodes into the output
+        assert_eq!(codecs[0].calls(), (0, 1));
+        assert_eq!(codecs[1].calls(), (1, 0));
+        assert_eq!(codecs[2].calls(), (1, 0));
+    }
+
+    #[test]
+    fn codec_chain_decode_into_bytes_direct_non_native_endianness() {
+        let values: Vec<u16> = (0..8).collect();
+        let (output, codecs) =
+            decode_into_test_chain(non_native_endianness(), 1, &[8], &[8], &values);
+        assert_eq!(output, values);
+        // The endianness is changed in place in the output
+        assert_eq!(codecs[0].calls(), (0, 1));
+        assert_eq!(
+            codecs[0].output_ptr.load(Ordering::Relaxed),
+            output.as_ptr() as usize
+        );
+    }
+
+    #[test]
+    fn codec_chain_decode_into_no_bytes_to_bytes_non_native_endianness() {
+        let values: Vec<u16> = (0..8).collect();
+        let (output, _) = decode_into_test_chain(non_native_endianness(), 0, &[8], &[8], &values);
+        assert_eq!(output, values);
+    }
+
+    #[test]
+    fn codec_chain_decode_into_bytes_direct_skipped_non_contiguous_view() {
+        // A 2x2 chunk written to the corner of a 2x4 array occupies two separate regions
+        let (output, codecs) =
+            decode_into_test_chain(Endianness::native(), 1, &[2, 2], &[2, 4], &[1, 2, 3, 4]);
+        assert_eq!(output, [1, 2, 0, 0, 3, 4, 0, 0]);
+        assert_eq!(codecs[0].calls(), (1, 0));
+
+        let (output, codecs) =
+            decode_into_test_chain(non_native_endianness(), 1, &[2, 2], &[2, 4], &[1, 2, 3, 4]);
+        assert_eq!(output, [1, 2, 0, 0, 3, 4, 0, 0]);
+        assert_eq!(codecs[0].calls(), (1, 0));
     }
 
     #[test]
