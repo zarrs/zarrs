@@ -125,4 +125,25 @@ mod tests {
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
     }
+
+    #[test]
+    fn default_decode_into() {
+        let codec = TestUnboundedCodec::new();
+        let options = CodecOptions::default();
+        let encoded = CowBytes::from(&b"decoded"[..]);
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                encoded.clone(),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+            )
+        };
+
+        let mut output = [0; 7];
+        decode_into(&mut output).unwrap();
+        assert_eq!(&output, b"decoded");
+        assert!(decode_into(&mut [0; 8]).is_err());
+        assert!(decode_into(&mut [0; 6]).is_err());
+    }
 }
