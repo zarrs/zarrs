@@ -5,7 +5,7 @@ use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use crate::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, RecommendedConcurrency,
+    CodecSpecificOptions, CodecTraits, CowBytes, InvalidBytesLengthError, RecommendedConcurrency,
 };
 
 /// Traits for bytes to bytes codecs.
@@ -66,6 +66,27 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError>;
+
+    /// Decode chunk bytes into a preallocated output buffer.
+    ///
+    /// The decoded bytes must fill `output` exactly.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or the decoded length is not the length of `output`.
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
+        if decoded_value.len() != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_value.len(), output.len()).into());
+        }
+        output.copy_from_slice(&decoded_value);
+        Ok(())
+    }
 
     /// Initialises a partial decoder.
     ///
