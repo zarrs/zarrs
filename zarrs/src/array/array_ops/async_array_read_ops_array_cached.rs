@@ -11,7 +11,8 @@ use crate::array::array_bytes_internal::{
     wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, fill_value_bytes,
+    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
+    fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -47,18 +48,15 @@ where
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
-            if chunk_subset == array_subset {
-                async_retrieve_chunk_bytes(cache, array, chunk_indices, options).await
-            } else {
-                C::Value::async_retrieve_partial_chunk_bytes(
-                    cache,
-                    array,
-                    chunk_indices,
-                    &array_subset.relative_to(chunk_subset.start())?,
-                    options,
-                )
-                .await
-            }
+            async_retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                chunk_indices,
+                &chunk_subset,
+                array_subset,
+                options,
+            )
+            .await
         }
         num_chunks => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
@@ -109,18 +107,15 @@ where
     let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let bytes = if chunk_subset_overlap == chunk_subset {
-            async_retrieve_chunk_bytes(cache, array, &chunk_indices, options).await?
-        } else {
-            C::Value::async_retrieve_partial_chunk_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                options,
-            )
-            .await?
-        };
+        let bytes = async_retrieve_chunk_overlap_bytes(
+            cache,
+            array,
+            &chunk_indices,
+            &chunk_subset,
+            &chunk_subset_overlap,
+            options,
+        )
+        .await?;
         Ok::<_, ArrayError>((
             bytes,
             chunk_subset_overlap.relative_to(&array_subset.start())?,
@@ -183,18 +178,15 @@ where
                 let chunk_subset = array.chunk_subset(&chunk_indices)?;
                 let overlap = chunk_subset.overlap(array_subset)?;
                 let output_subset = overlap.relative_to(array_subset_start)?;
-                let bytes = if overlap == chunk_subset {
-                    async_retrieve_chunk_bytes(cache, array, &chunk_indices, options).await?
-                } else {
-                    C::Value::async_retrieve_partial_chunk_bytes(
-                        cache,
-                        array,
-                        &chunk_indices,
-                        &overlap.relative_to(chunk_subset.start())?,
-                        options,
-                    )
-                    .await?
-                };
+                let bytes = async_retrieve_chunk_overlap_bytes(
+                    cache,
+                    array,
+                    &chunk_indices,
+                    &chunk_subset,
+                    &overlap,
+                    options,
+                )
+                .await?;
                 let mut data_view = unsafe {
                     ArrayBytesFixedDisjointView::new(
                         data_slice,

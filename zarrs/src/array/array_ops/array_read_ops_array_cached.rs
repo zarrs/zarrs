@@ -11,7 +11,9 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
     wrap_optional_masks,
 };
-use crate::array::chunk_cache::{SealedSync, fill_value_bytes, retrieve_chunk_bytes};
+use crate::array::chunk_cache::{
+    SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
 use zarrs_codec::{
@@ -46,17 +48,14 @@ where
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
-            if chunk_subset == array_subset {
-                retrieve_chunk_bytes(cache, array, chunk_indices, options)
-            } else {
-                C::Value::retrieve_partial_chunk_bytes(
-                    cache,
-                    array,
-                    chunk_indices,
-                    &array_subset.relative_to(chunk_subset.start())?,
-                    options,
-                )
-            }
+            retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                chunk_indices,
+                &chunk_subset,
+                array_subset,
+                options,
+            )
         }
         num_chunks => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
@@ -108,17 +107,14 @@ where
         .map(|chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let bytes = if chunk_subset_overlap == chunk_subset {
-                retrieve_chunk_bytes(cache, array, &chunk_indices, options)?
-            } else {
-                C::Value::retrieve_partial_chunk_bytes(
-                    cache,
-                    array,
-                    &chunk_indices,
-                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    options,
-                )?
-            };
+            let bytes = retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset,
+                &chunk_subset_overlap,
+                options,
+            )?;
             Ok((
                 bytes,
                 chunk_subset_overlap.relative_to(&array_subset.start())?,
@@ -173,17 +169,14 @@ where
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let overlap = chunk_subset.overlap(array_subset)?;
             let output_subset = overlap.relative_to(&array_subset_start)?;
-            let bytes = if overlap == chunk_subset {
-                retrieve_chunk_bytes(cache, array, &chunk_indices, options)?
-            } else {
-                C::Value::retrieve_partial_chunk_bytes(
-                    cache,
-                    array,
-                    &chunk_indices,
-                    &overlap.relative_to(chunk_subset.start())?,
-                    options,
-                )?
-            };
+            let bytes = retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset,
+                &overlap,
+                options,
+            )?;
             let mut data_view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     data_slice,
@@ -497,6 +490,15 @@ mod tests {
             cached.retrieve_array_subset::<Vec<u8>>(&[1..3]).unwrap(),
             vec![2, 0]
         );
+        // Complete chunks, in a single chunk and across multiple chunks
+        assert_eq!(
+            cached.retrieve_array_subset::<Vec<u8>>(&[0..2]).unwrap(),
+            vec![1, 2]
+        );
+        assert_eq!(
+            cached.retrieve_array_subset::<Vec<u8>>(&[0..4]).unwrap(),
+            vec![1, 2, 0, 0]
+        );
         assert!(matches!(
             cached.retrieve_subchunk::<Vec<u8>>(&[0]).unwrap_err(),
             ArrayError::MissingSubchunkGrid
@@ -548,6 +550,43 @@ mod tests {
         assert!(!cached.cache().is_empty());
     }
 
+    /// Merge complete and partial variable-length chunks, including missing chunks.
+    fn test_cache_variable<C>(cache: C)
+    where
+        C: ChunkCache,
+    {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![6, 6], vec![2, 2], data_type::string(), "")
+            .build_arc(store, "/")
+            .unwrap();
+        let data: Vec<String> = (0..36)
+            .map(|i| if i < 24 { i.to_string() } else { String::new() })
+            .collect();
+        array
+            .store_array_subset(&[0..4, 0..6], &data[..24])
+            .unwrap();
+
+        let cached = ArrayCached::new(array, cache);
+        // Repeat the reads to exercise both cold and populated caches.
+        for _ in 0..2 {
+            assert_eq!(
+                cached
+                    .retrieve_array_subset::<Vec<String>>(&[0..6, 0..6])
+                    .unwrap(),
+                data
+            );
+            let expected: Vec<String> = (1..6)
+                .flat_map(|row| data[row * 6 + 1..row * 6 + 6].iter().cloned())
+                .collect();
+            assert_eq!(
+                cached
+                    .retrieve_array_subset::<Vec<String>>(&[1..6, 1..6])
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
     fn test_cache_nested_optional<C>(cache: C)
     where
@@ -597,6 +636,8 @@ mod tests {
         test_cache_sharded(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
         test_cache_nested_optional(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCacheEncodedLruChunkLimit::new(9));
+        test_cache_variable(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
     }
 
     #[test]
@@ -611,6 +652,8 @@ mod tests {
         test_cache_sharded(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
         test_cache_nested_optional(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCacheDecodedLruChunkLimit::new(9));
+        test_cache_variable(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
     }
 
     #[test]
@@ -625,6 +668,8 @@ mod tests {
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
         test_cache_nested_optional(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCachePartialDecoderLruChunkLimit::new(9));
+        test_cache_variable(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
     }
 
     #[derive(Default)]

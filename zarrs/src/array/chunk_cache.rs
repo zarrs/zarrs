@@ -65,8 +65,10 @@ mod chunk_cache_type;
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
-pub(crate) use chunk_cache_type::async_retrieve_chunk_bytes;
-pub(crate) use chunk_cache_type::{fill_value_bytes, retrieve_chunk_bytes};
+pub(crate) use chunk_cache_type::{async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes};
+pub(crate) use chunk_cache_type::{
+    fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+};
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Bytes>;

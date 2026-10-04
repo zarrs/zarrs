@@ -3,7 +3,10 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use super::{AsyncChunkCache, SealedAsync};
 use super::{ChunkCache, SealedSync};
-use crate::array::{Array, ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions};
+use crate::array::{
+    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
+    CodecOptions,
+};
 use zarrs_codec::CodecError;
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
@@ -69,6 +72,34 @@ where
     }
 }
 
+/// Retrieve `overlap`, a subset of the chunk at `chunk_indices` with array subset `chunk_subset`.
+///
+/// The complete chunk is retrieved without subsetting if `overlap` covers it.
+pub(crate) fn retrieve_chunk_overlap_bytes<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    chunk_subset: &ArraySubset,
+    overlap: &dyn ArraySubsetTraits,
+    options: &CodecOptions,
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+where
+    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    C: ChunkCache + ?Sized,
+{
+    if *chunk_subset == overlap {
+        retrieve_chunk_bytes(cache, array, chunk_indices, options)
+    } else {
+        C::Value::retrieve_partial_chunk_bytes(
+            cache,
+            array,
+            chunk_indices,
+            &overlap.relative_to(chunk_subset.start())?,
+            options,
+        )
+    }
+}
+
 #[cfg(feature = "async")]
 pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
     cache: &C,
@@ -87,6 +118,34 @@ where
     } else {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         fill_value_bytes(array, chunk_shape.num_elements_u64())
+    }
+}
+
+/// Asynchronous version of [`retrieve_chunk_overlap_bytes`].
+#[cfg(feature = "async")]
+pub(crate) async fn async_retrieve_chunk_overlap_bytes<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    chunk_subset: &ArraySubset,
+    overlap: &dyn ArraySubsetTraits,
+    options: &CodecOptions,
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache + ?Sized,
+{
+    if *chunk_subset == overlap {
+        async_retrieve_chunk_bytes(cache, array, chunk_indices, options).await
+    } else {
+        C::Value::async_retrieve_partial_chunk_bytes(
+            cache,
+            array,
+            chunk_indices,
+            &overlap.relative_to(chunk_subset.start())?,
+            options,
+        )
+        .await
     }
 }
 
