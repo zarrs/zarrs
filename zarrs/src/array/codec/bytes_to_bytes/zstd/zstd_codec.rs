@@ -7,7 +7,8 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -126,6 +127,29 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 .map_err(CodecError::from)
                 .map(CowBytes::from)
         }
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if zstd::bulk::decompress_to_buffer(&encoded_value, output)
+            .is_ok_and(|decoded_len| decoded_len == output.len())
+        {
+            return Ok(());
+        }
+        // Decompression into `output` failed or decoded the wrong length, e.g. because the frame
+        // decodes to more than `output.len()` bytes. Decode with allocation to report an accurate
+        // error.
+        let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
+        if decoded_value.len() != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_value.len(), output.len()).into());
+        }
+        output.copy_from_slice(&decoded_value);
+        Ok(())
     }
 
     fn encoded_representation(
