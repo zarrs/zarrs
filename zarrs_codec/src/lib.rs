@@ -732,3 +732,9 @@ impl From<zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError
         Self::Other(err.to_string())
     }
 }
+
+impl From<zarrs_data_type::codec_traits::bytes::BytesCodecDecodeInPlaceError> for CodecError {
+    fn from(err: zarrs_data_type::codec_traits::bytes::BytesCodecDecodeInPlaceError) -> Self {
+        Self::Other(err.to_string())
+    }
+}
