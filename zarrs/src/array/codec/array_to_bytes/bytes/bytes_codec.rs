@@ -5,19 +5,20 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
-    Endianness, bytes_codec_partial,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
+    bytes_codec_partial,
 };
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType, DataTypeSize, FillValue,
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -187,12 +188,14 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     }
 
     fn supports_decode_in_place(&self) -> bool {
+        // An empty slice checks that the endianness is specified where it is required, so that
+        // callers do not write to an output before finding that decoding in place fails
         self.data_type.is_fixed()
             && !self.data_type.is_optional()
-            && self
-                .data_type
-                .codec_bytes()
-                .is_ok_and(BytesDataTypeTraits::is_decode_in_place_efficient)
+            && self.data_type.codec_bytes().is_ok_and(|codec| {
+                codec.is_decode_in_place_efficient()
+                    && codec.decode_in_place(&mut [], self.endian).is_ok()
+            })
     }
 
     fn decode_in_place(&self, bytes: &mut [u8]) -> Result<(), CodecError> {
@@ -228,6 +231,48 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes_decoded.validate(num_elements, &self.data_type)?;
 
         Ok(bytes_decoded)
+    }
+
+    fn decode_into(
+        &self,
+        bytes: CowBytes<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        match (output_target, self.data_type.size()) {
+            (ArrayBytesDecodeIntoTarget::Fixed(output), DataTypeSize::Fixed(data_type_size)) => {
+                let expected_len = shape
+                    .iter()
+                    .try_fold(data_type_size as u64, |len, d| len.checked_mul(d.get()))
+                    .and_then(|len| usize::try_from(len).ok())
+                    .ok_or("the decoded chunk size in bytes overflows usize")?;
+                if bytes.len() != expected_len {
+                    return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
+                }
+                // Change the endianness as the bytes are copied into the output, rather than
+                // decoding to an intermediate allocation that is then copied
+                let codec = self.data_type.codec_bytes()?;
+                if codec.is_decode_passthrough(self.endian) {
+                    Ok(output.copy_from_slice(&bytes)?)
+                } else if codec.is_decode_in_place_efficient() {
+                    // Check that the endianness is specified before writing to the output
+                    codec.decode_in_place(&mut [], self.endian)?;
+                    output.try_copy_from_slice_with(&bytes, |source, destination| {
+                        destination.copy_from_slice(source);
+                        Ok::<_, CodecError>(codec.decode_in_place(destination, self.endian)?)
+                    })
+                } else {
+                    // Decoding in place would allocate for each contiguous region
+                    let decoded = codec.decode(bytes, self.endian)?;
+                    Ok(output.copy_from_slice(&decoded)?)
+                }
+            }
+            (output_target, _) => {
+                let bytes = self.decode(bytes, shape, options)?;
+                decode_into_array_bytes_target(&bytes, output_target)
+            }
+        }
     }
 
     fn partial_decoder(
@@ -312,7 +357,62 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 mod tests {
     use super::*;
     use crate::array::codec::array_to_bytes::bytes::non_native_endianness;
-    use crate::array::data_type;
+    use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, data_type};
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    /// Decode `encoded` (`u16` elements) with the `bytes` codec into the subset of an array of
+    /// `array_shape` at the origin that has the shape of the chunk.
+    ///
+    /// Returns the array, which is written to partially if decoding fails, and the result of decoding.
+    fn decode_into_view_array(
+        endianness: Option<Endianness>,
+        chunk_shape: &[u64],
+        array_shape: &[u64],
+        encoded: &[u8],
+    ) -> (Vec<u16>, Result<(), CodecError>) {
+        let codec = BytesCodec::new(endianness)
+            .with_context(
+                data_type::uint16(),
+                FillValue::from(0u16),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let chunk_shape_nz: Vec<NonZeroU64> = chunk_shape
+            .iter()
+            .map(|&s| NonZeroU64::new(s).unwrap())
+            .collect();
+        let mut output = vec![0u16; usize::try_from(array_shape.iter().product::<u64>()).unwrap()];
+        let result = {
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                    size_of::<u16>(),
+                    array_shape,
+                    ArraySubset::new_with_shape(chunk_shape.to_vec()),
+                )
+            }
+            .unwrap();
+            codec.decode_into(
+                CowBytes::from(encoded),
+                &chunk_shape_nz,
+                (&mut view).into(),
+                &CodecOptions::default(),
+            )
+        };
+        (output, result)
+    }
+
+    /// Decode `encoded` (`u16` elements) with the `bytes` codec into a view of an array.
+    fn decode_into_view(
+        endianness: Option<Endianness>,
+        chunk_shape: &[u64],
+        array_shape: &[u64],
+        encoded: &[u8],
+    ) -> Result<Vec<u16>, CodecError> {
+        let (output, result) =
+            decode_into_view_array(endianness, chunk_shape, array_shape, encoded);
+        result.map(|()| output)
+    }
 
     #[test]
     fn decode_in_place() {
@@ -333,6 +433,69 @@ mod tests {
         assert_eq!(bytes, [2, 1, 4, 3]);
         // Endianness is required for multi-byte data types
         assert!(codec(None).decode_in_place(&mut bytes).is_err());
+        assert!(!codec(None).supports_decode_in_place());
+    }
+
+    #[test]
+    fn decode_into_endianness() {
+        let values = [1u16, 2, 3, 4];
+        for (endianness, encoded) in [
+            (Endianness::Little, values.map(u16::to_le_bytes).concat()),
+            (Endianness::Big, values.map(u16::to_be_bytes).concat()),
+        ] {
+            // A contiguous view
+            assert_eq!(
+                decode_into_view(Some(endianness), &[2, 2], &[2, 2], &encoded).unwrap(),
+                values
+            );
+            // A view with two contiguous regions
+            assert_eq!(
+                decode_into_view(Some(endianness), &[2, 2], &[2, 4], &encoded).unwrap(),
+                [1, 2, 0, 0, 3, 4, 0, 0]
+            );
+            // The encoded bytes are not the length of the chunk
+            assert!(decode_into_view(Some(endianness), &[2, 2], &[2, 2], &encoded[1..]).is_err());
+            assert!(decode_into_view(Some(endianness), &[2, 1], &[2, 2], &encoded).is_err());
+        }
+        // Endianness is required for multi-byte data types, and the output is not written to
+        for array_shape in [[2, 2], [2, 4]] {
+            let (output, result) = decode_into_view_array(None, &[2, 2], &array_shape, &[1; 8]);
+            assert!(result.is_err());
+            assert!(output.iter().all(|&value| value == 0));
+        }
+    }
+
+    #[test]
+    fn decode_into_size_overflow() {
+        let codec = BytesCodec::default()
+            .with_context(
+                data_type::uint16(),
+                FillValue::from(0u16),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        // The size of the decoded chunk in bytes overflows, which is an error rather than a panic
+        let shape = [NonZeroU64::new(1 << 32).unwrap(); 2];
+        let mut output = [0u16; 1];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                size_of::<u16>(),
+                &[1],
+                ArraySubset::new_with_shape(vec![1]),
+            )
+        }
+        .unwrap();
+        assert!(
+            codec
+                .decode_into(
+                    CowBytes::from(&[0u8; 2][..]),
+                    &shape,
+                    (&mut view).into(),
+                    &CodecOptions::default(),
+                )
+                .is_err()
+        );
     }
 
     #[test]
