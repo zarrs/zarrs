@@ -174,17 +174,30 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
-    /// Returns whether decoding valid encoded bytes produces identical fixed bytes in native
-    /// in-memory order.
+    /// Returns whether [`decode_in_place`](Self::decode_in_place) is supported.
     ///
-    /// The result may depend on the decoded representation. The default implementation is
-    /// conservative and returns `false`.
+    /// A codec returning `true` must override [`decode_in_place`](Self::decode_in_place), which otherwise returns an error.
+    ///
+    /// The default implementation is conservative and returns `false`.
+    fn supports_decode_in_place(&self) -> bool {
+        false
+    }
+
+    /// Decode bytes in place.
+    ///
+    /// The encoded `bytes` are transformed in place into the decoded bytes, which have the same length and layout: fixed-size elements, with no validation of values.
+    /// Callers may then produce the input of this codec directly in the output and call this method on the output, e.g. to change the endianness of the elements.
+    /// A caller remains responsible for checking that the length of the encoded bytes is the expected decoded length.
+    ///
+    /// This must only be called if [`supports_decode_in_place`](Self::supports_decode_in_place) returns `true`.
+    /// The default implementation always returns an error.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
-    #[expect(unused_variables)]
-    fn is_decode_passthrough(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        Ok(false)
+    /// Returns a [`CodecError`] if decoding in place fails or is not supported.
+    fn decode_in_place(&self, _bytes: &mut [u8]) -> Result<(), CodecError> {
+        Err(CodecError::Other(
+            "decoding in place is not supported".to_string(),
+        ))
     }
 
     /// Initialise a partial decoder.

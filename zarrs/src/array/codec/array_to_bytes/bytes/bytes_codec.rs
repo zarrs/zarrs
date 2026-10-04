@@ -5,8 +5,8 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
-    bytes_codec_partial,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
+    Endianness, bytes_codec_partial,
 };
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType, DataTypeSize, FillValue,
@@ -186,14 +186,20 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
-    fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
-            return Ok(false);
-        }
+    fn supports_decode_in_place(&self) -> bool {
+        self.data_type.is_fixed()
+            && !self.data_type.is_optional()
+            && self
+                .data_type
+                .codec_bytes()
+                .is_ok_and(BytesDataTypeTraits::is_decode_in_place_efficient)
+    }
+
+    fn decode_in_place(&self, bytes: &mut [u8]) -> Result<(), CodecError> {
         Ok(self
             .data_type
             .codec_bytes()?
-            .is_decode_passthrough(self.endian))
+            .decode_in_place(bytes, self.endian)?)
     }
 
     fn encode<'a>(
@@ -305,38 +311,49 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::array::codec::array_to_bytes::bytes::non_native_endianness;
     use crate::array::data_type;
 
     #[test]
-    fn decode_passthrough() {
-        let shape = [NonZeroU64::new(1).unwrap()];
+    fn decode_in_place() {
         let options = CodecSpecificOptions::default();
-        assert!(
-            BytesCodec::new(None)
-                .with_context(data_type::uint8(), FillValue::from(0u8), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        assert!(
-            BytesCodec::new(Some(Endianness::native()))
+        let codec = |endianness| {
+            BytesCodec::new(endianness)
                 .with_context(data_type::uint16(), FillValue::from(0u16), &options)
                 .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        let non_native = if Endianness::native() == Endianness::Little {
-            Endianness::Big
-        } else {
-            Endianness::Little
         };
+        let mut bytes = [1, 2, 3, 4];
+        let native = codec(Some(Endianness::native()));
+        assert!(native.supports_decode_in_place());
+        native.decode_in_place(&mut bytes).unwrap();
+        assert_eq!(bytes, [1, 2, 3, 4]);
+        let non_native = codec(Some(non_native_endianness()));
+        assert!(non_native.supports_decode_in_place());
+        non_native.decode_in_place(&mut bytes).unwrap();
+        assert_eq!(bytes, [2, 1, 4, 3]);
+        // Endianness is required for multi-byte data types
+        assert!(codec(None).decode_in_place(&mut bytes).is_err());
+    }
+
+    #[test]
+    fn data_type_decode_passthrough() {
+        let options = CodecSpecificOptions::default();
+        let uint8 = data_type::uint8();
+        let uint16 = data_type::uint16();
+        assert!(uint8.codec_bytes().unwrap().is_decode_passthrough(None));
         assert!(
-            !BytesCodec::new(Some(non_native))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
+            uint16
+                .codec_bytes()
                 .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
+                .is_decode_passthrough(Some(Endianness::native()))
         );
+        assert!(
+            !uint16
+                .codec_bytes()
+                .unwrap()
+                .is_decode_passthrough(Some(non_native_endianness()))
+        );
+        assert!(!uint16.codec_bytes().unwrap().is_decode_passthrough(None));
         assert!(
             BytesCodec::new(None)
                 .with_context(
