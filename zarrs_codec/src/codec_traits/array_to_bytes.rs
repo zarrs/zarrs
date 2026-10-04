@@ -174,6 +174,19 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
+    /// Returns whether decoding valid encoded bytes produces identical fixed bytes in native
+    /// in-memory order.
+    ///
+    /// The result may depend on the decoded representation. The default implementation is
+    /// conservative and returns `false`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
+    #[expect(unused_variables)]
+    fn is_decode_passthrough(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
+        Ok(false)
+    }
+
     /// Initialise a partial decoder.
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
