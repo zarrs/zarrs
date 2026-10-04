@@ -109,14 +109,18 @@ where
     let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
-            cache,
-            array,
-            &chunk_indices,
-            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-            options,
-        )
-        .await?;
+        let bytes = if chunk_subset_overlap == chunk_subset {
+            async_retrieve_chunk_bytes(cache, array, &chunk_indices, options).await?
+        } else {
+            C::Value::async_retrieve_partial_chunk_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                options,
+            )
+            .await?
+        };
         Ok::<_, ArrayError>((
             bytes,
             chunk_subset_overlap.relative_to(&array_subset.start())?,
@@ -179,14 +183,18 @@ where
                 let chunk_subset = array.chunk_subset(&chunk_indices)?;
                 let overlap = chunk_subset.overlap(array_subset)?;
                 let output_subset = overlap.relative_to(array_subset_start)?;
-                let bytes = C::Value::async_retrieve_partial_chunk_bytes(
-                    cache,
-                    array,
-                    &chunk_indices,
-                    &overlap.relative_to(chunk_subset.start())?,
-                    options,
-                )
-                .await?;
+                let bytes = if overlap == chunk_subset {
+                    async_retrieve_chunk_bytes(cache, array, &chunk_indices, options).await?
+                } else {
+                    C::Value::async_retrieve_partial_chunk_bytes(
+                        cache,
+                        array,
+                        &chunk_indices,
+                        &overlap.relative_to(chunk_subset.start())?,
+                        options,
+                    )
+                    .await?
+                };
                 let mut data_view = unsafe {
                     ArrayBytesFixedDisjointView::new(
                         data_slice,
@@ -620,6 +628,20 @@ mod tests {
                 18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45,
             ]
         );
+        assert_eq!(
+            cached
+                .async_retrieve_array_subset::<Vec<u16>>(&[0..8, 0..8])
+                .await
+                .unwrap(),
+            data
+        );
+        assert_eq!(
+            cached
+                .async_retrieve_array_subset::<Vec<u16>>(&[1..8, 0..8])
+                .await
+                .unwrap(),
+            data[8..]
+        );
         assert!(
             cached
                 .async_retrieve_subchunk::<Vec<u16>>(&[0])
@@ -675,6 +697,46 @@ mod tests {
         assert!(!cached.cache().is_empty().await);
     }
 
+    /// Merge complete and partial variable-length chunks, including missing chunks.
+    async fn test_cache_variable_async<C>(cache: C)
+    where
+        C: AsyncChunkCache + 'static,
+    {
+        let store = Arc::new(AsyncMemoryStore::new());
+        let array = ArrayBuilder::new(vec![6, 6], vec![2, 2], data_type::string(), "")
+            .build_arc(store, "/")
+            .unwrap();
+        let data: Vec<String> = (0..36)
+            .map(|i| if i < 24 { i.to_string() } else { String::new() })
+            .collect();
+        array
+            .async_store_array_subset(&[0..4, 0..6], &data[..24])
+            .await
+            .unwrap();
+
+        let cached = ArrayCached::new(array, cache);
+        // Repeat the reads to exercise both cold and populated caches.
+        for _ in 0..2 {
+            assert_eq!(
+                cached
+                    .async_retrieve_array_subset::<Vec<String>>(&[0..6, 0..6])
+                    .await
+                    .unwrap(),
+                data
+            );
+            let expected: Vec<String> = (1..6)
+                .flat_map(|row| data[row * 6 + 1..row * 6 + 6].iter().cloned())
+                .collect();
+            assert_eq!(
+                cached
+                    .async_retrieve_array_subset::<Vec<String>>(&[1..6, 1..6])
+                    .await
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
     async fn test_cache_nested_optional_async<C>(cache: C)
     where
@@ -725,6 +787,8 @@ mod tests {
         test_cache_sharded_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
         test_cache_into_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
+        test_cache_variable_async(AsyncChunkCacheEncodedLruChunkLimit::new(9)).await;
+        test_cache_variable_async(AsyncChunkCacheEncodedLruSizeLimit::new(4096)).await;
     }
 
     #[tokio::test]
@@ -734,6 +798,8 @@ mod tests {
         test_cache_sharded_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
         test_cache_into_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
+        test_cache_variable_async(AsyncChunkCacheDecodedLruChunkLimit::new(9)).await;
+        test_cache_variable_async(AsyncChunkCacheDecodedLruSizeLimit::new(4096)).await;
     }
 
     #[tokio::test]
@@ -743,6 +809,8 @@ mod tests {
         test_cache_sharded_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
         test_cache_into_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
         test_cache_nested_optional_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
+        test_cache_variable_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(9)).await;
+        test_cache_variable_async(AsyncChunkCachePartialDecoderLruSizeLimit::new(4096)).await;
     }
 
     /// Cached async retrievals must be `Send` so that they can be used with
