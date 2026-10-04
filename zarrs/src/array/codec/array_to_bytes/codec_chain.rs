@@ -597,6 +597,25 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
+        let mut output_target = output_target;
+
+        if self.array_to_array.is_empty() && self.bytes_to_bytes.len() == 1 {
+            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
+            if self.array_to_bytes.is_decode_passthrough(shape)?
+                && let BytesRepresentation::FixedSize(decoded_size) = bytes_representations[0]
+                && let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+                && let Some(output) = output.as_mut_slice()
+                && output.len() == usize::try_from(decoded_size).unwrap()
+            {
+                self.bytes_to_bytes[0].decode_into(
+                    bytes,
+                    &bytes_representations[0],
+                    output,
+                    options,
+                )?;
+                return Ok(());
+            }
+        }
 
         if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
             // Fast path if no bytes to bytes or array to array codecs
@@ -992,11 +1011,108 @@ impl ArrayCodecTraits for CodecChainBound {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::codec::BytesCodec;
-    use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
+    use crate::array::codec::array_to_bytes::bytes::BytesCodec;
+    use crate::array::{
+        ArrayBytesFixedDisjointView, ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type,
+    };
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    #[derive(Debug)]
+    struct TestZstdLikeDirectDecode {
+        expected_output_ptr: usize,
+    }
+
+    impl ExtensionName for TestZstdLikeDirectDecode {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl CodecTraits for TestZstdLikeDirectDecode {
+        fn configuration(
+            &self,
+            _version: ZarrVersion,
+            _options: &CodecMetadataOptions,
+        ) -> Option<Configuration> {
+            None
+        }
+
+        fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+            PartialDecoderCapability {
+                partial_read: false,
+                partial_decode: false,
+            }
+        }
+
+        fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+            PartialEncoderCapability {
+                partial_encode: false,
+            }
+        }
+    }
+
+    #[cfg_attr(
+        all(feature = "async", not(target_arch = "wasm32")),
+        async_trait::async_trait
+    )]
+    #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+    impl BytesToBytesCodecTraits for TestZstdLikeDirectDecode {
+        fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
+            self
+        }
+
+        fn recommended_concurrency(
+            &self,
+            _decoded_representation: &BytesRepresentation,
+        ) -> Result<RecommendedConcurrency, CodecError> {
+            Ok(RecommendedConcurrency::new_maximum(1))
+        }
+
+        fn encoded_representation(
+            &self,
+            decoded_representation: &BytesRepresentation,
+        ) -> BytesRepresentation {
+            *decoded_representation
+        }
+
+        fn encode<'a>(
+            &self,
+            decoded_value: CowBytes<'a>,
+            _options: &CodecOptions,
+        ) -> Result<CowBytes<'a>, CodecError> {
+            Ok(decoded_value)
+        }
+
+        fn decode<'a>(
+            &self,
+            _encoded_value: CowBytes<'a>,
+            _decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<CowBytes<'a>, CodecError> {
+            panic!("allocating bytes-to-bytes decode must be skipped")
+        }
+
+        fn decode_into(
+            &self,
+            encoded_value: CowBytes<'_>,
+            decoded_representation: &BytesRepresentation,
+            output: &mut [u8],
+            _options: &CodecOptions,
+        ) -> Result<usize, CodecError> {
+            assert_eq!(output.as_mut_ptr() as usize, self.expected_output_ptr);
+            assert_eq!(
+                *decoded_representation,
+                BytesRepresentation::FixedSize(output.len() as u64)
+            );
+            assert_eq!(encoded_value.len(), output.len());
+            output.copy_from_slice(&encoded_value);
+            Ok(output.len())
+        }
+    }
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
@@ -1284,6 +1400,46 @@ mod tests {
             &decoded_region,
             decoded_partial_chunk_true,
         );
+    }
+
+    #[test]
+    fn codec_chain_decode_into_bytes_direct() {
+        let shape = ChunkShape::from(vec![NonZeroU64::new(8).unwrap()]);
+        let decoded = (0..8u16).flat_map(u16::to_ne_bytes).collect::<Vec<_>>();
+        let mut output = vec![0; decoded.len()];
+        let expected_output_ptr = output.as_mut_ptr() as usize;
+        let codec = CodecChain::new(
+            vec![],
+            Arc::new(BytesCodec::default()),
+            vec![Arc::new(TestZstdLikeDirectDecode {
+                expected_output_ptr,
+            })],
+        )
+        .with_context(
+            data_type::uint16(),
+            FillValue::from(0u16),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                size_of::<u16>(),
+                &[8],
+                ArraySubset::new_with_shape(vec![8]),
+            )
+        }
+        .unwrap();
+
+        codec
+            .decode_into(
+                CowBytes::from(decoded.as_slice()),
+                &shape,
+                (&mut view).into(),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(output, decoded);
     }
 
     #[test]

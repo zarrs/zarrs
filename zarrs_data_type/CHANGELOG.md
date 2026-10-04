@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `BytesDataTypeTraits::is_decode_passthrough()`
 - Add `codec_traits::cast_value` module
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
 
