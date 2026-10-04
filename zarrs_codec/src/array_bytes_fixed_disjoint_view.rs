@@ -209,32 +209,49 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
     pub fn copy_from_slice(&mut self, subset_bytes: &[u8]) -> Result<(), InvalidBytesLengthError> {
+        self.try_copy_from_slice_with(subset_bytes, |source, destination| {
+            destination.copy_from_slice(source);
+            Ok(())
+        })
+    }
+
+    /// Copy bytes into the view with a custom copy for each contiguous region.
+    ///
+    /// The `subset_bytes` must be the same length as the byte length of the elements in the view.
+    /// `copy` is called with each contiguous region of `subset_bytes` and the region of the view it is destined for, which have the same length.
+    /// This can transform bytes as they are copied, e.g. to change their endianness.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the length of `subset_bytes` is not the same as the byte length of the elements in the view, or the first error returned by `copy`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn try_copy_from_slice_with<E: From<InvalidBytesLengthError>>(
+        &mut self,
+        subset_bytes: &[u8],
+        mut copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
         if subset_bytes.len() != self.bytes_in_subset_len {
-            return Err(InvalidBytesLengthError::new(
-                subset_bytes.len(),
-                self.bytes_in_subset_len,
-            ));
+            return Err(
+                InvalidBytesLengthError::new(subset_bytes.len(), self.bytes_in_subset_len).into(),
+            );
         }
         let data_type_size = self.data_type_size as u64;
-        let bytes_copied = self.contiguous_linearised_indices.iter().fold(
-            0,
-            |subset_offset: usize,
-             (array_subset_element_index, contiguous_elements): (u64, u64)| {
-                let output_offset =
-                    usize::try_from(array_subset_element_index * data_type_size).unwrap();
-                let length = usize::try_from(contiguous_elements * data_type_size).unwrap();
-                debug_assert!((output_offset + length) <= self.bytes.len());
-                debug_assert!((subset_offset + length) <= subset_bytes.len());
-                let subset_offset_end = subset_offset + length;
-                unsafe {
-                    self.bytes
-                        .index_mut(output_offset..output_offset + length)
-                        .copy_from_slice(&subset_bytes[subset_offset..subset_offset_end]);
-                }
-                subset_offset_end
-            },
-        );
-        debug_assert_eq!(bytes_copied, subset_bytes.len());
+        let mut subset_offset = 0;
+        for (array_subset_element_index, contiguous_elements) in &self.contiguous_linearised_indices
+        {
+            let output_offset =
+                usize::try_from(array_subset_element_index * data_type_size).unwrap();
+            let length = usize::try_from(contiguous_elements * data_type_size).unwrap();
+            debug_assert!((output_offset + length) <= self.bytes.len());
+            debug_assert!((subset_offset + length) <= subset_bytes.len());
+            let subset_offset_end = subset_offset + length;
+            copy(&subset_bytes[subset_offset..subset_offset_end], unsafe {
+                self.bytes.index_mut(output_offset..output_offset + length)
+            })?;
+            subset_offset = subset_offset_end;
+        }
+        debug_assert_eq!(subset_offset, subset_bytes.len());
 
         Ok(())
     }
@@ -419,6 +436,58 @@ mod tests {
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
         assert_eq!(&bytes, &[0, 11, 12, 3, 24, 25, 6, 255, 255]);
+    }
+
+    #[test]
+    fn disjoint_view_try_copy_from_slice_with() {
+        // A 2x2 view of a 3x3 array of 2 byte elements is two contiguous regions
+        let shape = vec![3, 3];
+        let mut bytes = vec![0u8; 18];
+        {
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut bytes),
+                    2,
+                    &shape,
+                    ArraySubset::new_with_ranges(&[1..3, 0..2]),
+                )
+            }
+            .unwrap();
+            let mut regions = 0;
+            // Swap the bytes of each element as they are copied
+            view.try_copy_from_slice_with::<InvalidBytesLengthError>(
+                &[1, 2, 3, 4, 5, 6, 7, 8],
+                |source, destination| {
+                    regions += 1;
+                    assert_eq!(source.len(), 4);
+                    assert_eq!(destination.len(), 4);
+                    destination.copy_from_slice(source);
+                    for element in destination.as_chunks_mut::<2>().0 {
+                        element.reverse();
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+            assert_eq!(regions, 2);
+
+            // Wrong length
+            assert!(
+                view.try_copy_from_slice_with::<InvalidBytesLengthError>(&[0; 7], |_, _| Ok(()))
+                    .is_err()
+            );
+            // Errors from the copy are returned
+            assert!(
+                view.try_copy_from_slice_with(&[0; 8], |_, _| {
+                    Err::<(), _>(InvalidBytesLengthError::new(0, 1))
+                })
+                .is_err()
+            );
+        }
+        assert_eq!(
+            bytes,
+            [0, 0, 0, 0, 0, 0, 2, 1, 4, 3, 0, 0, 6, 5, 8, 7, 0, 0]
+        );
     }
 
     #[test]
