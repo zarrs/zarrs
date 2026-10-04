@@ -10,7 +10,12 @@ pub struct BytesCodecEndiannessMissingError;
 
 /// Traits for a data type supporting the `bytes` codec.
 pub trait BytesDataTypeTraits {
-    /// Returns whether decoding with `endianness` preserves the native in-memory bytes.
+    /// Returns whether decoding with `endianness` is the identity on the encoded bytes.
+    ///
+    /// An implementation returning `true` guarantees that, for every valid input, the decoded
+    /// bytes are the encoded bytes unchanged (i.e. already in native in-memory byte order), with
+    /// no validation or transformation of values.
+    /// The `bytes` codec may then skip [`decode`](Self::decode) and use its input directly.
     ///
     /// The default implementation is conservative and returns `false`.
     #[allow(unused_variables)]

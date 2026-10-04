@@ -186,14 +186,13 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
-    fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
-            return Ok(false);
-        }
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .is_decode_passthrough(self.endian))
+    fn is_decode_passthrough(&self) -> bool {
+        self.data_type.is_fixed()
+            && !self.data_type.is_optional()
+            && self
+                .data_type
+                .codec_bytes()
+                .is_ok_and(|codec| codec.is_decode_passthrough(self.endian))
     }
 
     fn encode<'a>(
@@ -305,37 +304,29 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::array::codec::array_to_bytes::bytes::non_native_endianness;
     use crate::array::data_type;
 
     #[test]
     fn decode_passthrough() {
-        let shape = [NonZeroU64::new(1).unwrap()];
         let options = CodecSpecificOptions::default();
         assert!(
             BytesCodec::new(None)
                 .with_context(data_type::uint8(), FillValue::from(0u8), &options)
                 .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
+                .is_decode_passthrough()
         );
         assert!(
             BytesCodec::new(Some(Endianness::native()))
                 .with_context(data_type::uint16(), FillValue::from(0u16), &options)
                 .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
+                .is_decode_passthrough()
         );
-        let non_native = if Endianness::native() == Endianness::Little {
-            Endianness::Big
-        } else {
-            Endianness::Little
-        };
         assert!(
-            !BytesCodec::new(Some(non_native))
+            !BytesCodec::new(Some(non_native_endianness()))
                 .with_context(data_type::uint16(), FillValue::from(0u16), &options)
                 .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
+                .is_decode_passthrough()
         );
         assert!(
             BytesCodec::new(None)

@@ -108,6 +108,16 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
     }
 }
 
+/// Return the endianness that is not the native endianness.
+#[cfg(test)]
+pub(crate) fn non_native_endianness() -> Endianness {
+    if Endianness::native() == Endianness::Little {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
