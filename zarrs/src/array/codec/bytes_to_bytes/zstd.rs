@@ -83,7 +83,9 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -222,5 +224,67 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    fn decode_into() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"decode directly into this buffer".repeat(32);
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                encoded.clone(),
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        assert!(decode_into(&mut vec![0; len + 1]).is_err());
+        assert!(decode_into(&mut output[..len - 1]).is_err());
+    }
+
+    #[test]
+    fn decode_into_unknown_content_size() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"streamed frame without content size".repeat(32);
+        let len = decoded.len();
+        // The streaming encoder does not write the content size into the frame header
+        let encoded = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        assert!(matches!(
+            zstd::zstd_safe::get_frame_content_size(&encoded),
+            Ok(None)
+        ));
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                CowBytes::from(encoded.as_slice()),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length, not an opaque io error
+        assert!(matches!(
+            decode_into(&mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(&mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
     }
 }
