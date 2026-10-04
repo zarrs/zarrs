@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `ArrayBytesFixedDisjointView::as_mut_slice`
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
