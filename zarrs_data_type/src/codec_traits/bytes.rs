@@ -8,9 +8,30 @@ use zarrs_metadata::Endianness;
 #[error("endianness must be specified for multi-byte data types")]
 pub struct BytesCodecEndiannessMissingError;
 
+/// An error decoding the bytes of a fixed-size data type in place for the `bytes` codec.
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+pub enum BytesCodecDecodeInPlaceError {
+    /// Endianness must be specified for multi-byte data types.
+    #[error(transparent)]
+    EndiannessMissing(#[from] BytesCodecEndiannessMissingError),
+    /// Decoding changed the length of the bytes, which in-place decoding cannot represent.
+    #[error("decoding {len} bytes in place produced {decoded_len} bytes")]
+    LengthChanged {
+        /// The length of the bytes before decoding.
+        len: usize,
+        /// The length of the bytes after decoding.
+        decoded_len: usize,
+    },
+}
+
 /// Traits for a data type supporting the `bytes` codec.
 pub trait BytesDataTypeTraits {
-    /// Returns whether decoding with `endianness` preserves the native in-memory bytes.
+    /// Returns whether decoding with `endianness` is the identity on the encoded bytes.
+    ///
+    /// An implementation returning `true` guarantees that, for every valid input, the decoded
+    /// bytes are the encoded bytes unchanged (i.e. already in native in-memory byte order), with
+    /// no validation or transformation of values.
+    /// The `bytes` codec may then skip [`decode`](Self::decode) and use its input directly.
     ///
     /// The default implementation is conservative and returns `false`.
     #[allow(unused_variables)]
@@ -42,6 +63,40 @@ pub trait BytesDataTypeTraits {
         bytes: CowBytes<'a>,
         endianness: Option<Endianness>,
     ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError>;
+
+    /// Returns whether [`decode_in_place`](Self::decode_in_place) transforms bytes without allocating.
+    ///
+    /// The `bytes` codec uses this to decode in place only where it is cheaper than [`decode`](Self::decode).
+    /// The default implementation of [`decode_in_place`](Self::decode_in_place) is correct but allocates, so the default is `false`.
+    fn is_decode_in_place_efficient(&self) -> bool {
+        false
+    }
+
+    /// Decode the bytes of a fixed-size data type from a specified endianness in place.
+    ///
+    /// This is equivalent to [`decode`](BytesDataTypeTraits::decode) but transforms `bytes` in place.
+    /// The decoded bytes must be the same length as `bytes`.
+    ///
+    /// The default implementation decodes a copy of `bytes`, so it allocates.
+    /// Override this and [`is_decode_in_place_efficient`](Self::is_decode_in_place_efficient) to decode without allocating.
+    ///
+    /// # Errors
+    /// Returns a [`BytesCodecDecodeInPlaceError`] if `endianness` is [`None`] but must be specified, or (default implementation) if [`decode`](BytesDataTypeTraits::decode) does not preserve the length of `bytes`.
+    fn decode_in_place(
+        &self,
+        bytes: &mut [u8],
+        endianness: Option<Endianness>,
+    ) -> Result<(), BytesCodecDecodeInPlaceError> {
+        let decoded = self.decode(CowBytes::from(bytes.to_vec()), endianness)?;
+        if decoded.len() != bytes.len() {
+            return Err(BytesCodecDecodeInPlaceError::LengthChanged {
+                len: bytes.len(),
+                decoded_len: decoded.len(),
+            });
+        }
+        bytes.copy_from_slice(&decoded);
+        Ok(())
+    }
 }
 
 // Generate the codec support infrastructure using the generic macro
@@ -99,6 +154,18 @@ macro_rules! _impl_bytes_data_type_traits {
             > {
                 Ok(bytes)
             }
+
+            fn is_decode_in_place_efficient(&self) -> bool {
+                true
+            }
+
+            fn decode_in_place(
+                &self,
+                _bytes: &mut [u8],
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<(), $crate::codec_traits::bytes::BytesCodecDecodeInPlaceError> {
+                Ok(())
+            }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
@@ -148,6 +215,26 @@ macro_rules! _impl_bytes_data_type_traits {
             > {
                 self.encode(bytes, endianness)
             }
+
+            fn is_decode_in_place_efficient(&self) -> bool {
+                true
+            }
+
+            fn decode_in_place(
+                &self,
+                bytes: &mut [u8],
+                endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<(), $crate::codec_traits::bytes::BytesCodecDecodeInPlaceError> {
+                const COMPONENT_SIZE: usize = $component_size;
+                let endianness = endianness
+                    .ok_or($crate::codec_traits::bytes::BytesCodecEndiannessMissingError)?;
+                if endianness != ::zarrs_metadata::Endianness::native() {
+                    for chunk in bytes.as_chunks_mut::<COMPONENT_SIZE>().0 {
+                        chunk.reverse();
+                    }
+                }
+                Ok(())
+            }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
@@ -159,3 +246,43 @@ macro_rules! _impl_bytes_data_type_traits {
 
 #[doc(inline)]
 pub use _impl_bytes_data_type_traits as impl_bytes_data_type_traits;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A data type with a `decode` that drops the last byte.
+    struct LengthChanging;
+
+    impl BytesDataTypeTraits for LengthChanging {
+        fn encode<'a>(
+            &self,
+            bytes: CowBytes<'a>,
+            _endianness: Option<Endianness>,
+        ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
+            Ok(bytes)
+        }
+
+        fn decode<'a>(
+            &self,
+            bytes: CowBytes<'a>,
+            _endianness: Option<Endianness>,
+        ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
+            Ok(CowBytes::from(bytes[..bytes.len() - 1].to_vec()))
+        }
+    }
+
+    #[test]
+    fn default_decode_in_place_length_changed() {
+        let mut bytes = [1, 2, 3, 4];
+        assert!(!LengthChanging.is_decode_in_place_efficient());
+        assert!(matches!(
+            LengthChanging.decode_in_place(&mut bytes, None),
+            Err(BytesCodecDecodeInPlaceError::LengthChanged {
+                len: 4,
+                decoded_len: 3
+            })
+        ));
+        assert_eq!(bytes, [1, 2, 3, 4]);
+    }
+}
