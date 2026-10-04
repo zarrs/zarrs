@@ -44,8 +44,8 @@ pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecCo
 
 // Re-export extension trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bytes::{
-    BytesCodecEndiannessMissingError, BytesDataTypeExt, BytesDataTypePlugin, BytesDataTypeTraits,
-    impl_bytes_data_type_traits,
+    BytesCodecDecodeInPlaceError, BytesCodecEndiannessMissingError, BytesDataTypeExt,
+    BytesDataTypePlugin, BytesDataTypeTraits, impl_bytes_data_type_traits,
 };
 // Re-export Endianness for convenience
 pub use zarrs_metadata::Endianness;
@@ -108,6 +108,16 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
     }
 }
 
+/// Return the endianness that is not the native endianness.
+#[cfg(test)]
+pub(crate) fn non_native_endianness() -> Endianness {
+    if Endianness::native() == Endianness::Little {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
@@ -119,8 +129,57 @@ mod tests {
     };
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-        CodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecTraits, CowBytes, UnboundArrayToBytesCodecTraits,
     };
+
+    #[test]
+    fn bytes_data_type_decode_in_place() {
+        let non_native = Some(non_native_endianness());
+        for data_type in [
+            data_type::uint8(),
+            data_type::uint16(),
+            data_type::float32(),
+            data_type::float64(),
+            data_type::complex64(),
+        ] {
+            let codec = data_type.codec_bytes().unwrap();
+            let encoded: Vec<u8> = (0..32).collect();
+            for endianness in [non_native, Some(Endianness::native())] {
+                let decoded = codec
+                    .decode(CowBytes::from(encoded.clone()), endianness)
+                    .unwrap();
+                let mut in_place = encoded.clone();
+                codec.decode_in_place(&mut in_place, endianness).unwrap();
+                assert_eq!(in_place, decoded.into_vec());
+            }
+        }
+
+        // Components are reversed, not elements: a complex64 element has two 4 byte components
+        let mut bytes = [0, 1, 2, 3, 4, 5, 6, 7];
+        data_type::complex64()
+            .codec_bytes()
+            .unwrap()
+            .decode_in_place(&mut bytes, non_native)
+            .unwrap();
+        assert_eq!(bytes, [3, 2, 1, 0, 7, 6, 5, 4]);
+
+        // Endianness is required for multi-byte data types
+        let uint16 = data_type::uint16();
+        assert!(
+            uint16
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .is_err()
+        );
+        assert!(
+            data_type::uint8()
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .is_ok()
+        );
+    }
 
     #[test]
     fn codec_bytes_configuration_big() {

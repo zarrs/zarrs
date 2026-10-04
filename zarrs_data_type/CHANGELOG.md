@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `BytesDataTypeTraits::is_decode_passthrough()`
+- Add `BytesDataTypeTraits::{decode_in_place,is_decode_in_place_efficient}()`
+- Add `codec_traits::bytes::BytesCodecDecodeInPlaceError`
 - Add `codec_traits::cast_value` module
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
 
