@@ -132,6 +132,55 @@ mod tests {
         assert_eq!(bytes, decoded.to_vec());
     }
 
+    /// Retrieving whole chunks decodes zstd directly into the output where the output is
+    /// contiguous (chunks spanning full rows) and falls back otherwise (square chunks).
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zstd_array_round_trip() {
+        use crate::array::{ArrayBuilder, ArraySubset, data_type};
+        use zarrs_storage::store::MemoryStore;
+
+        let data: Vec<u16> = (0..64).collect();
+        let subsets = [
+            ArraySubset::new_with_ranges(&[0..8, 0..8]),
+            ArraySubset::new_with_ranges(&[2..6, 0..8]),
+            ArraySubset::new_with_ranges(&[1..7, 2..6]),
+        ];
+        for chunk_shape in [vec![2, 8], vec![4, 4]] {
+            let codec_sets: Vec<Vec<Arc<dyn BytesToBytesCodecTraits>>> = vec![
+                vec![Arc::new(ZstdCodec::new(1, false))],
+                #[cfg(feature = "crc32c")]
+                vec![
+                    Arc::new(ZstdCodec::new(1, true)),
+                    Arc::new(crate::array::codec::Crc32cCodec::new()),
+                ],
+            ];
+            for codecs in codec_sets {
+                let array =
+                    ArrayBuilder::new(vec![8, 8], chunk_shape.clone(), data_type::uint16(), 0u16)
+                        .bytes_to_bytes_codecs(codecs)
+                        .build_arc(Arc::new(MemoryStore::new()), "/")
+                        .unwrap();
+                array
+                    .store_array_subset(&array.subset_all(), &data)
+                    .unwrap();
+                for subset in &subsets {
+                    // `data` is the linear index of each element
+                    let expected: Vec<u16> = subset
+                        .linearised_indices(&[8, 8])
+                        .unwrap()
+                        .into_iter()
+                        .map(|i| u16::try_from(i).unwrap())
+                        .collect();
+                    assert_eq!(
+                        array.retrieve_array_subset::<Vec<u16>>(subset).unwrap(),
+                        expected
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_zstd_partial_decode() {
