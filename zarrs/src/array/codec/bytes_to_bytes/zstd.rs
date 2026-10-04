@@ -83,7 +83,9 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -222,5 +224,93 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    fn decode_into() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"decode directly into this buffer".repeat(32);
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                encoded.clone(),
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        assert!(decode_into(&mut vec![0; len + 1]).is_err());
+        assert!(decode_into(&mut output[..len - 1]).is_err());
+    }
+
+    #[test]
+    fn decode_into_unknown_content_size() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"streamed frame without content size".repeat(32);
+        let len = decoded.len();
+        // The streaming encoder does not write the content size into the frame header
+        let encoded = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        assert!(matches!(
+            zstd::zstd_safe::get_frame_content_size(&encoded),
+            Ok(None)
+        ));
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                CowBytes::from(encoded.as_slice()),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // A too-small output returns the bounded decoder's error without a second decode.
+        assert!(matches!(
+            decode_into(&mut output[..len - 1]),
+            Err(CodecError::IOError(_))
+        ));
+        // Successful decompression reports its actual length for a too-large output.
+        assert!(matches!(
+            decode_into(&mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+    }
+
+    #[test]
+    fn decode_into_oversized_frame_does_not_materialise_output() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = vec![0u8; 8 * 1024 * 1024];
+        let known_size = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        for encoded in [known_size, CowBytes::from(unknown_size)] {
+            let mut output = [0u8; 8];
+            // The old allocating retry returned UnexpectedChunkDecodedSize only
+            // after expanding the entire 8 MiB frame. Preserve the direct error.
+            assert!(matches!(
+                codec.decode_into(
+                    encoded,
+                    &BytesRepresentation::FixedSize(8),
+                    &mut output,
+                    &options,
+                ),
+                Err(CodecError::IOError(_))
+            ));
+        }
     }
 }

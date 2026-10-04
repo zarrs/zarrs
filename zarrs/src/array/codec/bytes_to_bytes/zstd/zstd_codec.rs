@@ -7,7 +7,8 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -126,6 +127,21 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 .map_err(CodecError::from)
                 .map(CowBytes::from)
         }
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // Never materialise an oversized frame just to improve a length diagnostic.
+        let decoded_len = zstd::bulk::decompress_to_buffer(&encoded_value, output)?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        Ok(())
     }
 
     fn encoded_representation(
