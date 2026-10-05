@@ -6,10 +6,10 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, CowBytes, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -193,6 +193,16 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.inner.decode(bytes, shape, options)
+    }
+
+    fn decode_into(
+        &self,
+        bytes: CowBytes<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.inner.decode_into(bytes, shape, output_target, options)
     }
 
     fn partial_decoder(

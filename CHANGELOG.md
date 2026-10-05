@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change the endianness of `bytes` codec output as it is copied into the output array, avoiding an intermediate allocation and copy
 - Decode `packbits` directly into contiguous preallocated array output, and through the `bytes` codec `decode_into` where it is equivalent
 - Decompress `pcodec` directly into contiguous preallocated array output that is aligned to the element type
-- Decompress `zfp` directly into contiguous preallocated array output that is aligned to the element type for `i32`, `i64`, `f32`, and `f64`
+- Decompress `zfp` directly into contiguous preallocated array output that is aligned to the element type for `i32`, `i64`, `f32`, and `f64`, including through `zfpy`
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
