@@ -83,13 +83,55 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
 {
     "level": 5
 }"#;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_bz2_decode_into() {
+        let codec_configuration: Bz2CodecConfiguration = serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = Bz2Codec::new_with_configuration(&codec_configuration).unwrap();
+        let options = CodecOptions::default();
+        let decoded = b"decode directly into this buffer".repeat(32);
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // A truncated stream and bytes that are not a bz2 stream
+        let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
+        assert!(decode_into(truncated, &mut output).is_err());
+        assert!(decode_into(CowBytes::from(vec![0u8; 64]), &mut output).is_err());
+    }
 
     #[test]
     #[cfg_attr(miri, ignore)]
