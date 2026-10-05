@@ -92,10 +92,11 @@ mod tests {
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
+    use super::super::decode_into_test_util::decode_into_view;
     use super::*;
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
-        transmute_to_bytes_vec,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CowBytes, DataType, FillValue,
+        data_type, transmute_to_bytes_vec,
     };
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
@@ -143,6 +144,87 @@ mod tests {
             .decode(encoded, chunk_shape.as_slice(), &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
+        Ok(())
+    }
+
+    /// `decode_into` decompresses into an output that is one contiguous region and is aligned to
+    /// the element type, and otherwise decodes and copies. Both match `decode`.
+    #[test]
+    fn codec_pcodec_decode_into() -> Result<(), Box<dyn std::error::Error>> {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let configuration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = PcodecCodec::new_with_configuration(&configuration).unwrap();
+        let cases: Vec<(DataType, FillValue)> = vec![
+            (data_type::uint16(), FillValue::from(0u16)),
+            (data_type::int64(), FillValue::from(0i64)),
+            (
+                data_type::float16(),
+                FillValue::from(half::f16::from_f32(0.0)),
+            ),
+            (data_type::float32(), FillValue::from(0f32)),
+            (
+                data_type::complex64(),
+                FillValue::from(num::complex::Complex32::new(0.0, 0.0)),
+            ),
+        ];
+        for (data_type, fill_value) in cases {
+            let element_size = data_type.fixed_size().unwrap();
+            let bytes: Vec<u8> = (0..16 * element_size)
+                .map(|i| u8::try_from(i * 7 % 256).unwrap())
+                .collect();
+            let codec = Arc::new(codec.clone()).with_context(
+                data_type,
+                fill_value,
+                &CodecSpecificOptions::default(),
+            )?;
+            let encoded =
+                codec.encode(bytes.clone().into(), &chunk_shape, &CodecOptions::default())?;
+            let decoded = codec
+                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())?
+                .into_fixed()?
+                .to_vec();
+            assert_eq!(decoded, bytes);
+
+            // One contiguous region, aligned and not aligned to the element type
+            for offset in [0, 1] {
+                let output = decode_into_view(
+                    &codec,
+                    &encoded,
+                    &chunk_shape,
+                    [4, 4],
+                    4,
+                    offset,
+                    element_size,
+                );
+                assert_eq!(output?, decoded);
+            }
+
+            // Four contiguous regions, with the rest of the output unchanged
+            let output =
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, element_size)?;
+            let row = 4 * element_size;
+            for (output_row, decoded_row) in
+                std::iter::zip(output.chunks_exact(2 * row), decoded.chunks_exact(row))
+            {
+                assert_eq!(&output_row[..row], decoded_row);
+                assert!(output_row[row..].iter().all(|byte| *byte == 0xFF));
+            }
+
+            // Truncated encoded bytes, and an output with fewer and more elements than the chunk
+            let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
+            assert!(
+                decode_into_view(&codec, &truncated, &chunk_shape, [4, 4], 4, 0, element_size)
+                    .is_err()
+            );
+            assert!(
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 2], 2, 0, element_size)
+                    .is_err()
+            );
+            assert!(
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 8], 8, 0, element_size)
+                    .is_err()
+            );
+        }
         Ok(())
     }
 
