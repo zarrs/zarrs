@@ -5,15 +5,16 @@ use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
 
 use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
-    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_dims, zfp_native_type_to_scalar_type,
+    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_decode_into, zfp_dims,
+    zfp_native_type_to_scalar_type,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, CowBytes, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -258,6 +259,32 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             self.encoding,
         )
         .map(ArrayBytes::from)
+    }
+
+    fn decode_into(
+        &self,
+        bytes: CowBytes<'_>,
+        shape: &[NonZeroU64],
+        mut output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // Decode directly into an output that is one contiguous region
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+            && let Some(output) = output.as_mut_slice()
+            && zfp_decode_into(
+                &self.config,
+                self.write_header,
+                &bytes,
+                shape,
+                self.encoding,
+                output,
+            )?
+        {
+            return Ok(());
+        }
+
+        let bytes = self.decode(bytes, shape, options)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn encoded_representation(
