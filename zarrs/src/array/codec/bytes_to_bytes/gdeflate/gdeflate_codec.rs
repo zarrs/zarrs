@@ -5,6 +5,7 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
+    gdeflate_decode_into,
 };
 use crate::array::{BytesRepresentation, CowBytes, RecommendedConcurrency};
 use zarrs_codec::{
@@ -127,10 +128,23 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
     fn decode<'a>(
         &self,
         encoded_value: CowBytes<'a>,
-        _decoded_representation: &BytesRepresentation,
+        decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        Ok(CowBytes::from(gdeflate_decode(&encoded_value)?))
+        Ok(CowBytes::from(gdeflate_decode(
+            &encoded_value,
+            decoded_representation,
+        )?))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        gdeflate_decode_into(&encoded_value, output)
     }
 
     fn encoded_representation(

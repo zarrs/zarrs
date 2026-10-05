@@ -48,7 +48,7 @@ use std::sync::Arc;
 pub use gdeflate_codec::GDeflateCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::CowBytes;
+use crate::array::BytesRepresentation;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 pub use zarrs_metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
@@ -78,11 +78,18 @@ fn read_u64_le(bytes: &[u8]) -> u64 {
     u64::from_le_bytes(bytes.try_into().unwrap())
 }
 
-/// Decode the static header, returning the decoded length and the number of pages.
+/// The validated static header of `gdeflate` encoded bytes.
+struct GDeflateHeader {
+    decoded_len: usize,
+    num_pages: usize,
+}
+
+/// Decode the static header.
 ///
 /// The page sizes must fit in the encoded bytes and the pages must be able to hold the decoded length.
-/// The decoded length is therefore bounded by the length of the encoded bytes.
-fn gdeflate_decode_header(encoded_value: &[u8]) -> Result<(usize, usize), CodecError> {
+/// This does not bound the decoded length by much, since a page decodes to up to 64 KiB from only 8 bytes of page size.
+/// Do not allocate the decoded length of an untrusted header before it is checked against the decoded representation or the pages are decoded.
+fn gdeflate_decode_header(encoded_value: &[u8]) -> Result<GDeflateHeader, CodecError> {
     if encoded_value.len() < GDEFLATE_STATIC_HEADER_LENGTH {
         return Err(InvalidBytesLengthError::new(
             encoded_value.len(),
@@ -90,7 +97,7 @@ fn gdeflate_decode_header(encoded_value: &[u8]) -> Result<(usize, usize), CodecE
         )
         .into());
     }
-    let decoded_value_len = usize::try_from(read_u64_le(&encoded_value[0..size_of::<u64>()]))
+    let decoded_len = usize::try_from(read_u64_le(&encoded_value[0..size_of::<u64>()]))
         .map_err(|err| CodecError::Other(err.to_string()))?;
     let num_pages = usize::try_from(read_u64_le(
         &encoded_value[size_of::<u64>()..2 * size_of::<u64>()],
@@ -112,35 +119,47 @@ fn gdeflate_decode_header(encoded_value: &[u8]) -> Result<(usize, usize), CodecE
         })?;
 
     // Each page decodes to at most one page of bytes
-    if decoded_value_len.div_ceil(GDEFLATE_PAGE_SIZE_UNCOMPRESSED) > num_pages {
+    if decoded_len.div_ceil(GDEFLATE_PAGE_SIZE_UNCOMPRESSED) > num_pages {
         return Err(CodecError::Other(
             "the gdeflate decoded length exceeds the capacity of the pages".to_string(),
         ));
     }
-    Ok((decoded_value_len, num_pages))
+    Ok(GDeflateHeader {
+        decoded_len,
+        num_pages,
+    })
 }
 
-fn gdeflate_decode(encoded_value: &CowBytes<'_>) -> Result<Vec<u8>, CodecError> {
-    let (decoded_value_len, _num_pages) = gdeflate_decode_header(encoded_value)?;
-    let mut decoded_value = vec![0u8; decoded_value_len];
-    gdeflate_decode_into(encoded_value, &mut decoded_value)?;
-    Ok(decoded_value)
+/// Decodes the pages of `gdeflate` encoded bytes in order.
+struct GDeflatePageDecoder<'a> {
+    encoded_value: &'a [u8],
+    decompressor: GDeflateDecompressor,
+    num_pages: usize,
+    page: usize,
+    page_offset: usize,
 }
 
-/// Decode `encoded_value` into `decoded_value`, which must be the decoded length in the header of `encoded_value`.
-fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
-    let (decoded_value_len, num_pages) = gdeflate_decode_header(encoded_value)?;
-    if decoded_value.len() != decoded_value_len {
-        return Err(InvalidBytesLengthError::new(decoded_value_len, decoded_value.len()).into());
+impl<'a> GDeflatePageDecoder<'a> {
+    fn new(encoded_value: &'a [u8], header: &GDeflateHeader) -> Result<Self, CodecError> {
+        Ok(Self {
+            encoded_value,
+            decompressor: GDeflateDecompressor::new()?,
+            num_pages: header.num_pages,
+            page: 0,
+            page_offset: GDEFLATE_STATIC_HEADER_LENGTH + header.num_pages * size_of::<u64>(),
+        })
     }
 
-    // Decode the pages
-    let decompressor = GDeflateDecompressor::new()?;
-    let mut decoded_len = 0;
-    let mut page_offset = GDEFLATE_STATIC_HEADER_LENGTH + num_pages * size_of::<u64>();
-    for page in 0..num_pages {
+    /// Decode the next page into `out`, which must be the decoded length of the page.
+    ///
+    /// This is a full page of decoded bytes except for the last page.
+    fn decode_next(&mut self, out: &mut [u8]) -> Result<(), CodecError> {
+        debug_assert!(self.page < self.num_pages);
+        let encoded_value = self.encoded_value;
+
         // Get the compressed page length
-        let page_size_compressed_offset = GDEFLATE_STATIC_HEADER_LENGTH + page * size_of::<u64>();
+        let page_size_compressed_offset =
+            GDEFLATE_STATIC_HEADER_LENGTH + self.page * size_of::<u64>();
         let page_size_compressed = usize::try_from(read_u64_le(
             &encoded_value
                 [page_size_compressed_offset..page_size_compressed_offset + size_of::<u64>()],
@@ -148,6 +167,7 @@ fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Resul
         .map_err(|err| CodecError::Other(err.to_string()))?;
 
         // Get the compressed page data
+        let page_offset = self.page_offset;
         let page_data = page_offset
             .checked_add(page_size_compressed)
             .and_then(|page_end| encoded_value.get(page_offset..page_end))
@@ -162,18 +182,73 @@ fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Resul
             nbytes: page_data.len(),
         };
 
-        // Decompress the page, which is a full page of decoded bytes except for the last
-        let page_end = (decoded_len + GDEFLATE_PAGE_SIZE_UNCOMPRESSED).min(decoded_value_len);
-        let data_out = &mut decoded_value[decoded_len..page_end];
-        decoded_len +=
-            decompressor.decompress_page(in_page, data_out.as_mut_ptr(), data_out.len())?;
-        page_offset += page_size_compressed;
+        self.decompressor
+            .decompress_page(in_page, out.as_mut_ptr(), out.len())?;
+        self.page += 1;
+        self.page_offset += page_size_compressed;
+        Ok(())
+    }
+}
+
+/// Decode `encoded_value`, which must decode to at most the size of `decoded_representation`.
+fn gdeflate_decode(
+    encoded_value: &[u8],
+    decoded_representation: &BytesRepresentation,
+) -> Result<Vec<u8>, CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    let mut decoded_value = if let Some(size) = decoded_representation.size() {
+        // The decoded length of the header is untrusted, so it must not be larger than expected
+        if !u64::try_from(header.decoded_len).is_ok_and(|len| len <= size) {
+            return Err(InvalidBytesLengthError::new(
+                header.decoded_len,
+                usize::try_from(size).unwrap_or(usize::MAX),
+            )
+            .into());
+        }
+        Vec::with_capacity(header.decoded_len)
+    } else {
+        // Allocate as pages are decoded, so that a header that is larger than the pages decode to is an error rather than a large allocation
+        Vec::new()
+    };
+
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = header.decoded_len;
+    for _ in 0..header.num_pages {
+        let page_len = remaining.min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED);
+        let page_start = decoded_value.len();
+        decoded_value.resize(page_start + page_len, 0);
+        pages.decode_next(&mut decoded_value[page_start..])?;
+        remaining -= page_len;
+    }
+    if remaining == 0 {
+        Ok(decoded_value)
+    } else {
+        Err(InvalidBytesLengthError::new(decoded_value.len(), header.decoded_len).into())
+    }
+}
+
+/// Decode `encoded_value` into `decoded_value`, which must be the decoded length in the header of `encoded_value`.
+fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    if decoded_value.len() != header.decoded_len {
+        return Err(InvalidBytesLengthError::new(header.decoded_len, decoded_value.len()).into());
     }
 
-    if decoded_len == decoded_value_len {
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = decoded_value;
+    for _ in 0..header.num_pages {
+        let (page, rest) =
+            remaining.split_at_mut(remaining.len().min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED));
+        pages.decode_next(page)?;
+        remaining = rest;
+    }
+    if remaining.is_empty() {
         Ok(())
     } else {
-        Err(InvalidBytesLengthError::new(decoded_len, decoded_value_len).into())
+        Err(
+            InvalidBytesLengthError::new(header.decoded_len - remaining.len(), header.decoded_len)
+                .into(),
+        )
     }
 }
 
@@ -305,8 +380,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::array::CowBytes;
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -361,6 +438,52 @@ mod tests {
         }
     }
 
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gdeflate_decode_into() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        let options = CodecOptions::default();
+        // Two pages
+        let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // Truncated and corrupt encoded bytes
+        let truncated = CowBytes::from(encoded[..encoded.len() - 10].to_vec());
+        assert!(decode_into(truncated, &mut output).is_err());
+        let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+        let mut corrupt = encoded.to_vec();
+        corrupt[header_length..].fill(0xFF);
+        assert!(decode_into(CowBytes::from(corrupt), &mut output).is_err());
+    }
+
     /// Headers that are inconsistent with the encoded bytes are an error rather than a panic or a
     /// large allocation.
     #[test]
@@ -387,11 +510,56 @@ mod tests {
         // A decoded length that the pages cannot hold
         assert!(decode(u64::MAX, 1).is_err());
         assert!(decode(3 * GDEFLATE_PAGE_SIZE_UNCOMPRESSED as u64, 2).is_err());
+        // A decoded length that exceeds the decoded representation
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&(GDEFLATE_PAGE_SIZE_UNCOMPRESSED as u64).to_le_bytes());
+        encoded.extend_from_slice(&1u64.to_le_bytes());
+        encoded.extend_from_slice(&8u64.to_le_bytes());
+        encoded.extend_from_slice(&[0u8; 8]);
+        for representation in [
+            BytesRepresentation::FixedSize(10),
+            BytesRepresentation::BoundedSize(10),
+        ] {
+            assert!(matches!(
+                codec.decode(
+                    CowBytes::from(encoded.clone()),
+                    &representation,
+                    &CodecOptions::default()
+                ),
+                Err(CodecError::UnexpectedChunkDecodedSize(_))
+            ));
+        }
         // Page sizes that exceed the encoded bytes
         let mut encoded = Vec::new();
         encoded.extend_from_slice(&10u64.to_le_bytes());
         encoded.extend_from_slice(&1u64.to_le_bytes());
         encoded.extend_from_slice(&u64::MAX.to_le_bytes());
+        assert!(
+            codec
+                .decode(
+                    CowBytes::from(encoded),
+                    &BytesRepresentation::UnboundedSize,
+                    &CodecOptions::default(),
+                )
+                .is_err()
+        );
+    }
+
+    /// A decoded length that is large for the encoded bytes is an error rather than a large allocation.
+    #[test]
+    fn codec_gdeflate_decode_large_header() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        // The pages can hold a decoded length of 8 GiB, but they are empty
+        let num_pages: usize = 1 << 17;
+        let decoded_len = (num_pages * GDEFLATE_PAGE_SIZE_UNCOMPRESSED) as u64;
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&decoded_len.to_le_bytes());
+        encoded.extend_from_slice(&(num_pages as u64).to_le_bytes());
+        encoded.resize(
+            GDEFLATE_STATIC_HEADER_LENGTH + num_pages * size_of::<u64>(),
+            0,
+        );
         assert!(
             codec
                 .decode(
