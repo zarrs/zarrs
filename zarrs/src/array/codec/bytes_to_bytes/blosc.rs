@@ -74,7 +74,9 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
@@ -127,6 +129,85 @@ mod tests {
             .decode(encoded, &bytes_representation, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_decode_into() {
+        let options = CodecOptions::default();
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
+        let decoded = crate::array::transmute_to_bytes_vec((0..4096u16).collect::<Vec<_>>());
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::Borrowed(&decoded), &options)
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded, &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // Bytes that are not a blosc buffer
+        assert!(decode_into(CowBytes::from(vec![0u8; 64]), &mut output).is_err());
+    }
+
+    /// Retrieving whole chunks decodes blosc directly into the output where the output is
+    /// contiguous (chunks spanning full rows) and falls back otherwise (square chunks).
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_array_round_trip() {
+        use crate::array::ArrayBuilder;
+
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let data: Vec<u16> = (0..64).collect();
+        let subsets = [
+            ArraySubset::new_with_ranges(&[0..8, 0..8]),
+            ArraySubset::new_with_ranges(&[2..6, 0..8]),
+            ArraySubset::new_with_ranges(&[1..7, 2..6]),
+        ];
+        for chunk_shape in [vec![2, 8], vec![4, 4]] {
+            let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
+            let array = ArrayBuilder::new(vec![8, 8], chunk_shape, data_type::uint16(), 0u16)
+                .bytes_to_bytes_codecs(vec![codec])
+                .build_arc(Arc::new(zarrs_storage::store::MemoryStore::new()), "/")
+                .unwrap();
+            array
+                .store_array_subset(&array.subset_all(), &data)
+                .unwrap();
+            for subset in &subsets {
+                // `data` is the linear index of each element
+                let expected: Vec<u16> = subset
+                    .linearised_indices(&[8, 8])
+                    .unwrap()
+                    .into_iter()
+                    .map(|i| u16::try_from(i).unwrap())
+                    .collect();
+                assert_eq!(
+                    array.retrieve_array_subset::<Vec<u16>>(subset).unwrap(),
+                    expected
+                );
+            }
+        }
     }
 
     #[test]

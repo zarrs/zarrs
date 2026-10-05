@@ -4,7 +4,7 @@ use std::sync::Arc;
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
 use zarrs_plugin::ZarrVersion;
 
-use super::super::blosc_impl::compressor_as_cstr;
+use super::super::blosc_impl::{blosc_decompress_bytes_into, compressor_as_cstr};
 use super::super::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscError, BloscShuffleMode,
@@ -16,8 +16,8 @@ use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
     BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
@@ -137,6 +137,20 @@ impl BloscCodec {
             },
         )
     }
+
+    fn do_decode_into(
+        encoded_value: &[u8],
+        output: &mut [u8],
+        n_threads: usize,
+    ) -> Result<(), CodecError> {
+        let decoded_len = blosc_validate(encoded_value)
+            .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        blosc_decompress_bytes_into(encoded_value, output, n_threads)
+            .map_err(|e| CodecError::from(e.to_string()))
+    }
 }
 
 impl CodecTraits for BloscCodec {
@@ -240,6 +254,17 @@ impl BytesToBytesCodecTraits for BloscCodec {
         // .get();
         let n_threads = 1;
         Ok(CowBytes::from(Self::do_decode(&encoded_value, n_threads)?))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let n_threads = 1;
+        Self::do_decode_into(&encoded_value, output, n_threads)
     }
 
     fn partial_decoder(
