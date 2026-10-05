@@ -95,14 +95,24 @@ mod tests {
     use num::Integer;
     use zarrs_data_type::FillValue;
 
+    use super::super::decode_into_test_util::{decode_into_view, decode_into_view_array};
     use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
-    use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use crate::array::{ArrayBytes, ArraySubset, CowBytes, DataType, data_type};
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
         UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+
+    /// A data type, fill value, first and last bit, and elements.
+    type DecodeIntoCase = (
+        DataType,
+        FillValue,
+        Option<u64>,
+        Option<u64>,
+        ArrayBytes<'static>,
+    );
 
     #[test]
     fn div_rem_8bit() {
@@ -127,6 +137,120 @@ mod tests {
         assert_eq!(div_rem_8bit(11, 12), (1, 3));
         assert_eq!(div_rem_8bit(12, 12), (2, 0));
         assert_eq!(div_rem_8bit(13, 12), (2, 1));
+    }
+
+    /// `decode_into` unpacks into a contiguous output and a view with two contiguous regions
+    /// identically to `decode`, including where the output holds other values beforehand.
+    #[test]
+    fn codec_packbits_decode_into() -> Result<(), Box<dyn std::error::Error>> {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let options = CodecOptions::default();
+        let cases: Vec<DecodeIntoCase> = vec![
+            (
+                data_type::bool(),
+                FillValue::from(false),
+                None,
+                None,
+                bool::into_array_bytes(
+                    &data_type::bool(),
+                    (0..16).map(|i| i % 3 == 0).collect::<Vec<bool>>(),
+                )?
+                .into_owned(),
+            ),
+            (
+                data_type::uint4(),
+                FillValue::from(0u8),
+                None,
+                None,
+                u8::to_array_bytes(&data_type::uint4(), &(0..16).collect::<Vec<u8>>())?
+                    .into_owned(),
+            ),
+            // Sign extension
+            (
+                data_type::int4(),
+                FillValue::from(0i8),
+                None,
+                None,
+                i8::to_array_bytes(&data_type::int4(), &(-8..8).collect::<Vec<i8>>())?.into_owned(),
+            ),
+            // Some of the bits of a component
+            (
+                data_type::int16(),
+                FillValue::from(0i16),
+                Some(1),
+                Some(11),
+                i16::to_array_bytes(
+                    &data_type::int16(),
+                    &(0..16).map(|i| i * 123 - 1000).collect::<Vec<i16>>(),
+                )?
+                .into_owned(),
+            ),
+            // Equivalent to the bytes codec
+            (
+                data_type::int16(),
+                FillValue::from(0i16),
+                None,
+                None,
+                i16::to_array_bytes(
+                    &data_type::int16(),
+                    &(0..16).map(|i| i * 123 - 1000).collect::<Vec<i16>>(),
+                )?
+                .into_owned(),
+            ),
+        ];
+        for (data_type, fill_value, first_bit, last_bit, bytes) in cases {
+            let element_size = data_type.fixed_size().unwrap();
+            for encoding in [
+                PackBitsPaddingEncoding::None,
+                PackBitsPaddingEncoding::FirstByte,
+                PackBitsPaddingEncoding::LastByte,
+            ] {
+                let codec = Arc::new(super::PackBitsCodec::new(encoding, first_bit, last_bit)?)
+                    .with_context(
+                        data_type.clone(),
+                        fill_value.clone(),
+                        &CodecSpecificOptions::default(),
+                    )?;
+                let encoded = codec.encode(bytes.clone(), &chunk_shape, &options)?;
+                let decoded = codec
+                    .decode(encoded.clone(), &chunk_shape, &options)?
+                    .into_fixed()?
+                    .to_vec();
+
+                // One contiguous region
+                let output =
+                    decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 4, 0, element_size);
+                assert_eq!(output?, decoded);
+
+                // Four contiguous regions, with the rest of the output unchanged
+                let output =
+                    decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, element_size)?;
+                let row = 4 * element_size;
+                for (output_row, decoded_row) in
+                    std::iter::zip(output.chunks_exact(2 * row), decoded.chunks_exact(row))
+                {
+                    assert_eq!(&output_row[..row], decoded_row);
+                    assert!(output_row[row..].iter().all(|byte| *byte == 0xFF));
+                }
+
+                // The encoded bytes are not the length of the chunk, and the output is not written to
+                let truncated = CowBytes::from(encoded[..encoded.len() - 1].to_vec());
+                for array_columns in [4, 8] {
+                    let (output, result) = decode_into_view_array(
+                        &codec,
+                        &truncated,
+                        &chunk_shape,
+                        [4, 4],
+                        array_columns,
+                        0,
+                        element_size,
+                    );
+                    assert!(result.is_err());
+                    assert!(output.iter().all(|byte| *byte == 0xFF));
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -14,8 +14,8 @@ use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, CowBytes};
 /// The array starts as `0xFF` so that bytes that are not written are detected.
 /// The array is `offset` bytes into its allocation, which determines its alignment.
 ///
-/// Returns the bytes of the array.
-pub(crate) fn decode_into_view(
+/// Returns the bytes of the array, which are written to partially if decoding fails, and the result of decoding.
+pub(crate) fn decode_into_view_array(
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
     encoded: &CowBytes<'_>,
     chunk_shape: &[NonZeroU64],
@@ -23,10 +23,10 @@ pub(crate) fn decode_into_view(
     array_columns: usize,
     offset: usize,
     element_size: usize,
-) -> Result<Vec<u8>, CodecError> {
+) -> (Vec<u8>, Result<(), CodecError>) {
     let array_shape = [4, u64::try_from(array_columns).unwrap()];
     let mut allocation = vec![0xFFu8; offset + 4 * array_columns * element_size];
-    {
+    let result = {
         let mut view = unsafe {
             ArrayBytesFixedDisjointView::new(
                 UnsafeCellSlice::new(&mut allocation[offset..]),
@@ -41,7 +41,31 @@ pub(crate) fn decode_into_view(
             chunk_shape,
             (&mut view).into(),
             &CodecOptions::default(),
-        )?;
-    }
-    Ok(allocation.split_off(offset))
+        )
+    };
+    (allocation.split_off(offset), result)
+}
+
+/// Decode `encoded` with `decode_into` into a view, as [`decode_into_view_array`].
+///
+/// Returns the bytes of the array.
+pub(crate) fn decode_into_view(
+    codec: &Arc<dyn ArrayToBytesCodecTraits>,
+    encoded: &CowBytes<'_>,
+    chunk_shape: &[NonZeroU64],
+    view_shape: [u64; 2],
+    array_columns: usize,
+    offset: usize,
+    element_size: usize,
+) -> Result<Vec<u8>, CodecError> {
+    let (array, result) = decode_into_view_array(
+        codec,
+        encoded,
+        chunk_shape,
+        view_shape,
+        array_columns,
+        offset,
+        element_size,
+    );
+    result.map(|()| array)
 }
