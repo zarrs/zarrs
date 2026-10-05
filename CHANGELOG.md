@@ -143,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
 - Partial codecs validate indexers against their own decoded shape
 - The `vlen` codec returns an error rather than panicking if the encoded index length exceeds the chunk length
+- The `gdeflate` codec decodes chunks of more than one page and returns an error rather than panicking if a page is corrupt
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
