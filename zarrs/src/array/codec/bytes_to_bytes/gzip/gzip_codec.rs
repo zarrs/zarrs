@@ -11,6 +11,7 @@ use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    read_decoded_bytes_into,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -116,6 +117,16 @@ impl BytesToBytesCodecTraits for GzipCodec {
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
         Ok(CowBytes::from(out))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        read_decoded_bytes_into(GzDecoder::new(&encoded_value[..]), output)
     }
 
     fn encoded_representation(
