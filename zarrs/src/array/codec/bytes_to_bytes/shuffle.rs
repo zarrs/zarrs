@@ -82,7 +82,9 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
@@ -104,6 +106,43 @@ mod tests {
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
+
+    #[test]
+    fn codec_shuffle_decode_into() {
+        let codec = ShuffleCodec::new(2);
+        let options = CodecOptions::default();
+        let decoded = crate::array::transmute_to_bytes_vec((0..32u16).collect::<Vec<_>>());
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 2]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded, &mut output[..len - 2]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // The input must be a multiple of the element size
+        assert!(decode_into(CowBytes::from(vec![0u8; 3]), &mut [0; 3]).is_err());
+    }
+
     #[test]
     fn codec_shuffle_partial_decode() {
         let elements: Vec<u16> = (0..8).collect();
