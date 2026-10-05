@@ -188,6 +188,36 @@ pub fn copy_decoded_bytes_into(
     Ok(())
 }
 
+/// Read the decoded bytes of `decoded` into `output`, which must be exactly the length of the decoded bytes.
+///
+/// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode through a [`Read`](std::io::Read) decoder.
+/// It reads the remainder of the decoded bytes on a length mismatch so that the error reports their length.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the length of the decoded bytes is not the length of `output`, or an IO error if `decoded` fails to read.
+pub fn read_decoded_bytes_into(
+    mut decoded: impl std::io::Read,
+    output: &mut [u8],
+) -> Result<(), CodecError> {
+    let mut filled = 0;
+    while filled < output.len() {
+        match decoded.read(&mut output[filled..]) {
+            Ok(0) => return Err(InvalidBytesLengthError::new(filled, output.len()).into()),
+            Ok(len) => filled += len,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
+    let remainder = std::io::copy(&mut decoded, &mut std::io::sink())?;
+    if remainder != 0 {
+        let decoded_len = output
+            .len()
+            .saturating_add(usize::try_from(remainder).unwrap_or(usize::MAX));
+        return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +230,46 @@ mod tests {
         assert!(copy_decoded_bytes_into(&[1, 2], &mut output).is_err());
         assert!(copy_decoded_bytes_into(&[1, 2, 3, 4], &mut output).is_err());
         assert_eq!(output, [1, 2, 3]);
+    }
+
+    #[test]
+    fn read_decoded_bytes_into_length() {
+        let mut output = [0; 3];
+        read_decoded_bytes_into(&[1, 2, 3][..], &mut output).unwrap();
+        assert_eq!(output, [1, 2, 3]);
+
+        // The length of the decoded bytes is reported on a mismatch
+        let invalid_len =
+            |decoded: &[u8], output: &mut [u8]| match read_decoded_bytes_into(decoded, output) {
+                Err(CodecError::UnexpectedChunkDecodedSize(err)) => err.to_string(),
+                result => panic!("unexpected result {result:?}"),
+            };
+        assert_eq!(
+            invalid_len(&[1, 2], &mut output),
+            InvalidBytesLengthError::new(2, 3).to_string()
+        );
+        assert_eq!(
+            invalid_len(&[1, 2, 3, 4, 5], &mut output),
+            InvalidBytesLengthError::new(5, 3).to_string()
+        );
+        assert_eq!(
+            invalid_len(&[], &mut output),
+            InvalidBytesLengthError::new(0, 3).to_string()
+        );
+        read_decoded_bytes_into(&[][..], &mut []).unwrap();
+    }
+
+    #[test]
+    fn read_decoded_bytes_into_read_error() {
+        struct Failing;
+        impl std::io::Read for Failing {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("failed"))
+            }
+        }
+        assert!(matches!(
+            read_decoded_bytes_into(Failing, &mut [0; 3]),
+            Err(CodecError::IOError(_))
+        ));
     }
 }
