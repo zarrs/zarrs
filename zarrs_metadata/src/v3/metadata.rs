@@ -62,11 +62,19 @@ impl From<MetadataV3> for Option<Configuration> {
     }
 }
 
+impl std::str::FromStr for MetadataV3 {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
 impl TryFrom<&str> for MetadataV3 {
     type Error = serde_json::Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str(s)
+        s.parse()
     }
 }
 
