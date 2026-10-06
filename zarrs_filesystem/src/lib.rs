@@ -116,6 +116,8 @@ struct CachedFile {
 /// responsibility of the consumer to ensure that a key is not written concurrently with any other
 /// read or write of that key; the store performs no locking of its own.
 ///
+/// Writes synchronise file contents and metadata with [`std::fs::File::sync_all`] before returning success.
+///
 /// Prefix operations ([`erase_prefix`](WritableStorageTraits::erase_prefix),
 /// [`list_prefix`](ListableStorageTraits::list_prefix) and
 /// [`list_dir`](ListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
@@ -314,6 +316,9 @@ impl FilesystemStore {
         } else {
             file.write_all_at(offset, value)?;
         }
+
+        // Surface write-back errors before dropping the file, which ignores close errors.
+        file.sync_all()?;
 
         Ok(())
     }
