@@ -429,11 +429,11 @@ impl Indexer for Vec<ArrayIndices> {
     }
 
     fn len(&self) -> u64 {
-        self.as_slice().len() as u64
+        self.len() as u64
     }
 
     fn is_empty(&self) -> bool {
-        self.as_slice().is_empty()
+        self.is_empty()
     }
 
     fn output_shape(&self) -> Vec<u64> {

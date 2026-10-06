@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
+- Bump `zarrs_chunk_grid` to 0.6.1
 - Bump `zarrs_storage` to 0.5.1
 - Bump `zarrs_metadata` to 0.7.6
 - Retrieve complete cached chunks without extracting a subset

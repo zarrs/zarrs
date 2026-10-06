@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
+- Remove redundant slice conversions in the `Vec<ArrayIndices>` indexer implementation to satisfy Clippy
 - An empty array subset is now always in-bounds, since it references no elements (unless it has an incompatible dimensionality)
 - `ravel_indices` now returns `None` if `indices` and `shape` have a different length
 - `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
