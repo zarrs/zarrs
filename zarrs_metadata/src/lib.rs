@@ -57,10 +57,17 @@ impl ArrayMetadata {
     }
 }
 
+impl std::str::FromStr for ArrayMetadata {
+    type Err = serde_json::Error;
+    fn from_str(metadata_json: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str::<Self>(metadata_json)
+    }
+}
+
 impl TryFrom<&str> for ArrayMetadata {
     type Error = serde_json::Error;
     fn try_from(metadata_json: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str::<Self>(metadata_json)
+        metadata_json.parse()
     }
 }
 
@@ -83,10 +90,17 @@ impl GroupMetadata {
     }
 }
 
+impl std::str::FromStr for GroupMetadata {
+    type Err = serde_json::Error;
+    fn from_str(metadata_json: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str::<Self>(metadata_json)
+    }
+}
+
 impl TryFrom<&str> for GroupMetadata {
     type Error = serde_json::Error;
     fn try_from(metadata_json: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str::<Self>(metadata_json)
+        metadata_json.parse()
     }
 }
 

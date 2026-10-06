@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
 
 ### Changed
+- Bump `zarrs_metadata` to 0.7.6
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
