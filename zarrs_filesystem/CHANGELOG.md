@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.12...HEAD)
 
+### Fixed
+- Synchronize file contents and metadata after `set` and `set_partial_many`, returning synchronization errors instead of silently discarding write-back errors ([#462](https://github.com/zarrs/zarrs/issues/462))
+
 ## [0.3.12](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.12) - 2026-07-23
 
 ### Added

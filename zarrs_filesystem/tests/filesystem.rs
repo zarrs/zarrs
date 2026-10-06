@@ -50,6 +50,55 @@ fn filesystem() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_sync_errors() -> Result<(), Box<dyn Error>> {
+    use std::io::Write;
+    use std::os::unix::fs::symlink;
+
+    use zarrs_storage::StorageError;
+
+    // /dev/null accepts writes but rejects fsync, so a failure must come from syncing.
+    let mut file = std::fs::OpenOptions::new().write(true).open("/dev/null")?;
+    file.write_all(b"value")?;
+    assert_eq!(
+        file.sync_all().unwrap_err().raw_os_error(),
+        Some(libc::EINVAL)
+    );
+
+    let assert_sync_error = |result: Result<(), StorageError>| match result.unwrap_err() {
+        StorageError::IOError(error) => {
+            assert_eq!(error.raw_os_error(), Some(libc::EINVAL));
+        }
+        error => panic!("expected a sync I/O error, got {error}"),
+    };
+
+    for cache_size in [0, 16] {
+        let path = tempfile::TempDir::new()?;
+        let mut options = FilesystemStoreOptions::default();
+        options.file_handle_cache_size(cache_size);
+        let store = FilesystemStore::new_with_options(path.path(), options)?;
+        let key: StoreKey = "null".try_into()?;
+        symlink("/dev/null", store.key_to_fspath(&key))?;
+
+        assert_sync_error(store.set(&key, Bytes::from_static(b"value")));
+        assert_sync_error(store.set(&key, Bytes::new()));
+
+        // Partial writes first read the key, but /dev/null has no regular-file size.
+        // Create the link while consuming the ranges, after reading the missing key,
+        // so that only the write targets /dev/null.
+        let partial_key: StoreKey = "partial".try_into()?;
+        let offset_values = std::iter::once_with(|| {
+            symlink("/dev/null", store.key_to_fspath(&partial_key)).unwrap();
+            (0, Bytes::from_static(b"first"))
+        })
+        .chain(std::iter::once((8, Bytes::from_static(b"last"))));
+        assert_sync_error(store.set_partial_many(&partial_key, Box::new(offset_values)));
+    }
+    Ok(())
+}
+
 #[test]
 fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
@@ -169,6 +218,23 @@ fn filesystem_handle_cache_invalidation() -> Result<(), Box<dyn Error>> {
     // Overwrite with a different size; the cached handle must not serve stale bytes or size
     store.set(&key, vec![1u8; 8].into())?;
     assert_eq!(store.get(&key)?.unwrap(), vec![1u8; 8]);
+
+    // A range batch must invalidate both cached contents and the cached size.
+    store.set_partial_many(
+        &key,
+        Box::new(
+            [
+                (1, Bytes::from_static(b"XY")),
+                (10, Bytes::from_static(b"Z")),
+            ]
+            .into_iter(),
+        ),
+    )?;
+    assert_eq!(
+        store.get(&key)?.unwrap(),
+        vec![1, b'X', b'Y', 1, 1, 1, 1, 1, 0, 0, b'Z']
+    );
+    assert_eq!(store.size_key(&key)?, Some(11));
 
     // Erase; the cached handle must not resurrect the key
     store.erase(&key)?;
