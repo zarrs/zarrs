@@ -110,6 +110,8 @@ struct CachedFile {
 /// A synchronous file system store.
 ///
 /// See <https://zarr-specs.readthedocs.io/en/latest/v3/stores/filesystem/index.html>.
+///
+/// Writes synchronise file contents and metadata with [`std::fs::File::sync_all`] before returning success.
 #[derive(Debug)]
 pub struct FilesystemStore {
     base_path: PathBuf,
@@ -314,6 +316,9 @@ impl FilesystemStore {
         } else {
             file.write_all_at(offset, value)?;
         }
+
+        // Surface write-back errors before dropping the file, which ignores close errors.
+        file.sync_all()?;
 
         Ok(())
     }
