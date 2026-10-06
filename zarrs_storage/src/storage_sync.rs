@@ -138,6 +138,19 @@ pub fn store_set_partial_many<T: ReadableWritableStorageTraits>(
     store.set(key, bytes_out.freeze())
 }
 
+/// Storage that can atomically rename one key to another.
+///
+/// Implementations must replace `destination` atomically if it already exists. The source and
+/// destination must be on the same storage system.
+#[auto_impl(Arc)]
+pub trait AtomicRenameStorageTraits: MaybeSend + MaybeSync {
+    /// Atomically rename `source` to `destination`.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if the rename fails.
+    fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError>;
+}
+
 /// Writable storage traits.
 #[auto_impl(Arc)]
 pub trait WritableStorageTraits: MaybeSend + MaybeSync {

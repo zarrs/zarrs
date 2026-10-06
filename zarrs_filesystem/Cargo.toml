@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_filesystem"
-version = "0.3.9"
+version = "0.3.12"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.87"
 description = "A filesystem store for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_filesystem"
@@ -20,6 +20,7 @@ bytes = "1.7.0"
 derive_more = { version = "2.0.0", features = ["from"] }
 itertools = "0.14.0"
 libc = "0.2.158"
+lru = "0.16.0"
 page_size = "0.6.0"
 pathdiff = "0.2.0"
 positioned-io = "0.3.5"
