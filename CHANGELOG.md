@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
+### Added
+- Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
+
 ### Changed
 - Bump `zarrs_filesystem` to 0.3.14 and `zarrs_storage` to 0.4.5
   - Includes optional filesystem read-handle caching, atomic rename support, and the atomic-write storage adapter
