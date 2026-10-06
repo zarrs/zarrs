@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.5...HEAD)
 
+### Added
+- Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
+
 ### Changed
 - **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
 - **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
