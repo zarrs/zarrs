@@ -233,7 +233,6 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let num_chunks = chunks_per_shard
-            .as_slice()
             .iter()
             .map(|i| usize::try_from(i.get()).unwrap())
             .product::<usize>();
@@ -504,7 +503,6 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         };
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let num_chunks = chunks_per_shard
-            .as_slice()
             .iter()
             .map(|i| usize::try_from(i.get()).unwrap())
             .product::<usize>();
@@ -812,7 +810,6 @@ impl ShardingCodec {
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         let n_chunks = chunks_per_shard
-            .as_slice()
             .iter()
             .map(|i| usize::try_from(i.get()).unwrap())
             .product::<usize>();
@@ -995,7 +992,6 @@ impl ShardingCodec {
 
         // Find chunks that are not entirely the fill value and collect their decoded bytes
         let n_chunks = chunks_per_shard
-            .as_slice()
             .iter()
             .map(|i| usize::try_from(i.get()).unwrap())
             .product::<usize>();

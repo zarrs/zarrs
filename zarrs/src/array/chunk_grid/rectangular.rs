@@ -100,7 +100,6 @@ impl RectangularChunkGrid {
                 RectangularChunkGridDimensionConfiguration::Varying(chunk_sizes) => {
                     RectangularChunkGridDimension::Varying(
                         chunk_sizes
-                            .as_slice()
                             .iter()
                             .scan(0, |offset, &size| {
                                 let last_offset = *offset;

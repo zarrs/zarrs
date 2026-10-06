@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Includes optional filesystem read-handle caching, atomic rename support, and the atomic-write storage adapter
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
+### Fixed
+- Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
+
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
 ### Fixed
