@@ -134,11 +134,19 @@ impl NodePath {
     }
 }
 
+impl std::str::FromStr for NodePath {
+    type Err = NodePathError;
+
+    fn from_str(path: &str) -> Result<Self, Self::Err> {
+        Self::new(path)
+    }
+}
+
 impl TryFrom<&str> for NodePath {
     type Error = NodePathError;
 
     fn try_from(path: &str) -> Result<Self, Self::Error> {
-        Self::new(path)
+        path.parse()
     }
 }
 
