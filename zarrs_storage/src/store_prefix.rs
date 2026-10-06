@@ -76,11 +76,19 @@ impl StorePrefix {
     }
 }
 
+impl std::str::FromStr for StorePrefix {
+    type Err = StorePrefixError;
+
+    fn from_str(prefix: &str) -> Result<Self, StorePrefixError> {
+        Self::new(prefix)
+    }
+}
+
 impl TryFrom<&str> for StorePrefix {
     type Error = StorePrefixError;
 
     fn try_from(prefix: &str) -> Result<Self, StorePrefixError> {
-        Self::new(prefix)
+        prefix.parse()
     }
 }
 

@@ -100,11 +100,19 @@ impl StoreKey {
     }
 }
 
+impl std::str::FromStr for StoreKey {
+    type Err = StoreKeyError;
+
+    fn from_str(key: &str) -> Result<Self, Self::Err> {
+        Self::new(key)
+    }
+}
+
 impl TryFrom<&str> for StoreKey {
     type Error = StoreKeyError;
 
     fn try_from(key: &str) -> Result<Self, Self::Error> {
-        Self::new(key)
+        key.parse()
     }
 }
 
