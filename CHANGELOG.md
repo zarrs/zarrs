@@ -139,6 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 - Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
 - Partial codecs validate indexers against their own decoded shape
 - The `vlen` codec returns an error rather than panicking if the encoded index length exceeds the chunk length
