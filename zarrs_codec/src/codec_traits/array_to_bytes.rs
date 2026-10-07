@@ -6,10 +6,11 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
+    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
+    decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -155,36 +156,30 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// This method is intended for internal use by Array.
     /// It works for fixed length data types and optional data types.
     ///
+    /// The input can contain encoded bytes or a deferred bytes-to-bytes decode.
+    /// The default implementation resolves the input normally, preserving ownership, then decodes and copies into the target.
+    /// An override may instead let an efficient producer write directly into a suitable target and transform those bytes there.
+    ///
     /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
     /// Chunk elements are written to the subset of the output in C order.
     ///
-    /// For optional data types, provide an `ArrayBytesDecodeIntoTarget` with a `mask` set to `Some`.
-    /// For non-optional data types, convert a fixed view to target using `.into()` or create with `mask: None`.
+    /// For optional data types, provide [`ArrayBytesDecodeIntoTarget::Optional`] with data and mask views.
+    /// For non-optional data types, convert a fixed view to a target using `.into()`.
+    ///
+    /// On error, the output target may have been partially written.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(
         &self,
-        bytes: CowBytes<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let bytes = input.into_bytes(options)?;
         let bytes = self.decode(bytes, shape, options)?;
         decode_into_array_bytes_target(&bytes, output_target)
-    }
-
-    /// Returns whether decoding valid encoded bytes produces identical fixed bytes in native
-    /// in-memory order.
-    ///
-    /// The result may depend on the decoded representation. The default implementation is
-    /// conservative and returns `false`.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
-    #[expect(unused_variables)]
-    fn is_decode_passthrough(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        Ok(false)
     }
 
     /// Initialise a partial decoder.

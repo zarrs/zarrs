@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `BytesToBytesCodecTraits::decode_into`
 - Add `ArrayBytesFixedDisjointView::as_mut_slice`
 - Add `ArrayBytesFixedDisjointView::try_copy_from_slice_with`
-- Add `ArrayToBytesCodecTraits::is_decode_passthrough`
+- Add `ArrayBytesDecodeIntoInput` and single-use `BytesDecodeSource` for deferred decoding
+- Add `BytesToBytesCodecTraits::is_decode_into_efficient` producer cost hint
 - Add `{copy,read}_decoded_bytes_into`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
+- **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput` rather than `CowBytes`
 - Bump `zarrs_chunk_grid` to 0.6.1
 - Bump `zarrs_storage` to 0.5.1
 - Bump `zarrs_metadata` to 0.7.6

@@ -70,6 +70,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Decode chunk bytes into a preallocated output buffer.
     ///
     /// The decoded bytes must fill `output` exactly.
+    /// On error, `output` may have been partially written.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the decoded length is not the length of `output`.
@@ -82,6 +83,15 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     ) -> Result<(), CodecError> {
         let decoded_value = self.decode(encoded_value, decoded_representation, options)?;
         Ok(copy_decoded_bytes_into(&decoded_value, output)?)
+    }
+
+    /// Whether decoding into a target avoids a full-size decoded intermediate
+    /// allocation and its separate copy.
+    ///
+    /// This cost hint does not promise to avoid decoder state or workspace
+    /// allocations. Both decoding routes remain usable when it is `false`.
+    fn is_decode_into_efficient(&self) -> bool {
+        false
     }
 
     /// Initialises a partial decoder.

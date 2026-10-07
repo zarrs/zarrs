@@ -1030,7 +1030,7 @@ mod tests {
                     vec![0u8; usize::try_from(output_shape.iter().product::<u64>()).unwrap() * 2];
                 codec
                     .decode_into(
-                        encoded,
+                        encoded.into(),
                         &shard_shape_nz,
                         zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
                             &mut super::indexer_tests::fixed_view(
