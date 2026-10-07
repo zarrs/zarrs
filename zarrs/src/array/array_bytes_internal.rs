@@ -4,11 +4,13 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArraySubset, DataType, Indexer};
+use super::{ArraySubset, DataType, FillValue, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
     ArrayBytesOffsetsCreateError, ArrayBytesOptional, ArrayBytesVariableLength, CodecError,
+    decode_into_array_bytes_target,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -42,6 +44,120 @@ pub(crate) fn optional_nesting_depth(data_type: &DataType) -> usize {
         1 + optional_nesting_depth(inner)
     } else {
         0
+    }
+}
+
+/// The innermost data type of (possibly nested) optional types.
+/// Returns `data_type` for non-optional types.
+pub(crate) fn optional_innermost(data_type: &DataType) -> &DataType {
+    let mut data_type = data_type;
+    while let Some(inner) = data_type.optional_inner() {
+        data_type = inner;
+    }
+    data_type
+}
+
+/// Output buffers for decoding fixed length data (including optional data with fixed length inner data) into views.
+pub(crate) struct FixedDecodeBuffers {
+    data: Vec<u8>,
+    masks: Vec<Vec<u8>>,
+    data_type_size: usize,
+    shape: Vec<u64>,
+}
+
+impl FixedDecodeBuffers {
+    /// Allocate uninitialised buffers for an array of `shape` and `data_type`.
+    ///
+    /// Returns [`None`] if the innermost data type is not fixed length.
+    ///
+    /// # Panics
+    /// Panics if the number of elements in `shape` exceeds [`usize::MAX`].
+    pub(crate) fn new(data_type: &DataType, shape: &[u64]) -> Option<Self> {
+        let data_type_size = optional_innermost(data_type).fixed_size()?;
+        let num_elements = usize::try_from(shape.iter().product::<u64>()).unwrap();
+        Some(Self {
+            data: Vec::with_capacity(num_elements * data_type_size),
+            masks: (0..optional_nesting_depth(data_type))
+                .map(|_| Vec::with_capacity(num_elements))
+                .collect(),
+            data_type_size,
+            shape: shape.to_vec(),
+        })
+    }
+
+    /// Return views of the data and each validity mask covering the entire array.
+    ///
+    /// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the views cannot be created.
+    pub(crate) fn views(
+        &mut self,
+    ) -> Result<
+        (
+            ArrayBytesFixedDisjointView<'_>,
+            Vec<ArrayBytesFixedDisjointView<'_>>,
+        ),
+        CodecError,
+    > {
+        let subset = ArraySubset::new_with_shape(self.shape.clone());
+        let data_view = unsafe {
+            // SAFETY: the view is the only view of the data
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut self.data),
+                self.data_type_size,
+                &self.shape,
+                subset.clone(),
+            )?
+        };
+        let mask_views = self
+            .masks
+            .iter_mut()
+            .map(|mask| unsafe {
+                // SAFETY: the view is the only view of the mask
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new_from_vec_with_spare_capacity(mask),
+                    1,
+                    &self.shape,
+                    subset.clone(),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((data_view, mask_views))
+    }
+
+    /// Convert the buffers into array bytes.
+    ///
+    /// # Safety
+    /// Every element of the views returned by [`views`](Self::views) must have been written.
+    pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
+        let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
+        unsafe { self.data.set_len(num_elements * self.data_type_size) };
+        for mask in &mut self.masks {
+            unsafe { mask.set_len(num_elements) };
+        }
+        wrap_optional_masks(ArrayBytes::new_flen(self.data), self.masks)
+    }
+}
+
+/// Fill every element of `target` with `fill_value`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `fill_value` is incompatible with `data_type` or `target`.
+pub(crate) fn fill_target(
+    target: ArrayBytesDecodeIntoTarget<'_>,
+    data_type: &DataType,
+    fill_value: &FillValue,
+) -> Result<(), CodecError> {
+    match target {
+        ArrayBytesDecodeIntoTarget::Fixed(view) => view
+            .fill(fill_value.as_ne_bytes())
+            .map_err(CodecError::from),
+        target @ ArrayBytesDecodeIntoTarget::Optional(..) => {
+            let fill_bytes =
+                ArrayBytes::new_fill_value(data_type, target.num_elements(), fill_value)?;
+            decode_into_array_bytes_target(&fill_bytes, target)
+        }
     }
 }
 
@@ -91,6 +207,60 @@ pub(crate) fn extract_target_views<'a, 'b>(
             mask_views.insert(0, mask_view);
             (data_view, mask_views)
         }
+    }
+}
+
+/// Merge a set of chunks of any data type (fixed, variable, or optional) into an array subset.
+///
+/// Optional data is merged by independently merging its inner data and its validity mask.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the chunk bytes are incompatible with `data_type` or their subsets are out of bounds.
+///
+/// # Panics
+/// Panics if the `array_shape` exceeds `usize::MAX` elements.
+pub(crate) fn merge_chunks<'a>(
+    chunk_bytes_and_subsets: Vec<(ArrayBytes<'_>, ArraySubset)>,
+    array_shape: &[u64],
+    data_type: &DataType,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if let Some(inner_data_type) = data_type.optional_inner() {
+        let mut data_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
+        let mut masks_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
+        for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
+            let (data, mask) = chunk_bytes.into_optional()?.into_parts();
+            data_and_subsets.push((*data, chunk_subset.clone()));
+            masks_and_subsets.push((ArrayBytes::new_flen(mask), chunk_subset));
+        }
+        let data = merge_chunks(data_and_subsets, array_shape, inner_data_type)?;
+        let mask = merge_chunks(masks_and_subsets, array_shape, &super::data_type::uint8())?;
+        Ok(data.with_optional_mask(mask.into_fixed()?))
+    } else if let Some(data_type_size) = data_type.fixed_size() {
+        let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+        let mut output = vec![0; num_elements * data_type_size];
+        let output_slice = UnsafeCellSlice::new(output.as_mut_slice());
+        for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
+            let mut output_view = unsafe {
+                // SAFETY: chunks represent disjoint array subsets
+                ArrayBytesFixedDisjointView::new(
+                    output_slice,
+                    data_type_size,
+                    array_shape,
+                    chunk_subset,
+                )?
+            };
+            output_view.copy_from_slice(&chunk_bytes.into_fixed()?)?;
+        }
+        Ok(ArrayBytes::new_flen(output))
+    } else {
+        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+            .into_iter()
+            .map(|(chunk_bytes, chunk_subset)| Ok((chunk_bytes.into_variable()?, chunk_subset)))
+            .collect::<Result<Vec<_>, CodecError>>()?;
+        Ok(ArrayBytes::Variable(merge_chunks_vlen(
+            chunk_bytes_and_subsets,
+            array_shape,
+        )))
     }
 }
 

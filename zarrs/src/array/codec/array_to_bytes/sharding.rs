@@ -433,6 +433,20 @@ fn merge_indexer_subchunks(
         let (_, bytes) = groups.into_iter().next().expect("one group");
         return Ok(bytes);
     }
+    if let Some(inner_data_type) = data_type.optional_inner() {
+        // Merge the inner data and validity mask independently
+        let mut data_groups = Vec::with_capacity(groups.len());
+        let mut mask_groups = Vec::with_capacity(groups.len());
+        for (positions, bytes) in groups {
+            let (data, mask) = bytes.into_optional()?.into_parts();
+            data_groups.push((positions.clone(), *data));
+            mask_groups.push((positions, ArrayBytes::new_flen(mask)));
+        }
+        let data = merge_indexer_subchunks(data_groups, num_elements, inner_data_type)?;
+        let mask =
+            merge_indexer_subchunks(mask_groups, num_elements, &crate::array::data_type::uint8())?;
+        return Ok(data.with_optional_mask(mask.into_fixed()?));
+    }
     if let Some(element_size) = data_type.fixed_size() {
         let mut output = vec![0; num_elements * element_size];
         for (positions, bytes) in groups {
