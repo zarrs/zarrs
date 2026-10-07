@@ -256,6 +256,10 @@ impl BytesToBytesCodecTraits for BloscCodec {
         Ok(CowBytes::from(Self::do_decode(&encoded_value, n_threads)?))
     }
 
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
     fn decode_into(
         &self,
         encoded_value: CowBytes<'_>,
