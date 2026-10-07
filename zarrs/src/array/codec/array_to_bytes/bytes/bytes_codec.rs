@@ -11,11 +11,12 @@ use super::{
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -238,6 +239,75 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(bytes_decoded)
     }
 
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        match output_target {
+            ArrayBytesDecodeIntoTarget::Fixed(output) if self.data_type.is_fixed() => {
+                let (num_elements, expected_len) = self.decoded_len(shape)?;
+                if output.num_elements() != num_elements {
+                    return Err("the decoded element count does not match the output target".into());
+                }
+                let codec = self.data_type.codec_bytes()?;
+                let passthrough = codec.is_decode_passthrough(self.endian);
+                let input = match input {
+                    ArrayBytesDecodeIntoInput::Deferred(source)
+                        if source.is_decode_into_efficient()
+                            && (passthrough || codec.is_decode_in_place_efficient())
+                            && source.decoded_representation()
+                                == &BytesRepresentation::FixedSize(expected_len as u64) =>
+                    {
+                        if let Some(bytes) = output.as_mut_slice()
+                            && bytes.len() == expected_len
+                        {
+                            if !passthrough {
+                                // Validate endianness before the producer writes anything.
+                                codec.decode_in_place(&mut [], self.endian)?;
+                            }
+                            source.decode_into(bytes, options)?;
+                            return if passthrough {
+                                Ok(())
+                            } else {
+                                Ok(codec.decode_in_place(bytes, self.endian)?)
+                            };
+                        }
+                        ArrayBytesDecodeIntoInput::Deferred(source)
+                    }
+                    input @ (ArrayBytesDecodeIntoInput::Bytes(_)
+                    | ArrayBytesDecodeIntoInput::Deferred(_)) => input,
+                };
+
+                // Keep owned intermediates intact when direct output is unsuitable.
+                let bytes = input.into_bytes(options)?;
+                if bytes.len() != expected_len {
+                    return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
+                }
+                if passthrough {
+                    Ok(output.copy_from_slice(&bytes)?)
+                } else if codec.is_decode_in_place_efficient() {
+                    codec.decode_in_place(&mut [], self.endian)?;
+                    output.try_copy_from_slice_with(&bytes, |source, destination| {
+                        destination.copy_from_slice(source);
+                        Ok::<_, CodecError>(codec.decode_in_place(destination, self.endian)?)
+                    })
+                } else {
+                    let decoded = codec.decode(bytes, self.endian)?;
+                    Ok(output.copy_from_slice(&decoded)?)
+                }
+            }
+            target @ (ArrayBytesDecodeIntoTarget::Fixed(_)
+            | ArrayBytesDecodeIntoTarget::Optional(..)) => {
+                let bytes = input.into_bytes(options)?;
+                let decoded = self.decode(bytes, shape, options)?;
+                decode_into_array_bytes_target(&decoded, target)
+            }
+        }
+    }
+
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
@@ -312,7 +382,133 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::data_type;
+    use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, data_type};
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    fn decode_into_view(
+        codec: &Arc<dyn ArrayToBytesCodecTraits>,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        chunk_shape: &[NonZeroU64],
+        array_shape: &[u64],
+    ) -> (Vec<u16>, Result<(), CodecError>) {
+        let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+        let mut output = vec![0u16; num_elements];
+        let result = {
+            let mut view = unsafe {
+                // SAFETY: the only view of output, used synchronously.
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                    size_of::<u16>(),
+                    array_shape,
+                    ArraySubset::new_with_shape(chunk_shape.iter().map(|d| d.get()).collect()),
+                )
+            }
+            .unwrap();
+            codec.decode_into(
+                input,
+                chunk_shape,
+                (&mut view).into(),
+                &CodecOptions::default(),
+            )
+        };
+        (output, result)
+    }
+
+    #[test]
+    fn decode_into_endianness_and_noncontiguous_views() {
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        for (endian, encoded) in [
+            (Endianness::Little, values.map(u16::to_le_bytes).concat()),
+            (Endianness::Big, values.map(u16::to_be_bytes).concat()),
+        ] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    FillValue::from(0u16),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            for (array_shape, expected) in [
+                ([2, 2], values.to_vec()),
+                ([2, 4], vec![1, 2, 0, 0, 3, 4, 0, 0]),
+            ] {
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(encoded.as_slice()).into(),
+                    &shape,
+                    &array_shape,
+                );
+                result.unwrap();
+                assert_eq!(output, expected);
+
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(&encoded[1..]).into(),
+                    &shape,
+                    &array_shape,
+                );
+                assert!(result.is_err());
+                assert!(output.iter().all(|&value| value == 0));
+            }
+        }
+        let codec = BytesCodec::new(None)
+            .with_context(
+                data_type::uint16(),
+                FillValue::from(0u16),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        for array_shape in [[2, 2], [2, 4]] {
+            let (output, result) = decode_into_view(
+                &codec,
+                CowBytes::from(&[1; 8][..]).into(),
+                &shape,
+                &array_shape,
+            );
+            assert!(result.is_err());
+            assert!(output.iter().all(|&value| value == 0));
+        }
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn decode_deferred_zstd_input() {
+        use zarrs_codec::{BytesDecodeSource, BytesToBytesCodecTraits};
+
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        let producer = crate::array::codec::ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        for endian in [Endianness::Little, Endianness::Big] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    FillValue::from(0u16),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            let encoded = if endian == Endianness::Little {
+                values.map(u16::to_le_bytes).concat()
+            } else {
+                values.map(u16::to_be_bytes).concat()
+            };
+            let compressed = producer.encode(encoded.into(), &options).unwrap();
+            for representation in [
+                BytesRepresentation::FixedSize(8),
+                BytesRepresentation::BoundedSize(8),
+            ] {
+                let input = ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    &producer,
+                    compressed.clone(),
+                    representation,
+                ));
+                let (output, result) = decode_into_view(&codec, input, &shape, &[2, 2]);
+                result.unwrap();
+                assert_eq!(output, values);
+            }
+        }
+    }
 
     #[test]
     fn decoded_size_overflow() {
