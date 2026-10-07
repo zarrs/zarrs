@@ -266,6 +266,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                         {
                             if !passthrough {
                                 // Validate endianness before the producer writes anything.
+                                // `decode_in_place` must check it even for empty bytes.
                                 codec.decode_in_place(&mut [], self.endian)?;
                             }
                             source.decode_into(bytes, options)?;
@@ -289,6 +290,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 if passthrough {
                     Ok(output.copy_from_slice(&bytes)?)
                 } else if codec.is_decode_in_place_efficient() {
+                    // Validate endianness before anything is written to the output.
                     codec.decode_in_place(&mut [], self.endian)?;
                     output.try_copy_from_slice_with(&bytes, |source, destination| {
                         destination.copy_from_slice(source);
