@@ -188,3 +188,7 @@ required-features = ["filesystem"]
 [[bench]]
 name = "zero_copy_paths"
 harness = false
+
+[[bench]]
+name = "deferred_decode_into"
+harness = false
