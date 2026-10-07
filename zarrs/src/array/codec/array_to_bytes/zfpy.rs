@@ -102,3 +102,47 @@ impl CodecTraitsV2 for ZfpyCodec {
         Ok(Codec::ArrayToBytes(codec))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroU64;
+
+    use super::super::decode_into_test_util::decode_into_view;
+    use super::*;
+    use crate::array::element::Element;
+    use crate::array::{FillValue, data_type};
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToBytesCodecTraits};
+
+    /// `decode_into` is the `decode_into` of the inner `zfp` codec.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfpy_decode_into() {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = data_type::float32();
+        let elements: Vec<f32> = (0..16u8).map(f32::from).collect();
+        let bytes = f32::to_array_bytes(&data_type, &elements).unwrap();
+        let codec = ZfpyCodec::new_reversible()
+            .with_context(
+                data_type,
+                FillValue::from(0f32),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let options = CodecOptions::default();
+        let encoded = codec.encode(bytes.clone(), &chunk_shape, &options).unwrap();
+        let decoded = bytes.into_fixed().unwrap().to_vec();
+
+        // One contiguous region
+        let output = decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 4, 0, 4);
+        assert_eq!(output.unwrap(), decoded);
+
+        // Four contiguous regions, with the rest of the output unchanged
+        let output = decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, 4).unwrap();
+        for (output_row, decoded_row) in
+            std::iter::zip(output.as_chunks::<32>().0, decoded.as_chunks::<16>().0)
+        {
+            assert_eq!(&output_row[..16], decoded_row);
+            assert!(output_row[16..].iter().all(|byte| *byte == 0xFF));
+        }
+    }
+}
