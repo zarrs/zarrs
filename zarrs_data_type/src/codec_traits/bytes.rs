@@ -80,6 +80,9 @@ pub trait BytesDataTypeTraits {
     /// The default implementation decodes a copy of `bytes`, so it allocates.
     /// Override this and [`is_decode_in_place_efficient`](Self::is_decode_in_place_efficient) to decode without allocating.
     ///
+    /// An override must check `endianness` before it inspects `bytes`, so that it returns the same error for empty `bytes` as for any other.
+    /// The `bytes` codec decodes empty bytes before a decoder writes to its output so that an invalid `endianness` is an error that leaves the output unwritten.
+    ///
     /// # Errors
     /// Returns a [`BytesCodecDecodeInPlaceError`] if `endianness` is [`None`] but must be specified, or (default implementation) if [`decode`](BytesDataTypeTraits::decode) does not preserve the length of `bytes`.
     fn decode_in_place(

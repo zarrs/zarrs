@@ -172,6 +172,14 @@ mod tests {
                 .decode_in_place(&mut [0; 2], None)
                 .is_err()
         );
+        // This is the case for empty bytes, which the `bytes` codec uses to validate endianness
+        assert!(
+            uint16
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [], None)
+                .is_err()
+        );
         assert!(
             data_type::uint8()
                 .codec_bytes()
