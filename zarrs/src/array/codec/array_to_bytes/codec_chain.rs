@@ -11,13 +11,14 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesDecodeSource, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -591,15 +592,34 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        input: zarrs_codec::ArrayBytesDecodeIntoInput<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
-        if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
-            // Fast path if no bytes to bytes or array to array codecs
+        if self.array_to_array.is_empty() {
+            let input = if let Some((last, rest)) = self.bytes_to_bytes.split_first() {
+                let mut bytes = input.into_bytes(options)?;
+                for (codec, representation) in std::iter::zip(
+                    rest.iter().rev(),
+                    bytes_representations[1..self.bytes_to_bytes.len()]
+                        .iter()
+                        .rev(),
+                ) {
+                    bytes = codec.decode(bytes, representation, options)?;
+                }
+                // Leave placement of the final decode to the array-to-bytes receiver.
+                ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    last.as_ref(),
+                    bytes,
+                    bytes_representations[0],
+                ))
+            } else {
+                // Transparent nested chains must not materialise a deferred input.
+                input
+            };
             return self.array_to_bytes.decode_into(
                 input,
                 &array_representations.last().unwrap().0,
@@ -616,16 +636,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             bytes_representations.iter().rev().skip(1),
         ) {
             bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
-
-        // Fast path if no array to array codecs
-        if self.array_to_array.is_empty() {
-            return self.array_to_bytes.decode_into(
-                bytes.into(),
-                &array_representations.last().unwrap().0,
-                output_target,
-                options,
-            );
         }
 
         // bytes->array

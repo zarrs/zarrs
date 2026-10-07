@@ -48,8 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
-- Decode `blosc` directly into preallocated byte buffers
+- Decode `zstd`, `blosc`, `gzip`, `zlib`, `bz2`, `shuffle`, and `gdeflate` directly into preallocated byte buffers
 - Let the `bytes` codec choose final-output placement for efficient deferred producers, while retaining fused copy-and-endianness conversion for ordinary input
+- Defer the final bytes-to-bytes stage in a codec chain so its array-to-bytes receiver chooses placement before decoding, preserving owned intermediates for fallback codecs
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
