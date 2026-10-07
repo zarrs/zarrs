@@ -266,6 +266,30 @@ fn efficient_producer_writes_final_pointer_before_endian_conversion() {
 }
 
 #[test]
+fn full_width_packbits_forwards_deferred_placement() {
+    use zarrs::array::codec::PackBitsCodec;
+    use zarrs::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+
+    let calls = Arc::default();
+    let codec = PackBitsCodec::new(PackBitsPaddingEncoding::None, None, None).unwrap();
+    let chain = bind(&CodecChain::new(
+        vec![],
+        Arc::new(codec),
+        vec![producer(&calls, 1, true, false, false)],
+    ));
+    let (_, pointer) = run(chain.as_ref(), false);
+    assert_eq!(
+        *calls.lock().unwrap(),
+        [Call {
+            id: 1,
+            direct: true,
+            representation: BytesRepresentation::FixedSize(8),
+            pointer,
+        }]
+    );
+}
+
+#[test]
 fn false_hint_does_not_use_available_direct_override() {
     for non_native in [false, true] {
         let calls = Arc::default();

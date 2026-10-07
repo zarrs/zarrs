@@ -2,6 +2,8 @@
 
 pub mod bytes;
 pub mod codec_chain;
+#[cfg(test)]
+mod decode_into_test_util;
 pub mod optional;
 pub mod packbits;
 pub mod vlen;

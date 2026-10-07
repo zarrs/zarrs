@@ -21,10 +21,11 @@ use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -73,6 +74,14 @@ struct PackBitsSizes {
     elements_size_bits: u64,
     /// The size of the packed elements in bytes, excluding the padding encoding byte.
     elements_size_bytes: usize,
+}
+
+impl PackBitsSizes {
+    /// Returns the length of the decoded bytes.
+    fn decoded_len(&self) -> Result<usize, CodecError> {
+        usize::try_from(self.elements_size_dec_bytes)
+            .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))
+    }
 }
 
 impl PackBitsCodec {
@@ -241,6 +250,100 @@ impl PackBitsCodecBound {
             elements_size_bytes,
         })
     }
+
+    /// Unpack the components of `bytes` into `bytes_dec`.
+    ///
+    /// `bytes_dec` must be the length of the decoded bytes.
+    /// It is zeroed once the input has been checked, since only the bits of the components are set, so it is not written to if the input is invalid.
+    fn unpack(
+        &self,
+        bytes: &[u8],
+        sizes: &PackBitsSizes,
+        bytes_dec: &mut [u8],
+    ) -> Result<(), CodecError> {
+        let PackBitsCodecComponents {
+            component_size_bits,
+            num_components,
+            sign_extension,
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
+
+        // Get the component size in bits
+        let PackBitsSizes {
+            num_elements,
+            elements_size_bits,
+            elements_size_bytes,
+            ..
+        } = *sizes;
+        let component_size_bits_extracted = last_bit - first_bit + 1;
+
+        // Input checks
+        let expected_length = elements_size_bytes
+            + match self.padding_encoding {
+                PackBitsPaddingEncoding::None => 0,
+                PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
+            };
+        if bytes.len() != expected_length {
+            return Err(InvalidBytesLengthError::new(bytes.len(), expected_length).into());
+        }
+
+        let padding_bits = padding_bits(elements_size_bits);
+        let packed_elements = match self.padding_encoding {
+            PackBitsPaddingEncoding::None => bytes,
+            PackBitsPaddingEncoding::FirstByte => {
+                if bytes[0] != padding_bits {
+                    return Err(CodecError::Other(
+                        "the packbits padding encoding start byte is incorrect".to_string(),
+                    ));
+                }
+                &bytes[1..]
+            }
+            PackBitsPaddingEncoding::LastByte => {
+                if bytes[elements_size_bytes] != padding_bits {
+                    return Err(CodecError::Other(
+                        "the packbits padding encoding last byte is incorrect".to_string(),
+                    ));
+                }
+                &bytes[..elements_size_bytes]
+            }
+        };
+
+        // Decode the components
+        bytes_dec.fill(0);
+        for component_idx in 0..num_elements * num_components {
+            let bit_dec0 = component_idx * component_size_bits + first_bit;
+            let bit_enc0 = component_idx * component_size_bits_extracted;
+            for bit in 0..component_size_bits_extracted {
+                let (byte_enc, bit_enc) = (bit_enc0 + bit).div_rem(&8);
+                let (byte_dec, bit_dec) = div_rem_8bit(bit_dec0 + bit, component_size_bits);
+                bytes_dec[usize::try_from(byte_dec).unwrap()] |=
+                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1)
+                        << bit_dec;
+            }
+            if sign_extension {
+                let signed: bool = {
+                    let bit_enc0 = component_idx * component_size_bits_extracted;
+                    let (byte_enc, bit_enc) =
+                        (bit_enc0 + component_size_bits_extracted.saturating_sub(1)).div_rem(&8);
+                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1) == 1
+                };
+                if signed {
+                    let (byte_dec, bit_dec) = div_rem_8bit(
+                        bit_dec0 + component_size_bits_extracted.saturating_sub(1),
+                        component_size_bits,
+                    );
+                    // Sign-extend to all remaining bits in the byte
+                    // This differs from the spec which says sign extend to N (component_size_bits) bits
+                    // This makes it just work with int4 / int2 -> int8
+                    for bit_dec in bit_dec + 1..8 {
+                        bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ArrayCodecTraits for PackBitsCodecBound {
@@ -358,101 +461,39 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let PackBitsCodecComponents {
-            component_size_bits,
-            num_components,
-            sign_extension,
-        } = self.components;
-        let first_bit = self.first_bit;
-        let last_bit = self.last_bit;
-
-        // Bytes codec fast path
         if let Some(bytes_codec) = &self.bytes_codec {
             return bytes_codec.decode(bytes, shape, options);
         }
 
-        // Get the component and element size in bits
-        let PackBitsSizes {
-            num_elements,
-            elements_size_dec_bytes,
-            elements_size_bits,
-            elements_size_bytes,
-        } = self.sizes(shape)?;
-        let component_size_bits_extracted = last_bit - first_bit + 1;
-
-        // Input checks
-        let expected_length = elements_size_bytes
-            + match self.padding_encoding {
-                PackBitsPaddingEncoding::None => 0,
-                PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
-            };
-        if bytes.len() != expected_length {
-            return Err(InvalidBytesLengthError::new(bytes.len(), expected_length).into());
-        }
-
-        let padding_bits = padding_bits(elements_size_bits);
-        let packed_elements = match self.padding_encoding {
-            PackBitsPaddingEncoding::None => &bytes[..],
-            PackBitsPaddingEncoding::FirstByte => {
-                if bytes[0] != padding_bits {
-                    return Err(CodecError::Other(
-                        "the packbits padding encoding start byte is incorrect".to_string(),
-                    ));
-                }
-                &bytes[1..]
-            }
-            PackBitsPaddingEncoding::LastByte => {
-                if bytes[elements_size_bytes] != padding_bits {
-                    return Err(CodecError::Other(
-                        "the packbits padding encoding last byte is incorrect".to_string(),
-                    ));
-                }
-                &bytes[..elements_size_bytes]
-            }
-        };
-
-        // Allocate the output
-        let mut bytes_dec = vec![
-            0u8;
-            usize::try_from(elements_size_dec_bytes).map_err(|_| {
-                CodecError::from("the decoded chunk size in bytes overflows usize")
-            })?
-        ];
-
-        // Decode the components
-        for component_idx in 0..num_elements * num_components {
-            let bit_dec0 = component_idx * component_size_bits + first_bit;
-            let bit_enc0 = component_idx * component_size_bits_extracted;
-            for bit in 0..component_size_bits_extracted {
-                let (byte_enc, bit_enc) = (bit_enc0 + bit).div_rem(&8);
-                let (byte_dec, bit_dec) = div_rem_8bit(bit_dec0 + bit, component_size_bits);
-                bytes_dec[usize::try_from(byte_dec).unwrap()] |=
-                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1)
-                        << bit_dec;
-            }
-            if sign_extension {
-                let signed: bool = {
-                    let bit_enc0 = component_idx * component_size_bits_extracted;
-                    let (byte_enc, bit_enc) =
-                        (bit_enc0 + component_size_bits_extracted.saturating_sub(1)).div_rem(&8);
-                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1) == 1
-                };
-                if signed {
-                    let (byte_dec, bit_dec) = div_rem_8bit(
-                        bit_dec0 + component_size_bits_extracted.saturating_sub(1),
-                        component_size_bits,
-                    );
-                    // Sign-extend to all remaining bits in the byte
-                    // This differs from the spec which says sign extend to N (component_size_bits) bits
-                    // This makes it just work with int4 / int2 -> int8
-                    for bit_dec in bit_dec + 1..8 {
-                        bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                    }
-                }
-            }
-        }
-
+        let sizes = self.sizes(shape)?;
+        let mut bytes_dec = vec![0u8; sizes.decoded_len()?];
+        self.unpack(&bytes, &sizes, &mut bytes_dec)?;
         Ok(ArrayBytes::Fixed(CowBytes::from(bytes_dec)))
+    }
+
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        mut output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if let Some(bytes_codec) = &self.bytes_codec {
+            return bytes_codec.decode_into(input, shape, output_target, options);
+        }
+        let bytes = input.into_bytes(options)?;
+
+        // Unpack directly into an output that is one contiguous region
+        let sizes = self.sizes(shape)?;
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+            && let Some(output) = output.as_mut_slice()
+            && output.len() == sizes.decoded_len()?
+        {
+            return self.unpack(&bytes, &sizes, output);
+        }
+
+        let bytes = self.decode(bytes, shape, options)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn partial_decoder(
