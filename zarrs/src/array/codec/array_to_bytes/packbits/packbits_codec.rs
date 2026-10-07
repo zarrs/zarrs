@@ -48,6 +48,8 @@ struct PackBitsCodecBound {
     last_bit: u64,
     data_type: DataType,
     fill_value: FillValue,
+    /// The equivalent `bytes` codec, if the components are whole bytes that are all packed.
+    bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
 }
 
 impl Default for PackBitsCodec {
@@ -178,6 +180,24 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             ));
         }
 
+        let bytes_codec = if components.component_size_bits.is_multiple_of(8)
+            && first_bit == 0
+            && last_bit == components.component_size_bits - 1
+        {
+            // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
+            Some(
+                Arc::new(BytesCodec::new(Some(Endianness::Little)))
+                    .with_context(
+                        data_type.clone(),
+                        fill_value.clone(),
+                        &CodecSpecificOptions::default(),
+                    )
+                    .map_err(|err| CodecCreateError::Other(err.to_string()))?,
+            )
+        } else {
+            None
+        };
+
         Ok(Arc::new(PackBitsCodecBound {
             padding_encoding: self.padding_encoding,
             components,
@@ -185,6 +205,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             last_bit,
             data_type,
             fill_value,
+            bytes_codec,
         }))
     }
 }
@@ -270,19 +291,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits.is_multiple_of(8)
-            && first_bit == 0
-            && last_bit == component_size_bits - 1
-        {
-            // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
-            return Arc::new(BytesCodec::new(Some(Endianness::Little)))
-                .with_context(
-                    self.data_type.clone(),
-                    self.fill_value.clone(),
-                    &CodecSpecificOptions::default(),
-                )
-                .map_err(|err| CodecError::Other(err.to_string()))?
-                .encode(bytes.clone(), shape, options);
+        if let Some(bytes_codec) = &self.bytes_codec {
+            return bytes_codec.encode(bytes, shape, options);
         }
 
         // Get the component and element size in bits
@@ -357,16 +367,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let last_bit = self.last_bit;
 
         // Bytes codec fast path
-        if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
-            // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            return Arc::new(BytesCodec::new(Some(Endianness::Little)))
-                .with_context(
-                    self.data_type.clone(),
-                    self.fill_value.clone(),
-                    &CodecSpecificOptions::default(),
-                )
-                .map_err(|err| CodecError::Other(err.to_string()))?
-                .decode(bytes.clone(), shape, options);
+        if let Some(bytes_codec) = &self.bytes_codec {
+            return bytes_codec.decode(bytes, shape, options);
         }
 
         // Get the component and element size in bits

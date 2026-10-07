@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
+- Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
