@@ -227,6 +227,31 @@ fn gdeflate_decode(
     }
 }
 
+/// Decode into a buffer whose length must match the decoded length in the header.
+fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    if decoded_value.len() != header.decoded_len {
+        return Err(InvalidBytesLengthError::new(header.decoded_len, decoded_value.len()).into());
+    }
+
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = decoded_value;
+    for _ in 0..header.num_pages {
+        let (page, rest) =
+            remaining.split_at_mut(remaining.len().min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED));
+        pages.decode_next(page)?;
+        remaining = rest;
+    }
+    if remaining.is_empty() {
+        Ok(())
+    } else {
+        Err(
+            InvalidBytesLengthError::new(header.decoded_len - remaining.len(), header.decoded_len)
+                .into(),
+        )
+    }
+}
+
 struct GDeflateCompressor(*mut gdeflate_sys::libdeflate_gdeflate_compressor);
 
 impl GDeflateCompressor {
@@ -409,6 +434,48 @@ mod tests {
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
         }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gdeflate_decode_into() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        let options = CodecOptions::default();
+        let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        let len = decoded.len();
+        let encoded = codec
+            .encode(CowBytes::from(decoded.as_slice()), &options)
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        let truncated = CowBytes::from(encoded[..encoded.len() - 10].to_vec());
+        assert!(decode_into(truncated, &mut output).is_err());
+        let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+        let mut corrupt = encoded.to_vec();
+        corrupt[header_length..].fill(0xFF);
+        assert!(decode_into(CowBytes::from(corrupt), &mut output).is_err());
     }
 
     /// Headers that are inconsistent with the encoded bytes are an error rather than a panic or a
