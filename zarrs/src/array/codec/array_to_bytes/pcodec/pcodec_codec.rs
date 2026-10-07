@@ -16,8 +16,8 @@ use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::pcodec::{
@@ -179,22 +179,48 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
 impl PcodecCodecBound {
     /// Decompress `bytes` into `output`.
     ///
-    /// Returns `false` if `output` cannot be decompressed into, which is the case if `output` is not aligned to the element type or the decompressed elements do not exactly fill it.
-    /// `output` may have been written to in this case.
+    /// Returns `false` without writing to `output` if `output` cannot be decompressed into, which is the case if `output` is not aligned to the element type or is not the number of elements of `shape`.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the number of decompressed elements does not fill `output`.
+    /// This is reported rather than decoding `bytes` again, since that cannot succeed.
+    /// If there are more decompressed elements than `output` holds, the reported length is one element more than the length of `output`.
     fn decompress_into(
         &self,
         bytes: &[u8],
         shape: &[NonZeroU64],
         output: &mut [u8],
     ) -> Result<bool, CodecError> {
-        let num_elements = shape.num_elements_usize() * self.elements_per_element;
+        // An element count that overflows is not the length of `output`
+        let Some(num_elements) = shape
+            .iter()
+            .try_fold(self.elements_per_element, |count, d| {
+                count.checked_mul(usize::try_from(d.get()).ok()?)
+            })
+        else {
+            return Ok(false);
+        };
         macro_rules! pcodec_decompress_into {
             ( $t:ty ) => {
                 match bytemuck::try_cast_slice_mut::<u8, $t>(output) {
                     Ok(output) if output.len() == num_elements => {
                         let progress = pco::standalone::simple_decompress_into(bytes, output)
                             .map_err(|err| CodecError::Other(err.to_string()))?;
-                        Ok(progress.finished && progress.n_processed == num_elements)
+                        if progress.finished && progress.n_processed == num_elements {
+                            Ok(true)
+                        } else {
+                            let decoded_elements = if progress.finished {
+                                progress.n_processed
+                            } else {
+                                num_elements.saturating_add(1)
+                            };
+                            let element_size = size_of::<$t>();
+                            Err(InvalidBytesLengthError::new(
+                                decoded_elements.saturating_mul(element_size),
+                                num_elements.saturating_mul(element_size),
+                            )
+                            .into())
+                        }
                     }
                     _ => Ok(false),
                 }

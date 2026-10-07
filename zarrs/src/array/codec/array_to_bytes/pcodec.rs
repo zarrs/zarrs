@@ -224,6 +224,23 @@ mod tests {
                 decode_into_view(&codec, &encoded, &chunk_shape, [4, 8], 8, 0, element_size)
                     .is_err()
             );
+
+            // A stream with fewer and more elements than the output is an error
+            for (stream_bytes, stream_columns) in [
+                (bytes[..8 * element_size].to_vec(), 2),
+                ([&bytes[..], &bytes[..]].concat(), 8),
+            ] {
+                let stream_shape = vec![
+                    NonZeroU64::new(4).unwrap(),
+                    NonZeroU64::new(stream_columns).unwrap(),
+                ];
+                let stream =
+                    codec.encode(stream_bytes.into(), &stream_shape, &CodecOptions::default())?;
+                assert!(matches!(
+                    decode_into_view(&codec, &stream, &chunk_shape, [4, 4], 4, 0, element_size),
+                    Err(zarrs_codec::CodecError::UnexpectedChunkDecodedSize(_))
+                ));
+            }
         }
         Ok(())
     }
