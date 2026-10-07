@@ -160,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass the encoded shape and data type to the partial decoder cache in a codec chain
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 - Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
+- Fix missing sign extension of `int2`/`int4` data when partially decoding with the `packbits` codec
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
