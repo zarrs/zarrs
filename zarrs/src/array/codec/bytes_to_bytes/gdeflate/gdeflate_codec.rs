@@ -127,10 +127,13 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
     fn decode<'a>(
         &self,
         encoded_value: CowBytes<'a>,
-        _decoded_representation: &BytesRepresentation,
+        decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        Ok(CowBytes::from(gdeflate_decode(&encoded_value)?))
+        Ok(CowBytes::from(gdeflate_decode(
+            &encoded_value,
+            decoded_representation,
+        )?))
     }
 
     fn encoded_representation(
