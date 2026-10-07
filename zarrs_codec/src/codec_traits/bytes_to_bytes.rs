@@ -200,10 +200,11 @@ pub fn copy_decoded_bytes_into(
 /// Read the decoded bytes of `decoded` into `output`, which must be exactly the length of the decoded bytes.
 ///
 /// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode through a [`Read`](std::io::Read) decoder.
-/// It reads the remainder of the decoded bytes on a length mismatch so that the error reports their length.
+/// It stops at the first decoded byte past the end of `output` rather than decoding the remainder, so a stream that is much larger than `output` is not expanded.
 ///
 /// # Errors
 /// Returns an [`InvalidBytesLengthError`] if the length of the decoded bytes is not the length of `output`, or an IO error if `decoded` fails to read.
+/// If the decoded bytes are too long, the reported length is one more than the length of `output`.
 pub fn read_decoded_bytes_into(
     mut decoded: impl std::io::Read,
     output: &mut [u8],
@@ -217,14 +218,21 @@ pub fn read_decoded_bytes_into(
             Err(err) => return Err(err.into()),
         }
     }
-    let remainder = std::io::copy(&mut decoded, &mut std::io::sink())?;
-    if remainder != 0 {
-        let decoded_len = output
-            .len()
-            .saturating_add(usize::try_from(remainder).unwrap_or(usize::MAX));
-        return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+    let mut extra = [0u8; 1];
+    loop {
+        match decoded.read(&mut extra) {
+            Ok(0) => return Ok(()),
+            Ok(_) => {
+                return Err(InvalidBytesLengthError::new(
+                    output.len().saturating_add(1),
+                    output.len(),
+                )
+                .into());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err.into()),
+        }
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -259,13 +267,24 @@ mod tests {
         );
         assert_eq!(
             invalid_len(&[1, 2, 3, 4, 5], &mut output),
-            InvalidBytesLengthError::new(5, 3).to_string()
+            InvalidBytesLengthError::new(4, 3).to_string()
         );
         assert_eq!(
             invalid_len(&[], &mut output),
             InvalidBytesLengthError::new(0, 3).to_string()
         );
         read_decoded_bytes_into(&[][..], &mut []).unwrap();
+    }
+
+    #[test]
+    fn read_decoded_bytes_into_does_not_read_past_the_first_extra_byte() {
+        // An endless stream is an error rather than being read to the end
+        let mut output = [0; 3];
+        assert!(matches!(
+            read_decoded_bytes_into(std::io::repeat(7), &mut output),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert_eq!(output, [7; 3]);
     }
 
     #[test]
