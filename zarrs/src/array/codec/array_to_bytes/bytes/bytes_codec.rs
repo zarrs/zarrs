@@ -8,9 +8,7 @@ use super::{
     BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
     bytes_codec_partial,
 };
-use crate::array::{
-    ArrayBytes, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType, DataTypeSize, FillValue,
-};
+use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -140,6 +138,32 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
     }
 }
 
+impl BytesCodecBound {
+    fn decoded_size(&self, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
+        let data_type_size = self.data_type.fixed_size().ok_or_else(|| {
+            CodecError::UnsupportedDataType(
+                self.data_type.clone(),
+                BytesCodec::aliases_v3().default_name.to_string(),
+            )
+        })?;
+        let num_elements = shape
+            .iter()
+            .try_fold(1u64, |count, d| count.checked_mul(d.get()))
+            .ok_or("the decoded chunk element count overflows u64")?;
+        let num_bytes = num_elements
+            .checked_mul(data_type_size as u64)
+            .ok_or("the decoded chunk size in bytes overflows u64")?;
+        Ok((num_elements, num_bytes))
+    }
+
+    fn decoded_len(&self, shape: &[NonZeroU64]) -> Result<(u64, usize), CodecError> {
+        let (num_elements, num_bytes) = self.decoded_size(shape)?;
+        let len = usize::try_from(num_bytes)
+            .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
+        Ok((num_elements, len))
+    }
+}
+
 impl ArrayCodecTraits for BytesCodecBound {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -202,7 +226,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let (num_elements, _) = self.decoded_len(shape)?;
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
@@ -215,10 +239,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        let (num_elements, _) = self.decoded_len(shape)?;
         let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes_decoded.validate(num_elements, &self.data_type)?;
 
         Ok(bytes_decoded)
@@ -290,15 +314,8 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        match self.data_type.size() {
-            DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            )),
-            DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
-                shape.num_elements_u64() * data_type_size as u64,
-            )),
-        }
+        let (_, size) = self.decoded_size(shape)?;
+        Ok(BytesRepresentation::FixedSize(size))
     }
 }
 
@@ -306,6 +323,34 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 mod tests {
     use super::*;
     use crate::array::data_type;
+
+    #[test]
+    fn decoded_size_overflow() {
+        let codec = BytesCodec::default()
+            .with_context(
+                data_type::uint16(),
+                FillValue::from(0u16),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let options = CodecOptions::default();
+        for shape in [
+            vec![NonZeroU64::new(u64::MAX).unwrap()],
+            vec![NonZeroU64::new(1 << 32).unwrap(); 2],
+        ] {
+            assert!(codec.encoded_representation(&shape).is_err());
+            assert!(
+                codec
+                    .encode(ArrayBytes::new_flen(vec![0; 2]), &shape, &options)
+                    .is_err()
+            );
+            assert!(
+                codec
+                    .decode(CowBytes::from(&[0; 2][..]), &shape, &options)
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn decode_passthrough() {
