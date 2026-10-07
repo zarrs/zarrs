@@ -74,7 +74,9 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
@@ -214,6 +216,67 @@ mod tests {
 
         let answer: Vec<u16> = vec![2, 6];
         assert_eq!(answer, decoded);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_partial_decode_unaligned() {
+        // The decoded size (21) is not a multiple of the typesize (4)
+        let bytes: Vec<u8> = (0..21).collect();
+        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
+        let codec_configuration: BloscCodecConfiguration = serde_json::from_str(
+            JSON_VALID1
+                .replace(r#""typesize": 2"#, r#""typesize": 4"#)
+                .as_str(),
+        )
+        .unwrap();
+        let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
+        let encoded = codec
+            .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
+            .unwrap();
+        let partial_decoder = codec
+            .partial_decoder(
+                Arc::new(encoded),
+                &bytes_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let decoded_regions = [
+            ByteRange::FromStart(0, None),
+            ByteRange::FromStart(4, Some(8)),
+            ByteRange::FromStart(1, Some(6)),
+            ByteRange::Suffix(5),
+            // Empty byte ranges aligned to the typesize
+            ByteRange::FromStart(0, Some(0)),
+            ByteRange::FromStart(8, Some(0)),
+        ];
+        let decoded = partial_decoder
+            .partial_decode_many(
+                Box::new(decoded_regions.into_iter()),
+                &CodecOptions::default(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(decoded[0].as_slice(), &bytes);
+        assert_eq!(decoded[1].as_slice(), &bytes[4..12]);
+        assert_eq!(decoded[2].as_slice(), &bytes[1..7]);
+        assert_eq!(decoded[3].as_slice(), &bytes[16..]);
+        assert!(decoded[4].is_empty());
+        assert!(decoded[5].is_empty());
+
+        // Byte ranges beyond the decoded size are an error
+        for byte_range in [
+            ByteRange::FromStart(18, Some(5)),
+            ByteRange::FromStart(16, Some(8)),
+            ByteRange::FromStart(22, None),
+            ByteRange::Suffix(22),
+            ByteRange::FromStart(1, Some(u64::MAX)),
+        ] {
+            assert!(matches!(
+                partial_decoder.partial_decode(byte_range, &CodecOptions::default()),
+                Err(CodecError::InvalidByteRangeError(_))
+            ));
+        }
     }
 
     #[cfg(feature = "async")]
