@@ -99,7 +99,7 @@ use std::sync::Arc;
 
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
-use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
+use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpFieldMut, ZfpHeaderMask, ZfpScalarType};
 
 use self::zfp_array::{ZfpArray, zfp_dims};
 use self::zfp_config::zfp_config;
@@ -209,7 +209,58 @@ fn zfp_decode(
     let mut field = zfp_dims(shape)
         .and_then(|dims| array.field_mut(dims))
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
+    zfp_decompress(config, write_header, encoded_value, &mut field)?;
+    Ok(array.into_bytes())
+}
 
+/// Decode `encoded_value` into `output`, which holds the decoded bytes of an array with `shape`.
+///
+/// Returns `false` if `output` cannot be decoded into.
+/// This is the case if zfp decodes the encoding to elements that are not the decoded elements (they are promoted or clamped), if `output` is not aligned to the element type, or if it is not the length of the array.
+fn zfp_decode_into(
+    config: &ZfpConfig,
+    write_header: bool,
+    encoded_value: &[u8],
+    shape: &[NonZeroU64],
+    encoding: ZfpEncoding,
+    output: &mut [u8],
+) -> Result<bool, CodecError> {
+    let num_elements = shape.num_elements_usize();
+    macro_rules! zfp_decode_into {
+        ( $t:ty ) => {
+            match bytemuck::try_cast_slice_mut::<u8, $t>(output) {
+                Ok(output) if output.len() == num_elements => {
+                    let mut field = zfp_dims(shape)
+                        .and_then(|dims| ZfpFieldMut::new(output, dims).ok())
+                        .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
+                    zfp_decompress(config, write_header, encoded_value, &mut field)?;
+                    Ok(true)
+                }
+                _ => Ok(false),
+            }
+        };
+    }
+
+    match encoding {
+        ZfpEncoding::Int32 => zfp_decode_into!(i32),
+        ZfpEncoding::Int64 => zfp_decode_into!(i64),
+        ZfpEncoding::Float32 => zfp_decode_into!(f32),
+        ZfpEncoding::Float64 => zfp_decode_into!(f64),
+        ZfpEncoding::Int8
+        | ZfpEncoding::Int16
+        | ZfpEncoding::UInt8
+        | ZfpEncoding::UInt16
+        | ZfpEncoding::UInt32
+        | ZfpEncoding::UInt64 => Ok(false),
+    }
+}
+
+fn zfp_decompress(
+    config: &ZfpConfig,
+    write_header: bool,
+    encoded_value: &[u8],
+    field: &mut ZfpFieldMut<'_>,
+) -> Result<(), CodecError> {
     let mut bitstream = ZfpBitStream::from_bytes(encoded_value)
         .map_err(|err| CodecError::Other(format!("failed to allocate zfp bitstream: {err}")))?;
     let header_config;
@@ -234,10 +285,9 @@ fn zfp_decode(
     };
 
     bitstream
-        .decompress(config, &mut field)
+        .decompress(config, field)
         .map_err(|err| CodecError::Other(format!("zfp decompression failed: {err}")))?;
-
-    Ok(array.into_bytes())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -247,12 +297,13 @@ mod tests {
 
     use num::traits::AsPrimitive;
 
+    use super::super::decode_into_test_util::decode_into_view;
     use super::*;
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
-        data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, CowBytes, DataType,
+        FillValue, data_type,
     };
     use zarrs_codec::{
         ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
@@ -320,6 +371,103 @@ mod tests {
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
         assert_eq!(elements, decoded_elements);
+    }
+
+    /// `decode_into` decodes directly into an output that is one contiguous region and aligned to
+    /// the element type if zfp decodes the encoding to the element type, and otherwise decodes and
+    /// copies. Both match `decode`.
+    fn codec_zfp_decode_into<T: ElementOwned + Copy + 'static>(
+        data_type: DataType,
+        fill_value: FillValue,
+        write_header: bool,
+    ) where
+        u64: num::traits::AsPrimitive<T>,
+    {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let elements: Vec<T> = (0..16u64).map(num::traits::AsPrimitive::<T>::as_).collect();
+        let bytes = T::to_array_bytes(&data_type, &elements).unwrap();
+        let element_size = data_type.fixed_size().unwrap();
+        let codec = ZfpCodec::new_reversible()
+            .with_write_header(write_header)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
+        let options = CodecOptions::default();
+        let encoded = codec.encode(bytes.clone(), &chunk_shape, &options).unwrap();
+        let decoded = codec
+            .decode(encoded.clone(), &chunk_shape, &options)
+            .unwrap()
+            .into_fixed()
+            .unwrap()
+            .to_vec();
+        assert_eq!(decoded, bytes.into_fixed().unwrap().to_vec());
+
+        // One contiguous region, aligned and not aligned to the element type
+        for offset in [0, 1] {
+            let output = decode_into_view(
+                &codec,
+                &encoded,
+                &chunk_shape,
+                [4, 4],
+                4,
+                offset,
+                element_size,
+            );
+            assert_eq!(output.unwrap(), decoded);
+        }
+
+        // Four contiguous regions, with the rest of the output unchanged
+        let output =
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, element_size).unwrap();
+        let row = 4 * element_size;
+        for (output_row, decoded_row) in
+            std::iter::zip(output.chunks_exact(2 * row), decoded.chunks_exact(row))
+        {
+            assert_eq!(&output_row[..row], decoded_row);
+            assert!(output_row[row..].iter().all(|byte| *byte == 0xFF));
+        }
+
+        // Truncated encoded bytes are decoded as they are by `decode`
+        let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
+        let decoded_truncated = codec.decode(truncated.clone(), &chunk_shape, &options);
+        let output = decode_into_view(&codec, &truncated, &chunk_shape, [4, 4], 4, 0, element_size);
+        match (decoded_truncated, output) {
+            (Ok(decoded), Ok(output)) => {
+                assert_eq!(decoded.into_fixed().unwrap().to_vec(), output);
+            }
+            (Err(_), Err(_)) => {}
+            (decoded, output) => panic!("{decoded:?} and {output:?} are not both ok or errors"),
+        }
+
+        // An output with fewer and more elements than the chunk
+        assert!(
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 2], 2, 0, element_size).is_err()
+        );
+        assert!(
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 8], 8, 0, element_size).is_err()
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfp_decode_into_native() {
+        for write_header in [false, true] {
+            codec_zfp_decode_into::<i32>(data_type::int32(), FillValue::from(0i32), write_header);
+            codec_zfp_decode_into::<i64>(data_type::int64(), FillValue::from(0i64), write_header);
+            codec_zfp_decode_into::<f32>(data_type::float32(), FillValue::from(0f32), write_header);
+            codec_zfp_decode_into::<f64>(data_type::float64(), FillValue::from(0f64), write_header);
+        }
+    }
+
+    /// Encodings that zfp decodes to promoted or clamped elements
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfp_decode_into_promoted() {
+        for write_header in [false, true] {
+            codec_zfp_decode_into::<u8>(data_type::uint8(), FillValue::from(0u8), write_header);
+            codec_zfp_decode_into::<u16>(data_type::uint16(), FillValue::from(0u16), write_header);
+            codec_zfp_decode_into::<i8>(data_type::int8(), FillValue::from(0i8), write_header);
+            codec_zfp_decode_into::<u32>(data_type::uint32(), FillValue::from(0u32), write_header);
+        }
     }
 
     #[test]
