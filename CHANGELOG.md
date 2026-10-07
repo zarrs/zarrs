@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
+- Re-export `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Add efficient asynchronous partial encoding for the `sharding_indexed` codec
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
@@ -53,7 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retrieve complete cached chunks without extracting a subset
 - Decode `zstd`, `blosc`, `gzip`, `zlib`, `bz2`, `shuffle`, and `gdeflate` directly into preallocated byte buffers
 - Let the `bytes` codec choose final-output placement for efficient deferred producers, while retaining fused copy-and-endianness conversion for ordinary input
+  - *Behavioural Change*: if decoding into an output fails, the output may have been partially written, including with undecoded bytes
 - Defer the final bytes-to-bytes stage in a codec chain so its array-to-bytes receiver chooses placement before decoding, preserving owned intermediates for fallback codecs
+- Decode `packbits`, `pcodec`, and `zfp` directly into an output that is one contiguous region, and forward deferred input through `packbits` and `zfpy`
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
