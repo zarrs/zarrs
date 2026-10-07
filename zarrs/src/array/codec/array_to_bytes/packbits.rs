@@ -97,7 +97,7 @@ mod tests {
 
     use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
-    use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use crate::array::{ArrayBytes, ArraySubset, CowBytes, data_type};
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
         UnboundArrayToBytesCodecTraits,
@@ -196,6 +196,38 @@ mod tests {
                 .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .is_err()
         );
+    }
+
+    /// Shapes with sizes that overflow are errors rather than panics.
+    #[test]
+    fn codec_packbits_rejects_overflowing_shape() -> Result<(), Box<dyn std::error::Error>> {
+        let codec = Arc::new(super::PackBitsCodec::default()).with_context(
+            data_type::uint4(),
+            FillValue::from(0u8),
+            &CodecSpecificOptions::default(),
+        )?;
+        let options = CodecOptions::default();
+        let max = NonZeroU64::new(u64::MAX).unwrap();
+        let shapes = [
+            // The number of elements overflows
+            vec![max, NonZeroU64::new(2).unwrap()],
+            // The number of bits overflows
+            vec![NonZeroU64::new(u64::MAX / 2).unwrap()],
+        ];
+        for shape in shapes {
+            assert!(codec.encoded_representation(&shape).is_err());
+            assert!(
+                codec
+                    .encode(ArrayBytes::new_flen(vec![0u8]), &shape, &options)
+                    .is_err()
+            );
+            assert!(
+                codec
+                    .decode(CowBytes::from(vec![0u8]), &shape, &options)
+                    .is_err()
+            );
+        }
+        Ok(())
     }
 
     #[test]
