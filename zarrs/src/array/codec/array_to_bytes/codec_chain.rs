@@ -591,7 +591,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        mut bytes: CowBytes<'_>,
+        input: zarrs_codec::ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
@@ -601,12 +601,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
             // Fast path if no bytes to bytes or array to array codecs
             return self.array_to_bytes.decode_into(
-                bytes,
+                input,
                 &array_representations.last().unwrap().0,
                 output_target,
                 options,
             );
         }
+
+        let mut bytes = input.into_bytes(options)?;
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
@@ -619,7 +621,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         // Fast path if no array to array codecs
         if self.array_to_array.is_empty() {
             return self.array_to_bytes.decode_into(
-                bytes,
+                bytes.into(),
                 &array_representations.last().unwrap().0,
                 output_target,
                 options,

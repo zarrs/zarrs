@@ -210,16 +210,6 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
-    fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
-            return Ok(false);
-        }
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .is_decode_passthrough(self.endian))
-    }
-
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
@@ -353,35 +343,8 @@ mod tests {
     }
 
     #[test]
-    fn decode_passthrough() {
-        let shape = [NonZeroU64::new(1).unwrap()];
+    fn unsupported_data_types() {
         let options = CodecSpecificOptions::default();
-        assert!(
-            BytesCodec::new(None)
-                .with_context(data_type::uint8(), FillValue::from(0u8), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        assert!(
-            BytesCodec::new(Some(Endianness::native()))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        let non_native = if Endianness::native() == Endianness::Little {
-            Endianness::Big
-        } else {
-            Endianness::Little
-        };
-        assert!(
-            !BytesCodec::new(Some(non_native))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
         assert!(
             BytesCodec::new(None)
                 .with_context(

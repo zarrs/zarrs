@@ -422,7 +422,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             {
                 let (mut data_view, mut mask_views) = buffers.views()?;
                 self.decode_into(
-                    encoded_shard,
+                    encoded_shard.into(),
                     shape,
                     build_nested_optional_target(&mut data_view, &mut mask_views),
                     options,
@@ -588,11 +588,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn decode_into(
         &self,
-        encoded_shard: CowBytes<'_>,
+        input: zarrs_codec::ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let encoded_shard = input.into_bytes(options)?;
         let data_type = self.data_type();
         let fill_value = self.fill_value();
 
@@ -660,7 +661,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 let size: usize = size.try_into().unwrap();
                 let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
                 self.inner_codecs.decode_into(
-                    encoded_chunk,
+                    encoded_chunk.into(),
                     &chunk_subset.chunk_shape().expect("nonempty subchunk"),
                     output_target_subchunk,
                     &options,

@@ -313,7 +313,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = chunk_encoded {
             self.codecs_bound()
                 .decode_into(
-                    CowBytes::Shared(chunk_encoded),
+                    CowBytes::Shared(chunk_encoded).into(),
                     &chunk_shape,
                     output_target,
                     options,
