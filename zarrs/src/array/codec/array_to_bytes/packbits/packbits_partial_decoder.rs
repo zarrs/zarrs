@@ -135,6 +135,13 @@ fn partial_decode<'a>(
                                 div_rem_8bit(bit_dec0 + bit, component_size_bits);
                             bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
                         }
+                        // Sign-extend to all remaining bits in the last byte, consistent with full decoding
+                        // This makes it just work with int4 / int2 -> int8
+                        let (byte_dec, bit_dec) =
+                            div_rem_8bit(bit_dec0 + component_size_bits - 1, component_size_bits);
+                        for bit_dec in bit_dec + 1..8 {
+                            bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
+                        }
                     }
                 }
             }

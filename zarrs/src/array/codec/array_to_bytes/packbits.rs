@@ -380,6 +380,18 @@ mod tests {
                 .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
+
+            // Partial decoding
+            let partial_decoder =
+                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let decoded_partial_chunk = partial_decoder.partial_decode(
+                &ArraySubset::new_with_ranges(&[0..2, 0..1]),
+                &CodecOptions::default(),
+            )?;
+            assert_eq!(
+                &elements[..2],
+                i8::from_array_bytes(&data_type, decoded_partial_chunk)?
+            );
         }
         Ok(())
     }
@@ -413,6 +425,18 @@ mod tests {
                 .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
+
+            // Partial decoding
+            let partial_decoder =
+                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let decoded_partial_chunk = partial_decoder.partial_decode(
+                &ArraySubset::new_with_ranges(&[0..2, 0..1]),
+                &CodecOptions::default(),
+            )?;
+            assert_eq!(
+                &elements[..2],
+                i8::from_array_bytes(&data_type, decoded_partial_chunk)?
+            );
         }
         Ok(())
     }
