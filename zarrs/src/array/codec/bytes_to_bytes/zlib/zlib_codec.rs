@@ -111,6 +111,10 @@ impl BytesToBytesCodecTraits for ZlibCodec {
         Ok(CowBytes::from(out))
     }
 
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
     fn decode_into(
         &self,
         encoded_value: CowBytes<'_>,
