@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implement `FromStr` for `ArrayMetadata`, `GroupMetadata`, and `MetadataV3`, preserving `TryFrom<&str>` support
 
+### Fixed
+- Serialise the `configuration` of `MetadataV3` if empty (e.g. `{"name":"crc32c","configuration":{}}`), as `zarr-python` requires it for `numcodecs.*` codecs
+- Serialise `must_understand: false` of `MetadataV3` with an empty or no `configuration`
+
 ## [0.7.5](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata-v0.7.5) - 2026-05-13
 
 ### Fixed

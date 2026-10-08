@@ -162,6 +162,23 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             }
         };
 
+        // Write codecs and storage transformers as objects with a `configuration` (even if empty), as
+        // Zarr 3.0 implementations reject short-hand names and zarr-python requires a `configuration`
+        // for `numcodecs.*` codecs (see `MetadataV3`)
+        if let AM::V3(metadata) = &mut metadata {
+            for metadata in metadata
+                .codecs
+                .iter_mut()
+                .chain(&mut metadata.storage_transformers)
+            {
+                if metadata.configuration().is_none() {
+                    *metadata =
+                        MetadataV3::new_with_configuration(metadata.name(), serde_json::Map::new())
+                            .with_must_understand(metadata.must_understand());
+                }
+            }
+        }
+
         // Convert aliased extension names
         if options.convert_aliased_extension_names() {
             match &mut metadata {

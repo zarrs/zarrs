@@ -1216,6 +1216,47 @@ mod tests {
     }
 
     #[test]
+    fn array_metadata_opt_codecs_as_objects() {
+        let metadata: ArrayMetadata = r#"{
+            "zarr_format": 3,
+            "node_type": "array",
+            "shape": [8],
+            "data_type": "uint8",
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4]}},
+            "chunk_key_encoding": {"name": "default"},
+            "fill_value": 0,
+            "codecs": [{"name": "bytes"}, "crc32c", {"name": "crc32c"}]
+        }"#
+        .parse()
+        .unwrap();
+        let array = Array::new_with_metadata(Arc::new(MemoryStore::new()), "/", metadata).unwrap();
+
+        // The array metadata is unchanged
+        let ArrayMetadata::V3(metadata) = array.metadata() else {
+            unreachable!()
+        };
+        assert!(
+            metadata
+                .codecs
+                .iter()
+                .all(|codec| codec.configuration().is_none())
+        );
+
+        // The stored metadata has codecs as objects with a configuration
+        let stored_metadata = serde_json::to_value(array.metadata_opt()).unwrap();
+        assert_eq!(
+            stored_metadata["codecs"],
+            serde_json::json!([
+                {"name": "bytes", "configuration": {}},
+                {"name": "crc32c", "configuration": {}},
+                {"name": "crc32c", "configuration": {}}
+            ])
+        );
+        // Other metadata is not changed
+        assert_eq!(stored_metadata["data_type"], "uint8");
+    }
+
+    #[test]
     fn array_clone_shares_metadata_copy_on_write() {
         let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
             .build(Arc::new(MemoryStore::new()), "/array")
