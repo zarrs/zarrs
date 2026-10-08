@@ -12,9 +12,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    store_set_partial_many, AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits,
-    MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
-    StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
+    AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytesIterator,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -323,6 +323,43 @@ impl FilesystemStore {
         Ok(())
     }
 
+    /// Write each value at its offset, in place: the rest of the file is kept, and the file
+    /// grows (zero-filled) when a value ends beyond it. The file is never read back nor
+    /// rewritten whole, so a partial write costs the bytes written, whatever the file size
+    /// (e.g. appending an inner chunk to a shard with partial encoding).
+    ///
+    /// Always buffered: the direct I/O path of [`Self::set_impl`] truncates the file to the
+    /// written length.
+    fn set_partial_impl(
+        &self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'_>,
+    ) -> Result<(), StorageError> {
+        self.invalidate_handle(key);
+
+        // Create directories
+        let key_path = self.key_to_fspath(key);
+        if let Some(parent) = key_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(key_path)?;
+        for (offset, value) in offset_values {
+            file.write_all_at(offset, &value)?;
+        }
+
+        // Surface write-back errors before dropping the file, which ignores close errors.
+        file.sync_all()?;
+
+        Ok(())
+    }
+
     #[cfg(target_os = "linux")]
     #[allow(clippy::too_many_lines)]
     fn get_partial_many_direct_io<'a>(
@@ -496,7 +533,7 @@ impl WritableStorageTraits for FilesystemStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        store_set_partial_many(self, key, offset_values)
+        self.set_partial_impl(key, offset_values)
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
