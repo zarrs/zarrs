@@ -3,6 +3,9 @@
 //! ### Compatible Implementations
 //! This codec is fully compatible with the `vlen-bytes` codec in `zarr-python`.
 //!
+//! This codec is only compatible with the `bytes` data type.
+//! Arrays are not created with it and other data types (e.g. by [`ArrayBuilder`](crate::array::ArrayBuilder)), but those with the `string` data type are read for backwards compatibility (**non-conformant**).
+//!
 //! ### Specification:
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/zarr-python-exts/codecs/vlen-bytes>
 //!
