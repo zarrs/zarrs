@@ -176,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read `numcodecs.pcodec` codec metadata written by `zarrs` 0.11 to 0.15, which used the `pcodec` name and legacy configurations
   - `pcodec` is a non-conformant (unregistered) name, read for backwards compatibility
 - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, for compatibility with `zarr-python` and `tensorstore`
+- Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

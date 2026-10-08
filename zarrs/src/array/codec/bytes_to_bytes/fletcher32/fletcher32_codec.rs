@@ -62,8 +62,8 @@ impl CodecTraits for Fletcher32Codec {
 
 /// HDF5 Fletcher32.
 ///
-/// Based on <https://github.com/Unidata/netcdf-c/blob/main/plugins/H5checksum.c#L109>.
-fn h5_checksum_fletcher32(data: &[u8]) -> u32 {
+/// Based on <https://github.com/Unidata/netcdf-c/blob/main/plugins/H5checksum.c#L109>, as in `numcodecs`.
+pub(super) fn h5_checksum_fletcher32(data: &[u8]) -> u32 {
     let mut len = data.len() / 2;
     let mut sum1: u32 = 0;
     let mut sum2: u32 = 0;
@@ -83,7 +83,7 @@ fn h5_checksum_fletcher32(data: &[u8]) -> u32 {
     }
 
     // Check for odd # of bytes
-    if len.is_odd() {
+    if data.len().is_odd() {
         sum1 += u32::from(u16::from(data[data_idx]) << 8);
         sum2 += sum1;
         sum1 = (sum1 & 0xffff) + (sum1 >> 16);
@@ -139,7 +139,13 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
                     [encoded_value.len() - CHECKSUM_SIZE..]
                     .try_into()
                     .unwrap();
-                if checksum != checksum_stored {
+                // NON-CONFORMANT: zarrs 0.19 to 0.23 omitted the last byte of data with an odd length from the checksum, read for backwards compatibility
+                let legacy_checksum = || {
+                    h5_checksum_fletcher32(&decoded_value[..decoded_value.len() - 1]).to_le_bytes()
+                };
+                if checksum != checksum_stored
+                    && !(decoded_value.len().is_odd() && legacy_checksum() == checksum_stored)
+                {
                     return Err(CodecError::InvalidChecksum);
                 }
             }

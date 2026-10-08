@@ -2,6 +2,9 @@
 - `zarrs: <0.24` `must_understand: false` was dropped from metadata (e.g. codecs) with an empty or no `configuration`
   - Implementations that do not support the extension fail to open these arrays, rather than ignoring it
   - `zarrs` 0.24+ preserves it
+- `zarrs: 0.19-0.23` `numcodecs.fletcher32` checksums of data with an odd length omitted the last byte
+  - These chunks fail checksum validation in other Zarr implementations (e.g. `numcodecs`)
+  - `zarrs` 0.24+ accepts these checksums for backwards compatibility
 - `zarrs: 0.20-0.22` `numcodecs.zfpy` codec metadata incorrectly serialised a string representation of the `zfp` mode rather than integer
   - `zarrs` 0.24+ supports deserialising the erroneous metadata
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
