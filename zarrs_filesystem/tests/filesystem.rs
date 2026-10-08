@@ -85,16 +85,17 @@ fn filesystem_sync_errors() -> Result<(), Box<dyn Error>> {
         assert_sync_error(store.set(&key, Bytes::from_static(b"value").into()));
         assert_sync_error(store.set(&key, Bytes::new().into()));
 
-        // Partial writes first read the key, but /dev/null has no regular-file size.
-        // Create the link while consuming the ranges, after reading the missing key,
-        // so that only the write targets /dev/null.
+        // Partial writes go to the key in place (no read of it first), so they reach
+        // /dev/null directly and must surface its sync error too.
         let partial_key: StoreKey = "partial".try_into()?;
-        let offset_values = std::iter::once_with(|| {
-            symlink("/dev/null", store.key_to_fspath(&partial_key)).unwrap();
-            (0, Bytes::from_static(b"first").into())
-        })
-        .chain(std::iter::once((8, Bytes::from_static(b"last").into())));
-        assert_sync_error(store.set_partial_many(&partial_key, Box::new(offset_values)));
+        symlink("/dev/null", store.key_to_fspath(&partial_key))?;
+        let offset_values = [
+            (0, Bytes::from_static(b"first").into()),
+            (8, Bytes::from_static(b"last").into()),
+        ];
+        assert_sync_error(
+            store.set_partial_many(&partial_key, Box::new(offset_values.into_iter())),
+        );
     }
     Ok(())
 }
