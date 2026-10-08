@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.4...HEAD)
 
 ### Added
+- Add `PcodecCodecConfigurationLegacy` and `PcodecCodecConfiguration::Legacy` for `pcodec` configurations written by `zarrs` 0.11 to 0.15
 - Add `ChunkEdgeLengths::decpde()` and `emcpde()` for expanding and compressing rectilinear chunk edge lengths
 
 ### Changed

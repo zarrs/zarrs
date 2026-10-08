@@ -92,6 +92,10 @@ impl PcodecCodec {
                 let chunk_config = configuration_to_chunk_config(configuration);
                 Ok(Self { chunk_config })
             }
+            PcodecCodecConfiguration::Legacy(configuration) => {
+                let chunk_config = configuration_to_chunk_config(&configuration.to_v1());
+                Ok(Self { chunk_config })
+            }
             _ => Err(PluginCreateError::Other(
                 "this pcodec codec configuration variant is unsupported".to_string(),
             )),
