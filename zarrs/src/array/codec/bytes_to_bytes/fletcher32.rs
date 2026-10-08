@@ -11,6 +11,8 @@
 //! ### Compatible Implementations
 //! This codec is fully compatible with the `numcodecs.fletcher32` codec in `zarr-python`.
 //!
+//! **Non-conformant** checksums written by `zarrs` 0.19 to 0.23 are read for backwards compatibility: they omit the last byte of data with an odd length.
+//!
 //! ### Specification
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/numcodecs/codecs/numcodecs.fletcher32>
 //! - <https://codec.zarrs.dev/bytes_to_bytes/fletcher32>
@@ -94,6 +96,44 @@ mod tests {
         CodecTraits,
     };
     use zarrs_storage::byte_range::ByteRange;
+
+    #[test]
+    fn codec_fletcher32_checksum_numcodecs() {
+        // Checksums of `numcodecs` 0.17.0
+        let checksum = |data: &[u8]| fletcher32_codec::h5_checksum_fletcher32(data).to_le_bytes();
+        assert_eq!(checksum(b"a"), [0, 97, 0, 97]);
+        assert_eq!(checksum(b"abc"), [98, 196, 197, 37]);
+        assert_eq!(checksum(b"abcd"), [198, 196, 41, 38]);
+        let data: Vec<u8> = (0..255).collect();
+        assert_eq!(checksum(&data), [64, 191, 118, 84]);
+    }
+
+    #[test]
+    fn codec_fletcher32_decode_legacy_odd_checksum() {
+        // Written by zarrs 0.19 to 0.23, which omitted the last byte of data with an odd length from the checksum
+        let data = b"abc";
+        let legacy = fletcher32_codec::h5_checksum_fletcher32(b"ab").to_le_bytes();
+        let encoded = [data.as_slice(), &legacy].concat();
+        let codec = Fletcher32Codec::new();
+        let decoded = codec
+            .decode(
+                CowBytes::from(encoded),
+                &BytesRepresentation::FixedSize(3),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(decoded.as_ref(), data);
+        // Other checksums are invalid
+        let encoded = [data.as_slice(), &[0, 0, 0, 0]].concat();
+        assert!(matches!(
+            codec.decode(
+                CowBytes::from(encoded),
+                &BytesRepresentation::FixedSize(3),
+                &CodecOptions::default(),
+            ),
+            Err(zarrs_codec::CodecError::InvalidChecksum)
+        ));
+    }
 
     const JSON1: &str = r"{}";
 
