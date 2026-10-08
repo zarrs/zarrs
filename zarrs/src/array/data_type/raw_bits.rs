@@ -163,7 +163,8 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         use base64::Engine;
         use base64::prelude::BASE64_STANDARD;
-        // RawBits fill value can be base64-encoded string or array of bytes
+        // The fill value is an array of bytes, or a base64-encoded string
+        // NON-CONFORMANT: A base64-encoded string is required by tensorstore (as of 0.1.85), read for compatibility
         if let Some(s) = fill_value_metadata.as_str() {
             let bytes = BASE64_STANDARD
                 .decode(s)
@@ -194,7 +195,7 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
         &self,
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
-        // Return as array of bytes (not base64 encoded) for consistency
+        // An array of bytes, as specified (not base64 encoded, as required by tensorstore)
         let bytes = fill_value.as_ne_bytes();
         let arr: Vec<zarrs_metadata::FillValueMetadata> = bytes
             .iter()
