@@ -18,6 +18,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `numcodecs.fletcher32`
 //! - `https://codec.zarrs.dev/bytes_to_bytes/fletcher32`
+//! - `fletcher32` (**non-conformant**, written by `zarrs` 0.19)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! - `fletcher32`
@@ -45,7 +46,12 @@ pub use zarrs_metadata_ext::codec::fletcher32::{
 };
 
 zarrs_plugin::impl_extension_aliases!(Fletcher32Codec,
-    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"],
+    v3: "numcodecs.fletcher32", [
+        "numcodecs.fletcher32",
+        "https://codec.zarrs.dev/bytes_to_bytes/fletcher32",
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.19, read for backwards compatibility
+        "fletcher32",
+    ],
     v2: "fletcher32"
 );
 
@@ -100,6 +106,12 @@ mod tests {
             .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
+    }
+
+    #[test]
+    fn codec_fletcher32_legacy_name() {
+        let codec = Codec::from_metadata(&MetadataV3::new("fletcher32")).unwrap();
+        assert!(matches!(codec, Codec::BytesToBytes(_)));
     }
 
     #[test]
