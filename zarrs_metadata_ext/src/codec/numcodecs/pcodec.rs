@@ -9,6 +9,8 @@ use zarrs_metadata::ConfigurationSerialize;
 pub enum PcodecCodecConfiguration {
     /// Version 1.0 draft.
     V1(PcodecCodecConfigurationV1),
+    /// The configuration written by `zarrs` 0.11 to 0.15, read for backwards compatibility.
+    Legacy(PcodecCodecConfigurationLegacy),
 }
 
 impl ConfigurationSerialize for PcodecCodecConfiguration {}
@@ -58,6 +60,62 @@ impl Default for PcodecCodecConfigurationV1 {
             paging_spec: PcodecPagingSpecConfiguration::default(),
             delta_encoding_order: None,
             equal_pages_up_to: default_equal_pages_up_to(),
+        }
+    }
+}
+
+/// `pcodec` codec configuration parameters written by `zarrs` 0.11 to 0.15, read for backwards compatibility.
+///
+/// These are **non-conformant** with the `pcodec` name (written by `zarrs` 0.11 and 0.12).
+/// `zarrs` 0.13 to 0.15 wrote them with the `https://codec.zarrs.dev/array_to_bytes/pcodec` name, for which they were conformant.
+///
+/// `zarrs` 0.11 to 0.14 wrote `int_mult_spec` and `float_mult_spec` rather than `mode_spec`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Display)]
+#[display("{}", serde_json::to_string(self).unwrap_or_default())]
+#[serde(deny_unknown_fields)]
+pub struct PcodecCodecConfigurationLegacy {
+    /// A compression level from 0-12, where 12 takes the longest and compresses the most.
+    #[serde(default)]
+    pub level: PcodecCompressionLevel,
+    /// Either a delta encoding level from 0-7 or None (inferred).
+    #[serde(default)]
+    pub delta_encoding_order: Option<PcodecDeltaEncodingOrder>,
+    /// Whether to try integer multiplier mode (`zarrs` 0.11 to 0.14).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub int_mult_spec: Option<bool>,
+    /// Whether to try float multiplier mode (`zarrs` 0.11 to 0.14).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float_mult_spec: Option<bool>,
+    /// The pcodec mode spec (`zarrs` 0.15).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_spec: Option<PcodecModeSpecConfiguration>,
+    /// The maximum number of values to encode per pcodec page.
+    pub max_page_n: usize,
+}
+
+impl PcodecCodecConfigurationLegacy {
+    /// Convert to the equivalent [`PcodecCodecConfigurationV1`].
+    #[must_use]
+    pub fn to_v1(&self) -> PcodecCodecConfigurationV1 {
+        let mode_spec = self.mode_spec.unwrap_or(
+            if self.int_mult_spec == Some(false) && self.float_mult_spec == Some(false) {
+                PcodecModeSpecConfiguration::Classic
+            } else {
+                PcodecModeSpecConfiguration::Auto
+            },
+        );
+        let delta_spec = if self.delta_encoding_order.is_some() {
+            PcodecDeltaSpecConfiguration::TryConsecutive
+        } else {
+            PcodecDeltaSpecConfiguration::Auto
+        };
+        PcodecCodecConfigurationV1 {
+            level: self.level,
+            mode_spec,
+            delta_spec,
+            paging_spec: PcodecPagingSpecConfiguration::EqualPagesUpTo,
+            delta_encoding_order: self.delta_encoding_order,
+            equal_pages_up_to: self.max_page_n,
         }
     }
 }
@@ -295,6 +353,44 @@ mod tests {
         }"#,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn codec_pcodec_legacy() {
+        // zarrs 0.11 to 0.14
+        let configuration = serde_json::from_str::<PcodecCodecConfiguration>(
+            r#"{"level": 8, "delta_encoding_order": null, "int_mult_spec": false, "float_mult_spec": false, "max_page_n": 1024}"#,
+        )
+        .unwrap();
+        let PcodecCodecConfiguration::Legacy(configuration) = configuration else {
+            panic!("expected a legacy configuration")
+        };
+        let v1 = configuration.to_v1();
+        assert_eq!(v1.mode_spec, PcodecModeSpecConfiguration::Classic);
+        assert_eq!(v1.delta_spec, PcodecDeltaSpecConfiguration::Auto);
+        assert_eq!(v1.equal_pages_up_to, 1024);
+
+        // zarrs 0.15
+        let configuration = serde_json::from_str::<PcodecCodecConfiguration>(
+            r#"{"level": 8, "delta_encoding_order": 2, "mode_spec": "auto", "max_page_n": 1024}"#,
+        )
+        .unwrap();
+        let PcodecCodecConfiguration::Legacy(configuration) = configuration else {
+            panic!("expected a legacy configuration")
+        };
+        let v1 = configuration.to_v1();
+        assert_eq!(v1.mode_spec, PcodecModeSpecConfiguration::Auto);
+        assert_eq!(v1.delta_spec, PcodecDeltaSpecConfiguration::TryConsecutive);
+        assert_eq!(
+            v1.delta_encoding_order,
+            Some(PcodecDeltaEncodingOrder::try_from(2u8).unwrap())
+        );
+
+        // Current configurations are not legacy
+        assert!(matches!(
+            serde_json::from_str::<PcodecCodecConfiguration>(r#"{"level": 8}"#).unwrap(),
+            PcodecCodecConfiguration::V1(_)
+        ));
     }
 
     #[test]

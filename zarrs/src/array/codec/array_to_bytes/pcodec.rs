@@ -16,7 +16,8 @@
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `numcodecs.pcodec`
-//! - `https://codec.zarrs.dev/array_to_bytes/pcodec`
+//! - `https://codec.zarrs.dev/array_to_bytes/pcodec` (written by `zarrs` 0.13 to 0.19)
+//! - `pcodec` (**non-conformant**, written by `zarrs` 0.11 and 0.12)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! - `pcodec`
@@ -47,12 +48,17 @@ use zarrs_metadata::v3::MetadataV3;
 
 use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::pcodec::{
-    PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
-    PcodecDeltaEncodingOrder,
+    PcodecCodecConfiguration, PcodecCodecConfigurationLegacy, PcodecCodecConfigurationV1,
+    PcodecCompressionLevel, PcodecDeltaEncodingOrder,
 };
 
 zarrs_plugin::impl_extension_aliases!(PcodecCodec,
-    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"],
+    v3: "numcodecs.pcodec", [
+        // Written by zarrs 0.13 to 0.19
+        "https://codec.zarrs.dev/array_to_bytes/pcodec",
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.11 and 0.12, read for backwards compatibility
+        "pcodec",
+    ],
     v2: "pcodec"
 );
 
@@ -108,6 +114,28 @@ mod tests {
         "mode_spec": "auto",
         "equal_pages_up_to": 262144
     }"#;
+
+    #[test]
+    fn codec_pcodec_legacy_metadata() {
+        for (name, configuration) in [
+            // zarrs 0.11 and 0.12
+            (
+                "pcodec",
+                serde_json::json!({"level": 8, "delta_encoding_order": null, "int_mult_spec": true, "float_mult_spec": true, "max_page_n": 262_144}),
+            ),
+            // zarrs 0.15
+            (
+                "https://codec.zarrs.dev/array_to_bytes/pcodec",
+                serde_json::json!({"level": 8, "delta_encoding_order": null, "mode_spec": "auto", "max_page_n": 262_144}),
+            ),
+        ] {
+            let metadata =
+                MetadataV3::new_with_serializable_configuration(name.to_string(), &configuration)
+                    .unwrap();
+            let codec = Codec::from_metadata(&metadata).unwrap();
+            assert!(matches!(codec, Codec::ArrayToBytes(_)));
+        }
+    }
 
     #[test]
     fn codec_pcodec_configuration() {
