@@ -16,9 +16,14 @@ use crate::{Configuration, ConfigurationError};
 /// `must_understand` is implicitly set to [`true`] if omitted.
 /// See [ZEP0009](https://zarr.dev/zeps/draft/ZEP0009.html) for more information on this field and Zarr V3 extensions.
 ///
-/// Note that metadata with an empty `configuration` will be serialised as `{"name":"...","configuration":{}}`, even though it *could* be simplified to a string representation.
-/// This is to support compatibility with Zarr <3.1, which specified that array `codec` metadata must be a list of JSON objects.
-/// Codec metadata can include strings since Zarr 3.1, but this may limit compatibility with older Zarr implementations.
+/// Metadata with a `configuration` (even if empty) is serialised as an object with the `configuration`, and metadata without a `configuration` is serialised as a string (a short-hand name) unless `must_understand` is [`false`].
+///
+/// Codec metadata needs a `configuration` to be serialised as an object such as `{"name":"...","configuration":{}}`, even though it *could* be simplified to a short-hand name.
+/// `zarrs` creates codec metadata with a `configuration`, and adds an empty `configuration` to codec metadata without one when storing array metadata (see `Array::metadata_opt`).
+/// This is for compatibility:
+/// - Zarr 3.0 specified that array `codecs` metadata must be a list of JSON objects.
+///   Codec metadata can be short-hand names since Zarr 3.1, but they are not supported by Zarr 3.0 implementations (e.g. `zarr-python` 3.4.1 and `tensorstore` 0.1.85).
+/// - NON-CONFORMANT: `zarr-python` (as of 3.4.1) requires a `configuration` for `numcodecs.*` codecs (e.g. `{"name":"numcodecs.fletcher32"}` is rejected), even though it is optional.
 ///
 /// ### Example Metadata
 /// ```json
@@ -95,23 +100,21 @@ impl core::fmt::Display for MetadataV3 {
 
 impl serde::Serialize for MetadataV3 {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        if let Some(configuration) = &self.configuration {
-            if configuration.is_empty() {
-                let mut s = s.serialize_map(Some(1))?;
-                s.serialize_entry("name", &self.name)?;
-                s.end()
-            } else {
-                let mut s = s.serialize_map(Some(if self.must_understand { 2 } else { 3 }))?;
-                s.serialize_entry("name", &self.name)?;
-                s.serialize_entry("configuration", configuration)?;
-                if !self.must_understand {
-                    s.serialize_entry("must_understand", &false)?;
-                }
-                s.end()
-            }
-        } else {
-            s.serialize_str(self.name.as_str())
+        if self.configuration.is_none() && self.must_understand {
+            return s.serialize_str(self.name.as_str());
         }
+        let len =
+            1 + usize::from(self.configuration.is_some()) + usize::from(!self.must_understand);
+        let mut s = s.serialize_map(Some(len))?;
+        s.serialize_entry("name", &self.name)?;
+        // An empty configuration is serialised for compatibility (see the type documentation)
+        if let Some(configuration) = &self.configuration {
+            s.serialize_entry("configuration", configuration)?;
+        }
+        if !self.must_understand {
+            s.serialize_entry("must_understand", &false)?;
+        }
+        s.end()
     }
 }
 
@@ -425,6 +428,43 @@ mod tests {
         assert_eq!(
             metadata,
             MetadataV3::new("test".to_string()).with_must_understand(false)
+        );
+    }
+
+    #[test]
+    fn metadata_serialise_forms() {
+        let roundtrip = |json: &str| {
+            let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+            serde_json::to_string(&metadata).unwrap()
+        };
+        assert_eq!(roundtrip(r#""crc32c""#), r#""crc32c""#);
+        let metadata: MetadataV3 = serde_json::from_str(r#"{"name":"crc32c"}"#).unwrap();
+        assert!(metadata.configuration().is_none());
+        assert_eq!(metadata, MetadataV3::new("crc32c"));
+        assert_eq!(roundtrip(r#"{"name":"crc32c"}"#), r#""crc32c""#);
+        assert_eq!(
+            roundtrip(r#"{"name":"crc32c","configuration":{}}"#),
+            r#"{"name":"crc32c","configuration":{}}"#
+        );
+        assert_eq!(
+            roundtrip(r#"{"name":"test","must_understand":false}"#),
+            r#"{"name":"test","must_understand":false}"#
+        );
+        assert_eq!(
+            roundtrip(r#"{"name":"test","configuration":{"a":1},"must_understand":false}"#),
+            r#"{"name":"test","configuration":{"a":1},"must_understand":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&MetadataV3::new("test").with_must_understand(false)).unwrap(),
+            r#"{"name":"test","must_understand":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&MetadataV3::new_with_configuration(
+                "crc32c",
+                serde_json::Map::new()
+            ))
+            .unwrap(),
+            r#"{"name":"crc32c","configuration":{}}"#
         );
     }
 }
