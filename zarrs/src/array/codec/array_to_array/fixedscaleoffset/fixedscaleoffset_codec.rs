@@ -43,13 +43,15 @@ struct FixedScaleOffsetCodecBound {
     encoded_fill_value: FillValue,
 }
 
-fn add_byteoder_to_dtype(dtype: &str) -> String {
-    if dtype == "u1" {
-        "|u1".to_string()
-    } else if !(dtype.starts_with('<') | dtype.starts_with('>')) {
-        format!("<{dtype}")
-    } else {
+/// Add a byteorder to a numpy data type string (e.g. `f8` -> `<f8`, `i1` -> `|i1`) if it does not have one.
+fn add_byteorder_to_dtype(dtype: &str) -> String {
+    if dtype.starts_with(['<', '>', '|']) {
         dtype.to_string()
+    } else if matches!(dtype, "b1" | "i1" | "u1") {
+        // Single byte data types are not applicable to byte ordering
+        format!("|{dtype}")
+    } else {
+        format!("<{dtype}")
     }
 }
 
@@ -65,11 +67,11 @@ impl FixedScaleOffsetCodec {
             FixedScaleOffsetCodecConfiguration::Numcodecs(configuration) => {
                 // Add a byteorder to the data type name, byteorder may be omitted
                 // FixedScaleOffsets permits `dtype` / `astype` with and without a byteoder character, but it is irrelevant
-                let dtype = add_byteoder_to_dtype(&configuration.dtype);
+                let dtype = add_byteorder_to_dtype(&configuration.dtype);
                 let astype = configuration
                     .astype
                     .as_ref()
-                    .map(|astype| add_byteoder_to_dtype(astype));
+                    .map(|astype| add_byteorder_to_dtype(astype));
 
                 // Get the data type metadata
                 let dtype = DataTypeMetadataV2::Simple(dtype);
