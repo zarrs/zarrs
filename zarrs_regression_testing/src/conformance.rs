@@ -27,11 +27,19 @@ pub(crate) fn non_conformances(
     let mut non_conformances = array_dir
         .map(|array_dir| chunk_non_conformances(metadata, array_dir))
         .unwrap_or_default();
-    if let Some(data_type) = metadata["data_type"].as_str()
+    let data_type = metadata["data_type"]
+        .as_str()
+        .or_else(|| metadata["data_type"]["name"].as_str());
+    if let Some(data_type) = data_type
         && UNREGISTERED_DATA_TYPE_NAMES.contains(&data_type)
     {
         non_conformances.push(format!("unregistered data type name `{data_type}`"));
     }
+    // `binary` is an old name of the `bytes` data type, reported above
+    let data_type = data_type.map(|data_type| match data_type {
+        "binary" => "bytes",
+        data_type => data_type,
+    });
     let mut codecs = metadata["codecs"].clone();
     for_each_codec(&mut codecs, &mut |codec| {
         let name = codec
@@ -56,6 +64,19 @@ pub(crate) fn non_conformances(
             ("numcodecs.zfpy", Some(Value::String(mode))) => {
                 non_conformances.push(format!(
                     "`numcodecs.zfpy` mode `{mode}` (an integer in numcodecs)"
+                ));
+            }
+            // `vlen-bytes` is only compatible with `bytes`, and `vlen-utf8` with `string`
+            ("vlen-bytes", _) if data_type.is_some_and(|data_type| data_type != "bytes") => {
+                non_conformances.push(format!(
+                    "`vlen-bytes` codec with the `{}` data type (only compatible with `bytes`)",
+                    data_type.unwrap_or_default()
+                ));
+            }
+            ("vlen-utf8", _) if data_type.is_some_and(|data_type| data_type != "string") => {
+                non_conformances.push(format!(
+                    "`vlen-utf8` codec with the `{}` data type (only compatible with `string`)",
+                    data_type.unwrap_or_default()
                 ));
             }
             // The crc32c codec computed CRC32 rather than CRC32C checksums prior to 0.11.5
@@ -172,6 +193,48 @@ mod tests {
                 "`zfp` mode `fixedrate` (registered as `fixed_rate`)",
             ]
         );
+        assert_eq!(
+            non_conformances(
+                Release(23),
+                &json!({"data_type": "string", "codecs": [{"name": "vlen-bytes"}]}),
+                None
+            ),
+            ["`vlen-bytes` codec with the `string` data type (only compatible with `bytes`)"]
+        );
+        assert_eq!(
+            non_conformances(
+                Release(23),
+                &json!({"data_type": "bytes", "codecs": [{"name": "vlen-utf8"}]}),
+                None
+            ),
+            ["`vlen-utf8` codec with the `bytes` data type (only compatible with `string`)"]
+        );
+        assert_eq!(
+            non_conformances(
+                Release(18),
+                &json!({"data_type": "binary", "codecs": [{"name": "vlen-bytes"}]}),
+                None
+            ),
+            ["unregistered data type name `binary`"]
+        );
+        assert_eq!(
+            non_conformances(
+                Release(23),
+                &json!({"data_type": {"name": "string"}, "codecs": [{"name": "vlen-bytes"}]}),
+                None
+            ),
+            ["`vlen-bytes` codec with the `string` data type (only compatible with `bytes`)"]
+        );
+        for (data_type, codec) in [("bytes", "vlen-bytes"), ("string", "vlen-utf8")] {
+            assert_eq!(
+                non_conformances(
+                    Release(23),
+                    &json!({"data_type": data_type, "codecs": [{"name": codec}]}),
+                    None
+                ),
+                Vec::<String>::new()
+            );
+        }
         let conformant = json!({"data_type": "uint8", "codecs": [
             {"name": "zfp", "configuration": {"mode": "fixed_rate", "rate": 8.0}},
             {"name": "numcodecs.zfpy", "configuration": {"mode": 2, "rate": 8.0}},

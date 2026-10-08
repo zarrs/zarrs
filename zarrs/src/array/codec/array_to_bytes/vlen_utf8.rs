@@ -3,6 +3,9 @@
 //! ### Compatible Implementations
 //! This codec is fully compatible with the `vlen-utf8` codec in `zarr-python`.
 //!
+//! This codec is only compatible with the `string` data type.
+//! Arrays are not created with it and other data types (e.g. by [`ArrayBuilder`](crate::array::ArrayBuilder)), but those with the `bytes` data type are read for backwards compatibility (**non-conformant**).
+//!
 //! ### Specification
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/vlen-utf8>
 //!

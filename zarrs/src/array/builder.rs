@@ -10,9 +10,10 @@ use zarrs_plugin::ExtensionName;
 use super::chunk_key_encoding::DefaultChunkKeyEncoding;
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
-    DimensionName, StorageTransformerChain,
+    CodecChainBound, DataType, DimensionName, FillValue, StorageTransformerChain,
 };
 use crate::array::codec::array_to_bytes::sharding::RequireDivisibleSubchunks;
+use crate::array::codec::array_to_bytes::vlen_v2::RequireCompatibleDataType;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::node::NodePath;
@@ -214,6 +215,9 @@ impl ArrayBuilder {
     }
 
     /// Create a new builder copying the configuration of an existing array.
+    ///
+    /// Building fails if the array has a codec configuration that is read for backwards compatibility but not created.
+    /// For example, the `vlen-bytes` codec with the `string` data type, or subchunk shapes that do not evenly divide the shard shape.
     #[must_use]
     pub fn from_array<T: ?Sized>(array: &Array<T>) -> Self {
         let mut builder = Self::new(
@@ -465,13 +469,17 @@ impl ArrayBuilder {
     /// # Errors
     /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
     pub fn build_metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
-        let codec_chain = self.build_codec_chain()?;
-        self.build_metadata_with_codec_chain(&codec_chain)
+        let data_type = self.data_type.to_data_type()?;
+        let fill_value = self.build_fill_value(&data_type)?;
+        let (codec_chain, _) = self.build_codec_chain(&data_type, &fill_value)?;
+        self.build_metadata_with_codec_chain(&data_type, fill_value, &codec_chain)
     }
 
     /// Build [`ArrayMetadataV3`] from the builder state using a pre-built codec chain.
     fn build_metadata_with_codec_chain(
         &self,
+        data_type: &DataType,
+        fill_value: FillValue,
         codec_chain: &CodecChain,
     ) -> Result<ArrayMetadataV3, ArrayCreateError> {
         let chunk_grid = match &self.chunk_grid {
@@ -479,21 +487,6 @@ impl ArrayBuilder {
             ArrayBuilderChunkGridMaybe::Metadata(array_shape, metadata) => {
                 ChunkGrid::from_metadata(&metadata.to_metadata()?, array_shape)
                     .map_err(ArrayCreateError::ChunkGridCreateError)?
-            }
-        };
-        let data_type = self.data_type.to_data_type()?;
-        let fill_value = match &self.fill_value.0 {
-            ArrayBuilderFillValueImpl::FillValue(fill_value) => fill_value.clone(),
-            ArrayBuilderFillValueImpl::Metadata(fill_value_metadata) => {
-                // ArrayBuilder is always for V3 arrays
-                data_type.fill_value_v3(fill_value_metadata).map_err(|_| {
-                    ArrayCreateError::InvalidFillValueMetadata {
-                        data_type_name: data_type
-                            .name_v3()
-                            .map_or_else(String::new, Cow::into_owned),
-                        fill_value_metadata: fill_value_metadata.clone(),
-                    }
-                })?
             }
         };
         if let Some(dimension_names) = &self.dimension_names
@@ -535,13 +528,46 @@ impl ArrayBuilder {
         .with_storage_transformers(self.storage_transformers.create_metadatas()))
     }
 
+    /// Build the fill value for a data type from the builder state.
+    fn build_fill_value(&self, data_type: &DataType) -> Result<FillValue, ArrayCreateError> {
+        match &self.fill_value.0 {
+            ArrayBuilderFillValueImpl::FillValue(fill_value) => Ok(fill_value.clone()),
+            ArrayBuilderFillValueImpl::Metadata(fill_value_metadata) => {
+                // ArrayBuilder is always for V3 arrays
+                data_type.fill_value_v3(fill_value_metadata).map_err(|_| {
+                    ArrayCreateError::InvalidFillValueMetadata {
+                        data_type_name: data_type
+                            .name_v3()
+                            .map_or_else(String::new, Cow::into_owned),
+                        fill_value_metadata: fill_value_metadata.clone(),
+                    }
+                })
+            }
+        }
+    }
+
+    /// The codec specific options used to validate the codecs of new arrays.
+    ///
+    /// These reject codec configurations that are read for backwards compatibility, but not created.
+    fn creation_options(&self) -> CodecSpecificOptions {
+        self.codec_specific_options
+            .clone()
+            .with_option(RequireDivisibleSubchunks)
+            .with_option(RequireCompatibleDataType)
+    }
+
     /// Build the codec chain from the builder's codec objects.
-    fn build_codec_chain(&self) -> Result<CodecChain, ArrayCreateError> {
-        let data_type = self.data_type.to_data_type()?;
+    ///
+    /// The codec chain is returned along with its binding to `data_type` and `fill_value` with the [`creation_options`](Self::creation_options).
+    fn build_codec_chain(
+        &self,
+        data_type: &DataType,
+        fill_value: &FillValue,
+    ) -> Result<(CodecChain, Arc<CodecChainBound>), ArrayCreateError> {
         let array_to_bytes_codec = self
             .array_to_bytes_codec
             .clone()
-            .unwrap_or_else(|| super::codec::default_array_to_bytes_codec(&data_type));
+            .unwrap_or_else(|| super::codec::default_array_to_bytes_codec(data_type));
 
         // If subchunk_shape is set, wrap the codec chain with a sharding codec
         let codec_chain = if let Some(subchunk_shape) = &self.subchunk_shape {
@@ -561,7 +587,7 @@ impl ArrayBuilder {
                     ))
                 })?;
 
-            let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
+            let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, data_type);
             sharding_builder
                 .array_to_array_codecs(self.array_to_array_codecs.clone())
                 .array_to_bytes_codec(array_to_bytes_codec.clone())
@@ -576,7 +602,14 @@ impl ArrayBuilder {
             )
         };
 
-        Ok(codec_chain)
+        // Reject codecs that are incompatible with the data type, e.g. `vlen-bytes` with the `string` data type
+        let codec_chain_bound = codec_chain.with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &self.creation_options(),
+        )?;
+
+        Ok((codec_chain, codec_chain_bound))
     }
 
     /// Build into an [`Array`].
@@ -591,8 +624,12 @@ impl ArrayBuilder {
         path: &str,
     ) -> Result<Array<TStorage>, ArrayCreateError> {
         let path: NodePath = path.try_into()?;
-        let codec_chain = Arc::new(self.build_codec_chain()?);
-        let array_metadata_v3 = self.build_metadata_with_codec_chain(&codec_chain)?;
+        let data_type = self.data_type.to_data_type()?;
+        let fill_value = self.build_fill_value(&data_type)?;
+        let (codec_chain, codec_chain_bound) = self.build_codec_chain(&data_type, &fill_value)?;
+        let codec_chain = Arc::new(codec_chain);
+        let array_metadata_v3 =
+            self.build_metadata_with_codec_chain(&data_type, fill_value, &codec_chain)?;
         // The array is owned here, so set the options in place rather than deriving copies.
         let mut array = Array::new_with_codec_chain(
             storage,
@@ -603,18 +640,7 @@ impl ArrayBuilder {
         )?;
         // Subchunk shapes that do not evenly divide the shard shape are not yet part of the specification.
         // Existing arrays with such subchunk shapes can still be opened.
-        let creation_options = self
-            .codec_specific_options
-            .clone()
-            .with_option(RequireDivisibleSubchunks);
-        array
-            .codecs()
-            .with_context(
-                array.data_type().clone(),
-                array.fill_value().clone(),
-                &creation_options,
-            )?
-            .decoded_subchunk_grids(array.chunk_grid().into())?;
+        codec_chain_bound.decoded_subchunk_grids(array.chunk_grid().into())?;
         array.set_metadata_options(self.metadata_options);
         array.set_codec_options(self.codec_options);
         Ok(array)
@@ -652,6 +678,70 @@ mod tests {
     use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use zarrs_storage::storage_adapter::usage_log::UsageLogStorageAdapter;
     use zarrs_storage::store::MemoryStore;
+
+    #[test]
+    fn array_builder_vlen_codec_data_types() {
+        use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+        use crate::array::codec::{VlenBytesCodec, VlenUtf8Codec};
+        let builder = |data_type, fill_value: &str| {
+            let mut builder = ArrayBuilder::new(vec![4], vec![2], data_type, fill_value);
+            builder.fill_value(FillValueMetadata::from(fill_value));
+            builder
+        };
+        // Compatible data types
+        builder(data_type::string(), "")
+            .array_to_bytes_codec(Arc::new(VlenUtf8Codec::new()))
+            .build_metadata()
+            .unwrap();
+        builder(data_type::bytes(), "")
+            .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
+            .build_metadata()
+            .unwrap();
+        // Non-conformant data types are not created
+        let metadata = builder(data_type::string(), "")
+            .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
+            .build_metadata();
+        assert!(matches!(
+            metadata,
+            Err(ArrayCreateError::CodecsCreateError(
+                zarrs_codec::CodecCreateError::UnsupportedDataType(..)
+            ))
+        ));
+        assert!(
+            builder(data_type::bytes(), "")
+                .array_to_bytes_codec(Arc::new(VlenUtf8Codec::new()))
+                .build_metadata()
+                .is_err()
+        );
+        // Including when nested in a sharding codec
+        assert!(
+            builder(data_type::string(), "")
+                .array_to_bytes_codec(Arc::new(
+                    ShardingCodecBuilder::new(
+                        vec![NonZeroU64::new(1).unwrap()],
+                        &data_type::string()
+                    )
+                    .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
+                    .build()
+                ))
+                .build_metadata()
+                .is_err()
+        );
+        assert!(
+            builder(data_type::string(), "")
+                .subchunk_shape(vec![1])
+                .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
+                .build_metadata()
+                .is_err()
+        );
+        // But they are read
+        let metadata: crate::array::ArrayMetadata = serde_json::from_str(
+            r#"{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"string","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2]}},"chunk_key_encoding":{"name":"default"},"fill_value":"","codecs":[{"name":"vlen-bytes"}]}"#,
+        )
+        .unwrap();
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
+        crate::array::Array::new_with_metadata(store, "/", metadata).unwrap();
+    }
 
     #[test]
     fn array_builder() {

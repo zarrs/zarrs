@@ -42,6 +42,12 @@ use crate::array::{ArrayBytesOffsets, CowBytes};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
 
+/// An internal option rejecting data types incompatible with the `vlen-bytes` and `vlen-utf8` codecs.
+///
+/// Set when creating new arrays, since `vlen-bytes` is only compatible with the `bytes` data type and `vlen-utf8` with `string`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RequireCompatibleDataType;
+
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", [
         "https://codec.zarrs.dev/array_to_bytes/vlen_v2",

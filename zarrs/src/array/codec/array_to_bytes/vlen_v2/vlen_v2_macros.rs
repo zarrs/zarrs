@@ -44,7 +44,7 @@ macro_rules! vlen_v2_module {
 }
 
 macro_rules! vlen_v2_codec {
-    ($struct:ident, $default_name:literal) => {
+    ($struct:ident, $default_name:literal $(, $compatible_data_type:ty)?) => {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -131,6 +131,19 @@ macro_rules! vlen_v2_codec {
                 fill_value: crate::array::FillValue,
                 codec_specific_options: &zarrs_codec::CodecSpecificOptions,
             ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+                // NON-CONFORMANT: Other data types are read for backwards compatibility (zarrs prior to 0.24 created such arrays)
+                $(
+                if codec_specific_options
+                    .get_option::<crate::array::codec::array_to_bytes::vlen_v2::RequireCompatibleDataType>()
+                    .is_some()
+                    && data_type.as_any().type_id() != std::any::TypeId::of::<$compatible_data_type>()
+                {
+                    return Err(CodecCreateError::UnsupportedDataType(
+                        data_type,
+                        $default_name.to_string(),
+                    ));
+                }
+                )?
                 paste::paste! {
                     Ok(Arc::new([<$struct Bound>] {
                         inner: self

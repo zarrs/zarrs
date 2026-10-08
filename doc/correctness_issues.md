@@ -9,6 +9,9 @@
   - Values out of the range of the data type but in the range of `astype` (or vice versa) were saturated before the transform
   - Encoded values were rounded with ties away from zero rather than to even (`numpy.around`)
   - 8 and 16-bit integer data was computed in `f32`, losing precision
+- `zarrs: 0.18-0.23` it was possible to create non-conformant arrays with the `vlen-bytes` codec and a data type other than `bytes`, or the `vlen-utf8` codec and a data type other than `string`
+  - These arrays fail to be opened by other Zarr implementations (e.g. `zarr-python`)
+  - `zarrs` 0.24+ `ArrayBuilder` returns an error for these combinations, but they are still read
 - `zarrs: 0.20-0.22` `numcodecs.zfpy` codec metadata incorrectly serialised a string representation of the `zfp` mode rather than integer
   - `zarrs` 0.24+ supports deserialising the erroneous metadata
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
