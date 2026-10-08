@@ -6,6 +6,8 @@
   - `zarrs` 0.24+ reads it for backwards compatibility
 - `zarrs: 0.19.x` `numcodecs.fletcher32` codec metadata was written with the non-conformant (unregistered) `fletcher32` name
   - `zarrs` 0.24+ reads it for backwards compatibility
+- `zarrs: 0.19.x` `zarrs.vlen_v2` codec metadata was written with the non-conformant (unregistered) `vlen_v2` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`

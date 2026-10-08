@@ -16,6 +16,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `zarrs.vlen_v2`
 //! - `https://codec.zarrs.dev/array_to_bytes/vlen_v2`
+//! - `vlen_v2` (**non-conformant**, written by `zarrs` 0.19)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! None
@@ -42,7 +43,11 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesL
 use zarrs_metadata_ext::codec::vlen_v2::{self};
 
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
-    v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
+    v3: "zarrs.vlen_v2", [
+        "https://codec.zarrs.dev/array_to_bytes/vlen_v2",
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.19, read for backwards compatibility
+        "vlen_v2",
+    ]
 );
 
 // Register the V3 codec.
@@ -99,4 +104,17 @@ fn get_interleaved_bytes_and_offsets(
     let offsets_out = offsets_from_usize(offsets_out)?;
 
     Ok((bytes_out, offsets_out))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codec_vlen_v2_legacy_names() {
+        for name in ["https://codec.zarrs.dev/array_to_bytes/vlen_v2", "vlen_v2"] {
+            let codec = Codec::from_metadata(&MetadataV3::new(name)).unwrap();
+            assert!(matches!(codec, Codec::ArrayToBytes(_)));
+        }
+    }
 }

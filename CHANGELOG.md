@@ -171,6 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `gdeflate` is a non-conformant (unregistered) name, read for backwards compatibility
 - Read `fletcher32` codec metadata with the `fletcher32` name written by `zarrs` 0.19
   - `fletcher32` is a non-conformant (unregistered) name, read for backwards compatibility
+- Read `zarrs.vlen_v2` codec metadata with the `vlen_v2` name written by `zarrs` 0.19
+  - `vlen_v2` is a non-conformant (unregistered) name, read for backwards compatibility
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
