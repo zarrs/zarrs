@@ -124,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
 - Compute `numcodecs.fixedscaleoffset` in `f32` for `float32` data and otherwise `f64`, with encoded values rounded with ties to even, as in `numcodecs`, and round decoded integers to the nearest integer
+- Write the fill value of the `bytes` data type as a base64-encoded string rather than an array of bytes (both are conformant), as `zarr-python` only reads base64-encoded strings
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
