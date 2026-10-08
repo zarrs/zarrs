@@ -6,6 +6,8 @@
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`
   - `zarr-python` shared this bug (see https://github.com/zarr-developers/zarr-python/issues/2842)
+- `zarrs: 0.11-0.12` `bz2` codec metadata was written with the non-conformant (unregistered) `bz2` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
 - † `zarrs: <0.11.5`: arrays that used the `crc32c` codec have invalid chunk checksums
   - These arrays will fail to be read by Zarr implementations if they validate checksums
   - These arrays can be read by zarrs if the [validate checksums](crate::config::Config#validate-checksums) global configuration option is disabled or the relevant codec option is set explicitly

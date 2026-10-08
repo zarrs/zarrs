@@ -15,7 +15,8 @@
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `numcodecs.bz2`
-//! - `https://codec.zarrs.dev/bytes_to_bytes/bz2`
+//! - `https://codec.zarrs.dev/bytes_to_bytes/bz2` (written by `zarrs` 0.13 to 0.19)
+//! - `bz2` (**non-conformant**, written by `zarrs` 0.11 and 0.12)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! - `bz2`
@@ -45,7 +46,12 @@ pub use zarrs_metadata_ext::codec::bz2::{
 };
 
 zarrs_plugin::impl_extension_aliases!(Bz2Codec,
-    v3: "numcodecs.bz2", [],
+    v3: "numcodecs.bz2", [
+        // Written by zarrs 0.13 to 0.19
+        "https://codec.zarrs.dev/bytes_to_bytes/bz2",
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.11 and 0.12, read for backwards compatibility
+        "bz2",
+    ],
     v2: "bz2", []
 );
 
@@ -108,6 +114,19 @@ mod tests {
             .decode(encoded, &bytes_representation, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
+    }
+
+    #[test]
+    fn codec_bz2_legacy_names() {
+        for name in ["https://codec.zarrs.dev/bytes_to_bytes/bz2", "bz2"] {
+            let metadata = MetadataV3::new_with_serializable_configuration(
+                name.to_string(),
+                &serde_json::json!({"level": 9}),
+            )
+            .unwrap();
+            let codec = Codec::from_metadata(&metadata).unwrap();
+            assert!(matches!(codec, Codec::BytesToBytes(_)));
+        }
     }
 
     #[test]
