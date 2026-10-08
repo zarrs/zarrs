@@ -26,6 +26,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `zarrs.gdeflate`
 //! - `https://codec.zarrs.dev/bytes_to_bytes/gdeflate`
+//! - `gdeflate` (**non-conformant**, written by `zarrs` 0.16 to 0.19)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! None
@@ -55,7 +56,13 @@ pub use zarrs_metadata_ext::codec::gdeflate::{
     GDeflateCompressionLevelError,
 };
 
-zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
+zarrs_plugin::impl_extension_aliases!(GDeflateCodec,
+    v3: "zarrs.gdeflate", [
+        "https://codec.zarrs.dev/bytes_to_bytes/gdeflate",
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.16 to 0.19, read for backwards compatibility
+        "gdeflate",
+    ]
+);
 
 // Register the V3 codec.
 inventory::submit! {
@@ -274,6 +281,22 @@ mod tests {
     #[test]
     fn codec_gdeflate_configuration_valid() {
         assert!(serde_json::from_str::<GDeflateCodecConfiguration>(JSON_VALID).is_ok());
+    }
+
+    #[test]
+    fn codec_gdeflate_legacy_names() {
+        for name in [
+            "https://codec.zarrs.dev/bytes_to_bytes/gdeflate",
+            "gdeflate",
+        ] {
+            let metadata = MetadataV3::new_with_serializable_configuration(
+                name.to_string(),
+                &serde_json::json!({"level": 1}),
+            )
+            .unwrap();
+            let codec = Codec::from_metadata(&metadata).unwrap();
+            assert!(matches!(codec, Codec::BytesToBytes(_)));
+        }
     }
 
     #[test]
