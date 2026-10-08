@@ -63,12 +63,13 @@ impl zarrs_data_type::DataTypeTraits for BytesDataType {
         &self,
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
-        // Return as array of bytes for consistency
-        // Note: base64 encoding may be preferred per zarr spec - see comments in test
-        let bytes = fill_value.as_ne_bytes();
-        let arr: Vec<FillValueMetadata> =
-            bytes.iter().map(|&b| FillValueMetadata::from(b)).collect();
-        Ok(FillValueMetadata::Array(arr))
+        use base64::Engine;
+        use base64::prelude::BASE64_STANDARD;
+        // A base64-encoded string rather than an array of bytes (both are conformant), for compatibility
+        // NON-CONFORMANT: zarr-python (as of 3.4.1) only reads base64-encoded strings
+        Ok(FillValueMetadata::from(
+            BASE64_STANDARD.encode(fill_value.as_ne_bytes()),
+        ))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
