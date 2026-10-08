@@ -5,8 +5,14 @@
 //! </div>
 //!
 //! ### Compatible Implementations
-//! This codec is fully compatible with the `numcodecs.fixedscaleoffset` codec in `zarr-python`.
+//! This codec is compatible with the `numcodecs.fixedscaleoffset` codec in `zarr-python`.
 //! However, it supports additional data types not supported by that implementation.
+//!
+//! The transform is lossy, and decoded data may differ slightly from that of `numcodecs`:
+//! - The transform is computed in `f32` for `float32` data (encoded data when decoding) and otherwise `f64`, and encoded values are rounded with ties to even, as in `numcodecs`.
+//! - Decoded integers are rounded to the nearest integer, whereas `numcodecs` truncates them.
+//! - `numcodecs` computes in the integer data type if `offset` and `scale` are integers in the metadata, which can overflow.
+//! - Values out of the range of the encoded data type are saturated, which is unspecified in `numcodecs`.
 //!
 //! ### Specification
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/numcodecs/codecs/numcodecs.fixedscaleoffset>
@@ -142,6 +148,85 @@ mod tests {
                 1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.
             ]
         );
+    }
+
+    /// Encode and decode `elements` with a codec with `configuration`, returning the encoded and decoded bytes.
+    fn encode_decode(
+        configuration: serde_json::Value,
+        data_type: crate::array::DataType,
+        elements: Vec<u8>,
+        num_elements: u64,
+    ) -> (Vec<u8>, Vec<u8>) {
+        let shape = [NonZeroU64::new(num_elements).unwrap()];
+        let codec_configuration: FixedScaleOffsetCodecConfiguration =
+            serde_json::from_value(configuration).unwrap();
+        let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .unwrap();
+        let encoded = codec
+            .encode(ArrayBytes::from(elements), &shape, &CodecOptions::default())
+            .unwrap();
+        let decoded = codec
+            .decode(encoded.clone(), &shape, &CodecOptions::default())
+            .unwrap();
+        (
+            encoded.into_fixed().unwrap().into_vec(),
+            decoded.into_fixed().unwrap().into_vec(),
+        )
+    }
+
+    #[test]
+    fn codec_fixedscaleoffset_numcodecs() {
+        let int16 = |values: &[i16]| -> Vec<u8> {
+            values
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect()
+        };
+        // Rounded with ties to even, as in numcodecs 0.17.0
+        let (encoded, _) = encode_decode(
+            serde_json::json!({"offset": 0, "scale": 0.5, "dtype": "u1"}),
+            data_type::uint8(),
+            vec![1, 3, 5, 7],
+            4,
+        );
+        assert_eq!(encoded, [0, 2, 2, 4]);
+
+        // Computed in f64, as in numcodecs 0.17.0
+        // numcodecs truncates decoded integers (to -8219 and 27509), whereas they are rounded
+        let (encoded, decoded) = encode_decode(
+            serde_json::json!({"offset": 0, "scale": 0.1, "dtype": "<i2"}),
+            data_type::int16(),
+            int16(&[-8220, 27507]),
+            2,
+        );
+        assert_eq!(encoded, int16(&[-822, 2751]));
+        assert_eq!(decoded, int16(&[-8220, 27510]));
+
+        // Computed in f32 for float32 data, as in numcodecs 0.17.0 (376907 if computed in f64)
+        let (encoded, _) = encode_decode(
+            serde_json::json!({"offset": 0.1, "scale": 1000.3, "dtype": "<f4", "astype": "<i4"}),
+            data_type::float32(),
+            f32::from_bits(1_136_423_517).to_ne_bytes().to_vec(),
+            1,
+        );
+        assert_eq!(encoded, 376_906i32.to_ne_bytes());
+
+        // Encoded values out of the range of the data type, but in the range of `astype`
+        // numcodecs 0.17.0 computes in `int8` with integer `offset` and `scale`, which overflows (to -48, 0, -10)
+        let (encoded, decoded) = encode_decode(
+            serde_json::json!({"offset": -100, "scale": 10, "dtype": "i1", "astype": "<i2"}),
+            data_type::int8(),
+            [100i8, -100, 27]
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect(),
+            3,
+        );
+        assert_eq!(encoded, int16(&[2000, 0, 1270]));
+        assert_eq!(decoded, [100i8.to_ne_bytes()[0], 156, 27]);
     }
 
     #[test]
