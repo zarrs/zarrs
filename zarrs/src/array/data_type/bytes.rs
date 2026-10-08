@@ -9,7 +9,11 @@ use super::macros::register_data_type_plugin;
 pub struct BytesDataType;
 register_data_type_plugin!(BytesDataType);
 zarrs_plugin::impl_extension_aliases!(BytesDataType,
-    v3: "bytes", ["binary", "variable_length_bytes"],
+    v3: "bytes", [
+        // NON-CONFORMANT: An unregistered name written by zarrs 0.16 to 0.18, read for backwards compatibility
+        "binary",
+        "variable_length_bytes",
+    ],
     v2: "|VX", ["|VX"]
 );
 
