@@ -145,6 +145,29 @@ mod tests {
     }
 
     #[test]
+    fn codec_fixedscaleoffset_single_byte_dtypes() {
+        // numcodecs writes single byte data types with the `|` byteorder (e.g. `|i1`), and it may be omitted
+        for (dtype, data_type) in [
+            ("|i1", data_type::int8()),
+            ("i1", data_type::int8()),
+            ("|u1", data_type::uint8()),
+            ("u1", data_type::uint8()),
+        ] {
+            let codec_configuration: FixedScaleOffsetCodecConfiguration = serde_json::from_value(
+                serde_json::json!({"offset": 0, "scale": 1, "dtype": dtype, "astype": dtype}),
+            )
+            .unwrap();
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(
+                    data_type,
+                    FillValue::from(0u8),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
     fn codec_fixedscaleoffset_encoded_fill_value() {
         const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
         let data_type = data_type::float64();

@@ -164,6 +164,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `packbits` sign extension of data types wider than a byte, which only extended to the end of the byte holding the sign bit
 - Fix `packbits` partial decoding with a non-zero `first_bit`
 - Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
+- Fix the `numcodecs.fixedscaleoffset` codec rejecting single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
