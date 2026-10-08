@@ -167,6 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the `numcodecs.fixedscaleoffset` codec rejecting single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
 - Read `bz2` codec metadata written by `zarrs` 0.11 to 0.19, which used the `bz2` and `https://codec.zarrs.dev/bytes_to_bytes/bz2` names
   - `bz2` is a non-conformant (unregistered) name, read for backwards compatibility
+- Read `gdeflate` codec metadata with the `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented) and `gdeflate` (written by `zarrs` 0.16 to 0.19) names
+  - `gdeflate` is a non-conformant (unregistered) name, read for backwards compatibility
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
