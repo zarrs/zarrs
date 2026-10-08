@@ -12,6 +12,8 @@
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`
   - `zarr-python` shared this bug (see https://github.com/zarr-developers/zarr-python/issues/2842)
+- `zarrs: 0.10-0.12` `zfp` codec metadata was written with non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes
+  - `zarrs` 0.24+ reads them for backwards compatibility
 - `zarrs: 0.11-0.12` `bz2` codec metadata was written with the non-conformant (unregistered) `bz2` name
   - `zarrs` 0.24+ reads it for backwards compatibility
 - † `zarrs: <0.11.5`: arrays that used the `crc32c` codec have invalid chunk checksums

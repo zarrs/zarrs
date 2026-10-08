@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Support deserialising `numcodecs.zfpy` metadata with a string `mode`, as erroneously written by `zarrs` 0.20-0.22
+- Support deserialising `zfp` metadata with the `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes written by `zarrs` 0.10 to 0.15
+  - These are non-conformant with the `zfp` name (written by `zarrs` 0.10 to 0.12), and are read for backwards compatibility
 
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.4) - 2026-05-16
 
