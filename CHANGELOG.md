@@ -123,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `lru` to 0.18.2
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
+- Compute `numcodecs.fixedscaleoffset` in `f32` for `float32` data and otherwise `f64`, with encoded values rounded with ties to even, as in `numcodecs`, and round decoded integers to the nearest integer
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
@@ -177,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `pcodec` is a non-conformant (unregistered) name, read for backwards compatibility
 - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, for compatibility with `zarr-python` and `tensorstore`
 - Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
+- Fix `numcodecs.fixedscaleoffset` with an `astype` whose range differs from the data type: values were saturated to the range of the data type (or `astype`) before the transform
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
