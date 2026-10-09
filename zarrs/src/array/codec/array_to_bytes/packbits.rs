@@ -87,6 +87,26 @@ fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
     (byte, byte_bit)
 }
 
+/// Sign extend the decoded component at `component_idx` from `last_bit` to all of its (byte padded) bits.
+///
+/// Sign extending the padding bits makes int2/int4 decode as int8.
+fn sign_extend_component(
+    bytes_dec: &mut [u8],
+    component_idx: u64,
+    last_bit: u64,
+    component_size_bits: u64,
+) {
+    let component_size_bytes = usize::try_from(component_size_bits.div_ceil(8)).unwrap();
+    let component_start = usize::try_from(component_idx).unwrap() * component_size_bytes;
+    let component = &mut bytes_dec[component_start..component_start + component_size_bytes];
+    let (sign_byte, sign_bit) = last_bit.div_rem(&8);
+    let sign_byte = usize::try_from(sign_byte).unwrap();
+    if (component[sign_byte] >> sign_bit) & 0b1 == 1 {
+        component[sign_byte] |= 0xFF << sign_bit;
+        component[sign_byte + 1..].fill(0xFF);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
@@ -281,6 +301,46 @@ mod tests {
                     assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
                 }
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn codec_packbits_int16_sign_extension() -> Result<(), Box<dyn std::error::Error>> {
+        // The sign bit is in the low byte, so sign extension must extend through the high byte
+        for last_bit in 0..8 {
+            let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(4).unwrap()];
+            let data_type = data_type::int16();
+            let fill_value = FillValue::from(0i16);
+            let codec = Arc::new(
+                super::PackBitsCodec::new(PackBitsPaddingEncoding::None, None, Some(last_bit))
+                    .unwrap(),
+            )
+            .with_context(
+                data_type.clone(),
+                fill_value.clone(),
+                &CodecSpecificOptions::default(),
+            )?;
+            let max = 1i16 << last_bit;
+            let elements: Vec<i16> = (0..32).map(|i| -max + i % (2 * max)).collect();
+            let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
+            let encoded = codec.encode(bytes, &chunk_shape, &CodecOptions::default())?;
+
+            // Decoding
+            let decoded = codec.decode(encoded.clone(), &chunk_shape, &CodecOptions::default())?;
+            assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
+
+            // Partial decoding
+            let partial_decoder =
+                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let decoded_partial_chunk = partial_decoder.partial_decode(
+                &ArraySubset::new_with_ranges(&[4..8, 0..4]),
+                &CodecOptions::default(),
+            )?;
+            assert_eq!(
+                &elements[16..],
+                i16::from_array_bytes(&data_type, decoded_partial_chunk)?
+            );
         }
         Ok(())
     }

@@ -9,7 +9,7 @@ use num::Integer;
 use std::num::NonZeroU64;
 
 use super::PackBitsCodecComponents;
-use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
+use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, sign_extend_component};
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
@@ -122,27 +122,12 @@ fn partial_decode<'a>(
                             << bit_dec;
                 }
                 if sign_extension {
-                    let signed: bool = {
-                        let (byte_dec, bit_dec) = div_rem_8bit(
-                            bit_dec0 + component_size_bits_extracted.saturating_sub(1),
-                            component_size_bits,
-                        );
-                        bytes_dec[usize::try_from(byte_dec).unwrap()] >> bit_dec & 0x1 == 1
-                    };
-                    if signed {
-                        for bit in component_size_bits_extracted..component_size_bits {
-                            let (byte_dec, bit_dec) =
-                                div_rem_8bit(bit_dec0 + bit, component_size_bits);
-                            bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                        }
-                        // Sign-extend to all remaining bits in the last byte, consistent with full decoding
-                        // This makes it just work with int4 / int2 -> int8
-                        let (byte_dec, bit_dec) =
-                            div_rem_8bit(bit_dec0 + component_size_bits - 1, component_size_bits);
-                        for bit_dec in bit_dec + 1..8 {
-                            bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                        }
-                    }
+                    sign_extend_component(
+                        &mut bytes_dec,
+                        component_idx_outer + component_idx,
+                        last_bit,
+                        component_size_bits,
+                    );
                 }
             }
             component_idx_outer += num_elements * num_components;
