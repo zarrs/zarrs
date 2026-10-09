@@ -9,6 +9,7 @@
 
 mod codec_specific_options;
 mod options;
+mod resources;
 pub use codec_specific_options::CodecSpecificOptions;
 
 mod codec_partial_default;
@@ -71,6 +72,7 @@ pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 
 use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
+pub use resources::Resources;
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, ChunkShape, Configuration};
 use zarrs_storage::StorageError;
