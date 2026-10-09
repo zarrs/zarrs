@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
+- Add `Resources` (re-exported from `zarrs_codec`), which sets the resources (e.g. concurrency) available to an operation
 
 ### Changed
 - Bump `zarrs_chunk_grid` to 0.6.1
@@ -123,6 +124,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `lru` to 0.18.2
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
+- **Breaking**: Array operations that encode, decode, or access multiple chunks take a per-call `resources: &Resources` argument, including async variants
+  - This applies to the `retrieve_*` (except `retrieve_encoded_chunk`), `store_chunk[s]`, `store_partial_chunk`, `store_array_subset`, `compact_chunk`, `erase_chunks`, `partial_{en,de}coder`, and `local_subchunk_grid[_at_level]` operations
+  - Concurrency is now set per call rather than per array via `CodecOptions`
+- **Breaking**: `concurrency::concurrency_chunks_and_codec` takes and returns `Resources` instead of a concurrent target and `CodecOptions`
+- `erase_chunks` and `async_erase_chunks` are bounded by the concurrent target of their `Resources`
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
@@ -137,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+- **Breaking**: Remove `Config::{[set_]codec_concurrent_target,[set_]chunk_concurrent_minimum}`, use `Resources` instead
 
 ### Fixed
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy

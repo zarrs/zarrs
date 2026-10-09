@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `Resources`, which sets the resources (e.g. concurrency) available to an operation
 
 ### Changed
 - Bump `zarrs_chunk_grid` to 0.6.1
@@ -46,12 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - Bump `itertools` to 0.15.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: Codec, partial decoder, and partial encoder trait methods that take `&CodecOptions` also take `&Resources`
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
 - **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`
 - **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
 - **Breaking**: Remove `ArrayTo{Array,Bytes}CodecTraits::with_codec_specific_options`, codecs read their options in `UnboundArrayTo{Array,Bytes}CodecTraits::with_context` instead
+- **Breaking**: Remove `CodecOptions::{concurrent_target,chunk_concurrent_minimum}` and their `set_`/`with_` variants, use `Resources` instead
 
 ## [0.2.1] - 2026-03-21
 
