@@ -2,6 +2,7 @@
 
 use ndarray::ArrayD;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use zarrs::array::Resources;
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
@@ -12,6 +13,8 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::node::Node;
     use zarrs::storage::store;
 
+    let resources = Resources::default();
+
     // Create a store
     // let path = tempfile::TempDir::new()?;
     // let mut store: ReadableWritableListableStorage =
@@ -19,6 +22,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableWritableListableStorage = Arc::new(
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
+
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
@@ -81,11 +85,12 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         array.store_chunk(
             &chunk_indices,
             vec![i as f32 * 0.1; chunk_subset.num_elements() as usize],
+            &resources,
         )
     })?;
 
     let subset_all = array.subset_all();
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_chunk [0, 0] and [0, 1]:\n{data_all:+4.1}\n");
 
     // Store multiple chunks
@@ -97,55 +102,58 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             //
             1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1,
         ],
+        &resources,
     )?;
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_chunks [1..2, 0..2]:\n{data_all:+4.1}\n");
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     array.store_array_subset(
         &[3..6, 3..6],
         &[-3.3f32, -3.4, -3.5, -4.3, -4.4, -4.5, -5.3, -5.4, -5.5],
+        &resources,
     )?;
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_array_subset [3..6, 3..6]:\n{data_all:+4.1}\n");
 
     // Store array subset
     array.store_array_subset(
         &[0..8, 6..7],
         &[-0.6f32, -1.6, -2.6, -3.6, -4.6, -5.6, -6.6, -7.6],
+        &resources,
     )?;
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_array_subset [0..8, 6..7]:\n{data_all:+4.1}\n");
 
     // Store chunk subset
     array.store_partial_chunk(
         // chunk indices
-        &[1, 1],
-        // subset within chunk
+        &[1, 1], // subset within chunk
         &[3..4, 0..4],
         &[-7.4f32, -7.5, -7.6, -7.7],
+        &resources,
     )?;
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_partial_chunk [3..4, 0..4] of chunk [1, 1]:\n{data_all:+4.1}\n");
 
     // Erase a chunk
     array.erase_chunk(&[0, 0])?;
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("erase_chunk [0, 0]:\n{data_all:+4.1}\n");
 
     // Read a chunk
     let chunk_indices = vec![0, 1];
-    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
+    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices, &resources)?;
     println!("retrieve_chunk [0, 1]:\n{data_chunk:+4.1}\n");
 
     // Read chunks
     let chunks = ArraySubset::new_with_ranges(&[0..2, 1..2]);
-    let data_chunks: ArrayD<f32> = array.retrieve_chunks(&chunks)?;
+    let data_chunks: ArrayD<f32> = array.retrieve_chunks(&chunks, &resources)?;
     println!("retrieve_chunks [0..2, 1..2]:\n{data_chunks:+4.1}\n");
 
     // Retrieve an array subset
     let subset = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_subset: ArrayD<f32> = array.retrieve_array_subset(&subset)?;
+    let data_subset: ArrayD<f32> = array.retrieve_array_subset(&subset, &resources)?;
     println!("retrieve_array_subset [2..6, 3..5]:\n{data_subset:+4.1}\n");
 
     // Show the hierarchy

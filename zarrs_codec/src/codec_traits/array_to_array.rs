@@ -9,7 +9,7 @@ use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
-    CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
+    CodecError, CodecOptions, CodecSpecificOptions, CodecTraits, Resources,
 };
 #[cfg(feature = "async")]
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -142,6 +142,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Decode a chunk.
@@ -153,6 +154,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Initialise a partial decoder.
@@ -164,8 +166,10 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
@@ -184,8 +188,10 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
@@ -205,8 +211,10 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
@@ -226,8 +234,10 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),

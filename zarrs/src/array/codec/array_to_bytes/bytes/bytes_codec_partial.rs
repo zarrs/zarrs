@@ -6,7 +6,7 @@ use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -78,6 +78,7 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
@@ -101,9 +102,11 @@ where
             .map(ByteRange::new);
 
         // Decode
-        let decoded = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)?;
+        let decoded = self.input_output_handle.partial_decode_many(
+            Box::new(byte_ranges),
+            options,
+            resources,
+        )?;
 
         let decoded = if let Some(decoded) = decoded {
             ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
@@ -142,6 +145,7 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
@@ -168,7 +172,7 @@ where
         // Decode
         let decoded = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
             .await?;
 
         let decoded = if let Some(decoded) = decoded {
@@ -198,6 +202,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
@@ -233,8 +238,11 @@ where
                 })
                 .collect();
 
-            self.input_output_handle
-                .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+            self.input_output_handle.partial_encode_many(
+                Box::new(offset_bytes.into_iter()),
+                options,
+                resources,
+            )
         } else {
             // Create a chunk filled with the fill value
             let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
@@ -253,7 +261,7 @@ where
             let chunk_bytes = self.encode_bytes(chunk_bytes)?;
 
             self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
+                .partial_encode(0, chunk_bytes, options, resources)
         }
     }
 
@@ -278,6 +286,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
@@ -314,7 +323,7 @@ where
                 .collect();
 
             self.input_output_handle
-                .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+                .partial_encode_many(Box::new(offset_bytes.into_iter()), options, resources)
                 .await
         } else {
             // Create a chunk filled with the fill value
@@ -334,7 +343,7 @@ where
             let chunk_bytes = self.encode_bytes(chunk_bytes)?;
 
             self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
+                .partial_encode(0, chunk_bytes, options, resources)
                 .await
         }
     }

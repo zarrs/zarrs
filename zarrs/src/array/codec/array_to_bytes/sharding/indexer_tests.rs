@@ -136,29 +136,32 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        self.inner.encode(bytes, shape, options)
+        self.inner.encode(bytes, shape, options, resources)
     }
     fn decode<'a>(
         &self,
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.inner.decode(bytes, shape, options)
+        self.inner.decode(bytes, shape, options, resources)
     }
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         self.counts.decoders.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(CountingDecoder {
             inner: self
                 .inner
                 .clone()
-                .partial_decoder(input_handle, shape, options)?,
+                .partial_decoder(input_handle, shape, options, resources)?,
             counts: self.counts.clone(),
         }))
     }
@@ -168,13 +171,14 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         self.counts.decoders.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(CountingDecoder {
             inner: self
                 .inner
                 .clone()
-                .async_partial_decoder(input_handle, shape, options)
+                .async_partial_decoder(input_handle, shape, options, resources)
                 .await?,
             counts: self.counts.clone(),
         }))
@@ -205,9 +209,10 @@ impl ArrayPartialDecoderTraits for CountingDecoder<dyn ArrayPartialDecoderTraits
         &self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         self.counts.batch_sizes.lock().unwrap().push(indexer.len());
-        self.inner.partial_decode(indexer, options)
+        self.inner.partial_decode(indexer, options, resources)
     }
 }
 
@@ -231,13 +236,14 @@ impl AsyncArrayPartialDecoderTraits for CountingDecoder<dyn AsyncArrayPartialDec
         &'a self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.counts.batch_sizes.lock().unwrap().push(indexer.len());
         let active = self.counts.active.fetch_add(1, Ordering::SeqCst) + 1;
         self.counts.peak.fetch_max(active, Ordering::SeqCst);
         // Force overlap without timing assumptions to exercise the bounded future stream.
         tokio::task::yield_now().await;
-        let result = self.inner.partial_decode(indexer, options).await;
+        let result = self.inner.partial_decode(indexer, options, resources).await;
         self.counts.active.fetch_sub(1, Ordering::SeqCst);
         result
     }
@@ -407,7 +413,8 @@ fn sharding_indexer_batches() {
             bytes,
             counts,
         } = &fixture;
-        let options = CodecOptions::default().with_concurrent_target(concurrency);
+        let options = CodecOptions::default();
+        let resources = Resources::default().with_concurrent_target(concurrency);
         let input: Arc<dyn BytesPartialDecoderTraits> = if absent {
             Arc::new((
                 zarrs_storage::store::MemoryStore::new(),
@@ -416,21 +423,23 @@ fn sharding_indexer_batches() {
         } else {
             Arc::new(
                 codec
-                    .encode(bytes.clone(), &shape, &options)
+                    .encode(bytes.clone(), &shape, &options, &resources)
                     .unwrap()
                     .into_vec(),
             )
         };
         let decoder = codec
             .clone()
-            .partial_decoder(input, &shape, &options)
+            .partial_decoder(input, &shape, &options, &resources)
             .unwrap();
         for (indices, sizes) in selections(nested) {
             counts.reset();
             let sizes = if absent { vec![] } else { sizes };
             let expected = expected(&fixture, &indices, absent);
             assert_eq!(
-                decoder.partial_decode(&indices, &options).unwrap(),
+                decoder
+                    .partial_decode(&indices, &options, &resources)
+                    .unwrap(),
                 expected
             );
             counts.check(&sizes);
@@ -446,6 +455,7 @@ fn sharding_indexer_batches() {
                             subset,
                         )),
                         &options,
+                        &resources,
                     )
                     .unwrap();
                 assert_eq!(output, expected_output(&expected, strided));
@@ -454,7 +464,11 @@ fn sharding_indexer_batches() {
         }
         counts.reset();
         for indices in [vec![vec![0, 4]], vec![vec![0]]] {
-            assert!(decoder.partial_decode(&indices, &options).is_err());
+            assert!(
+                decoder
+                    .partial_decode(&indices, &options, &resources)
+                    .is_err()
+            );
         }
         counts.check(&[]);
     }
@@ -471,7 +485,8 @@ async fn async_sharding_indexer_batches() {
             bytes,
             counts,
         } = &fixture;
-        let options = CodecOptions::default().with_concurrent_target(concurrency);
+        let options = CodecOptions::default();
+        let resources = Resources::default().with_concurrent_target(concurrency);
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = if absent {
             Arc::new((
                 zarrs_storage::store::AsyncMemoryStore::new(),
@@ -480,14 +495,14 @@ async fn async_sharding_indexer_batches() {
         } else {
             Arc::new(
                 codec
-                    .encode(bytes.clone(), &shape, &options)
+                    .encode(bytes.clone(), &shape, &options, &resources)
                     .unwrap()
                     .into_vec(),
             )
         };
         let decoder = codec
             .clone()
-            .async_partial_decoder(input, &shape, &options)
+            .async_partial_decoder(input, &shape, &options, &resources)
             .await
             .unwrap();
         for (indices, sizes) in selections(nested) {
@@ -495,7 +510,10 @@ async fn async_sharding_indexer_batches() {
             let sizes = if absent { vec![] } else { sizes };
             let expected = expected(&fixture, &indices, absent);
             assert_eq!(
-                decoder.partial_decode(&indices, &options).await.unwrap(),
+                decoder
+                    .partial_decode(&indices, &options, &resources)
+                    .await
+                    .unwrap(),
                 expected
             );
             counts.check(&sizes);
@@ -517,6 +535,7 @@ async fn async_sharding_indexer_batches() {
                             subset,
                         )),
                         &options,
+                        &resources,
                     )
                     .await
                     .unwrap();
@@ -526,7 +545,12 @@ async fn async_sharding_indexer_batches() {
         }
         counts.reset();
         for indices in [vec![vec![0, 4]], vec![vec![0]]] {
-            assert!(decoder.partial_decode(&indices, &options).await.is_err());
+            assert!(
+                decoder
+                    .partial_decode(&indices, &options, &resources)
+                    .await
+                    .is_err()
+            );
         }
         counts.check(&[]);
     }

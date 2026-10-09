@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
+use zarrs::array::Resources;
 
 use bytes::Bytes;
 use zarrs::array::codec::BytesCodec;
@@ -126,7 +127,7 @@ fn zero_copy_write_from_borrowed_slice() -> TestResult {
     let data = vec![1u8, 2, 3, 4];
     let (expected_ptr, expected_len) = (data.as_ptr() as usize, data.len());
 
-    array.store_chunk(&[0, 0], data.as_slice())?;
+    array.store_chunk(&[0, 0], data.as_slice(), &Resources::default())?;
 
     assert_eq!(
         store.recorded("array/c/0/0"),
@@ -134,7 +135,7 @@ fn zero_copy_write_from_borrowed_slice() -> TestResult {
         "a borrowed slice should reach the store without a copy"
     );
 
-    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0])?;
+    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
     assert_eq!(retrieved, vec![1u8, 2, 3, 4]);
     drop(data);
     Ok(())
@@ -145,13 +146,17 @@ fn zero_copy_write_from_borrowed_slice() -> TestResult {
 #[test]
 fn zero_copy_read_passthrough_chain() -> TestResult {
     let (array, store) = passthrough_array();
-    array.store_chunk(&[0, 0], &Bytes::from(vec![1u8, 2, 3, 4]))?;
+    array.store_chunk(
+        &[0, 0],
+        &Bytes::from(vec![1u8, 2, 3, 4]),
+        &Resources::default(),
+    )?;
 
     // The address of the buffer the store holds, which must outlive the read below.
     let stored = store.get(&StoreKey::new("array/c/0/0").unwrap())?.unwrap();
     let stored_ptr = stored.as_ptr() as usize;
 
-    let retrieved: ArrayBytes = array.retrieve_chunk(&[0, 0])?;
+    let retrieved: ArrayBytes = array.retrieve_chunk(&[0, 0], &Resources::default())?;
     let retrieved = retrieved.into_fixed()?;
 
     assert_eq!(
@@ -172,7 +177,7 @@ fn zero_copy_passthrough_chain() -> TestResult {
     let data = Bytes::from(vec![1u8, 2, 3, 4]);
     let (expected_ptr, expected_len) = (data.as_ptr() as usize, data.len());
 
-    array.store_chunk(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], &data, &Resources::default())?;
 
     // `data` is still alive here, so an equal address cannot be a coincidental reallocation.
     assert_eq!(
@@ -182,7 +187,7 @@ fn zero_copy_passthrough_chain() -> TestResult {
     );
 
     // The write must still be correct.
-    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0])?;
+    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
     assert_eq!(retrieved, vec![1u8, 2, 3, 4]);
     drop(data);
     Ok(())
@@ -199,7 +204,7 @@ fn compressed_chain_copies() -> TestResult {
     let data = Bytes::from(vec![1u8, 2, 3, 4]);
     let data_ptr = data.as_ptr() as usize;
 
-    array.store_chunk(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], &data, &Resources::default())?;
 
     // A compressor must produce a new buffer; documents that the fast path does not apply.
     let (recorded_ptr, _) = store.recorded("array/c/0/0").expect("chunk was written");
@@ -208,7 +213,7 @@ fn compressed_chain_copies() -> TestResult {
         "a compressed chain cannot store the caller's buffer"
     );
 
-    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0])?;
+    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
     assert_eq!(retrieved, vec![1u8, 2, 3, 4]);
     drop(data);
     Ok(())
@@ -222,7 +227,7 @@ fn zero_copy_owned_vec() -> TestResult {
     let data = vec![1u8, 2, 3, 4];
     let (expected_ptr, expected_len) = (data.as_ptr() as usize, data.len());
 
-    array.store_chunk(&[0, 0], data)?;
+    array.store_chunk(&[0, 0], data, &Resources::default())?;
 
     assert_eq!(
         store.recorded("array/c/0/0"),
@@ -236,8 +241,8 @@ fn zero_copy_owned_vec() -> TestResult {
 #[test]
 fn borrowed_slice_still_correct() -> TestResult {
     let (array, _store) = passthrough_array();
-    array.store_chunk(&[0, 0], &[1u8, 2, 3, 4])?;
-    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0])?;
+    array.store_chunk(&[0, 0], &[1u8, 2, 3, 4], &Resources::default())?;
+    let retrieved: Vec<u8> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
     assert_eq!(retrieved, vec![1u8, 2, 3, 4]);
     Ok(())
 }
@@ -271,7 +276,7 @@ fn byte_swap_encodes_from_shared_bytes() -> TestResult {
     for e in elements {
         raw.extend_from_slice(&e.to_ne_bytes());
     }
-    array.store_chunk(&[0], &Bytes::from(raw.clone()))?;
+    array.store_chunk(&[0], &Bytes::from(raw.clone()), &Resources::default())?;
 
     // Each 2-byte component must be reversed relative to the in-memory representation.
     let stored = store.get(&StoreKey::new("array/c/0").unwrap())?.unwrap();
@@ -288,7 +293,7 @@ fn byte_swap_encodes_from_shared_bytes() -> TestResult {
     );
 
     // And the values must still round-trip back to what was written.
-    let retrieved: Vec<u16> = array.retrieve_chunk(&[0])?;
+    let retrieved: Vec<u16> = array.retrieve_chunk(&[0], &Resources::default())?;
     assert_eq!(retrieved, elements);
     Ok(())
 }
@@ -297,13 +302,17 @@ fn byte_swap_encodes_from_shared_bytes() -> TestResult {
 #[test]
 fn byte_swap_read_copies() -> TestResult {
     let (array, store) = byte_swapping_array();
-    array.store_chunk(&[0], &Bytes::from(vec![1u8, 2, 3, 4]))?;
+    array.store_chunk(
+        &[0],
+        &Bytes::from(vec![1u8, 2, 3, 4]),
+        &Resources::default(),
+    )?;
 
     // The address of the buffer the store holds, which must outlive the read below.
     let stored = store.get(&StoreKey::new("array/c/0").unwrap())?.unwrap();
     let stored_ptr = stored.as_ptr() as usize;
 
-    let retrieved: ArrayBytes = array.retrieve_chunk(&[0])?;
+    let retrieved: ArrayBytes = array.retrieve_chunk(&[0], &Resources::default())?;
     let retrieved = retrieved.into_fixed()?;
 
     assert_ne!(
@@ -323,7 +332,11 @@ fn byte_swap_read_copies() -> TestResult {
 #[test]
 fn retrieve_encoded_chunk_shares_the_stored_buffer() -> TestResult {
     let (array, store) = passthrough_array();
-    array.store_chunk(&[0, 0], &Bytes::from(vec![1u8, 2, 3, 4]))?;
+    array.store_chunk(
+        &[0, 0],
+        &Bytes::from(vec![1u8, 2, 3, 4]),
+        &Resources::default(),
+    )?;
 
     // The address of the buffer the store holds, which must outlive the read below.
     let stored = store.get(&StoreKey::new("array/c/0/0").unwrap())?.unwrap();
@@ -347,7 +360,7 @@ mod r#async {
     use std::sync::{Arc, Mutex};
 
     use bytes::Bytes;
-    use zarrs::array::{ArrayBuilder, CowBytes, data_type};
+    use zarrs::array::{ArrayBuilder, CowBytes, Resources, data_type};
     use zarrs::storage::store::AsyncMemoryStore;
     use zarrs::storage::{
         AsyncWritableStorageTraits, OffsetBytesIterator, StorageError, StoreKey, StorePrefix,
@@ -401,7 +414,9 @@ mod r#async {
         let data = Bytes::from(vec![1u8, 2, 3, 4]);
         let (expected_ptr, expected_len) = (data.as_ptr() as usize, data.len());
 
-        array.async_store_chunk(&[0, 0], &data).await?;
+        array
+            .async_store_chunk(&[0, 0], &data, &Resources::default())
+            .await?;
 
         let key = StoreKey::new("array/c/0/0")?;
         assert_eq!(

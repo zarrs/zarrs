@@ -19,8 +19,12 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Panics
     /// Panics if the number of elements in the chunk exceeds `usize::MAX`.
-    fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64]) -> Result<T, ArrayError> {
-        let chunk = self.retrieve_chunk_if_exists::<T>(chunk_indices)?;
+    fn retrieve_chunk<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<T, ArrayError> {
+        let chunk = self.retrieve_chunk_if_exists::<T>(chunk_indices, resources)?;
         super::chunk_or_fill_value(self, chunk_indices, chunk)
     }
 
@@ -39,6 +43,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Read and decode the chunks at `chunks` into their bytes.
@@ -54,9 +59,10 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let array_subset = self.chunks_subset(chunks)?;
-        self.retrieve_array_subset(&array_subset)
+        self.retrieve_array_subset(&array_subset, resources)
     }
 
     /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into their bytes.
@@ -77,6 +83,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     /// Read and decode the elements selected by `indexer` in the chunk at `chunk_indices` into a preallocated `output_target`.
@@ -97,6 +104,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Read and decode the `array_subset` of array into its bytes.
@@ -114,6 +122,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     /// Read and decode the chunk at `chunk_indices` into its bytes if it exists.
@@ -129,6 +138,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<T>, ArrayError>;
 
     /// Retrieve the encoded bytes of a chunk.
@@ -149,11 +159,12 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
-        let concurrent_limit = self.codec_options().concurrent_target();
+        let concurrent_limit = resources.concurrent_target();
         let retrieve = |chunk_indices: crate::array::ArrayIndicesTinyVec| {
             self.retrieve_encoded_chunk(&chunk_indices)
         };
@@ -174,8 +185,9 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.retrieve_subchunk_at_level(0, subchunk_indices)
+        self.retrieve_subchunk_at_level(0, subchunk_indices, resources)
     }
 
     /// Read and decode the subchunk at `subchunk_indices` from `level`.
@@ -189,6 +201,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         level: usize,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let subchunk_grid = self
             .subchunk_grid_at_level(level)
@@ -197,7 +210,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         let array_subset = subchunk_grid
             .subset(subchunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-        self.retrieve_array_subset(&array_subset)
+        self.retrieve_array_subset(&array_subset, resources)
     }
 
     /// Read and decode the subchunks at `subchunks`.
@@ -208,8 +221,9 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.retrieve_subchunks_at_level(0, subchunks)
+        self.retrieve_subchunks_at_level(0, subchunks, resources)
     }
 
     /// Read and decode subchunks from `level`.
@@ -223,6 +237,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let subchunk_grid = self
             .subchunk_grid_at_level(level)
@@ -234,7 +249,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
                 subchunk_grid.grid_shape().to_vec(),
             )
         })?;
-        self.retrieve_array_subset(&array_subset)
+        self.retrieve_array_subset(&array_subset, resources)
     }
 
     /// Read and decode the `array_subset` of array into a preallocated `output_target`.
@@ -257,6 +272,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Initialises a partial decoder for the chunk at `chunk_indices`.
@@ -266,6 +282,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn partial_decoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
 
     /// Return the chunk-local subchunk grid for a chunk, if available.
@@ -274,8 +291,12 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the chunk indices are invalid or the local grid cannot be resolved.
-    fn local_subchunk_grid(&self, chunk_indices: &[u64]) -> Result<Option<ChunkGrid>, ArrayError> {
-        self.local_subchunk_grid_at_level(0, chunk_indices)
+    fn local_subchunk_grid(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<ChunkGrid>, ArrayError> {
+        self.local_subchunk_grid_at_level(0, chunk_indices, resources)
     }
 
     /// Return the chunk-local subchunk grid at `level` for a chunk, if available.
@@ -289,10 +310,11 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         level: usize,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
         Ok(self
-            .partial_decoder(chunk_indices)?
-            .local_subchunk_grids(self.codec_options())
+            .partial_decoder(chunk_indices, resources)?
+            .local_subchunk_grids(self.codec_options(), resources)
             .map_err(ArrayError::CodecError)?
             .into_iter()
             .nth(level)

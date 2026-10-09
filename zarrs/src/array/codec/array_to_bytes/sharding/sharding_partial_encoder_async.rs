@@ -23,7 +23,7 @@ use crate::array::{
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderSubchunkingTraits,
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
+    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, Resources, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -52,6 +52,7 @@ impl AsyncShardingPartialEncoder {
         index_codecs: Arc<CodecChainBound>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
+        resources: &Resources,
         sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(&shard_shape, &subchunk_shape)?;
@@ -65,6 +66,7 @@ impl AsyncShardingPartialEncoder {
             &shard_shape,
             &subchunk_shape,
             options,
+            resources,
         )
         .await?
         .unwrap_or_else(|| {
@@ -94,6 +96,7 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialEncoder {
     async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
     }
@@ -119,6 +122,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let handle: Arc<dyn AsyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
         let shard_index = self.shard_index.lock().await;
@@ -130,6 +134,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
             Some(shard_index.as_slice()),
             indexer,
             options,
+            resources,
         )
         .await
     }
@@ -153,6 +158,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         chunk_subset_indexer: &dyn crate::array::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &super::Resources,
     ) -> Result<(), super::CodecError> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
@@ -212,7 +218,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         // Read the straddling subchunks
         let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)
             .await?
             .map(|bytes| {
                 std::iter::zip(
@@ -245,6 +251,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                             CowBytes::from(subchunk_encoded),
                             &update.subchunk_shape,
                             options,
+                            resources,
                         )?
                         .into_owned()
                 } else {
@@ -266,7 +273,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(subchunk_updated, &update.subchunk_shape, options)?
+                        .encode(subchunk_updated, &update.subchunk_shape, options, resources)?
                         .into_static();
                     Ok((update.subchunk_index, Some(subchunk_encoded)))
                 }
@@ -318,7 +325,12 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
             let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
-                .encode(shard_index_bytes.into(), &self.index_shape, options)?
+                .encode(
+                    shard_index_bytes.into(),
+                    &self.index_shape,
+                    options,
+                    resources,
+                )?
                 .into_static();
 
             // Get the total size of the encoded subchunks
@@ -356,6 +368,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                                 .into_iter(),
                             ),
                             options,
+                            resources,
                         )
                         .await?;
                 }
@@ -367,6 +380,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                                 [(offset_new_chunks, CowBytes::from(encoded_output))].into_iter(),
                             ),
                             options,
+                            resources,
                         )
                         .await?;
                 }

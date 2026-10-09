@@ -5,7 +5,7 @@ use super::{AsyncChunkCache, SealedAsync};
 use super::{ChunkCache, SealedSync};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
-    CodecOptions,
+    CodecOptions, Resources,
 };
 use zarrs_codec::CodecError;
 #[cfg(feature = "async")]
@@ -57,13 +57,14 @@ pub(crate) fn retrieve_chunk_bytes<TStorage, C>(
     array: &Array<TStorage>,
     chunk_indices: &[u64],
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
 {
     if let Some(bytes) =
-        C::Value::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?
+        C::Value::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?
     {
         Ok(bytes)
     } else {
@@ -82,13 +83,14 @@ pub(crate) fn retrieve_chunk_overlap_bytes<TStorage, C>(
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        retrieve_chunk_bytes(cache, array, chunk_indices, options)
+        retrieve_chunk_bytes(cache, array, chunk_indices, options, resources)
     } else {
         C::Value::retrieve_partial_chunk_bytes(
             cache,
@@ -96,6 +98,7 @@ where
             chunk_indices,
             &overlap.relative_to(chunk_subset.start())?,
             options,
+            resources,
         )
     }
 }
@@ -106,13 +109,20 @@ pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
     array: &Array<TStorage>,
     chunk_indices: &[u64],
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncChunkCache + ?Sized,
 {
-    if let Some(bytes) =
-        C::Value::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options).await?
+    if let Some(bytes) = C::Value::async_retrieve_chunk_bytes_if_exists(
+        cache,
+        array,
+        chunk_indices,
+        options,
+        resources,
+    )
+    .await?
     {
         Ok(bytes)
     } else {
@@ -130,13 +140,14 @@ pub(crate) async fn async_retrieve_chunk_overlap_bytes<TStorage, C>(
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncChunkCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        async_retrieve_chunk_bytes(cache, array, chunk_indices, options).await
+        async_retrieve_chunk_bytes(cache, array, chunk_indices, options, resources).await
     } else {
         C::Value::async_retrieve_partial_chunk_bytes(
             cache,
@@ -144,6 +155,7 @@ where
             chunk_indices,
             &overlap.relative_to(chunk_subset.start())?,
             options,
+            resources,
         )
         .await
     }
@@ -163,8 +175,9 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.0.local_subchunk_grids(options)
+        self.0.local_subchunk_grids(options, resources)
     }
 }
 
@@ -188,8 +201,9 @@ impl zarrs_codec::AsyncArrayPartialDecoderTraits for SyncPartialDecoderAsAsync {
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.0.partial_decode(indexer, options)
+        self.0.partial_decode(indexer, options, resources)
     }
 
     async fn partial_decode_into(
@@ -197,8 +211,10 @@ impl zarrs_codec::AsyncArrayPartialDecoderTraits for SyncPartialDecoderAsAsync {
         indexer: &dyn crate::array::Indexer,
         output_target: zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        self.0.partial_decode_into(indexer, output_target, options)
+        self.0
+            .partial_decode_into(indexer, output_target, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {

@@ -1,6 +1,7 @@
 //! Array chunk reads with generic indexers.
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::{ArrayBuilder, ArrayIndices, ArraySubset, data_type};
 use zarrs::storage::store::MemoryStore;
@@ -10,17 +11,22 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
         .build(store, "/array")?;
-    array.store_chunk(&[0, 0], (0u16..16).collect::<Vec<_>>())?;
+    array.store_chunk(
+        &[0, 0],
+        (0u16..16).collect::<Vec<_>>(),
+        &Resources::default(),
+    )?;
 
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
     assert_eq!(
-        array.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
+        array.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered, &Resources::default())?,
         [1, 15, 4, 10]
     );
     assert_eq!(
         array.retrieve_partial_chunk::<Vec<u16>>(
             &[0, 0],
-            &ArraySubset::new_with_ranges(&[0..2, 0..2])
+            &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+            &Resources::default()
         )?,
         [0, 1, 4, 5]
     );
@@ -28,7 +34,7 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
     let oob: Vec<ArrayIndices> = vec![vec![0, 4]];
     assert!(
         array
-            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
+            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob, &Resources::default())
             .is_err()
     );
     Ok(())
@@ -45,13 +51,13 @@ fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::err
     let cached = ArrayCached::new(Arc::new(array), ChunkCacheDecodedLruChunkLimit::new(4));
     let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![1, 1]];
     assert_eq!(
-        cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
+        cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered, &Resources::default())?,
         [0, 0]
     );
     let oob: Vec<ArrayIndices> = vec![vec![0, 2]];
     assert!(
         cached
-            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
+            .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob, &Resources::default())
             .is_err()
     );
     Ok(())
@@ -66,12 +72,16 @@ async fn async_chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std:
     let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
         .build(store, "/array")?;
     array
-        .async_store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())
+        .async_store_chunk(
+            &[0, 0],
+            &(0u16..16).collect::<Vec<_>>(),
+            &Resources::default(),
+        )
         .await?;
     let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1]];
     assert_eq!(
         array
-            .async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)
+            .async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered, &Resources::default())
             .await?,
         [15, 1]
     );

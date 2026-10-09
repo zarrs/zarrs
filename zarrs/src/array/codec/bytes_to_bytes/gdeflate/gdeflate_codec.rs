@@ -9,7 +9,7 @@ use super::{
 use crate::array::{BytesRepresentation, CowBytes, RecommendedConcurrency};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -96,6 +96,7 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
@@ -129,6 +130,7 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(CowBytes::from(gdeflate_decode(&encoded_value)?))
     }

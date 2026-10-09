@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArrayBytes;
@@ -36,7 +37,9 @@ fn array_blosc_write_all(c: &mut Criterion) {
                 .unwrap();
                 let data = vec![1u8; num_elements.try_into().unwrap()];
                 let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset(&subset, &data).unwrap();
+                array
+                    .store_array_subset(&subset, &data, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -71,11 +74,15 @@ fn array_blosc_read_all(c: &mut Criterion) {
             .unwrap();
             let data = vec![1u8; num_elements.try_into().unwrap()];
             let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset(&subset, &data).unwrap();
+            array
+                .store_array_subset(&subset, &data, &Resources::default())
+                .unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }

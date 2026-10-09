@@ -25,6 +25,7 @@ async fn async_retrieve_array_subset_bytes<TStorage, C>(
     array: &Array<TStorage>,
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -54,18 +55,15 @@ where
                 &chunk_subset,
                 array_subset,
                 options,
+                resources,
             )
             .await
         }
         num_chunks => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
-                num_chunks,
-                options,
-                &codec_concurrency,
-            );
+            let (chunk_concurrent_limit, resources) =
+                concurrency_chunks_and_codec(num_chunks, resources, &codec_concurrency);
             if array.data_type().is_fixed() {
                 async_retrieve_multi_chunk_fixed(
                     cache,
@@ -73,7 +71,8 @@ where
                     array_subset,
                     &chunks,
                     chunk_concurrent_limit,
-                    &options,
+                    options,
+                    &resources,
                 )
                 .await
             } else {
@@ -83,7 +82,8 @@ where
                     array_subset,
                     &chunks,
                     chunk_concurrent_limit,
-                    &options,
+                    options,
+                    &resources,
                 )
                 .await
             }
@@ -98,6 +98,7 @@ async fn async_retrieve_multi_chunk_variable<TStorage, C>(
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -113,6 +114,7 @@ where
             &chunk_subset,
             &chunk_subset_overlap,
             options,
+            resources,
         )
         .await?;
         Ok::<_, ArrayError>((
@@ -142,6 +144,7 @@ async fn async_retrieve_multi_chunk_fixed<TStorage, C>(
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -184,6 +187,7 @@ where
                     &chunk_subset,
                     &overlap,
                     options,
+                    resources,
                 )
                 .await?;
                 let mut data_view = unsafe {
@@ -233,9 +237,16 @@ where
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes =
-            async_retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options).await?;
+        let bytes = async_retrieve_chunk_bytes(
+            self.cache(),
+            self.array(),
+            chunk_indices,
+            options,
+            resources,
+        )
+        .await?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
     }
 
@@ -245,6 +256,7 @@ where
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let bytes = C::Value::async_retrieve_partial_chunk_bytes(
             self.cache(),
@@ -252,6 +264,7 @@ where
             chunk_indices,
             indexer,
             options,
+            resources,
         )
         .await?;
         decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
@@ -270,9 +283,15 @@ where
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
-            .await
+        self.async_retrieve_chunk_into_with_options(
+            chunk_indices,
+            output_target,
+            options,
+            resources,
+        )
+        .await
     }
 
     async fn retrieve_partial_chunk_into(
@@ -281,12 +300,14 @@ where
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
             options,
+            resources,
         )
         .await
     }
@@ -302,10 +323,17 @@ where
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes =
-            async_retrieve_chunk_bytes(self.cache(), self.array(), chunk_indices, options).await?;
+        let bytes = async_retrieve_chunk_bytes(
+            self.cache(),
+            self.array(),
+            chunk_indices,
+            options,
+            resources,
+        )
+        .await?;
         let shape = self.array().chunk_shape(chunk_indices)?;
         T::from_array_bytes_arc(
             bytes,
@@ -319,11 +347,13 @@ where
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_into_with_options(
             chunk_indices,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -332,6 +362,7 @@ where
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -339,6 +370,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let bytes = C::Value::async_retrieve_partial_chunk_bytes(
             self.cache(),
@@ -346,6 +378,7 @@ where
             chunk_indices,
             indexer,
             self.codec_options(),
+            resources,
         )
         .await?;
         T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
@@ -357,12 +390,14 @@ where
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -371,12 +406,14 @@ where
     pub async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let bytes = async_retrieve_array_subset_bytes(
             self.cache(),
             self.array(),
             array_subset,
             self.codec_options(),
+            resources,
         )
         .await?;
         T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
@@ -386,6 +423,7 @@ where
     pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<T>, ArrayError> {
         let options = self.codec_options();
         let Some(bytes) = C::Value::async_retrieve_chunk_bytes_if_exists(
@@ -393,6 +431,7 @@ where
             self.array(),
             chunk_indices,
             options,
+            resources,
         )
         .await?
         else {
@@ -421,14 +460,18 @@ where
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
-        self.array().async_retrieve_encoded_chunks(chunks).await
+        self.array()
+            .async_retrieve_encoded_chunks(chunks, resources)
+            .await
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -436,12 +479,14 @@ where
         &self,
         level: usize,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -449,6 +494,7 @@ where
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -456,6 +502,7 @@ where
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
             self.array().as_ref(),
@@ -463,6 +510,7 @@ where
             array_subset,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -471,12 +519,14 @@ where
     pub async fn async_partial_decoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
         C::Value::async_partial_decoder(
             self.cache(),
             self.array(),
             chunk_indices,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -485,6 +535,7 @@ where
     pub async fn async_local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -492,6 +543,7 @@ where
         &self,
         level: usize,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError>;
 }
 
@@ -514,35 +566,42 @@ mod tests {
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
-        array.async_store_chunk(&[0], &[1u8, 2]).await.unwrap();
+        array
+            .async_store_chunk(&[0], &[1u8, 2], &Resources::default())
+            .await
+            .unwrap();
 
         let cached = ArrayCached::new(array, cache);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![1, 2]
         );
         assert_eq!(
             cached
-                .async_retrieve_partial_chunk::<Vec<u8>>(&[0], &[1..2])
+                .async_retrieve_partial_chunk::<Vec<u8>>(&[0], &[1..2], &Resources::default())
                 .await
                 .unwrap(),
             vec![2]
         );
         assert_eq!(
             cached
-                .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1])
+                .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1], &Resources::default())
                 .await
                 .unwrap(),
             None
         );
         assert_eq!(
             cached
-                .async_partial_decoder(&[0])
+                .async_partial_decoder(&[0], &Resources::default())
                 .await
                 .unwrap()
                 .partial_decode(
                     &ArraySubset::new_with_ranges(&[0..1]),
-                    &CodecOptions::default()
+                    &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .await
                 .unwrap(),
@@ -550,34 +609,48 @@ mod tests {
         );
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<u8>>(&[1..3])
+                .async_retrieve_array_subset::<Vec<u8>>(&[1..3], &Resources::default())
                 .await
                 .unwrap(),
             vec![2, 0]
         );
-        assert!(cached.async_retrieve_chunk::<Vec<u8>>(&[2]).await.is_err());
+        assert!(
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[2], &Resources::default())
+                .await
+                .is_err()
+        );
         assert!(!cached.cache().is_empty().await);
 
         // Write operations invalidate affected cached chunks
-        cached.async_store_chunk(&[0], &[3u8, 4]).await.unwrap();
-        assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
-            vec![3, 4]
-        );
         cached
-            .async_store_array_subset(&[0..1], &[5u8])
+            .async_store_chunk(&[0], &[3u8, 4], &Resources::default())
             .await
             .unwrap();
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<u8>>(&[0..4])
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
+            vec![3, 4]
+        );
+        cached
+            .async_store_array_subset(&[0..1], &[5u8], &Resources::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            cached
+                .async_retrieve_array_subset::<Vec<u8>>(&[0..4], &Resources::default())
                 .await
                 .unwrap(),
             vec![5, 4, 0, 0]
         );
         cached.async_erase_chunk(&[0]).await.unwrap();
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![0, 0]
         );
 
@@ -595,24 +668,23 @@ mod tests {
         let array = builder.build_arc(store, "/").unwrap();
         let data: Vec<u16> = (0..64).collect();
         array
-            .async_store_array_subset(&array.subset_all(), &data)
+            .async_store_array_subset(&array.subset_all(), &data, &Resources::default())
             .await
             .unwrap();
 
-        // Exercise the cached reads under a non-default concurrency target. The derived
-        // array shares the cache, so the assertions below still observe it.
-        let cached = ArrayCached::new(array, cache)
-            .with_codec_options(CodecOptions::default().with_concurrent_target(1));
+        // Exercise the cached reads under a non-default concurrency target.
+        let cached = ArrayCached::new(array, cache);
+        let resources = Resources::default().with_concurrent_target(1);
         assert_eq!(
             cached
-                .async_retrieve_subchunk::<Vec<u16>>(&[2, 3])
+                .async_retrieve_subchunk::<Vec<u16>>(&[2, 3], &resources)
                 .await
                 .unwrap(),
             vec![38, 39, 46, 47]
         );
         assert_eq!(
             cached
-                .async_retrieve_subchunks::<Vec<u16>>(&[1..3, 1..3])
+                .async_retrieve_subchunks::<Vec<u16>>(&[1..3, 1..3], &resources)
                 .await
                 .unwrap(),
             vec![
@@ -621,27 +693,27 @@ mod tests {
         );
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<u16>>(&[0..8, 0..8])
+                .async_retrieve_array_subset::<Vec<u16>>(&[0..8, 0..8], &resources)
                 .await
                 .unwrap(),
             data
         );
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<u16>>(&[1..8, 0..8])
+                .async_retrieve_array_subset::<Vec<u16>>(&[1..8, 0..8], &resources)
                 .await
                 .unwrap(),
             data[8..]
         );
         assert!(
             cached
-                .async_retrieve_subchunk::<Vec<u16>>(&[0])
+                .async_retrieve_subchunk::<Vec<u16>>(&[0], &resources)
                 .await
                 .is_err()
         );
         assert!(
             cached
-                .async_retrieve_subchunks::<Vec<u16>>(&[0..1])
+                .async_retrieve_subchunks::<Vec<u16>>(&[0..1], &resources)
                 .await
                 .is_err()
         );
@@ -657,7 +729,11 @@ mod tests {
             .build_arc(store, "/")
             .unwrap();
         array
-            .async_store_array_subset(&array.subset_all(), &(0..16u8).collect::<Vec<u8>>())
+            .async_store_array_subset(
+                &array.subset_all(),
+                &(0..16u8).collect::<Vec<u8>>(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
 
@@ -680,6 +756,7 @@ mod tests {
                 .async_retrieve_array_subset_into(
                     &subset,
                     ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                    &Resources::default(),
                 )
                 .await
                 .unwrap();
@@ -701,7 +778,7 @@ mod tests {
             .map(|i| if i < 24 { i.to_string() } else { String::new() })
             .collect();
         array
-            .async_store_array_subset(&[0..4, 0..6], &data[..24])
+            .async_store_array_subset(&[0..4, 0..6], &data[..24], &Resources::default())
             .await
             .unwrap();
 
@@ -710,7 +787,10 @@ mod tests {
         for _ in 0..2 {
             assert_eq!(
                 cached
-                    .async_retrieve_array_subset::<Vec<String>>(&[0..6, 0..6])
+                    .async_retrieve_array_subset::<Vec<String>>(
+                        &[0..6, 0..6],
+                        &Resources::default()
+                    )
                     .await
                     .unwrap(),
                 data
@@ -720,7 +800,10 @@ mod tests {
                 .collect();
             assert_eq!(
                 cached
-                    .async_retrieve_array_subset::<Vec<String>>(&[1..6, 1..6])
+                    .async_retrieve_array_subset::<Vec<String>>(
+                        &[1..6, 1..6],
+                        &Resources::default()
+                    )
                     .await
                     .unwrap(),
                 expected
@@ -743,11 +826,11 @@ mod tests {
         .build_arc(store, "/")
         .unwrap();
         array
-            .async_store_chunk(&[0], &[Some(Some(1u8)), Some(None)])
+            .async_store_chunk(&[0], &[Some(Some(1u8)), Some(None)], &Resources::default())
             .await
             .unwrap();
         array
-            .async_store_chunk(&[1], &[None, Some(Some(4u8))])
+            .async_store_chunk(&[1], &[None, Some(Some(4u8))], &Resources::default())
             .await
             .unwrap();
         // chunk 2 is unwritten, so it decodes to the fill value (`None`)
@@ -756,7 +839,10 @@ mod tests {
         // Spans all three chunks
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<Option<Option<u8>>>>(&[0..6])
+                .async_retrieve_array_subset::<Vec<Option<Option<u8>>>>(
+                    &[0..6],
+                    &Resources::default()
+                )
                 .await
                 .unwrap(),
             vec![Some(Some(1)), Some(None), None, Some(Some(4)), None, None]
@@ -764,7 +850,10 @@ mod tests {
         // Partial overlap of two chunks
         assert_eq!(
             cached
-                .async_retrieve_array_subset::<Vec<Option<Option<u8>>>>(&[1..4])
+                .async_retrieve_array_subset::<Vec<Option<Option<u8>>>>(
+                    &[1..4],
+                    &Resources::default()
+                )
                 .await
                 .unwrap(),
             vec![Some(None), None, Some(Some(4))]
@@ -815,12 +904,20 @@ mod tests {
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
-        array.async_store_chunk(&[0], &[1u8, 2]).await.unwrap();
+        array
+            .async_store_chunk(&[0], &[1u8, 2], &Resources::default())
+            .await
+            .unwrap();
 
         let cached = Arc::new(ArrayCached::new(array, cache));
         let handles = (0..4).map(|_| {
             let cached = cached.clone();
-            tokio::spawn(async move { cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap() })
+            tokio::spawn(async move {
+                cached
+                    .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                    .await
+                    .unwrap()
+            })
         });
         for handle in handles {
             assert_eq!(handle.await.unwrap(), vec![1, 2]);

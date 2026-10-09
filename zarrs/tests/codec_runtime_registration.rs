@@ -9,8 +9,8 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, register_codec_v3,
-    unregister_codec_v3,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{RuntimePlugin, ZarrVersion};
 
@@ -67,6 +67,7 @@ impl BytesToBytesCodecTraits for TestPassthroughCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
@@ -76,6 +77,7 @@ impl BytesToBytesCodecTraits for TestPassthroughCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }
@@ -109,13 +111,18 @@ fn codec_runtime_registration() {
     if let Codec::BytesToBytes(codec) = codec {
         let data = vec![1u8, 2, 3, 4, 5];
         let encoded = codec
-            .encode(CowBytes::Borrowed(&data), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&data),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
             .decode(
                 encoded,
                 &BytesRepresentation::FixedSize(5),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(data, decoded.as_ref());
@@ -157,7 +164,11 @@ fn codec_runtime_registration_array_roundtrip() {
     // Store some data
     let expected_full_data: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     array
-        .store_array_subset(&array.subset_all(), &expected_full_data)
+        .store_array_subset(
+            &array.subset_all(),
+            &expected_full_data,
+            &Resources::default(),
+        )
         .expect("Failed to store full array subset");
 
     // Re-open the array from storage (simulates a fresh open)
@@ -166,7 +177,10 @@ fn codec_runtime_registration_array_roundtrip() {
 
     // Retrieve the entire array and verify consistency (row-major order)
     let full_data: Vec<u8> = reopened_array
-        .retrieve_array_subset(&zarrs::array::ArraySubset::new_with_ranges(&[0..4, 0..4]))
+        .retrieve_array_subset(
+            &zarrs::array::ArraySubset::new_with_ranges(&[0..4, 0..4]),
+            &Resources::default(),
+        )
         .expect("Failed to retrieve full array");
     assert_eq!(full_data, expected_full_data);
 

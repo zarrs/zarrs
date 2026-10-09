@@ -4,6 +4,7 @@
 use std::error::Error;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
@@ -32,10 +33,18 @@ fn fixed_fixture() -> Array<AsyncStore> {
 
 async fn populate<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     array
-        .async_store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])
+        .async_store_chunk(
+            &[0, 0],
+            &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+            &Resources::default(),
+        )
         .await?;
     array
-        .async_store_chunk(&[0, 1], &[4u8, 5, 0, 9, 10, 0, 14, 15, 0])
+        .async_store_chunk(
+            &[0, 1],
+            &[4u8, 5, 0, 9, 10, 0, 14, 15, 0],
+            &Resources::default(),
+        )
         .await?;
     array
         .async_store_chunks(
@@ -43,6 +52,7 @@ async fn populate<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
             &[
                 16u8, 17, 18, 19, 20, 0, 21, 22, 23, 24, 25, 0, 0, 0, 0, 0, 0, 0,
             ],
+            &Resources::default(),
         )
         .await?;
     Ok(())
@@ -65,11 +75,16 @@ async fn retrieve_into<A: AsyncArrayReadOps>(
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
         if let Some(chunk_indices) = chunk_indices {
             array
-                .async_retrieve_partial_chunk_into(chunk_indices, subset, target)
+                .async_retrieve_partial_chunk_into(
+                    chunk_indices,
+                    subset,
+                    target,
+                    &Resources::default(),
+                )
                 .await?;
         } else {
             array
-                .async_retrieve_array_subset_into(subset, target)
+                .async_retrieve_array_subset_into(subset, target, &Resources::default())
                 .await?;
         }
     }
@@ -91,7 +106,11 @@ async fn retrieve_chunk_into<A: AsyncArrayReadOps>(
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
         array
-            .async_retrieve_chunk_into(chunk_indices, ArrayBytesDecodeIntoTarget::Fixed(&mut view))
+            .async_retrieve_chunk_into(
+                chunk_indices,
+                ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                &Resources::default(),
+            )
             .await?;
     }
     Ok(output)
@@ -104,11 +123,15 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
     let array_subset = ArraySubset::new_with_ranges(&[1..4, 1..4]);
 
     assert_eq!(
-        array.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+        array
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?,
         [1, 2, 3, 6, 7, 8, 11, 12, 13]
     );
     assert_eq!(
-        array.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await?,
+        array
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())
+            .await?,
         [4, 5, 0, 9, 10, 0, 14, 15, 0]
     );
     assert_eq!(
@@ -117,7 +140,7 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
     );
     assert_eq!(
         array
-            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0])
+            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0], &Resources::default())
             .await?,
         Some(vec![16, 17, 18, 21, 22, 23, 0, 0, 0])
     );
@@ -128,19 +151,19 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
     );
     assert_eq!(
         array
-            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1])
+            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1], &Resources::default())
             .await?,
         None
     );
     assert_eq!(
         array
-            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
+            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset, &Resources::default())
             .await?,
         [7, 8, 12, 13]
     );
     assert_eq!(
         array
-            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
+            .async_retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset, &Resources::default())
             .await?,
         [7, 8, 12, 13]
     );
@@ -149,22 +172,26 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
         [7, 8, 12, 13]
     );
     assert_eq!(
-        array.async_retrieve_chunks::<Vec<u8>>(&chunks).await?,
-        [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
-    );
-    assert_eq!(
-        array.async_retrieve_chunks::<Vec<u8>>(&chunks).await?,
+        array
+            .async_retrieve_chunks::<Vec<u8>>(&chunks, &Resources::default())
+            .await?,
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<u8>>(&array_subset)
+            .async_retrieve_chunks::<Vec<u8>>(&chunks, &Resources::default())
+            .await?,
+        [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
+    );
+    assert_eq!(
+        array
+            .async_retrieve_array_subset::<Vec<u8>>(&array_subset, &Resources::default())
             .await?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<u8>>(&array_subset)
+            .async_retrieve_array_subset::<Vec<u8>>(&array_subset, &Resources::default())
             .await?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
@@ -177,31 +204,51 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        array.async_retrieve_subchunk::<Vec<u8>>(&[1, 1]).await?,
+        array
+            .async_retrieve_subchunk::<Vec<u8>>(&[1, 1], &Resources::default())
+            .await?,
         [7]
     );
     assert_eq!(
         array
-            .async_retrieve_subchunks::<Vec<u8>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]),)
+            .async_retrieve_subchunks::<Vec<u8>>(
+                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                &Resources::default()
+            )
             .await?,
         [7, 8, 12, 13]
     );
     assert!(array.async_retrieve_encoded_chunk(&[0, 0]).await?.is_some());
     assert_eq!(
-        array.async_retrieve_encoded_chunks(&chunks).await?.len(),
+        array
+            .async_retrieve_encoded_chunks(&chunks, &Resources::default())
+            .await?
+            .len(),
         chunks.num_elements_usize()
     );
-    let decoder = array.async_partial_decoder(&[0, 0]).await?;
+    let decoder = array
+        .async_partial_decoder(&[0, 0], &Resources::default())
+        .await?;
     assert!(decoder.exists().await?);
     assert_eq!(
         decoder
-            .partial_decode(&chunk_subset, &CodecOptions::default())
+            .partial_decode(
+                &chunk_subset,
+                &CodecOptions::default(),
+                &Resources::default()
+            )
             .await?
             .into_fixed()?
             .as_ref(),
         &[7, 8, 12, 13]
     );
-    assert!(array.async_partial_decoder(&[0, 0]).await?.exists().await?);
+    assert!(
+        array
+            .async_partial_decoder(&[0, 0], &Resources::default())
+            .await?
+            .exists()
+            .await?
+    );
     Ok(())
 }
 
@@ -232,6 +279,7 @@ where
         sharding_codec.index_codecs(),
         sharding_codec.index_location(),
         array.codec_options(),
+        &Resources::default(),
         sharding_codec.options().clone(),
     )
     .await?)
@@ -259,7 +307,11 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
     assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0]).await?, None);
 
     array
-        .async_store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])
+        .async_store_chunk(
+            &[0, 0],
+            &[1u8, 0, 0, 0, 0, 0, 0, 0, 0],
+            &Resources::default(),
+        )
         .await?;
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1]).await?, None);
@@ -280,10 +332,18 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
         .await?;
     array.async_store_metadata().await?;
 
-    array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
-    array.async_store_chunk(&[0, 1], &[2u8; 9]).await?;
     array
-        .async_store_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]), &[3u8; 18])
+        .async_store_chunk(&[0, 0], &[1u8; 9], &Resources::default())
+        .await?;
+    array
+        .async_store_chunk(&[0, 1], &[2u8; 9], &Resources::default())
+        .await?;
+    array
+        .async_store_chunks(
+            &ArraySubset::new_with_ranges(&[1..2, 0..2]),
+            &[3u8; 18],
+            &Resources::default(),
+        )
         .await?;
 
     array
@@ -291,6 +351,7 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
             &[0, 0],
             &ArraySubset::new_with_ranges(&[1..2, 1..3]),
             &[4u8, 5],
+            &Resources::default(),
         )
         .await?;
     array
@@ -298,32 +359,49 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
             &[0, 0],
             &ArraySubset::new_with_ranges(&[2..3, 0..1]),
             &[6u8],
+            &Resources::default(),
         )
         .await?;
     array
-        .async_store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &[7u8, 8])
+        .async_store_array_subset(
+            &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+            &[7u8, 8],
+            &Resources::default(),
+        )
         .await?;
     array
-        .async_store_array_subset(&ArraySubset::new_with_ranges(&[4..5, 4..5]), &[9u8])
+        .async_store_array_subset(
+            &ArraySubset::new_with_ranges(&[4..5, 4..5]),
+            &[9u8],
+            &Resources::default(),
+        )
         .await?;
     assert_eq!(
         array
             .async_readable()
-            .async_retrieve_chunk::<Vec<u8>>(&[1, 1])
+            .async_retrieve_chunk::<Vec<u8>>(&[1, 1], &Resources::default())
             .await?,
         [3, 3, 3, 3, 9, 3, 3, 3, 3]
     );
 
-    let encoder = array.async_partial_encoder(&[0, 0]).await?;
+    let encoder = array
+        .async_partial_encoder(&[0, 0], &Resources::default())
+        .await?;
     let _ = encoder.supports_partial_encode();
     encoder
         .partial_encode(
             &ArraySubset::new_with_ranges(&[0..1, 2..3]),
             &vec![10u8].into(),
             &CodecOptions::default(),
+            &Resources::default(),
         )
         .await?;
-    assert_eq!(array.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?[2], 10);
+    assert_eq!(
+        array
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?[2],
+        10
+    );
 
     let encoded = array.async_retrieve_encoded_chunk(&[0, 0]).await?.unwrap();
     unsafe {
@@ -332,20 +410,25 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
             .async_store_encoded_chunk(&[0, 1], encoded.into())
             .await?;
     }
-    let _ = array.async_compact_chunk(&[0, 0]).await?;
+    let _ = array
+        .async_compact_chunk(&[0, 0], &Resources::default())
+        .await?;
     array.async_erase_chunk(&[0, 1]).await?;
     assert!(
         array
-            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[0, 1])
+            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[0, 1], &Resources::default())
             .await?
             .is_none()
     );
     array
-        .async_erase_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]))
+        .async_erase_chunks(
+            &ArraySubset::new_with_ranges(&[1..2, 0..2]),
+            &Resources::default(),
+        )
         .await?;
     assert!(
         array
-            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0])
+            .async_retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0], &Resources::default())
             .await?
             .is_none()
     );
@@ -354,17 +437,21 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
 
 async fn exercise_variable_length_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     array
-        .async_store_chunk(&[0, 0], &["a", "bb", "ccc", "dddd"])
+        .async_store_chunk(&[0, 0], &["a", "bb", "ccc", "dddd"], &Resources::default())
         .await?;
     array
-        .async_store_chunk(&[0, 1], &["eeeee", "ffffff", "ggggggg", "hhhhhhhh"])
+        .async_store_chunk(
+            &[0, 1],
+            &["eeeee", "ffffff", "ggggggg", "hhhhhhhh"],
+            &Resources::default(),
+        )
         .await?;
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[
-                1..3,
-                1..3
-            ]))
+            .async_retrieve_array_subset::<Vec<String>>(
+                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                &Resources::default()
+            )
             .await?,
         ["dddd", "ggggggg", "", ""]
     );
@@ -372,14 +459,15 @@ async fn exercise_variable_length_ops<A: AsyncArrayUpdateOps>(array: &A) -> Test
         .async_store_array_subset(
             &ArraySubset::new_with_ranges(&[1..3, 1..3]),
             &["updated", "values", "across", "chunks"],
+            &Resources::default(),
         )
         .await?;
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[
-                1..3,
-                1..3
-            ]))
+            .async_retrieve_array_subset::<Vec<String>>(
+                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                &Resources::default()
+            )
             .await?,
         ["updated", "values", "across", "chunks"]
     );
@@ -388,17 +476,25 @@ async fn exercise_variable_length_ops<A: AsyncArrayUpdateOps>(array: &A) -> Test
 
 async fn exercise_optional_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     array
-        .async_store_chunk(&[0, 0], &[Some(1u8), None, Some(3), Some(4)])
+        .async_store_chunk(
+            &[0, 0],
+            &[Some(1u8), None, Some(3), Some(4)],
+            &Resources::default(),
+        )
         .await?;
     array
-        .async_store_chunk(&[0, 1], &[None, Some(6u8), None, Some(8)])
+        .async_store_chunk(
+            &[0, 1],
+            &[None, Some(6u8), None, Some(8)],
+            &Resources::default(),
+        )
         .await?;
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
-                0..2,
-                1..3
-            ]))
+            .async_retrieve_array_subset::<Vec<Option<u8>>>(
+                &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+                &Resources::default()
+            )
             .await?,
         [None, None, Some(4), None]
     );
@@ -406,14 +502,15 @@ async fn exercise_optional_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult 
         .async_store_array_subset(
             &ArraySubset::new_with_ranges(&[0..2, 1..3]),
             &[Some(9u8), None, None, Some(10)],
+            &Resources::default(),
         )
         .await?;
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
-                0..2,
-                1..3
-            ]))
+            .async_retrieve_array_subset::<Vec<Option<u8>>>(
+                &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+                &Resources::default()
+            )
             .await?,
         [Some(9), None, None, Some(10)]
     );
@@ -459,20 +556,24 @@ async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
     builder.array_to_bytes_codec(outer.build_arc());
     let array = builder.build(store, "/nested")?;
     array
-        .async_store_array_subset(&array.subset_all(), &(0..64).collect::<Vec<u16>>())
+        .async_store_array_subset(
+            &array.subset_all(),
+            &(0..64).collect::<Vec<u16>>(),
+            &Resources::default(),
+        )
         .await?;
 
     assert_eq!(array.subchunk_grids().len(), 2);
     assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
     assert_eq!(
         array
-            .async_retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])
+            .async_retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3], &Resources::default())
             .await?,
         [38, 39, 46, 47]
     );
     assert_eq!(
         array
-            .async_local_subchunk_grid_at_level(1, &[0, 0])
+            .async_local_subchunk_grid_at_level(1, &[0, 0], &Resources::default())
             .await?
             .unwrap()
             .grid_shape(),

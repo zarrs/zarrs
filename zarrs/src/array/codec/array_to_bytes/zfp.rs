@@ -242,6 +242,7 @@ fn zfp_decode(
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -312,10 +313,20 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded.clone(), chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded.clone(),
+                chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
@@ -339,14 +350,18 @@ mod tests {
             .unwrap();
         let options = CodecOptions::default();
 
-        let encoded = codec.encode(bytes, &shape, &options).unwrap();
+        let encoded = codec
+            .encode(bytes, &shape, &options, &Resources::default())
+            .unwrap();
         let mut bitstream = ZfpBitStream::from_bytes(&encoded).unwrap();
         let header = bitstream.read_header(ZfpHeaderMask::FULL).unwrap();
         let metadata = header.metadata.unwrap();
         assert_eq!(metadata.scalar_type, ZfpScalarType::F32);
         assert_eq!(metadata.dims, [3, 3, 3, 0]);
 
-        let decoded = codec.decode(encoded, &shape, &options).unwrap();
+        let decoded = codec
+            .decode(encoded, &shape, &options, &Resources::default())
+            .unwrap();
         assert_eq!(
             f32::from_array_bytes(&data_type, decoded).unwrap(),
             elements
@@ -519,7 +534,12 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ArraySubset::new_with_shape(vec![1, 2, 3]),
@@ -528,7 +548,12 @@ mod tests {
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zfp partial decoder does not hold bytes
 
@@ -537,7 +562,11 @@ mod tests {
             vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
 
             let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
@@ -578,13 +607,23 @@ mod tests {
 
         let max_encoded_size = codec.encoded_representation(&chunk_shape).unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
+            .async_partial_decoder(
+                input_handle,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
 
@@ -598,7 +637,11 @@ mod tests {
             vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .await
                 .unwrap();
 

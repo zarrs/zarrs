@@ -6,7 +6,7 @@ use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -36,11 +36,12 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_encode(&reshaped_indexer, bytes, options)
+            .partial_encode(&reshaped_indexer, bytes, options, resources)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -93,11 +94,12 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_encode(&reshaped_indexer, bytes, options)
+            .partial_encode(&reshaped_indexer, bytes, options, resources)
             .await
     }
 
@@ -113,9 +115,10 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.input_handle
-            .local_subchunk_grids(options)?
+            .local_subchunk_grids(options, resources)?
             .into_iter()
             .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
             .collect()
@@ -142,10 +145,12 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
-        self.input_handle.partial_decode(&reshaped_indexer, options)
+        self.input_handle
+            .partial_decode(&reshaped_indexer, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -163,9 +168,10 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.input_handle
-            .local_subchunk_grids(options)
+            .local_subchunk_grids(options, resources)
             .await?
             .into_iter()
             .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
@@ -196,11 +202,12 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_decode(&reshaped_indexer, options)
+            .partial_decode(&reshaped_indexer, options, resources)
             .await
     }
 

@@ -74,6 +74,7 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
@@ -110,13 +111,18 @@ mod tests {
             let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
 
             let encoded = codec
-                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+                .encode(
+                    CowBytes::Borrowed(&bytes),
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded = codec
                 .decode(
                     encoded.clone(),
                     &bytes_representation,
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
@@ -144,7 +150,11 @@ mod tests {
         let codec = Arc::new(Crc32cCodec::new_with_configuration(&codec_configuration));
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [ByteRange::FromStart(3, Some(2))];
         let input_handle = Arc::new(encoded);
@@ -153,6 +163,7 @@ mod tests {
                 input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // crc32c partial decoder does not hold bytes
@@ -160,6 +171,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .unwrap();
@@ -184,7 +196,11 @@ mod tests {
         let codec = Arc::new(Crc32cCodec::new_with_configuration(&codec_configuration));
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [ByteRange::FromStart(3, Some(2))];
         let input_handle = Arc::new(encoded);
@@ -193,6 +209,7 @@ mod tests {
                 input_handle,
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap();
@@ -200,6 +217,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap()

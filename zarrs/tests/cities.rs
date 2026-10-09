@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::array_to_bytes::vlen_utf8::VlenUtf8Codec;
@@ -62,12 +63,15 @@ fn cities_impl(
     array.store_metadata()?;
 
     let subset_all = array.subset_all();
-    array.store_array_subset(&subset_all, cities)?;
-    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
+    array.store_array_subset(&subset_all, cities, &Resources::default())?;
+    let cities_out =
+        array.retrieve_array_subset::<Vec<String>>(&subset_all, &Resources::default())?;
     assert_eq!(cities, cities_out);
 
-    let last_block: ArrayBytes =
-        array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
+    let last_block: ArrayBytes = array.retrieve_chunk(
+        &[(cities.len() as u64).div_ceil(chunk_size)],
+        &Resources::default(),
+    )?;
     let variable_length_bytes = last_block.into_variable()?;
     assert_eq!(variable_length_bytes.offsets().len() as u64, chunk_size + 1);
 
@@ -129,7 +133,8 @@ fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
+    let cities_out =
+        array.retrieve_array_subset::<Vec<String>>(&subset_all, &Resources::default())?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);
@@ -144,7 +149,8 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
+    let cities_out =
+        array.retrieve_array_subset::<Vec<String>>(&subset_all, &Resources::default())?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);

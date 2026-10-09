@@ -8,7 +8,7 @@ use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -182,8 +182,9 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        self.inner.encode(bytes, shape, options)
+        self.inner.encode(bytes, shape, options, resources)
     }
 
     fn decode<'a>(
@@ -191,8 +192,9 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.inner.decode(bytes, shape, options)
+        self.inner.decode(bytes, shape, options, resources)
     }
 
     fn partial_decoder(
@@ -200,10 +202,11 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         self.inner
             .clone()
-            .partial_decoder(input_handle, shape, options)
+            .partial_decoder(input_handle, shape, options, resources)
     }
 
     #[cfg(feature = "async")]
@@ -212,10 +215,11 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         self.inner
             .clone()
-            .async_partial_decoder(input_handle, shape, options)
+            .async_partial_decoder(input_handle, shape, options, resources)
             .await
     }
 

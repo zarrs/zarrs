@@ -100,15 +100,22 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_with_options(chunk_indices, chunk_data, self.codec_options())
-            .await
+        self.async_store_chunk_with_options(
+            chunk_indices,
+            chunk_data,
+            self.codec_options(),
+            resources,
+        )
+        .await
     }
 
     pub async fn async_store_chunks<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
@@ -119,8 +126,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.async_store_chunk_with_options(&chunk_indices, chunks_data, options)
-                    .await?;
+                self.async_store_chunk_with_options(
+                    &chunk_indices,
+                    chunks_data,
+                    options,
+                    resources,
+                )
+                .await?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -130,12 +142,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 // Calculate chunk/codec concurrency
                 let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
                 let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
-                    options,
-                    &codec_concurrency,
-                );
+                let (chunk_concurrent_limit, resources) =
+                    concurrency_chunks_and_codec(num_chunks, resources, &codec_concurrency);
+                let resources = &resources;
 
                 let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
@@ -147,8 +156,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                         )
                         .unwrap(); // FIXME: unwrap
                     async move {
-                        self.async_store_chunk_with_options(&chunk_indices, chunk_bytes, &options)
-                            .await
+                        self.async_store_chunk_with_options(
+                            &chunk_indices,
+                            chunk_bytes,
+                            options,
+                            resources,
+                        )
+                        .await
                     }
                 };
                 futures::stream::iter(&chunks.indices())
@@ -172,7 +186,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await?)
     }
 
-    pub async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
+    pub async fn async_erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
@@ -193,7 +211,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         };
         futures::stream::iter(chunks.iter_indices())
             .map(Ok)
-            .try_for_each_concurrent(None, erase_chunk)
+            .try_for_each_concurrent(Some(resources.concurrent_target()), erase_chunk)
             .await
     }
     /////////////////////////////////////////////////////////////////////////////
@@ -227,6 +245,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_data: T,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
@@ -240,7 +259,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         } else {
             let chunk_encoded = self
                 .codecs_bound()
-                .encode(chunk_bytes, &chunk_shape, options)
+                .encode(chunk_bytes, &chunk_shape, options, resources)
                 .map_err(ArrayError::CodecError)?;
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }

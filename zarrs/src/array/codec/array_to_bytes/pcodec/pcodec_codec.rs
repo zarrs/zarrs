@@ -15,7 +15,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError,
     CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -213,6 +213,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
@@ -244,6 +245,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         macro_rules! pcodec_decode {
             ( $t:ty ) => {

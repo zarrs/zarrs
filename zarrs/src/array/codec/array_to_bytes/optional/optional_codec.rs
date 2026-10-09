@@ -15,7 +15,7 @@ use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes,
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
@@ -394,6 +394,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let ArrayBytes::Optional(optional_bytes) = bytes else {
             return Err(CodecError::Other(
@@ -415,10 +416,12 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Encode mask
-        let encoded_mask =
-            self.mask_codecs
-                .clone()
-                .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
+        let encoded_mask = self.mask_codecs.clone().encode(
+            ArrayBytes::from(mask.as_ref()),
+            shape,
+            options,
+            resources,
+        )?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
@@ -430,7 +433,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
             self.data_codecs
                 .clone()
-                .encode(sparse_data, &data_shape, options)?
+                .encode(sparse_data, &data_shape, options, resources)?
         } else {
             CowBytes::from(vec![])
         };
@@ -450,6 +453,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
         if bytes.len() < 2 * size_of::<u64>() {
@@ -467,10 +471,10 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         let encoded_data = &bytes[16 + mask_len..];
 
         // Decode mask
-        let decoded_mask = self
-            .mask_codecs
-            .clone()
-            .decode(encoded_mask.into(), shape, options)?;
+        let decoded_mask =
+            self.mask_codecs
+                .clone()
+                .decode(encoded_mask.into(), shape, options, resources)?;
         let mask = decoded_mask.into_fixed()?.into_vec();
 
         // Decode data
@@ -485,7 +489,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
                 self.data_codecs
                     .clone()
-                    .decode(encoded_data.into(), &data_shape, options)?
+                    .decode(encoded_data.into(), &data_shape, options, resources)?
                     .into_owned()
             };
 
@@ -651,8 +655,18 @@ mod tests {
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
 
-        let encoded = codec.encode(input, &chunk_shape, &CodecOptions::default())?;
-        let decoded = codec.decode(encoded, &chunk_shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            input,
+            &chunk_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
+        let decoded = codec.decode(
+            encoded,
+            &chunk_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
 
         // The codec now returns optional ArrayBytes
         assert!(matches!(decoded, ArrayBytes::Optional(..)));
@@ -844,10 +858,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -909,10 +933,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -1002,10 +1036,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         // Verify the 3-level nested structure
@@ -1071,10 +1115,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure

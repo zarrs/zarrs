@@ -7,7 +7,7 @@ use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, CodecChainBound, CowBytes, DataType, FillValue};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
-    CodecError, CodecOptions,
+    CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -60,6 +60,7 @@ fn decode_vlen_bytes<'a>(
     fill_value: &FillValue,
     shape: &[NonZeroU64],
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
         let (data, index) = super::get_vlen_bytes_and_offsets(
@@ -69,6 +70,7 @@ fn decode_vlen_bytes<'a>(
             data_codecs,
             index_location,
             options,
+            resources,
         )?;
         Ok(ArrayBytes::Variable(extract_decoded_regions_vlen(
             &data, &index, indexer, shape,
@@ -101,9 +103,10 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all the input bytes (cached due to PartialDecoderCapability.partial_read == false)
-        let bytes = self.input_handle.decode(options)?;
+        let bytes = self.input_handle.decode(options, resources)?;
         decode_vlen_bytes(
             &self.index_codecs,
             &self.data_codecs,
@@ -114,6 +117,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
             &self.fill_value,
             &self.shape,
             options,
+            resources,
         )
     }
 
@@ -182,9 +186,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get all the input bytes (cached due to PartialDecoderCapability.partial_read == false)
-        let bytes = self.input_handle.decode(options).await?;
+        let bytes = self.input_handle.decode(options, resources).await?;
         decode_vlen_bytes(
             &self.index_codecs,
             &self.data_codecs,
@@ -195,6 +200,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
             &self.fill_value,
             &self.shape,
             options,
+            resources,
         )
     }
 

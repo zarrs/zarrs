@@ -13,7 +13,7 @@ use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -432,6 +432,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_encode(
             bytes,
@@ -447,6 +448,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_decode(
             bytes,

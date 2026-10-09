@@ -141,19 +141,24 @@
 //! //     ...
 //! // }
 //!
+//! // Operations take the resources (e.g. concurrency) they may use
+//! let resources = zarrs::array::Resources::default();
+//!
 //! // Perform some write operations on the chunks
 //! array.store_chunk(
 //!     &[0, 1], // chunk index
-//!     &[0.2f32, 0.3, 1.2, 1.3]
+//!     &[0.2f32, 0.3, 1.2, 1.3],
+//!     &resources,
 //! )?;
 //! array.store_array_subset(
 //!     &[1..3, 1..3], // array indices
-//!     &ndarray::array![[-1.1f32, -1.2], [-2.1, -2.2]]
+//!     &ndarray::array![[-1.1f32, -1.2], [-2.1, -2.2]],
+//!     &resources,
 //! )?;
 //! array.erase_chunk(&[1, 1])?;
 //!
 //! // Retrieve all array elements as an ndarray
-//! let array_all: ndarray::Array2<f32> = array.retrieve_array_subset(&[0..3, 0..4])?;
+//! let array_all: ndarray::Array2<f32> = array.retrieve_array_subset(&[0..3, 0..4], &resources)?;
 //! println!("{array_all:4}");
 //! // [[ NaN,  NaN,  0.2,  0.3],
 //! //  [ NaN, -1.1, -1.2,  1.3],
@@ -162,6 +167,7 @@
 //! // Retrieve a chunk directly
 //! let array_chunk: ndarray::Array2<f32> = array.retrieve_chunk(
 //!     &[0, 1], // chunk index
+//!     &resources,
 //! )?;
 //! println!("{array_chunk:4}");
 //! // [[  0.2,  0.3],
@@ -171,6 +177,7 @@
 // TODO: mention using a partial decoder cache
 //! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk(
 //!     &[0, 3], // subchunk index
+//!     &resources,
 //! )?;
 //! println!("{array_subchunk:4}");
 //! // [[ 0.3],

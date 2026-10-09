@@ -19,7 +19,7 @@ use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
     CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, data_type,
+    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
@@ -130,6 +130,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -139,6 +140,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }

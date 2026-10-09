@@ -3,6 +3,11 @@
 //! These traits decouple the array operations from the [`Array`] type, so that they can also be
 //! implemented by wrappers such as [`ArrayCached`].
 //!
+//! # Resources
+//!
+//! Operations that encode, decode, or access multiple chunks take a [`Resources`] argument.
+//! It sets the resources (e.g. concurrency) that the operation may use, and is chosen per call.
+//!
 //! # Codec and metadata options
 //!
 //! Operations do not take options as arguments. They use the options stored on the array:
@@ -19,15 +24,19 @@
 //!
 //! ```rust,no_run
 //! # use std::sync::Arc;
-//! # use zarrs::array::{Array, ArrayOps, ArrayReadOps, CodecOptions};
+//! # use zarrs::array::{Array, ArrayOps, ArrayReadOps, CodecOptions, Resources};
 //! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 //! # let array = Array::open(store, "/group/array")?;
-//! // Default options
-//! let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0])?;
+//! // Default options and resources
+//! let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
+//!
+//! // Limited resources
+//! let resources = Resources::default().with_concurrent_target(1);
+//! let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0], &resources)?;
 //!
 //! // Overridden options. Derive once and reuse, rather than per operation.
-//! let tuned = array.with_codec_options(CodecOptions::default().with_concurrent_target(1));
-//! let chunk: Vec<f32> = tuned.retrieve_chunk(&[0, 0])?;
+//! let tuned = array.with_codec_options(CodecOptions::default().with_validate_checksums(false));
+//! let chunk: Vec<f32> = tuned.retrieve_chunk(&[0, 0], &resources)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -57,7 +66,7 @@ use super::{
     ChunkGridDecodedRef, ChunkKeyEncoding, ChunkShape, ChunkShapeTraits, CodecChain,
     CodecChainBound, CodecCreateError, CodecOptions, CodecSpecificOptions, DataType, DimensionName,
     FillValue, FromArrayBytes, IncompatibleDimensionalityError, Indexer, IntoArrayBytes, NodePath,
-    StorageTransformerChain,
+    Resources, StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
 use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};

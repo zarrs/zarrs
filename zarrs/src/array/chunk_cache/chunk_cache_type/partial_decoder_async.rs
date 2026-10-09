@@ -5,7 +5,8 @@ use crate::array::chunk_cache::{
     AsyncChunkCache, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder, SealedAsync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, chunk_shape_to_array_shape,
+    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, Resources,
+    chunk_shape_to_array_shape,
 };
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_storage::AsyncReadableStorageTraits;
@@ -24,6 +25,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -33,7 +35,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         cache
             .try_get_or_insert_with(chunk_indices.to_vec(), async move {
                 array
-                    .async_partial_decoder_with_options(chunk_indices, options)
+                    .async_partial_decoder_with_options(chunk_indices, options, resources)
                     .await
             })
             .await
@@ -45,17 +47,19 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
-        let decoder = Self::async_partial_decoder(cache, array, chunk_indices, options).await?;
+        let decoder =
+            Self::async_partial_decoder(cache, array, chunk_indices, options, resources).await?;
         if decoder.exists().await? {
             Ok(Some(
                 decoder
-                    .partial_decode(&ArraySubset::new_with_shape(shape), options)
+                    .partial_decode(&ArraySubset::new_with_shape(shape), options, resources)
                     .await?
                     .into_owned()
                     .into(),
@@ -71,15 +75,16 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         Ok(
-            Self::async_partial_decoder(cache, array, chunk_indices, options)
+            Self::async_partial_decoder(cache, array, chunk_indices, options, resources)
                 .await?
-                .partial_decode(indexer, options)
+                .partial_decode(indexer, options, resources)
                 .await?
                 .into_owned()
                 .into(),

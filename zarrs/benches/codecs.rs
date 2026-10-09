@@ -1,7 +1,7 @@
 //! Benchmark various codecs.
 #![allow(missing_docs)]
 
-use zarrs::array::{CodecSpecificOptions, CowBytes};
+use zarrs::array::{CodecSpecificOptions, CowBytes, Resources};
 
 use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
@@ -42,7 +42,12 @@ fn codec_bytes(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode_decode", num_elements), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &shape, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -69,13 +74,21 @@ fn codec_blosc(c: &mut Criterion) {
 
         let data_decoded: Vec<u8> = (0..size3).map(|i| i as u8).collect();
         let data_encoded = codec
-            .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&data_decoded),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         group.throughput(Throughput::Bytes(size3));
         group.bench_function(BenchmarkId::new("encode", size3), |b| {
             b.iter(|| {
                 codec
-                    .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+                    .encode(
+                        CowBytes::Borrowed(&data_decoded),
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -86,6 +99,7 @@ fn codec_blosc(c: &mut Criterion) {
                         CowBytes::Borrowed(&data_encoded),
                         &rep,
                         &CodecOptions::default(),
+                        &Resources::default(),
                     )
                     .unwrap()
             });

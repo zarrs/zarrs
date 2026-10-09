@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 use zarrs::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGridConfiguration};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
@@ -13,10 +14,13 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::node::Node;
     use zarrs::storage::store;
 
+    let resources = Resources::default();
+
     // Create a store
     // let path = tempfile::TempDir::new()?;
     // let mut store: ReadableWritableListableStorage =
     //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
+
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
@@ -90,7 +94,7 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                     .collect::<Vec<_>>(),
                 i as f32,
             );
-            array.store_chunk(&chunk_indices, chunk_array)
+            array.store_chunk(&chunk_indices, chunk_array, &resources)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices,
@@ -110,32 +114,34 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             vec![3, 3],
             vec![0.1f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         )?,
+        &resources,
     )?;
 
     // Store elements directly, in this case set the 7th column to 123.0
-    array.store_array_subset(&[0..8, 6..7], &[123.0f32; 8])?;
+    array.store_array_subset(&[0..8, 6..7], &[123.0f32; 8], &resources)?;
 
     // Store elements directly in a chunk, in this case set the last row of the bottom right chunk
     array.store_partial_chunk(
         // chunk indices
-        &[3, 1],
-        // subset within chunk
+        &[3, 1], // subset within chunk
         &[1..2, 0..4],
         &[-4.0f32; 4],
+        &resources,
     )?;
 
     // Read the whole array
-    let data_all: ndarray::ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
+    let data_all: ndarray::ArrayD<f32> =
+        array.retrieve_array_subset(&array.subset_all(), &resources)?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a chunk back from the store
     let chunk_indices = vec![1, 0];
-    let data_chunk: ndarray::ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
+    let data_chunk: ndarray::ArrayD<f32> = array.retrieve_chunk(&chunk_indices, &resources)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
+    let data_4x2: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset_4x2, &resources)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     // Show the hierarchy

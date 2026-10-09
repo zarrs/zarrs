@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::codec::BytesCodec;
 use zarrs::array::{
@@ -20,9 +21,19 @@ fn codec_chain_bound_context_and_runtime() -> Result<(), Box<dyn std::error::Err
 
     let shape = array.chunk_shape(&[0])?;
     let decoded = ArrayBytes::from(vec![1, 2, 3, 4]);
-    let encoded = codecs.encode(decoded.clone(), &shape, &CodecOptions::default())?;
+    let encoded = codecs.encode(
+        decoded.clone(),
+        &shape,
+        &CodecOptions::default(),
+        &Resources::default(),
+    )?;
     assert_eq!(
-        codecs.decode(encoded, &shape, &CodecOptions::default())?,
+        codecs.decode(
+            encoded,
+            &shape,
+            &CodecOptions::default(),
+            &Resources::default()
+        )?,
         decoded
     );
     codecs.encoded_representation(&shape)?;

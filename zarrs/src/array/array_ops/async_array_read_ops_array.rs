@@ -27,8 +27,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_with_options(chunk_indices, self.codec_options())
+        self.async_retrieve_chunk_with_options(chunk_indices, self.codec_options(), resources)
             .await
     }
 
@@ -36,11 +37,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_into_with_options(
             chunk_indices,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -48,15 +51,22 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_partial_chunk_with_options(chunk_indices, indexer, self.codec_options())
-            .await
+        self.async_retrieve_partial_chunk_with_options(
+            chunk_indices,
+            indexer,
+            self.codec_options(),
+            resources,
+        )
+        .await
     }
 
     pub async fn async_retrieve_partial_chunk_into(
@@ -64,12 +74,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -77,6 +89,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
         if array_subset.dimensionality() != self.dimensionality() {
@@ -111,23 +124,23 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
                 if chunk_subset == array_subset {
-                    self.async_retrieve_chunk(chunk_indices).await
+                    self.async_retrieve_chunk(chunk_indices, resources).await
                 } else {
                     let array_subset_in_chunk_subset =
                         array_subset.relative_to(chunk_subset.start())?;
-                    self.async_retrieve_partial_chunk(chunk_indices, &array_subset_in_chunk_subset)
-                        .await
+                    self.async_retrieve_partial_chunk(
+                        chunk_indices,
+                        &array_subset_in_chunk_subset,
+                        resources,
+                    )
+                    .await
                 }
             }
             _ => {
                 let chunk_shape = self.chunk_shape(chunks.start())?;
                 let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
-                    options,
-                    &codec_concurrency,
-                );
+                let (chunk_concurrent_limit, resources) =
+                    concurrency_chunks_and_codec(num_chunks, resources, &codec_concurrency);
 
                 let bytes = if self.data_type().is_fixed() {
                     self.async_retrieve_multi_chunk_fixed(
@@ -135,7 +148,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                         &chunks,
                         self.data_type(),
                         chunk_concurrent_limit,
-                        &options,
+                        options,
+                        &resources,
                     )
                     .await?
                 } else {
@@ -144,7 +158,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                         &chunks,
                         self.data_type(),
                         chunk_concurrent_limit,
-                        &options,
+                        options,
+                        &resources,
                     )
                     .await?
                 };
@@ -177,19 +192,24 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<T>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_with_options(chunk_indices, self.codec_options())
-            .await
+        self.async_retrieve_chunk_if_exists_with_options(
+            chunk_indices,
+            self.codec_options(),
+            resources,
+        )
+        .await
     }
 
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<Vec<Option<Bytes>>, ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
-        let options = self.codec_options();
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -209,7 +229,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
 
         let futures = chunks.iter_indices().map(retrieve_encoded_chunk);
         futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
+            .buffered(resources.concurrent_target())
             .try_collect()
             .await
     }
@@ -217,6 +237,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -224,11 +245,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         level: usize,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
@@ -236,12 +259,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
             self,
@@ -249,6 +274,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             array_subset,
             output_target,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -256,20 +282,23 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_partial_decoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        self.async_partial_decoder_with_options(chunk_indices, self.codec_options())
+        self.async_partial_decoder_with_options(chunk_indices, self.codec_options(), resources)
             .await
     }
 
     pub async fn async_local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError>;
 
     pub async fn async_local_subchunk_grid_at_level(
         &self,
         level: usize,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError>;
 }
 
@@ -278,9 +307,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let chunk = self
-            .async_retrieve_chunk_if_exists_with_options::<T>(chunk_indices, options)
+            .async_retrieve_chunk_if_exists_with_options::<T>(chunk_indices, options, resources)
             .await?;
         super::chunk_or_fill_value(self, chunk_indices, chunk)
     }
@@ -290,6 +320,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         if output_target.num_elements() != chunk_shape.num_elements_u64() {
@@ -317,6 +348,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     &chunk_shape,
                     output_target,
                     options,
+                    resources,
                 )
                 .map_err(ArrayError::CodecError)
         } else {
@@ -330,6 +362,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
@@ -342,7 +375,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             }
             if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
                 return self
-                    .async_retrieve_chunk_with_options(chunk_indices, options)
+                    .async_retrieve_chunk_with_options(chunk_indices, options, resources)
                     .await;
             }
         }
@@ -355,9 +388,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         let bytes = self
             .codecs_bound()
-            .async_partial_decoder(input_handle, &chunk_shape, options)
+            .async_partial_decoder(input_handle, &chunk_shape, options, resources)
             .await?
-            .partial_decode(indexer, options)
+            .partial_decode(indexer, options, resources)
             .await?
             .into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
@@ -370,6 +403,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
@@ -382,7 +416,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             }
             if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
                 return self
-                    .async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
+                    .async_retrieve_chunk_into_with_options(
+                        chunk_indices,
+                        output_target,
+                        options,
+                        resources,
+                    )
                     .await;
             }
         }
@@ -394,9 +433,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         self.codecs_bound()
-            .async_partial_decoder(input_handle, &chunk_shape, options)
+            .async_partial_decoder(input_handle, &chunk_shape, options, resources)
             .await?
-            .partial_decode_into(indexer, output_target, options)
+            .partial_decode_into(indexer, output_target, options, resources)
             .await?;
         Ok(())
     }
@@ -405,6 +444,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<T>, ArrayError> {
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
@@ -424,7 +464,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
                 .codecs_bound()
-                .decode(CowBytes::Shared(chunk_encoded), &chunk_shape, options)
+                .decode(
+                    CowBytes::Shared(chunk_encoded),
+                    &chunk_shape,
+                    options,
+                    resources,
+                )
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
             Ok(Some(T::from_array_bytes(
@@ -441,6 +486,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -450,7 +496,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self
             .codecs_bound()
-            .async_partial_decoder(input_handle, &self.chunk_shape(chunk_indices)?, options)
+            .async_partial_decoder(
+                input_handle,
+                &self.chunk_shape(chunk_indices)?,
+                options,
+                resources,
+            )
             .await?)
     }
     /// Helper method to retrieve multiple chunks with variable-length data types (async).
@@ -462,6 +513,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let array_subset_start = array_subset.start();
         let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
@@ -474,6 +526,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                         options,
+                        resources,
                     )
                     .await?,
                     chunk_subset_overlap.relative_to(array_subset_start)?,
@@ -501,6 +554,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let data_type_size = data_type
             .fixed_size()
@@ -564,6 +618,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                         target,
                         options,
+                        resources,
                     )
                     .await?;
                     Ok::<_, ArrayError>(())
@@ -599,9 +654,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
-            .await
+        self.async_retrieve_chunk_into_with_options(
+            chunk_indices,
+            output_target,
+            options,
+            resources,
+        )
+        .await
     }
 
     async fn retrieve_partial_chunk_into(
@@ -610,12 +671,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
             chunk_indices,
             indexer,
             output_target,
             options,
+            resources,
         )
         .await
     }

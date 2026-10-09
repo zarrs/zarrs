@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use zarrs::array::CowBytes;
+use zarrs::array::{CowBytes, Resources};
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
@@ -278,6 +278,7 @@ zarrs_data_type::register_data_type_extension_codec!(
 );
 
 fn main() {
+    let resources = Resources::default();
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";
     let fill_value = CustomDataTypeFixedSizeElement { x: 1, y: 2.3 };
@@ -308,10 +309,11 @@ fn main() {
         CustomDataTypeFixedSizeElement { x: 3, y: 4.5 },
         CustomDataTypeFixedSizeElement { x: 6, y: 7.8 },
     ];
-    array.store_chunk(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data, &resources).unwrap();
 
-    let data: Vec<CustomDataTypeFixedSizeElement> =
-        array.retrieve_array_subset(&array.subset_all()).unwrap();
+    let data: Vec<CustomDataTypeFixedSizeElement> = array
+        .retrieve_array_subset(&array.subset_all(), &resources)
+        .unwrap();
 
     assert_eq!(data[0], CustomDataTypeFixedSizeElement { x: 3, y: 4.5 });
     assert_eq!(data[1], CustomDataTypeFixedSizeElement { x: 6, y: 7.8 });

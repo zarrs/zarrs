@@ -10,7 +10,7 @@ use zarrs_storage::{
     StoreKey,
 };
 
-use crate::{CodecError, CodecOptions, CowBytes};
+use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
@@ -35,9 +35,10 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &self,
         decoded_region: ByteRange,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'_>>, CodecError> {
         Ok(self
-            .partial_decode_many(Box::new([decoded_region].into_iter()), options)?
+            .partial_decode_many(Box::new([decoded_region].into_iter()), options, resources)?
             .map(|mut v| v.pop().expect("single byte range")))
     }
 
@@ -51,6 +52,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError>;
 
     /// Decode all bytes.
@@ -59,8 +61,12 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails.
-    fn decode(&self, options: &CodecOptions) -> Result<Option<CowBytes<'_>>, CodecError> {
-        self.partial_decode(ByteRange::FromStart(0, None), options)
+    fn decode(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<CowBytes<'_>>, CodecError> {
+        self.partial_decode(ByteRange::FromStart(0, None), options, resources)
     }
 
     /// Returns whether this decoder supports partial decoding.
@@ -89,8 +95,9 @@ pub trait BytesPartialEncoderTraits:
         offset: u64,
         bytes: CowBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        self.partial_encode_many(Box::new([(offset, bytes)].into_iter()), options)
+        self.partial_encode_many(Box::new([(offset, bytes)].into_iter()), options, resources)
     }
 
     /// Partially encode a chunk from an [`OffsetBytesIterator`].
@@ -101,6 +108,7 @@ pub trait BytesPartialEncoderTraits:
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError>;
 
     /// Returns whether this encoder supports partial encoding.
@@ -123,6 +131,7 @@ impl BytesPartialDecoderTraits for CowBytes<'static> {
         &self,
         decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
@@ -150,6 +159,7 @@ impl BytesPartialDecoderTraits for Vec<u8> {
         &self,
         decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
@@ -177,6 +187,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         if let Some(input) = self.lock().unwrap().as_ref() {
             let size = input.len() as u64;
@@ -211,6 +222,7 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<(), CodecError> {
         let mut v = self.lock().unwrap();
         let mut output = v.as_ref().cloned().unwrap_or_default();
@@ -244,6 +256,7 @@ impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (T
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let results = self.0.get_partial_many(&self.1, decoded_regions)?;
         if let Some(results) = results {
@@ -274,6 +287,7 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<(), CodecError> {
         let offset_values = offset_values
             .into_iter()

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -122,8 +122,10 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
     }
 }
 
@@ -147,8 +149,11 @@ where
         &self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let encoded = self.input_output_handle.partial_decode(indexer, options)?;
+        let encoded = self
+            .input_output_handle
+            .partial_decode(indexer, options, resources)?;
         encoded.validate(indexer.len(), &self.encoded_data_type)?;
         self.decode(encoded)
     }
@@ -171,11 +176,12 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         bytes.validate(indexer.len(), &self.decoded_data_type)?;
         let encoded = self.encode(bytes.clone())?;
         self.input_output_handle
-            .partial_encode(indexer, &encoded, options)
+            .partial_encode(indexer, &encoded, options, resources)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -193,8 +199,11 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
+            .await
     }
 }
 
@@ -221,10 +230,11 @@ where
         &'a self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let encoded = self
             .input_output_handle
-            .partial_decode(indexer, options)
+            .partial_decode(indexer, options, resources)
             .await?;
         encoded.validate(indexer.len(), &self.encoded_data_type)?;
         self.decode(encoded)
@@ -251,11 +261,12 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         bytes.validate(indexer.len(), &self.decoded_data_type)?;
         let encoded = self.encode(bytes.clone())?;
         self.input_output_handle
-            .partial_encode(indexer, &encoded, options)
+            .partial_encode(indexer, &encoded, options, resources)
             .await
     }
 

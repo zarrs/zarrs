@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use ndarray::{Array2, ArrayD, array};
+use zarrs::array::Resources;
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
@@ -10,6 +11,8 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::{ArrayBytes, data_type};
     use zarrs::storage::store;
 
+    let resources = Resources::default();
+
     // Create a store
     // let path = tempfile::TempDir::new()?;
     // let mut store: ReadableWritableListableStorage =
@@ -17,6 +20,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableWritableListableStorage = Arc::new(
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
+
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
@@ -74,24 +78,26 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     array.store_chunk(
         &[0, 0],
         ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
+        &resources,
     )?;
     array.store_chunk(
         &[0, 1],
         ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
+        &resources,
     )?;
     let subset_all = array.subset_all();
-    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_chunk [0, 0] and [0, 1]:\n{data_all}\n");
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     let ndarray_subset: Array2<&str> = array![["!", "@@"], ["###", "$$$$"]];
-    array.store_array_subset(&[1..3, 1..3], ndarray_subset)?;
-    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
+    array.store_array_subset(&[1..3, 1..3], ndarray_subset, &resources)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all, &resources)?;
     println!("store_array_subset [1..3, 1..3]:\nndarray::ArrayD<String>\n{data_all}");
 
     // Retrieve bytes directly, convert into a single string allocation, create a &str ndarray
     // TODO: Add a convenience function for this?
-    let data_all: ArrayBytes = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayBytes = array.retrieve_array_subset(&subset_all, &resources)?;
     let (bytes, offsets) = data_all.into_variable()?.into_parts();
     let string = String::from_utf8(bytes.into_vec())?;
     let elements = offsets

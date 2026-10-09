@@ -7,7 +7,7 @@ use super::{
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 
@@ -83,8 +83,9 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
-        let encoded_value = self.input_handle.decode(options)?;
+        let encoded_value = self.input_handle.decode(options, resources)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };
@@ -126,8 +127,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
-        let encoded_value = self.input_handle.decode(options).await?;
+        let encoded_value = self.input_handle.decode(options, resources).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };

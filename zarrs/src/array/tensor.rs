@@ -110,6 +110,7 @@ impl<'a> Tensor<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use zarrs_storage::store::MemoryStore;
 
     use crate::array::{ArrayBuilder, Tensor, data_type};
@@ -132,9 +133,13 @@ mod tests {
             .unwrap();
 
         let tensor = Tensor::new(&bytes[..], data_type::float32(), vec![2, 2]);
-        array.store_chunk(&[0, 0], tensor).unwrap();
+        array
+            .store_chunk(&[0, 0], tensor, &Resources::default())
+            .unwrap();
 
-        let retrieved: Vec<f32> = array.retrieve_chunk(&[0, 0]).unwrap();
+        let retrieved: Vec<f32> = array
+            .retrieve_chunk(&[0, 0], &Resources::default())
+            .unwrap();
         assert_eq!(retrieved, elements);
     }
 
