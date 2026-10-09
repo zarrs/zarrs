@@ -23,6 +23,7 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::store_chunks`].
@@ -31,6 +32,7 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::erase_chunk`].
@@ -39,7 +41,11 @@ pub trait AsyncArrayWriteOps: ArrayOps {
 
     /// Async variant of [`ArrayWriteOps::erase_chunks`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError>;
+    async fn async_erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayWriteOps::store_encoded_chunk`].
     ///

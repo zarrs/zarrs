@@ -3,6 +3,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
+use zarrs::array::Resources;
 
 use itertools::Itertools;
 use zarrs::array::codec::{BytesCodec, ShardingCodecBuilder, SqueezeCodec, VlenCodec};
@@ -264,6 +265,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
                 shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .into_vec(),
@@ -272,13 +274,23 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     let partial_decoder = if _async {
         bound_codec
             .clone()
-            .async_partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
+            .async_partial_decoder(
+                encoded_chunk.clone(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap()
     } else {
         bound_codec
             .clone()
-            .partial_decoder(encoded_chunk, shape, &CodecOptions::default())
+            .partial_decoder(
+                encoded_chunk,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
     };
 
@@ -286,10 +298,10 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
         &data_type,
         if _async {
             partial_decoder
-                .partial_decode(indexer, &CodecOptions::default())
+                .partial_decode(indexer, &CodecOptions::default(), &Resources::default())
                 .await
         } else {
-            partial_decoder.partial_decode(indexer, &CodecOptions::default())
+            partial_decoder.partial_decode(indexer, &CodecOptions::default(), &Resources::default())
         }
         .unwrap(),
     )
@@ -319,6 +331,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
                 shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .into_vec(),
@@ -328,7 +341,12 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
     let partial_encoder = bound_codec
         .clone()
-        .partial_encoder(output.clone(), shape, &CodecOptions::default())
+        .partial_encoder(
+            output.clone(),
+            shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
         .unwrap();
     assert_eq!(
         partial_encoder.supports_partial_encode(),
@@ -344,6 +362,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
             indexer,
             &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
             &CodecOptions::default(),
+            &Resources::default(),
         )
         .unwrap();
 
@@ -351,7 +370,12 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     T::from_array_bytes(
         &data_type,
         bound_codec
-            .decode(output.into(), shape, &CodecOptions::default())
+            .decode(
+                output.into(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap(),
     )
     .unwrap()

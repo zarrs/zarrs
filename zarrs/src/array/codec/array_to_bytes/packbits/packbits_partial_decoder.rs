@@ -13,7 +13,7 @@ use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
-    CodecError, CodecOptions,
+    CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -36,6 +36,7 @@ use zarrs_storage::byte_range::ByteRange;
     last_bit: u64,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
+    resources: &Resources,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
@@ -48,6 +49,7 @@ fn partial_decode<'a>(
     last_bit: u64,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let PackBitsCodecComponents {
         component_size_bits,
@@ -86,13 +88,14 @@ fn partial_decode<'a>(
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
         input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
             .await
     } else {
-        input_handle.partial_decode_many(Box::new(byte_ranges), options)
+        input_handle.partial_decode_many(Box::new(byte_ranges), options, resources)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode_many(Box::new(byte_ranges), options)?;
+    let encoded_bytes =
+        input_handle.partial_decode_many(Box::new(byte_ranges), options, resources)?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {
@@ -205,6 +208,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
             &self.input_handle,
@@ -217,6 +221,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
             self.last_bit,
             indexer,
             options,
+            resources,
         )
     }
 
@@ -288,6 +293,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         partial_decode_async(
             &self.input_handle,
@@ -300,6 +306,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
             self.last_bit,
             indexer,
             options,
+            resources,
         )
         .await
     }

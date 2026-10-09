@@ -7,7 +7,7 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -100,6 +100,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
         compressor.include_checksum(self.checksum)?;
@@ -114,6 +115,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {

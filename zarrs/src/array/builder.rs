@@ -637,6 +637,7 @@ impl ArrayBuilder {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
 
     use zarrs_data_type::FillValue;
@@ -1122,11 +1123,15 @@ mod tests {
             .store_array_subset(
                 &ArraySubset::new_with_shape(SHAPE.to_vec()),
                 data.as_slice(),
+                &Resources::default(),
             )
             .unwrap();
 
         let read_data = array
-            .retrieve_array_subset::<Vec<f64>>(&ArraySubset::new_with_shape(SHAPE.to_vec()))
+            .retrieve_array_subset::<Vec<f64>>(
+                &ArraySubset::new_with_shape(SHAPE.to_vec()),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(data, read_data);
     }

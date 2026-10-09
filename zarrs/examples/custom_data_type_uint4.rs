@@ -4,7 +4,7 @@
 
 use std::any::Any;
 use std::sync::Arc;
-use zarrs::array::CowBytes;
+use zarrs::array::{CowBytes, Resources};
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -192,6 +192,7 @@ impl ElementOwned for CustomDataTypeUInt4Element {
 }
 
 fn main() {
+    let resources = Resources::default();
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";
     let fill_value = CustomDataTypeUInt4Element::try_from(15).unwrap();
@@ -226,10 +227,11 @@ fn main() {
         CustomDataTypeUInt4Element::try_from(4).unwrap(),
         CustomDataTypeUInt4Element::try_from(5).unwrap(),
     ];
-    array.store_chunk(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data, &resources).unwrap();
 
-    let data: Vec<CustomDataTypeUInt4Element> =
-        array.retrieve_array_subset(&array.subset_all()).unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> = array
+        .retrieve_array_subset(&array.subset_all(), &resources)
+        .unwrap();
 
     for f in &data {
         println!("uint4: {:08b} u8: {}", f.into_u8(), f.into_u8());
@@ -242,7 +244,9 @@ fn main() {
     assert_eq!(data[4], CustomDataTypeUInt4Element::try_from(5).unwrap());
     assert_eq!(data[5], CustomDataTypeUInt4Element::try_from(15).unwrap());
 
-    let data: Vec<CustomDataTypeUInt4Element> = array.retrieve_array_subset(&[1..3, 0..1]).unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> = array
+        .retrieve_array_subset(&[1..3, 0..1], &resources)
+        .unwrap();
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(2).unwrap());
     assert_eq!(data[1], CustomDataTypeUInt4Element::try_from(3).unwrap());
 }

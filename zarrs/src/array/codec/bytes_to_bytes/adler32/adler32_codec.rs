@@ -17,7 +17,7 @@ use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
     BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
@@ -100,6 +100,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut adler = simd_adler32::Adler32::new();
         adler.write(&decoded_value);
@@ -130,6 +131,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
@@ -171,6 +173,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
         match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => Ok(Arc::new(
@@ -188,6 +191,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
         match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => Ok(Arc::new(

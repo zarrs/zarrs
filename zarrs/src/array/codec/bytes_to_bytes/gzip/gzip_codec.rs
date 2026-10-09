@@ -10,7 +10,7 @@ use super::{
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -96,6 +96,7 @@ impl BytesToBytesCodecTraits for GzipCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder = GzEncoder::new(
             Cursor::new(decoded_value),
@@ -111,6 +112,7 @@ impl BytesToBytesCodecTraits for GzipCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = GzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();

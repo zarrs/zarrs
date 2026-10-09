@@ -37,6 +37,7 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Encode `chunks_data` and store at the chunks with indices represented by the `chunks` array subset.
@@ -53,6 +54,7 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Erase the chunk at `chunk_indices`.
@@ -67,7 +69,7 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if `chunks` is out-of-bounds of the chunk grid or has an incompatible dimensionality, the chunk key cannot be encoded, or there is an underlying store error.
-    fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError>;
+    fn erase_chunks(&self, chunks: &dyn Indexer, resources: &Resources) -> Result<(), ArrayError>;
 
     /// Store `encoded_chunk_bytes` at `chunk_indices`.
     ///

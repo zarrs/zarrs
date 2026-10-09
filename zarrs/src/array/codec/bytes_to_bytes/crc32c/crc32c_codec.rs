@@ -17,7 +17,7 @@ use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
     BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -89,6 +89,7 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let encoded_value = match self.0 {
@@ -116,6 +117,7 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let data_len = encoded_value.len() - CHECKSUM_SIZE;
@@ -156,6 +158,7 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
         match self.0 {
             Crc32cCodecConfigurationLocation::End => Ok(Arc::new(StripSuffixPartialDecoder::new(
@@ -174,6 +177,7 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
         match self.0 {
             Crc32cCodecConfigurationLocation::End => Ok(Arc::new(

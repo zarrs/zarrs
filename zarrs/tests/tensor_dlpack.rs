@@ -3,7 +3,7 @@
 
 use dlpark::ffi::{DLDataType, DLDataTypeCode};
 use dlpark::{DlpackFlags, versioned};
-use zarrs::array::{ArrayBuilder, ArraySubset, Tensor, TensorError, data_type};
+use zarrs::array::{ArrayBuilder, ArraySubset, Resources, Tensor, TensorError, data_type};
 use zarrs_storage::store::MemoryStore;
 
 fn test_tensor() -> Tensor<'static> {
@@ -12,10 +12,13 @@ fn test_tensor() -> Tensor<'static> {
         .build(store.into(), "/")
         .unwrap();
     array
-        .store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])
+        .store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0], &Resources::default())
         .unwrap();
     array
-        .retrieve_chunks(&ArraySubset::new_with_shape(vec![1, 2]))
+        .retrieve_chunks(
+            &ArraySubset::new_with_shape(vec![1, 2]),
+            &Resources::default(),
+        )
         .unwrap()
 }
 

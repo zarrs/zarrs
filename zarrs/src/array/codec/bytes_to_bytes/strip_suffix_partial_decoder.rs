@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
@@ -39,10 +39,13 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
-                let bytes = self.input_handle.partial_decode(decoded_region, options)?;
+                let bytes = self
+                    .input_handle
+                    .partial_decode(decoded_region, options, resources)?;
                 Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
@@ -101,6 +104,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
@@ -108,13 +112,13 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             match decoded_region {
                 ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
                     self.input_handle
-                        .partial_decode(decoded_region, options)
+                        .partial_decode(decoded_region, options, resources)
                         .await?,
                 ),
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode(decoded_region, options)
+                        .partial_decode(decoded_region, options, resources)
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
@@ -126,7 +130,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             }
         });
         let results: Vec<Option<_>> = futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
+            .buffered(resources.concurrent_target())
             .try_collect()
             .await?;
         let results: Option<Vec<_>> = results.into_iter().collect();

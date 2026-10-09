@@ -26,7 +26,7 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -218,6 +218,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
@@ -240,7 +241,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                     &CodecSpecificOptions::default(),
                 )
                 .map_err(|err| CodecError::Other(err.to_string()))?
-                .encode(bytes.clone(), shape, options);
+                .encode(bytes.clone(), shape, options, resources);
         }
 
         // Get the component and element size in bits
@@ -304,6 +305,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
@@ -323,7 +325,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                     &CodecSpecificOptions::default(),
                 )
                 .map_err(|err| CodecError::Other(err.to_string()))?
-                .decode(bytes.clone(), shape, options);
+                .decode(bytes.clone(), shape, options, resources);
         }
 
         // Get the component and element size in bits
@@ -412,6 +414,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let component_size_bits = self.components.component_size_bits;
         let first_bit = self.first_bit;
@@ -450,6 +453,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let component_size_bits = self.components.component_size_bits;
         let first_bit = self.first_bit;

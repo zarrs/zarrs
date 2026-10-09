@@ -38,7 +38,7 @@ use std::sync::Arc;
 use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
-    data_type,
+    Resources, data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_codec::{
@@ -930,14 +930,15 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
 
     // Store data using ArrayBytes API (handles fixed, variable, and optional types)
     let subset = zarrs::array::ArraySubset::new_with_shape(config.array_shape.clone());
-    if let Err(e) = array.store_array_subset(&subset, test_data.clone()) {
+    if let Err(e) = array.store_array_subset(&subset, test_data.clone(), &Resources::default()) {
         return CodecTestResult::Unsupported {
             reason: format!("Data storage failed: {e}"),
         };
     }
 
     // Round-trip test: read back the data and verify it matches
-    let read_data = match array.retrieve_array_subset::<ArrayBytes>(&subset) {
+    let read_data = match array.retrieve_array_subset::<ArrayBytes>(&subset, &Resources::default())
+    {
         Ok(data) => data,
         Err(e) => {
             return CodecTestResult::Unsupported {

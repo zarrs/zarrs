@@ -28,6 +28,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Encode `subset_data` and store in `array_subset`.
@@ -48,6 +49,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Retrieve the chunk at `chunk_indices`, compact it if possible, and store the compacted chunk back.
@@ -58,7 +60,11 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Returns an [`ArrayError`] if
     ///  - there is a codec error, or
     ///  - an underlying store error.
-    fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
+    fn compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;
@@ -76,5 +82,6 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     fn partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
 }

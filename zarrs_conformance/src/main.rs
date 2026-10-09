@@ -1,6 +1,7 @@
 //! Zarr conformance test binary.
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use clap::Parser;
 use zarrs::array::{Array, ArrayBytes, DataType, FillValue};
@@ -57,7 +58,7 @@ fn main() -> Result<()> {
     let array = Array::open(store, "/")?;
 
     // Retrieve the entire array
-    let element_bytes = array.retrieve_array_subset(&array.subset_all())?;
+    let element_bytes = array.retrieve_array_subset(&array.subset_all(), &Resources::default())?;
 
     // Print the array elements in C order (as fill value metadata)
     print_elements_as_fill_value_metadata(array.data_type(), element_bytes)?;

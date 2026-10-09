@@ -260,6 +260,7 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::sync::Arc;
 
     use super::*;
@@ -303,10 +304,19 @@ mod tests {
         let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -322,7 +332,11 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -335,6 +349,7 @@ mod tests {
                 input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // gdeflate partial decoder does not hold bytes
@@ -342,6 +357,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .unwrap()
@@ -369,7 +385,11 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -382,6 +402,7 @@ mod tests {
                 input_handle,
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap();
@@ -389,6 +410,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap()

@@ -5,7 +5,7 @@ use crate::array::{
     ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
     copy_fill_value_into,
 };
 use zarrs_storage::MaybeSync;
@@ -29,6 +29,7 @@ pub(super) trait AsyncRetrieveInto {
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     async fn retrieve_partial_chunk_into(
@@ -37,6 +38,7 @@ pub(super) trait AsyncRetrieveInto {
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 }
 
@@ -46,6 +48,7 @@ pub(super) async fn retrieve_array_subset_into<A, R>(
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
@@ -90,7 +93,7 @@ where
             let chunk_subset = array.chunk_subset(chunk_indices)?;
             if chunk_subset == array_subset {
                 retrieve
-                    .retrieve_chunk_into(chunk_indices, output_target, options)
+                    .retrieve_chunk_into(chunk_indices, output_target, options, resources)
                     .await
             } else {
                 retrieve
@@ -99,6 +102,7 @@ where
                         &array_subset.relative_to(chunk_subset.start())?,
                         output_target,
                         options,
+                        resources,
                     )
                     .await
             }
@@ -106,12 +110,8 @@ where
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
-                num_chunks,
-                options,
-                &codec_concurrency,
-            );
+            let (chunk_concurrent_limit, resources) =
+                concurrency_chunks_and_codec(num_chunks, resources, &codec_concurrency);
             retrieve_multi_chunk_fixed_into(
                 array,
                 retrieve,
@@ -119,13 +119,15 @@ where
                 &chunks,
                 chunk_concurrent_limit,
                 &output_target,
-                &options,
+                options,
+                &resources,
             )
             .await
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn retrieve_multi_chunk_fixed_into<A, R>(
     array: &A,
     retrieve: &R,
@@ -134,6 +136,7 @@ async fn retrieve_multi_chunk_fixed_into<A, R>(
     chunk_concurrent_limit: usize,
     output_target: &ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
@@ -184,6 +187,7 @@ where
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                     target,
                     options,
+                    resources,
                 )
                 .await?;
             Ok::<_, ArrayError>(())

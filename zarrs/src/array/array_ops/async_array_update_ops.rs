@@ -16,6 +16,7 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayUpdateOps::store_array_subset`].
@@ -24,11 +25,16 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayUpdateOps::compact_chunk`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
+    async fn async_compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
     fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits>;
@@ -38,5 +44,6 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
     async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError>;
 }

@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{ArrayBuilder, data_type};
@@ -73,7 +74,7 @@ fn array_partial_encode_sharding(
 
     // [1, 0]
     // [0, 0]
-    array.store_array_subset(&[0..1, 0..1], &[1u16])?;
+    array.store_array_subset(&[0..1, 0..1], &[1u16], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     assert_eq!(store_perf.bytes_read(), 0);
@@ -87,7 +88,7 @@ fn array_partial_encode_sharding(
 
     // [0, 0]
     // [0, 0]
-    array.store_array_subset(&[0..1, 0..1], &[0u16])?;
+    array.store_array_subset(&[0..1, 0..1], &[0u16], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -98,7 +99,7 @@ fn array_partial_encode_sharding(
 
     // [1, 2]
     // [0, 0]
-    array.store_array_subset(&[0..1, 0..2], &[1u16, 2])?;
+    array.store_array_subset(&[0..1, 0..2], &[1u16, 2], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -107,13 +108,16 @@ fn array_partial_encode_sharding(
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![1, 2, 0, 0]);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())?,
+        vec![1, 2, 0, 0]
+    );
     store_perf.reset();
 
     // Check that the shard is entirely rewritten when possible, rather than appended
     // [3, 4]
     // [0, 0]
-    array.store_array_subset(&[0..1, 0..2], &[3u16, 4])?;
+    array.store_array_subset(&[0..1, 0..2], &[3u16, 4], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index + 1x subchunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -125,12 +129,15 @@ fn array_partial_encode_sharding(
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![3, 4, 0, 0]);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())?,
+        vec![3, 4, 0, 0]
+    );
     store_perf.reset();
 
     // [99, 4]
     // [5, 0]
-    array.store_array_subset(&[0..2, 0..1], &[99u16, 5])?;
+    array.store_array_subset(&[0..2, 0..1], &[99u16, 5], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -140,7 +147,7 @@ fn array_partial_encode_sharding(
         );
     }
     assert_eq!(
-        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())?,
         vec![99, 4, 5, 0]
     );
     store_perf.reset();
@@ -148,7 +155,7 @@ fn array_partial_encode_sharding(
     // [99, 4]
     // [5, 100]
     store_perf.reset();
-    array.store_array_subset(&[1..2, 1..2], &[100u16])?;
+    array.store_array_subset(&[1..2, 1..2], &[100u16], &Resources::default())?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -160,7 +167,7 @@ fn array_partial_encode_sharding(
     store_perf.reset();
 
     assert_eq!(
-        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())?,
         vec![99, 4, 5, 100]
     );
 
@@ -197,16 +204,16 @@ async fn array_partial_encode_sharding_async() {
             .with_codec_options(options);
 
         array
-            .async_store_array_subset(&[0..1, 0..2], &[1u16, 2])
+            .async_store_array_subset(&[0..1, 0..2], &[1u16, 2], &Resources::default())
             .await
             .unwrap();
         array
-            .async_store_array_subset(&[0..2, 0..1], &[3u16, 4])
+            .async_store_array_subset(&[0..2, 0..1], &[3u16, 4], &Resources::default())
             .await
             .unwrap();
         assert_eq!(
             array
-                .async_retrieve_chunk::<Vec<u16>>(&[0, 0])
+                .async_retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())
                 .await
                 .unwrap(),
             vec![3, 2, 4, 0]
@@ -299,7 +306,7 @@ fn array_partial_encode_sharding_compact(
     // Step 1: Write a large compressible pattern (all same values)
     // This fills multiple subchunks with highly compressible data
     let compressible_data = vec![42u16; 16]; // Fill all 16 elements of the shard
-    array.store_chunk(&[0, 0], &compressible_data)?;
+    array.store_chunk(&[0, 0], &compressible_data, &Resources::default())?;
 
     let size_after_first_write = get_bytes_0_0()?.unwrap().len();
 
@@ -307,11 +314,11 @@ fn array_partial_encode_sharding_compact(
     // This creates gaps as the old compressed data is marked stale
     // Write to subchunk [0,0] (elements [0..2, 0..2] of the shard)
     let random_data1 = vec![100u16, 101, 102, 103];
-    array.store_array_subset(&[0..2, 0..2], &random_data1)?;
+    array.store_array_subset(&[0..2, 0..2], &random_data1, &Resources::default())?;
 
     // Write to subchunk [1,0] (elements [2..4, 0..2] of the shard)
     let random_data2 = vec![200u16, 201, 202, 203];
-    array.store_array_subset(&[2..4, 0..2], &random_data2)?;
+    array.store_array_subset(&[2..4, 0..2], &random_data2, &Resources::default())?;
 
     let size_after_overwrites = get_bytes_0_0()?.unwrap().len();
 
@@ -323,7 +330,7 @@ fn array_partial_encode_sharding_compact(
 
     // Step 3: Compact the chunk
     store_perf.reset();
-    let compaction_occurred = array.compact_chunk(&[0, 0])?;
+    let compaction_occurred = array.compact_chunk(&[0, 0], &Resources::default())?;
 
     // Verify that compaction occurred
     assert!(
@@ -356,14 +363,14 @@ fn array_partial_encode_sharding_compact(
         202, 203, 42, 42,
     ];
     assert_eq!(
-        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0], &Resources::default())?,
         expected_data,
         "Data should be unchanged after compaction"
     );
 
     // Step 4: Verify idempotency - compacting an already-compact shard should return false
     store_perf.reset();
-    let compaction_occurred_2 = array.compact_chunk(&[0, 0])?;
+    let compaction_occurred_2 = array.compact_chunk(&[0, 0], &Resources::default())?;
 
     assert!(
         !compaction_occurred_2,

@@ -6,7 +6,7 @@ use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -88,6 +88,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if !decoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
@@ -110,6 +111,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if !encoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));

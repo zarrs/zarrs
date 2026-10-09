@@ -3,6 +3,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
@@ -24,79 +25,79 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     // -----|-----
     // 9 10 | 0  0
     // 0  0 | 0  0
-    array.store_chunk(&[0, 0], &[1u8, 2, 0, 0])?;
-    array.store_chunk(&[0, 1], &[3u8, 4, 7, 8])?;
-    array.store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10])?;
+    array.store_chunk(&[0, 0], &[1u8, 2, 0, 0], &Resources::default())?;
+    array.store_chunk(&[0, 1], &[3u8, 4, 7, 8], &Resources::default())?;
+    array.store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10], &Resources::default())?;
 
-    assert!(array.retrieve_chunk::<ArrayBytes>(&[0, 0, 0]).is_err());
-    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 0])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 1])?, vec![3, 4, 7, 8].into());
-    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[1, 0])?, vec![9, 10, 0, 0].into());
-    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[1, 1])?, vec![0, 0, 0, 0].into());
+    assert!(array.retrieve_chunk::<ArrayBytes>(&[0, 0, 0], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 0], &Resources::default())?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 1], &Resources::default())?, vec![3, 4, 7, 8].into());
+    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[1, 0], &Resources::default())?, vec![9, 10, 0, 0].into());
+    assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[1, 1], &Resources::default())?, vec![0, 0, 0, 0].into());
 
-    assert!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 0, 0]).is_err());
-    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 0])?, Some(vec![1, 2, 5, 6].into()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 1])?, Some(vec![3, 4, 7, 8].into()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[1, 0])?, Some(vec![9, 10, 0, 0].into()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[1, 1])?, None);
+    assert!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 0, 0], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 0], &Resources::default())?, Some(vec![1, 2, 5, 6].into()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[0, 1], &Resources::default())?, Some(vec![3, 4, 7, 8].into()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[1, 0], &Resources::default())?, Some(vec![9, 10, 0, 0].into()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ArrayBytes>(&[1, 1], &Resources::default())?, None);
 
-    assert!(array.retrieve_chunk::<ndarray::ArrayD<u16>>(&[0, 0]).is_err());
-    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[0, 0])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[0, 1])?, ndarray::array![[3, 4], [7, 8]].into_dyn());
-    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[1, 0])?, ndarray::array![[9, 10], [0, 0]].into_dyn());
-    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[1, 1])?, ndarray::array![[0, 0], [0, 0]].into_dyn());
+    assert!(array.retrieve_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &Resources::default())?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[0, 1], &Resources::default())?, ndarray::array![[3, 4], [7, 8]].into_dyn());
+    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[1, 0], &Resources::default())?, ndarray::array![[9, 10], [0, 0]].into_dyn());
+    assert_eq!(array.retrieve_chunk::<ndarray::ArrayD<u8>>(&[1, 1], &Resources::default())?, ndarray::array![[0, 0], [0, 0]].into_dyn());
 
-    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[0, 0])?, Some(ndarray::array![[1, 2], [5, 6]].into_dyn()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[0, 1])?, Some(ndarray::array![[3, 4], [7, 8]].into_dyn()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0])?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
-    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1])?, None);
+    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[0, 0], &Resources::default())?, Some(ndarray::array![[1, 2], [5, 6]].into_dyn()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[0, 1], &Resources::default())?, Some(ndarray::array![[3, 4], [7, 8]].into_dyn()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0], &Resources::default())?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
+    assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1], &Resources::default())?, None);
 
-    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
-    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
-    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2], &Resources::default()).is_err());
+    assert!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..3, 0..3], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 0..2], &Resources::default())?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..1, 0..2], &Resources::default())?, vec![1, 2].into());
+    assert_eq!(array.retrieve_partial_chunk::<ArrayBytes>(&[0, 0], &[0..2, 1..2], &Resources::default())?, vec![2, 6].into());
 
-    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
-    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
-    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3], &Resources::default()).is_err());
+    assert!(array.retrieve_partial_chunk::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2], &Resources::default())?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2], &Resources::default())?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.retrieve_partial_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2], &Resources::default())?, ndarray::array![[2], [6]].into_dyn());
 
-    assert!(array.retrieve_chunks::<ArrayBytes>(&[0..2]).is_err());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 0..1])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 0..2])?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 1..2])?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 1..3])?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
+    assert!(array.retrieve_chunks::<ArrayBytes>(&[0..2], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..0, 0..0], &Resources::default())?, vec![].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 0..1], &Resources::default())?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 0..2], &Resources::default())?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 1..2], &Resources::default())?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 1..3], &Resources::default())?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
 
-    assert!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2]).is_err());
-    assert!(array.retrieve_chunks::<ndarray::ArrayD<u16>>(&[0..2, 0..2]).is_err());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 0..2])?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 1..2])?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..1, 1..3])?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
+    assert!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2], &Resources::default()).is_err());
+    assert!(array.retrieve_chunks::<ndarray::ArrayD<u16>>(&[0..2, 0..2], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 0..2], &Resources::default())?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 1..2], &Resources::default())?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..1, 1..3], &Resources::default())?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
 
-    assert!(array.retrieve_array_subset::<ArrayBytes>(&[0..4]).is_err());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..2, 0..2])?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4])?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[1..3, 1..3])?, vec![6, 7, 10 ,0].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[5..7, 5..6])?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..5, 0..5])?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
+    assert!(array.retrieve_array_subset::<ArrayBytes>(&[0..4], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0], &Resources::default())?, vec![].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..2, 0..2], &Resources::default())?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4], &Resources::default())?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[1..3, 1..3], &Resources::default())?, vec![6, 7, 10 ,0].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[5..7, 5..6], &Resources::default())?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..5, 0..5], &Resources::default())?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
 
-    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4]).is_err());
-    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[0..4, 0..4]).is_err());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..0, 0..0])?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4, 0..4])?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[1..3, 1..3])?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[5..7, 5..6])?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..5, 0..5])?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
+    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4], &Resources::default()).is_err());
+    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[0..4, 0..4], &Resources::default()).is_err());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..0, 0..0], &Resources::default())?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4, 0..4], &Resources::default())?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[1..3, 1..3], &Resources::default())?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[5..7, 5..6], &Resources::default())?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..5, 0..5], &Resources::default())?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
-    assert!(array.partial_decoder(&[0]).is_err());
-    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..1], &options).is_err());
-    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&[0..1, 0..2], &options)?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..1, 0..2], &options)?, vec![1, 2].into());
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..2, 1..2], &options)?, vec![2, 6].into());
+    assert!(array.partial_decoder(&[0], &Resources::default()).is_err());
+    assert!(array.partial_decoder(&[0, 0], &Resources::default())?.partial_decode(&[0..1], &options, &Resources::default()).is_err());
+    assert_eq!(array.partial_decoder(&[5, 0], &Resources::default())?.partial_decode(&[0..1, 0..2], &options, &Resources::default())?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.partial_decoder(&[0, 0], &Resources::default())?.partial_decode(&[0..1, 0..2], &options, &Resources::default())?, vec![1, 2].into());
+    assert_eq!(array.partial_decoder(&[0, 0], &Resources::default())?.partial_decode(&[0..2, 1..2], &options, &Resources::default())?, vec![2, 6].into());
 
     Ok(())
 }
@@ -121,7 +122,12 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     array_sync_read(&array)?;
 
     // uncompressed partial decoder holds no data
-    assert_eq!(array.partial_decoder(&[0, 0])?.size_held(), 0);
+    assert_eq!(
+        array
+            .partial_decoder(&[0, 0], &Resources::default())?
+            .size_held(),
+        0
+    );
 
     Ok(())
 }
@@ -161,20 +167,27 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     // sharding partial decoder holds the shard index, which has double the number of elements
     assert_eq!(
-        array.partial_decoder(&[0, 0])?.size_held(),
+        array
+            .partial_decoder(&[0, 0], &Resources::default())?
+            .size_held(),
         size_of::<u64>() * 4 * 2
     );
     // this chunk is empty, so it has no shard index
-    assert_eq!(array.partial_decoder(&[1, 1])?.size_held(), 0);
+    assert_eq!(
+        array
+            .partial_decoder(&[1, 1], &Resources::default())?
+            .size_held(),
+        0
+    );
 
     Ok(())
 }
 
 fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
     // Store a single chunk
-    array.store_chunk(&[0, 0], &["a", "bb", "ccc", "dddd"])?;
+    array.store_chunk(&[0, 0], &["a", "bb", "ccc", "dddd"], &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 0], &Resources::default())?,
         &["a", "bb", "ccc", "dddd"]
     );
 
@@ -184,32 +197,37 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
         &[
             "1", "22", "333", "4444", "55555", "666666", "7777777", "88888888",
         ],
+        &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[1, 0])?,
+        array.retrieve_chunk::<Vec<String>>(&[1, 0], &Resources::default())?,
         &["1", "22", "55555", "666666"]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[1, 1])?,
+        array.retrieve_chunk::<Vec<String>>(&[1, 1], &Resources::default())?,
         &["333", "4444", "7777777", "88888888"]
     );
 
     // Write array subset with partial chunks
-    array.store_array_subset(&[1..3, 1..3], &["S1", "S22", "S333", "S4444"])?;
+    array.store_array_subset(
+        &[1..3, 1..3],
+        &["S1", "S22", "S333", "S4444"],
+        &Resources::default(),
+    )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 0], &Resources::default())?,
         &["a", "bb", "ccc", "S1"]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[0, 1])?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 1], &Resources::default())?,
         &["", "", "S22", ""]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[1, 0])?,
+        array.retrieve_chunk::<Vec<String>>(&[1, 0], &Resources::default())?,
         &["1", "S333", "55555", "666666"]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[1, 1])?,
+        array.retrieve_chunk::<Vec<String>>(&[1, 1], &Resources::default())?,
         &["S4444", "4444", "7777777", "88888888"]
     );
 
@@ -217,23 +235,24 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
     array.store_chunks(
         &[0..1, 0..2],
         &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"],
+        &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 0], &Resources::default())?,
         &["a", "bb", "C0", "C11"]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<String>>(&[0, 1])?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 1], &Resources::default())?,
         &["ccc", "dddd", "C222", "C3333"]
     );
     assert_eq!(
-        array.retrieve_chunks::<Vec<String>>(&[0..1, 0..2])?,
+        array.retrieve_chunks::<Vec<String>>(&[0..1, 0..2], &Resources::default())?,
         &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"]
     );
 
     // Full chunk requests
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&[0..4, 0..4])?,
+        array.retrieve_array_subset::<Vec<String>>(&[0..4, 0..4], &Resources::default())?,
         &[
             "a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333", //
             "1", "S333", "S4444", "4444", "55555", "666666", "7777777", "88888888" //
@@ -242,13 +261,21 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
 
     // Partial chunk requests
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&[1..3, 1..3])?,
+        array.retrieve_array_subset::<Vec<String>>(&[1..3, 1..3], &Resources::default())?,
         &["C11", "C222", "S333", "S4444"]
     );
 
     // Incompatible chunks / bytes
-    assert!(array.store_chunks(&[0..0, 0..2], &["a", "bb"]).is_err());
-    assert!(array.store_chunks(&[0..1, 0..2], &["a", "bb"]).is_err());
+    assert!(
+        array
+            .store_chunks(&[0..0, 0..2], &["a", "bb"], &Resources::default())
+            .is_err()
+    );
+    assert!(
+        array
+            .store_chunks(&[0..1, 0..2], &["a", "bb"], &Resources::default())
+            .is_err()
+    );
 
     Ok(())
 }
@@ -325,40 +352,37 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = builder.build(store, array_path).unwrap();
 
-    array.store_array_subset(
-        &[1..3, 1..3],
-        &[&[0u8][..], &[0u8, 1][..], &[0u8, 1, 2][..], &[0u8, 1, 2, 3][..]],
-    )?;
+    array.store_array_subset(&[1..3, 1..3], &[&[0u8][..], &[0u8, 1][..], &[0u8, 1, 2][..], &[0u8, 1, 2, 3][..]], &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<Vec<u8>>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<Vec<u8>>>(&[0, 0], &Resources::default())?,
         vec![
             vec![], vec![],
             vec![], vec![0]
         ],
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<Vec<u8>>>(&[0, 1])?,
+        array.retrieve_chunk::<Vec<Vec<u8>>>(&[0, 1], &Resources::default())?,
         vec![
             vec![], vec![],
             vec![0, 1], vec![]
         ],
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<Vec<u8>>>(&[1, 0])?,
+        array.retrieve_chunk::<Vec<Vec<u8>>>(&[1, 0], &Resources::default())?,
         vec![
             vec![], vec![0, 1, 2],
             vec![], vec![]
         ],
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<Vec<u8>>>(&[1, 1])?,
+        array.retrieve_chunk::<Vec<Vec<u8>>>(&[1, 1], &Resources::default())?,
         vec![
             vec![0, 1, 2, 3], vec![],
             vec![], vec![]
         ],
     );
     assert_eq!(
-        array.retrieve_array_subset::<Vec<Vec<u8>>>(&[1..3, 0..4])?,
+        array.retrieve_array_subset::<Vec<Vec<u8>>>(&[1..3, 0..4], &Resources::default())?,
         vec![
             vec![], vec![0], vec![0, 1], vec![],
             vec![], vec![0, 1, 2], vec![0, 1, 2, 3], vec![],
@@ -381,9 +405,9 @@ fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, "/array")?;
 
     let chunk = ndarray::array![[1.0f32, 2.0], [3.0, 4.0]];
-    array.store_chunk(&[0, 0], &chunk)?;
+    array.store_chunk(&[0, 0], &chunk, &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0])?,
+        array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0], &Resources::default())?,
         chunk.into_dyn()
     );
 
@@ -393,9 +417,9 @@ fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
         [11.0, 12.0, 13.0],
     ];
     let transposed = subset.t();
-    array.store_array_subset(&[1..4, 1..4], &transposed)?;
+    array.store_array_subset(&[1..4, 1..4], &transposed, &Resources::default())?;
     assert_eq!(
-        array.retrieve_array_subset::<ndarray::ArrayD<f32>>(&[1..4, 1..4])?,
+        array.retrieve_array_subset::<ndarray::ArrayD<f32>>(&[1..4, 1..4], &Resources::default())?,
         ndarray::array![
             [5.0, 8.0, 11.0],
             [6.0, 9.0, 12.0],
@@ -430,9 +454,9 @@ fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
         .map(|u| u as u32)
         .collect();
 
-    array.store_array_subset(&array.subset_all(), &elements)?;
+    array.store_array_subset(&array.subset_all(), &elements, &Resources::default())?;
     assert_eq!(
-        array.retrieve_array_subset::<Vec<u32>>(&array.subset_all())?,
+        array.retrieve_array_subset::<Vec<u32>>(&array.subset_all(), &Resources::default())?,
         elements
     );
 
@@ -462,7 +486,7 @@ fn retrieve_into_vec(
             ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
         };
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
-        array.retrieve_array_subset_into(&subset, target)?;
+        array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
     }
 
     Ok(output)
@@ -476,9 +500,9 @@ fn array_sync_read_into(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::e
     // -----|-----
     // 9 10 | 0  0
     // 0  0 | 0  0
-    array.store_chunk(&[0, 0], &[1u8, 2, 0, 0])?;
-    array.store_chunk(&[0, 1], &[3u8, 4, 7, 8])?;
-    array.store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10])?;
+    array.store_chunk(&[0, 0], &[1u8, 2, 0, 0], &Resources::default())?;
+    array.store_chunk(&[0, 1], &[3u8, 4, 7, 8], &Resources::default())?;
+    array.store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10], &Resources::default())?;
 
     // Full array retrieval (multi-chunk)
     assert_eq!(
@@ -496,7 +520,7 @@ fn array_sync_read_into(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::e
     assert_eq!(retrieve_into_vec(array, &[5..7, 5..6])?, vec![0, 0]);
 
     // Empty subset (test via retrieve_array_subset for comparison; _into doesn't support empty views)
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0])?, Vec::<u8>::new().into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0], &Resources::default())?, Vec::<u8>::new().into());
 
     // Dimensionality mismatch should error
     let subset_1d = ArraySubset::from(vec![0..4u64]);
@@ -508,7 +532,7 @@ fn array_sync_read_into(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::e
         ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
     };
     let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
-    assert!(array.retrieve_array_subset_into(&subset_1d, target).is_err());
+    assert!(array.retrieve_array_subset_into(&subset_1d, target, &Resources::default()).is_err());
 
     Ok(())
 }
@@ -578,7 +602,7 @@ fn retrieve_optional_into_vecs(
             Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
             &mut mask_view,
         );
-        array.retrieve_array_subset_into(&subset, target)?;
+        array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
     }
 
     Ok((data_output, mask_output))
@@ -594,14 +618,14 @@ fn array_sync_read_into_optional(array: &Array<MemoryStore>) -> Result<(), Box<d
     // Chunk [1,0]:           Chunk [1,1]:
     //   None    Some(10)     Some(0) None
     //   None    None         None    Some(15)
-    array.store_chunk(&[0, 0], ndarray::array![[Some(1u8), Some(2)], [Some(5), None]])?;
-    array.store_chunk(&[0, 1], ndarray::array![[None::<u8>, Some(4)], [Some(7), Some(8)]])?;
-    array.store_chunk(&[1, 0], ndarray::array![[None::<u8>, Some(10)], [None, None]])?;
-    array.store_chunk(&[1, 1], ndarray::array![[Some(0u8), None], [None, Some(15)]])?;
+    array.store_chunk(&[0, 0], ndarray::array![[Some(1u8), Some(2)], [Some(5), None]], &Resources::default())?;
+    array.store_chunk(&[0, 1], ndarray::array![[None::<u8>, Some(4)], [Some(7), Some(8)]], &Resources::default())?;
+    array.store_chunk(&[1, 0], ndarray::array![[None::<u8>, Some(10)], [None, None]], &Resources::default())?;
+    array.store_chunk(&[1, 1], ndarray::array![[Some(0u8), None], [None, Some(15)]], &Resources::default())?;
 
     // Full array retrieval (multi-chunk) - compare with normal retrieve
     let (data, mask) = retrieve_optional_into_vecs(array, &[0..4, 0..4])?;
-    let expected = array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4])?;
+    let expected = array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4], &Resources::default())?;
     let expected_opt = expected.into_optional()?;
     let (expected_data, expected_mask) = expected_opt.into_parts();
     assert_eq!(data, expected_data.into_fixed()?.into_vec());

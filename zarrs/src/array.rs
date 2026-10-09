@@ -262,7 +262,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec, Indexer};
+/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec, Indexer, Resources};
 /// # use zarrs::array::ArraySubset;
 /// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -274,19 +274,21 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// let chunk_grid_shape = array.chunk_grid_shape();
 /// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape.to_vec()).indices();
 ///
+/// let resources = Resources::default();
+///
 /// // Iterate over chunk indices (in parallel)
 /// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndicesTinyVec| {
 ///     // Retrieve the array subset of the chunk within the array bounds
 ///     //   This partially decodes chunks that extend beyond the array end
 ///     let subset: ArraySubset = array.chunk_subset_bounded(&chunk_indices)?;
-///     let chunk_bytes: ArrayBytes = array.retrieve_array_subset(&subset)?;
+///     let chunk_bytes: ArrayBytes = array.retrieve_array_subset(&subset, &resources)?;
 ///
 ///     // ... Update the chunk bytes
 ///
 ///     // Write the updated chunk
 ///     //   Elements beyond the array bounds in straddling chunks are left
 ///     //   unmodified or set to the fill value if the chunk did not exist.
-///     array.store_array_subset(&subset, chunk_bytes)
+///     array.store_array_subset(&subset, chunk_bytes, &resources)
 /// })?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -1500,12 +1502,13 @@ mod tests {
             .store_array_subset(
                 &[3..6, 3..6],
                 &[1.0f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                &Resources::default(),
             )
             .unwrap();
 
         let subset_all = array.subset_all();
         let data_all = array
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
         assert_eq!(
             data_all,
@@ -1524,14 +1527,14 @@ mod tests {
         );
         assert!(
             array
-                .retrieve_chunk_if_exists::<Vec<f32>>(&[0; 2])
+                .retrieve_chunk_if_exists::<Vec<f32>>(&[0; 2], &Resources::default())
                 .unwrap()
                 .is_none()
         );
         #[cfg(feature = "ndarray")]
         assert!(
             array
-                .retrieve_chunk_if_exists::<ndarray::ArrayD<f32>>(&[0; 2])
+                .retrieve_chunk_if_exists::<ndarray::ArrayD<f32>>(&[0; 2], &Resources::default())
                 .unwrap()
                 .is_none()
         );
@@ -1546,7 +1549,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
         let elements = array_in
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
 
         assert_eq!(
@@ -1568,7 +1571,7 @@ mod tests {
         let store = Arc::new(FilesystemStore::new(path_out).unwrap());
         let array_out = Array::new_with_metadata(store, "/", array_in.metadata().clone()).unwrap();
         array_out
-            .store_array_subset(&subset_all, &elements)
+            .store_array_subset(&subset_all, &elements, &Resources::default())
             .unwrap();
 
         // Store V2 and V3 metadata
@@ -1717,7 +1720,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
         let elements = array_in
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
 
         assert_eq!(

@@ -11,7 +11,7 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -242,6 +242,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, &self.data_type)?;
@@ -258,13 +259,21 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
                 )
             })?;
             let index_shape = vec![num_offsets];
-            self.index_codecs
-                .encode(ArrayBytes::new_flen(offsets), &index_shape, options)?
+            self.index_codecs.encode(
+                ArrayBytes::new_flen(offsets),
+                &index_shape,
+                options,
+                resources,
+            )?
         } else if *self.index_codecs.data_type() == crate::array::data_type::uint64() {
             let offsets = offsets.into_u64_ne_bytes();
             let index_shape = vec![num_offsets];
-            self.index_codecs
-                .encode(ArrayBytes::new_flen(offsets), &index_shape, options)?
+            self.index_codecs.encode(
+                ArrayBytes::new_flen(offsets),
+                &index_shape,
+                options,
+                resources,
+            )?
         } else {
             return Err(CodecError::Other(
                 "unsupported bound vlen index data type, expected uint32 or uint64".to_string(),
@@ -274,7 +283,8 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         // Encode data
         let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
             let data_shape = vec![data_len];
-            self.data_codecs.encode(data.into(), &data_shape, options)?
+            self.data_codecs
+                .encode(data.into(), &data_shape, options, resources)?
         } else {
             vec![].into()
         };
@@ -303,6 +313,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
             &bytes,
@@ -311,6 +322,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
             &self.data_codecs,
             self.index_location,
             options,
+            resources,
         )?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
@@ -321,6 +333,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
             input_handle,
@@ -339,6 +352,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             vlen_partial_decoder::AsyncVlenPartialDecoder::new(

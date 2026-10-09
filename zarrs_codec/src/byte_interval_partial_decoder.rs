@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator};
 
-use crate::{CodecError, CodecOptions, CowBytes};
+use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 #[cfg(feature = "async")]
 use crate::AsyncBytesPartialDecoderTraits;
@@ -46,6 +46,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         &self,
         byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
@@ -59,7 +60,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
             }
         });
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -109,6 +110,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         &'a self,
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
@@ -122,7 +124,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
             }
         });
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
             .await
     }
 

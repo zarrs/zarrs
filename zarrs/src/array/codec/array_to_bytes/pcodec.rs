@@ -89,6 +89,7 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -137,10 +138,16 @@ mod tests {
             bytes.clone(),
             chunk_shape.as_slice(),
             &CodecOptions::default(),
+            &Resources::default(),
         )?;
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
         let decoded = codec
-            .decode(encoded, chunk_shape.as_slice(), &CodecOptions::default())
+            .decode(
+                encoded,
+                chunk_shape.as_slice(),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -333,16 +340,30 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
@@ -379,16 +400,30 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
+            .async_partial_decoder(
+                input_handle,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
 

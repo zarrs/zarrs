@@ -182,6 +182,7 @@ impl CodecTraitsV3 for ReshapeCodec {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Mutex;
 
@@ -223,8 +224,18 @@ mod tests {
         )?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
-        let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
-        let decoded = codec.decode(encoded, &shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            bytes.clone(),
+            &shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
+        let decoded = codec.decode(
+            encoded,
+            &shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
         assert_eq!(bytes, decoded);
         Ok(())
     }
@@ -921,7 +932,12 @@ mod tests {
             .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
         let encoded = codec
-            .encode(bytes, shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
@@ -936,10 +952,20 @@ mod tests {
             )
             .unwrap();
         let input_handle = bytes_codec
-            .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle,
+                &encoded_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         codec
-            .partial_decoder(input_handle, shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
     }
 
@@ -948,7 +974,7 @@ mod tests {
         indexer: &dyn Indexer,
     ) -> Vec<u16> {
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(indexer, &CodecOptions::default())
+            .partial_decode(indexer, &CodecOptions::default(), &Resources::default())
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded_partial_chunk.into_fixed().unwrap())
     }
@@ -968,7 +994,12 @@ mod tests {
             .with_context(data_type, fill_value, &CodecSpecificOptions::default())
             .unwrap();
         let encoded = codec
-            .encode(bytes, shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let bytes_codec = Arc::new(BytesCodec::default());
@@ -983,31 +1014,61 @@ mod tests {
             )
             .unwrap();
         let encoded_chunk = bytes_codec
-            .encode(encoded, &encoded_shape, &CodecOptions::default())
+            .encode(
+                encoded,
+                &encoded_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .into_vec();
         let output = Arc::new(Mutex::new(Some(encoded_chunk)));
         let input_output_handle = bytes_codec
             .clone()
-            .partial_encoder(output.clone(), &encoded_shape, &CodecOptions::default())
+            .partial_encoder(
+                output.clone(),
+                &encoded_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let partial_encoder = codec
             .clone()
-            .partial_encoder(input_output_handle, shape, &CodecOptions::default())
+            .partial_encoder(
+                input_output_handle,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert!(partial_encoder.supports_partial_encode());
 
         let bytes = crate::array::transmute_to_bytes_vec(elements_partial_encode);
         partial_encoder
-            .partial_encode(indexer, &ArrayBytes::from(bytes), &CodecOptions::default())
+            .partial_encode(
+                indexer,
+                &ArrayBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let output = output.lock().unwrap().clone().unwrap();
         let decoded_encoded = bytes_codec
-            .decode(output.into(), &encoded_shape, &CodecOptions::default())
+            .decode(
+                output.into(),
+                &encoded_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(decoded_encoded, shape, &CodecOptions::default())
+            .decode(
+                decoded_encoded,
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap())
     }
@@ -1225,14 +1286,22 @@ mod tests {
         let wrong_dimensionality = ArraySubset::new_with_ranges(&[0..1, 0..1]);
         assert!(
             partial_decoder
-                .partial_decode(&wrong_dimensionality, &CodecOptions::default())
+                .partial_decode(
+                    &wrong_dimensionality,
+                    &CodecOptions::default(),
+                    &Resources::default()
+                )
                 .is_err()
         );
 
         let out_of_bounds = vec![vec![2, 0, 0]];
         assert!(
             partial_decoder
-                .partial_decode(&out_of_bounds, &CodecOptions::default())
+                .partial_decode(
+                    &out_of_bounds,
+                    &CodecOptions::default(),
+                    &Resources::default()
+                )
                 .is_err()
         );
     }

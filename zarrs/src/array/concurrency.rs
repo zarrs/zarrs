@@ -13,8 +13,8 @@
 //     Maximum,
 // }
 
-use zarrs_codec::CodecOptions;
 pub use zarrs_codec::RecommendedConcurrency;
+use zarrs_codec::Resources;
 
 /// Calculate the outer and inner concurrent limits given a concurrency target and their recommended concurrency.
 ///
@@ -47,25 +47,28 @@ pub fn calc_concurrency_outer_inner(
     (concurrency_outer, concurrency_inner)
 }
 
-/// Calculate the outer concurrency and inner options for a codec.
+/// Calculate the outer concurrency and inner resources for a codec.
+///
+/// Return is (outer, inner).
 #[must_use]
 pub fn concurrency_chunks_and_codec(
-    concurrency_target: usize,
     num_chunks: usize,
-    codec_options: &CodecOptions,
+    resources: &Resources,
     codec_concurrency: &RecommendedConcurrency,
-) -> (usize, CodecOptions) {
+) -> (usize, Resources) {
     // core::cmp::minmax https://github.com/rust-lang/rust/issues/115939
-    let chunk_concurrent_minimum = codec_options.chunk_concurrent_minimum();
+    let chunk_concurrent_minimum = resources.chunk_concurrent_minimum();
     let min_concurrent_chunks = std::cmp::min(chunk_concurrent_minimum, num_chunks);
     let max_concurrent_chunks = std::cmp::max(chunk_concurrent_minimum, num_chunks);
     let (self_concurrent_limit, codec_concurrent_limit) = calc_concurrency_outer_inner(
-        concurrency_target,
+        resources.concurrent_target(),
         &RecommendedConcurrency::new(min_concurrent_chunks..max_concurrent_chunks),
         codec_concurrency,
     );
-    let codec_options = codec_options.with_concurrent_target(codec_concurrent_limit);
-    (self_concurrent_limit, codec_options)
+    let resources = resources
+        .clone()
+        .with_concurrent_target(codec_concurrent_limit);
+    (self_concurrent_limit, resources)
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
 use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ChunkShape, CodecOptions, DataType, FillValue, Indexer,
+    Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -43,6 +44,7 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         &self,
         indexer: &dyn Indexer,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(bytes) = &self.bytes {
             Ok(bytes.extract_array_subset(
@@ -122,12 +124,14 @@ impl SealedSync for ChunkCacheTypeDecoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let bytes = Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?;
+        let bytes =
+            Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?;
         Ok(Arc::new(cached_partial_decoder(
             array,
             bytes,
@@ -140,6 +144,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
@@ -152,6 +157,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
                     .retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
                         chunk_indices,
                         options,
+                        resources,
                     )?
                     .map(Arc::new))
             })
@@ -164,12 +170,14 @@ impl SealedSync for ChunkCacheTypeDecoded {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let chunk = Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)?;
+        let chunk =
+            Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?;
         cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
     }
 }
@@ -183,14 +191,20 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
-        let bytes =
-            Self::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)
-                .await?;
+        let bytes = Self::async_retrieve_chunk_bytes_if_exists(
+            cache,
+            array,
+            chunk_indices,
+            options,
+            resources,
+        )
+        .await?;
         let decoder = SyncPartialDecoderAsAsync(Arc::new(cached_partial_decoder(
             array,
             bytes,
@@ -204,6 +218,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -216,6 +231,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
                     .async_retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
                         chunk_indices,
                         options,
+                        resources,
                     )
                     .await?
                     .map(Arc::new))
@@ -230,14 +246,20 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
-        let chunk =
-            Self::async_retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options)
-                .await?;
+        let chunk = Self::async_retrieve_chunk_bytes_if_exists(
+            cache,
+            array,
+            chunk_indices,
+            options,
+            resources,
+        )
+        .await?;
         cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
     }
 }

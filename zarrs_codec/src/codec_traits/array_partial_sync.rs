@@ -7,7 +7,7 @@ use zarrs_storage::StorageError;
 
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    decode_into_array_bytes_target,
+    Resources, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for a partial array decoder.
@@ -30,6 +30,7 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError>;
 
     /// Return the outermost chunk-local subchunk grid for this decoder, if available.
@@ -38,9 +39,13 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
-    fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+    fn local_subchunk_grid(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
         Ok(self
-            .local_subchunk_grids(options)?
+            .local_subchunk_grids(options, resources)?
             .into_iter()
             .next()
             .flatten())
@@ -57,6 +62,7 @@ where
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(Vec::new())
     }
@@ -95,6 +101,7 @@ pub trait ArrayPartialDecoderTraits:
         &self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
     /// Partially decode into a preallocated output.
@@ -113,6 +120,7 @@ pub trait ArrayPartialDecoderTraits:
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         if indexer.len() != output_target.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
@@ -122,7 +130,7 @@ pub trait ArrayPartialDecoderTraits:
             .into());
         }
 
-        let decoded_value = self.partial_decode(indexer, options)?;
+        let decoded_value = self.partial_decode(indexer, options, resources)?;
         decode_into_array_bytes_target(&decoded_value, output_target)
     }
 
@@ -157,6 +165,7 @@ pub trait ArrayPartialEncoderTraits:
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError>;
 
     /// Returns whether this encoder supports partial encoding.

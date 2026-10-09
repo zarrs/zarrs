@@ -7,7 +7,7 @@ use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLev
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -90,6 +90,7 @@ impl BytesToBytesCodecTraits for ZlibCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder =
             flate2::read::ZlibEncoder::new(Cursor::new(decoded_value), self.compression);
@@ -103,6 +104,7 @@ impl BytesToBytesCodecTraits for ZlibCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();

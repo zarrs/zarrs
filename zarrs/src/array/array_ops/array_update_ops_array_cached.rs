@@ -22,8 +22,9 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.encoder.local_subchunk_grids(options)
+        self.encoder.local_subchunk_grids(options, resources)
     }
 }
 
@@ -47,8 +48,9 @@ where
         &self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        self.encoder.partial_decode(indexer, options)
+        self.encoder.partial_decode(indexer, options, resources)
     }
 
     fn partial_decode_into(
@@ -56,9 +58,10 @@ where
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         self.encoder
-            .partial_decode_into(indexer, output_target, options)
+            .partial_decode_into(indexer, output_target, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -81,8 +84,11 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        let result = self.encoder.partial_encode(indexer, bytes, options);
+        let result = self
+            .encoder
+            .partial_encode(indexer, bytes, options, resources);
         self.cache.invalidate_chunk(&self.chunk_indices);
         result
     }
@@ -104,9 +110,10 @@ where
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.array()
-            .store_partial_chunk(chunk_indices, indexer, indexer_data)?;
+            .store_partial_chunk(chunk_indices, indexer, indexer_data, resources)?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
@@ -116,8 +123,10 @@ where
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().store_array_subset(array_subset, subset_data)?;
+        self.array()
+            .store_array_subset(array_subset, subset_data, resources)?;
         if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
             self.cache().invalidate_chunks(&chunks);
         } else {
@@ -127,8 +136,12 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
-        let compacted = self.array().compact_chunk(chunk_indices)?;
+    pub fn compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError> {
+        let compacted = self.array().compact_chunk(chunk_indices, resources)?;
         if compacted {
             self.cache().invalidate_chunk(chunk_indices);
         }
@@ -143,8 +156,9 @@ where
     pub fn partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        let encoder = self.array().partial_encoder(chunk_indices)?;
+        let encoder = self.array().partial_encoder(chunk_indices, resources)?;
         Ok(Arc::new(CachedArrayPartialEncoder {
             encoder,
             cache: self.cache_arc(),
@@ -172,26 +186,44 @@ mod tests {
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
-        array.store_chunk(&[0], &[1u8, 2]).unwrap();
+        array
+            .store_chunk(&[0], &[1u8, 2], &Resources::default())
+            .unwrap();
 
         let cached = ArrayCached::new(array, cache);
-        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
+        assert_eq!(
+            cached
+                .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .unwrap(),
+            vec![1, 2]
+        );
         assert_eq!(cached.cache().len(), 1);
 
-        let encoder = cached.partial_encoder(&[0]).unwrap();
+        let encoder = cached.partial_encoder(&[0], &Resources::default()).unwrap();
         encoder
             .partial_encode(
                 &ArraySubset::new_with_ranges(&[1..2]),
                 &vec![3u8].into(),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert!(cached.cache().is_empty());
-        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 3]);
+        assert_eq!(
+            cached
+                .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .unwrap(),
+            vec![1, 3]
+        );
 
         encoder.erase().unwrap();
         assert!(cached.cache().is_empty());
-        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![0, 0]);
+        assert_eq!(
+            cached
+                .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .unwrap(),
+            vec![0, 0]
+        );
 
         assert!(!encoder.exists().unwrap());
     }
@@ -204,19 +236,27 @@ mod tests {
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
-        array.store_chunk(&[0], &[1u8, 2]).unwrap();
+        array
+            .store_chunk(&[0], &[1u8, 2], &Resources::default())
+            .unwrap();
 
         let cached = ArrayCached::new(array, cache);
-        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
+        assert_eq!(
+            cached
+                .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .unwrap(),
+            vec![1, 2]
+        );
         assert_eq!(cached.cache().len(), 1);
 
-        let encoder = cached.partial_encoder(&[0]).unwrap();
+        let encoder = cached.partial_encoder(&[0], &Resources::default()).unwrap();
         assert!(
             encoder
                 .partial_encode(
                     &ArraySubset::new_with_ranges(&[2..3]),
                     &vec![3u8].into(),
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .is_err()
         );

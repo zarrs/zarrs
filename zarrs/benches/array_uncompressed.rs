@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use zarrs::array::Resources;
 
 fn array_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_write_all");
@@ -21,7 +22,9 @@ fn array_write_all(c: &mut Criterion) {
                 .unwrap();
                 let data = vec![1u8; num_elements.try_into().unwrap()];
                 let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset(&subset, &data).unwrap();
+                array
+                    .store_array_subset(&subset, &data, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -47,7 +50,9 @@ fn array_write_all_sharded(c: &mut Criterion) {
                 .unwrap();
                 let data = vec![1u16; num_elements.try_into().unwrap()];
                 let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset(&subset, &data).unwrap();
+                array
+                    .store_array_subset(&subset, &data, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -72,12 +77,15 @@ fn array_read_all(c: &mut Criterion) {
             .unwrap();
             let data = vec![1u16; num_elements.try_into().unwrap()];
             let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset(&subset, &data).unwrap();
+            array
+                .store_array_subset(&subset, &data, &Resources::default())
+                .unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes: zarrs::array::ArrayBytes =
-                    array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: zarrs::array::ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -103,12 +111,15 @@ fn array_read_all_sharded(c: &mut Criterion) {
             .unwrap();
             let data = vec![0u8; num_elements.try_into().unwrap()];
             let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset(&subset, &data).unwrap();
+            array
+                .store_array_subset(&subset, &data, &Resources::default())
+                .unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes: zarrs::array::ArrayBytes =
-                    array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: zarrs::array::ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }

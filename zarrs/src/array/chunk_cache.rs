@@ -54,7 +54,7 @@ use super::{ArrayBytes, ArrayError};
 use crate::array::{Array, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions};
+use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions, Resources};
 
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
@@ -125,7 +125,7 @@ mod chunk_cache_type_sealed {
     use super::{
         Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, ChunkCacheType,
         ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions,
-        Indexer, ReadableStorageTraits,
+        Indexer, ReadableStorageTraits, Resources,
     };
     #[cfg(feature = "async")]
     use super::{
@@ -151,6 +151,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
@@ -161,6 +162,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
@@ -172,6 +174,7 @@ mod chunk_cache_type_sealed {
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
@@ -192,6 +195,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
         where
             TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -202,6 +206,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
         where
             TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
@@ -213,6 +218,7 @@ mod chunk_cache_type_sealed {
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where
             TStorage: ?Sized + AsyncReadableStorageTraits + 'static,

@@ -4,7 +4,7 @@ use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -43,8 +43,10 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
     }
 }
 
@@ -68,9 +70,11 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Bytes codec does pass-through decoding
-        self.input_output_handle.partial_decode(indexer, options)
+        self.input_output_handle
+            .partial_decode(indexer, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -91,6 +95,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
@@ -98,7 +103,7 @@ where
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
-            .partial_encode(indexer, &rounded_bytes, options)
+            .partial_encode(indexer, &rounded_bytes, options, resources)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -116,8 +121,11 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
+            .await
     }
 }
 
@@ -144,10 +152,11 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Bytes codec does pass-through decoding
         self.input_output_handle
-            .partial_decode(indexer, options)
+            .partial_decode(indexer, options, resources)
             .await
     }
 
@@ -172,6 +181,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
@@ -179,7 +189,7 @@ where
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
-            .partial_encode(indexer, &rounded_bytes, options)
+            .partial_encode(indexer, &rounded_bytes, options, resources)
             .await
     }
 

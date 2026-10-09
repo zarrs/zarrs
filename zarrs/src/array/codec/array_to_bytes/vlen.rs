@@ -111,7 +111,7 @@ use crate::array::{
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
-    CodecTraitsV3, InvalidBytesLengthError,
+    CodecTraitsV3, InvalidBytesLengthError, Resources,
 };
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
@@ -144,6 +144,7 @@ fn get_vlen_bytes_and_offsets(
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<(Bytes, ArrayBytesOffsets), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
@@ -187,7 +188,7 @@ fn get_vlen_bytes_and_offsets(
 
     // Decode the index
     let mut index = index_codecs
-        .decode(index_enc, &index_shape, options)?
+        .decode(index_enc, &index_shape, options, resources)?
         .into_fixed()?;
     let index_data_type = index_codecs.data_type();
     if Endianness::Big.is_native() {
@@ -209,7 +210,7 @@ fn get_vlen_bytes_and_offsets(
     let data_len_expected = index.last();
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
         data_codecs
-            .decode(data_enc, &[data_len_expected], options)?
+            .decode(data_enc, &[data_len_expected], options, resources)?
             .into_fixed()?
             .into_bytes()
     } else {
@@ -229,6 +230,7 @@ fn get_vlen_bytes_and_offsets(
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -266,10 +268,20 @@ mod tests {
             let elements = vec!["a", "bb", "", "dddd"];
             let bytes = <&str>::into_array_bytes(&data_type, elements)?.into_owned();
             let shape = [NonZeroU64::new(4).unwrap()];
-            let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             let encoded = CowBytes::Shared(encoded.into_bytes());
             let encoded_range = encoded.as_ptr_range();
-            let decoded = codec.decode(encoded.clone(), &shape, &CodecOptions::default())?;
+            let decoded = codec.decode(
+                encoded.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             assert_eq!(decoded, bytes);
             let offsets = decoded.offsets().unwrap();
             assert_eq!(offsets.is_u32(), is_u32);

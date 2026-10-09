@@ -9,7 +9,8 @@ use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
     BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, decode_into_array_bytes_target,
+    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
+    decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -119,6 +120,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode a chunk.
@@ -130,6 +132,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Compact a chunk to remove any extraneous data.
@@ -146,6 +149,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         Ok(None)
     }
@@ -169,8 +173,9 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        let bytes = self.decode(bytes, shape, options)?;
+        let bytes = self.decode(bytes, shape, options, resources)?;
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
@@ -195,8 +200,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
@@ -215,8 +222,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
@@ -236,8 +245,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             shape.to_vec(),
@@ -257,8 +268,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         _ = options;
+        _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             shape.to_vec(),
