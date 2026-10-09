@@ -31,8 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -46,6 +44,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
       - run: cargo test --all-features --examples
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: |
+            target/zarrs_regression_testing/helpers
+            target/zarrs_regression_testing/target
+          # Regressions fail the job, but the helper builds are still worth caching
+          cache-on-failure: true
+      - run: cargo run -p zarrs_regression_testing -- --json target/zarrs_regression_testing/results.json
+      # Render with `zarr-compatibility report results.json --html report.html` (https://github.com/zarrs/zarr_compatibility)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-results
+          path: target/zarrs_regression_testing/results.json
   build_wasm:
     runs-on: ubuntu-latest
     steps:
@@ -61,8 +78,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -76,8 +91,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -99,8 +112,6 @@ jobs:
             lscpu | grep Endian 
             "
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -127,8 +138,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: RUSTDOCFLAGS="--deny warnings" cargo doc --all-features --no-deps
@@ -181,8 +190,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly install cargo-llvm-cov --locked
