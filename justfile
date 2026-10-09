@@ -60,24 +60,18 @@ _coverage_report:
 _coverage_file:
     cargo +{{TOOLCHAIN}} llvm-cov --all-features --doctests --lcov --output-path lcov.info
 
-# Initialize snapshot test data submodule
-init_snapshots:
-    git submodule update --init zarrs/tests/data/snapshots
+# Test data compatibility with the latest zarrs release (as in CI)
+regression *args:
+    cargo +{{TOOLCHAIN}} run -p zarrs_regression_testing -- {{args}}
 
-# Test codec snapshots
-test_snapshots:
-    cargo +{{TOOLCHAIN}} test --all-features -p zarrs --test codec_snapshot_tests
+# Determine how far back data compatibility extends across all tested zarrs releases
+regression_all *args: (regression "--all" args)
 
-# Clean up generated snapshot files
-clean_snapshots:
-    rm -rf zarrs/tests/data/snapshots/*
+# Write the results of data compatibility testing as JSON (pass --all to include all releases), e.g. for a report by zarr_compatibility (https://github.com/zarrs/zarr_compatibility)
+regression_json *args:
+    -cargo +{{TOOLCHAIN}} run -p zarrs_regression_testing -- --json target/zarrs_regression_testing/results.json {{args}}
 
-# Update codec snapshots (requires submodule to be initialized)
-update_snapshots: clean_snapshots
-    UPDATE_SNAPSHOTS=1 cargo +{{TOOLCHAIN}} test --all-features -p zarrs --test codec_snapshot_tests
-    @echo "Snapshot data updated. Check and commit as required."
+# Remove regression testing helpers and work directories
+regression_clean:
+    rm -rf target/zarrs_regression_testing
 
-# Add newly supported codec snapshots (previously unsupported combinations that now work)
-add_snapshots:
-    ADD_SNAPSHOTS=1 cargo +{{TOOLCHAIN}} test --all-features -p zarrs --test codec_snapshot_tests
-    @echo "Newly supported snapshots added. Check and commit as required."
