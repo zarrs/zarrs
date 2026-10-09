@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `lru` to 0.18.2
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
+### Fixed
+- `FilesystemStore::set_partial_many` writes values in place instead of reading the whole value and rewriting it
+  - Partial encoding of `sharding_indexed` arrays (`experimental_partial_encoding`) appended each inner chunk by rewriting the entire shard file
+
 ## [0.3.13](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.13) - 2026-10-07
 
 ### Fixed
