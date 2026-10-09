@@ -110,7 +110,8 @@ fn partial_decode<'a>(
 
             // Decode the components
             for component_idx in 0..num_elements * num_components {
-                let bit_dec0 = (component_idx_outer + component_idx) * component_size_bits;
+                let bit_dec0 =
+                    (component_idx_outer + component_idx) * component_size_bits + first_bit;
                 let bit_enc0 = component_idx * component_size_bits_extracted;
                 for bit in 0..component_size_bits_extracted {
                     let bit_in = bit_enc0 + bit + bit_offset_from_contiguous_byte_range;

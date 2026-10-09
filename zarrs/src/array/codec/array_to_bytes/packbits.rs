@@ -299,9 +299,63 @@ mod tests {
                         .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
                         .unwrap();
                     assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
+
+                    // Partial decoding
+                    let partial_decoder = codec.partial_decoder(
+                        Arc::new(encoded),
+                        &chunk_shape,
+                        &CodecOptions::default(),
+                    )?;
+                    let decoded_partial_chunk = partial_decoder.partial_decode(
+                        &ArraySubset::new_with_ranges(&[2..5, 1..4]),
+                        &CodecOptions::default(),
+                    )?;
+                    let answer: Vec<i16> = (2..5)
+                        .flat_map(|i| (1..4).map(move |j| i * 5 + j))
+                        .map(|idx| elements[idx])
+                        .collect();
+                    assert_eq!(
+                        answer,
+                        i16::from_array_bytes(&data_type, decoded_partial_chunk)?
+                    );
                 }
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn codec_packbits_int8_first_bit() -> Result<(), Box<dyn std::error::Error>> {
+        let chunk_shape = vec![NonZeroU64::new(16).unwrap()];
+        let data_type = data_type::int8();
+        let fill_value = FillValue::from(0i8);
+        let codec = Arc::new(
+            super::PackBitsCodec::new(PackBitsPaddingEncoding::None, Some(2), Some(5)).unwrap(),
+        )
+        .with_context(
+            data_type.clone(),
+            fill_value.clone(),
+            &CodecSpecificOptions::default(),
+        )?;
+        let elements: Vec<i8> = (-8..8).map(|i| i << 2).collect();
+        let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
+        let encoded = codec.encode(bytes, &chunk_shape, &CodecOptions::default())?;
+
+        // Decoding
+        let decoded = codec.decode(encoded.clone(), &chunk_shape, &CodecOptions::default())?;
+        assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
+
+        // Partial decoding
+        let partial_decoder =
+            codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+        let decoded_partial_chunk = partial_decoder.partial_decode(
+            &ArraySubset::new_with_ranges(&[3..13]),
+            &CodecOptions::default(),
+        )?;
+        assert_eq!(
+            &elements[3..13],
+            i8::from_array_bytes(&data_type, decoded_partial_chunk)?
+        );
         Ok(())
     }
 
