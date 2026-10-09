@@ -17,7 +17,7 @@ use super::{
 };
 use crate::array::codec::BytesCodec;
 use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
-use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
+use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, sign_extend_component};
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType, FillValue,
 };
@@ -383,24 +383,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                         << bit_dec;
             }
             if sign_extension {
-                let signed: bool = {
-                    let bit_enc0 = component_idx * component_size_bits_extracted;
-                    let (byte_enc, bit_enc) =
-                        (bit_enc0 + component_size_bits_extracted.saturating_sub(1)).div_rem(&8);
-                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1) == 1
-                };
-                if signed {
-                    let (byte_dec, bit_dec) = div_rem_8bit(
-                        bit_dec0 + component_size_bits_extracted.saturating_sub(1),
-                        component_size_bits,
-                    );
-                    // Sign-extend to all remaining bits in the byte
-                    // This differs from the spec which says sign extend to N (component_size_bits) bits
-                    // This makes it just work with int4 / int2 -> int8
-                    for bit_dec in bit_dec + 1..8 {
-                        bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                    }
-                }
+                sign_extend_component(&mut bytes_dec, component_idx, last_bit, component_size_bits);
             }
         }
 
