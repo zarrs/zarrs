@@ -3,8 +3,7 @@ use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
 use super::super::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
-    optional_nesting_depth,
+    build_nested_optional_target, merge_chunks, optional_nesting_depth,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -15,9 +14,8 @@ use crate::array::{ArrayBytes, ChunkShapeTraits};
 use rayon::iter::ParallelIterator;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, InvalidNumberOfElementsError,
-    copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
+    InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::{Bytes, StorageHandle};
 
@@ -438,61 +436,28 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let nesting_depth = optional_nesting_depth(data_type);
-
-        let chunk_indices = chunks.indices();
-        if nesting_depth > 0 {
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<
-                (ArrayBytesOptional<'static>, ArraySubset),
-                ArrayError,
-            > {
-                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                Ok((
-                    self.retrieve_partial_chunk_with_options::<ArrayBytes<'static>>(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        options,
-                    )?
-                    .into_optional()?,
-                    chunk_subset_overlap.relative_to(&array_subset.start())?,
-                ))
-            };
-            let chunk_bytes_and_subsets = chunk_indices
-                .concurrent_limit(chunk_concurrent_limit)
-                .map(retrieve_chunk)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-                chunk_bytes_and_subsets,
-                &array_subset.shape(),
-                nesting_depth,
-            )?))
-        } else {
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<
-                (ArrayBytesVariableLength<'static>, ArraySubset),
-                ArrayError,
-            > {
-                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                Ok((
-                    self.retrieve_partial_chunk_with_options::<ArrayBytes<'static>>(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        options,
-                    )?
-                    .into_variable()?,
-                    chunk_subset_overlap.relative_to(&array_subset.start())?,
-                ))
-            };
-            let chunk_bytes_and_subsets = chunk_indices
-                .concurrent_limit(chunk_concurrent_limit)
-                .map(retrieve_chunk)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ArrayBytes::Variable(merge_chunks_vlen(
-                chunk_bytes_and_subsets,
-                &array_subset.shape(),
-            )))
-        }
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let chunk_subset = self.chunk_subset(&chunk_indices)?;
+            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+            Ok::<_, ArrayError>((
+                self.retrieve_partial_chunk_with_options::<ArrayBytes<'static>>(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    options,
+                )?,
+                chunk_subset_overlap.relative_to(&array_subset.start())?,
+            ))
+        };
+        let chunk_bytes_and_subsets = chunks
+            .indices()
+            .concurrent_limit(chunk_concurrent_limit)
+            .map(retrieve_chunk)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(merge_chunks(
+            chunk_bytes_and_subsets,
+            &array_subset.shape(),
+            data_type,
+        )?)
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types.

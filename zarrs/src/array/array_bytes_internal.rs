@@ -9,7 +9,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::{ArraySubset, DataType, FillValue, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
-    ArrayBytesOffsetsCreateError, ArrayBytesOptional, ArrayBytesVariableLength, CodecError,
+    ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
     decode_into_array_bytes_target,
 };
 
@@ -210,6 +210,24 @@ pub(crate) fn extract_target_views<'a, 'b>(
     }
 }
 
+/// Split keyed optional array bytes into keyed inner data and keyed validity masks.
+///
+/// # Errors
+/// Returns a [`CodecError`] if any array bytes are not optional.
+#[expect(clippy::type_complexity)]
+pub(crate) fn split_optional<K: Clone>(
+    bytes_and_keys: Vec<(ArrayBytes<'_>, K)>,
+) -> Result<(Vec<(ArrayBytes<'_>, K)>, Vec<(ArrayBytes<'_>, K)>), CodecError> {
+    let mut data_and_keys = Vec::with_capacity(bytes_and_keys.len());
+    let mut masks_and_keys = Vec::with_capacity(bytes_and_keys.len());
+    for (bytes, key) in bytes_and_keys {
+        let (data, mask) = bytes.into_optional()?.into_parts();
+        data_and_keys.push((*data, key.clone()));
+        masks_and_keys.push((ArrayBytes::new_flen(mask), key));
+    }
+    Ok((data_and_keys, masks_and_keys))
+}
+
 /// Merge a set of chunks of any data type (fixed, variable, or optional) into an array subset.
 ///
 /// Optional data is merged by independently merging its inner data and its validity mask.
@@ -225,13 +243,7 @@ pub(crate) fn merge_chunks<'a>(
     data_type: &DataType,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(inner_data_type) = data_type.optional_inner() {
-        let mut data_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
-        let mut masks_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
-        for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
-            let (data, mask) = chunk_bytes.into_optional()?.into_parts();
-            data_and_subsets.push((*data, chunk_subset.clone()));
-            masks_and_subsets.push((ArrayBytes::new_flen(mask), chunk_subset));
-        }
+        let (data_and_subsets, masks_and_subsets) = split_optional(chunk_bytes_and_subsets)?;
         let data = merge_chunks(data_and_subsets, array_shape, inner_data_type)?;
         let mask = merge_chunks(masks_and_subsets, array_shape, &super::data_type::uint8())?;
         Ok(data.with_optional_mask(mask.into_fixed()?))
@@ -331,127 +343,23 @@ pub(crate) fn merge_chunks_vlen<'a>(
     }
 }
 
-/// Merge multiple chunks with optional variable-length data types.
-///
-/// This handles optional wrappers (including nested optionals like `Option<Option<String>>`)
-/// around variable-length data. Each chunk should contain an `ArrayBytes::Optional` with
-/// variable-length inner data.
-///
-/// # Arguments
-/// * `chunk_bytes_and_subsets` - Pairs of `(ArrayBytes, ArraySubset)` for each chunk
-/// * `array_shape` - The shape of the output array
-/// * `nesting_depth` - The number of nested `Option` layers (e.g., 1 for `Option<String>`, 2 for `Option<Option<String>>`)
+/// Merge cached chunk bytes into an array subset.
 ///
 /// # Errors
-/// Returns an error if the chunks don't have the expected optional structure.
+/// Returns a [`CodecError`] if the chunk bytes are incompatible with `data_type`.
 ///
 /// # Panics
-/// Panics if the `array_shape` exceeds `usize::MAX` elements.
-pub(crate) fn merge_chunks_vlen_optional<'a>(
-    chunk_bytes_and_subsets: Vec<(ArrayBytesOptional<'_>, ArraySubset)>,
-    array_shape: &[u64],
-    nesting_depth: usize,
-) -> Result<ArrayBytesOptional<'a>, CodecError> {
-    debug_assert!(nesting_depth > 0);
-
-    let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
-
-    // Allocate mask buffers for each nesting level (1 byte per element per level)
-    let mut merged_masks: Vec<Vec<u8>> = (0..nesting_depth)
-        .map(|_| vec![0u8; num_elements])
-        .collect();
-
-    // Unwrap optionals and collect inner variable-length data
-    let mut inner_bytes_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
-
-    for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
-        // Unwrap nesting_depth levels of Optional, collecting masks
-        let mut current = ArrayBytes::Optional(chunk_bytes);
-        let mut chunk_masks = Vec::with_capacity(nesting_depth);
-
-        for _ in 0..nesting_depth {
-            let optional = current.into_optional()?;
-            let (data, mask) = optional.into_parts();
-            chunk_masks.push(mask);
-            current = *data;
-        }
-
-        // Copy chunk masks to merged masks at correct positions
-        let indices: Vec<_> = chunk_subset
-            .linearised_indices(array_shape)
-            .unwrap()
-            .into_iter()
-            .collect();
-        for (level, chunk_mask) in chunk_masks.iter().enumerate() {
-            for (chunk_idx, &array_idx) in indices.iter().enumerate() {
-                let array_idx = usize::try_from(array_idx).unwrap();
-                merged_masks[level][array_idx] = chunk_mask[chunk_idx];
-            }
-        }
-
-        inner_bytes_and_subsets.push((current.into_variable()?, chunk_subset));
-    }
-
-    // Merge the inner variable-length data using the existing function
-    let merged_vlen = merge_chunks_vlen(inner_bytes_and_subsets, array_shape);
-
-    // Wrap with masks in reverse order (innermost first)
-    let mut result = ArrayBytes::Variable(merged_vlen);
-    for mask in merged_masks.into_iter().rev() {
-        result = result.with_optional_mask(mask);
-    }
-
-    Ok(result.into_optional()?)
-}
-
-/// Merge cached variable-length chunk bytes into an array subset.
-///
-/// Dispatches to [`merge_chunks_vlen_optional`] or [`merge_chunks_vlen`] depending on the optional
-/// nesting depth of `data_type`.
-///
-/// # Errors
-/// Returns a [`CodecError`] if the chunks don't have the optional structure implied by `data_type`.
-///
-/// # Panics
-/// Panics if a chunk does not hold variable-length bytes, or if `array_shape` exceeds `usize::MAX`
-/// elements.
-pub(crate) fn merge_cached_chunks_vlen(
+/// Panics if `array_shape` exceeds `usize::MAX` elements.
+pub(crate) fn merge_cached_chunks(
     chunk_bytes_and_subsets: Vec<(Arc<ArrayBytes<'static>>, ArraySubset)>,
     array_shape: &[u64],
     data_type: &DataType,
 ) -> Result<ArrayBytes<'static>, CodecError> {
-    let nesting_depth = optional_nesting_depth(data_type);
-    if nesting_depth > 0 {
-        let chunks = chunk_bytes_and_subsets
-            .into_iter()
-            .map(|(bytes, subset)| {
-                (
-                    Arc::unwrap_or_clone(bytes)
-                        .into_optional()
-                        .expect("run on vlen data"),
-                    subset,
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-            chunks,
-            array_shape,
-            nesting_depth,
-        )?))
-    } else {
-        let chunks = chunk_bytes_and_subsets
-            .into_iter()
-            .map(|(bytes, subset)| {
-                (
-                    Arc::unwrap_or_clone(bytes)
-                        .into_variable()
-                        .expect("run on vlen data"),
-                    subset,
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Variable(merge_chunks_vlen(chunks, array_shape)))
-    }
+    let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+        .into_iter()
+        .map(|(bytes, subset)| (Arc::unwrap_or_clone(bytes), subset))
+        .collect();
+    merge_chunks(chunk_bytes_and_subsets, array_shape, data_type)
 }
 
 /// Extract decoded variable-length regions from bytes and offsets using an indexer.

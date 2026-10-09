@@ -6,8 +6,7 @@ use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::super::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks_vlen, merge_chunks_vlen_optional,
-    optional_nesting_depth,
+    build_nested_optional_target, merge_chunks, optional_nesting_depth,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -464,70 +463,33 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let nesting_depth = optional_nesting_depth(data_type);
         let array_subset_start = array_subset.start();
-        let array_subset_shape = array_subset.shape();
-
-        if nesting_depth > 0 {
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-                let array_subset_start = &array_subset_start;
-                async move {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    Ok::<_, ArrayError>((
-                        self.async_retrieve_partial_chunk_with_options::<ArrayBytes>(
-                            &chunk_indices,
-                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                            options,
-                        )
-                        .await?
-                        .into_optional()?,
-                        chunk_subset_overlap.relative_to(array_subset_start)?,
-                    ))
-                }
-            };
-
-            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-                .map(retrieve_chunk)
-                .buffered(chunk_concurrent_limit)
-                .try_collect()
-                .await?;
-
-            Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-                chunk_bytes_and_subsets,
-                &array_subset_shape,
-                nesting_depth,
-            )?))
-        } else {
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-                let array_subset_start = &array_subset_start;
-                async move {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    Ok::<_, ArrayError>((
-                        self.async_retrieve_partial_chunk_with_options::<ArrayBytes>(
-                            &chunk_indices,
-                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                            options,
-                        )
-                        .await?
-                        .into_variable()?,
-                        chunk_subset_overlap.relative_to(array_subset_start)?,
-                    ))
-                }
-            };
-
-            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-                .map(retrieve_chunk)
-                .buffered(chunk_concurrent_limit)
-                .try_collect()
-                .await?;
-
-            Ok(ArrayBytes::Variable(merge_chunks_vlen(
-                chunk_bytes_and_subsets,
-                &array_subset_shape,
-            )))
-        }
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let array_subset_start = &array_subset_start;
+            async move {
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                Ok::<_, ArrayError>((
+                    self.async_retrieve_partial_chunk_with_options::<ArrayBytes>(
+                        &chunk_indices,
+                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        options,
+                    )
+                    .await?,
+                    chunk_subset_overlap.relative_to(array_subset_start)?,
+                ))
+            }
+        };
+        let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
+            .map(retrieve_chunk)
+            .buffered(chunk_concurrent_limit)
+            .try_collect()
+            .await?;
+        Ok(merge_chunks(
+            chunk_bytes_and_subsets,
+            &array_subset.shape(),
+            data_type,
+        )?)
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types (async).

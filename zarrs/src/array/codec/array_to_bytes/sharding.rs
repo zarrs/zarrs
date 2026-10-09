@@ -97,6 +97,7 @@ use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
 use zarrs_codec::CowBytes;
 
+use crate::array::array_bytes_internal::split_optional;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
@@ -414,12 +415,12 @@ fn group_indices_by_subchunk(
 
 /// Restore indexer order after independently decoding each subchunk's selected elements.
 fn merge_indexer_subchunks(
-    groups: Vec<(Vec<usize>, ArrayBytes<'static>)>,
+    groups: Vec<(ArrayBytes<'static>, Vec<usize>)>,
     num_elements: usize,
     data_type: &DataType,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let mut num_decoded = 0;
-    for (positions, bytes) in &groups {
+    for (bytes, positions) in &groups {
         bytes.validate(positions.len() as u64, data_type)?;
         num_decoded += positions.len();
     }
@@ -428,28 +429,34 @@ fn merge_indexer_subchunks(
             "indexer yielded {num_decoded} elements, but has a length of {num_elements}"
         )));
     }
+    merge_validated_indexer_subchunks(groups, num_elements, data_type)
+}
+
+/// Merge subchunk groups validated by [`merge_indexer_subchunks`].
+fn merge_validated_indexer_subchunks(
+    groups: Vec<(ArrayBytes<'static>, Vec<usize>)>,
+    num_elements: usize,
+    data_type: &DataType,
+) -> Result<ArrayBytes<'static>, CodecError> {
     if groups.len() == 1 {
         // Positions within a group are ascending and cover every element, so already in order
-        let (_, bytes) = groups.into_iter().next().expect("one group");
+        let (bytes, _) = groups.into_iter().next().expect("one group");
         return Ok(bytes);
     }
     if let Some(inner_data_type) = data_type.optional_inner() {
         // Merge the inner data and validity mask independently
-        let mut data_groups = Vec::with_capacity(groups.len());
-        let mut mask_groups = Vec::with_capacity(groups.len());
-        for (positions, bytes) in groups {
-            let (data, mask) = bytes.into_optional()?.into_parts();
-            data_groups.push((positions.clone(), *data));
-            mask_groups.push((positions, ArrayBytes::new_flen(mask)));
-        }
-        let data = merge_indexer_subchunks(data_groups, num_elements, inner_data_type)?;
-        let mask =
-            merge_indexer_subchunks(mask_groups, num_elements, &crate::array::data_type::uint8())?;
+        let (data_groups, mask_groups) = split_optional(groups)?;
+        let data = merge_validated_indexer_subchunks(data_groups, num_elements, inner_data_type)?;
+        let mask = merge_validated_indexer_subchunks(
+            mask_groups,
+            num_elements,
+            &crate::array::data_type::uint8(),
+        )?;
         return Ok(data.with_optional_mask(mask.into_fixed()?));
     }
     if let Some(element_size) = data_type.fixed_size() {
         let mut output = vec![0; num_elements * element_size];
-        for (positions, bytes) in groups {
+        for (bytes, positions) in groups {
             let bytes = bytes.into_fixed()?;
             for (element, position) in positions.into_iter().enumerate() {
                 output[position * element_size..(position + 1) * element_size]
@@ -460,7 +467,7 @@ fn merge_indexer_subchunks(
     } else {
         let groups = groups
             .into_iter()
-            .map(|(positions, bytes)| Ok((positions, bytes.into_variable()?)))
+            .map(|(bytes, positions)| Ok((positions, bytes.into_variable()?)))
             .collect::<Result<Vec<_>, CodecError>>()?;
         let mut elements: Vec<&[u8]> = vec![&[]; num_elements];
         let mut bytes_len = 0;

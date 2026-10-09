@@ -500,7 +500,7 @@ fn partial_decode_indexer(
             } else {
                 ArrayBytes::new_fill_value(data_type, group.len(), fill_value)?
             };
-            Ok::<_, CodecError>((group.positions, bytes))
+            Ok::<_, CodecError>((bytes, group.positions))
         })
         .collect::<Result<Vec<_>, _>>()?;
     super::merge_indexer_subchunks(decoded, usize::try_from(indexer.len()).unwrap(), data_type)
