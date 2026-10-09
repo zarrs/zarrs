@@ -7,8 +7,7 @@ use futures::{StreamExt, TryStreamExt};
 use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
-    wrap_optional_masks,
+    build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
@@ -128,7 +127,7 @@ where
         .try_collect()
         .await?;
 
-    Ok(merge_cached_chunks_vlen(
+    Ok(merge_cached_chunks(
         chunk_bytes_and_subsets,
         &array_subset.shape(),
         array.data_type(),

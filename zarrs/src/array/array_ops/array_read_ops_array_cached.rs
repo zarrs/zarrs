@@ -8,8 +8,7 @@ use rayon::iter::ParallelIterator;
 use super::{ArrayReadOps, *};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_cached_chunks_vlen, optional_nesting_depth,
-    wrap_optional_masks,
+    build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
     SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
@@ -122,7 +121,7 @@ where
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
 
-    Ok(merge_cached_chunks_vlen(
+    Ok(merge_cached_chunks(
         chunk_bytes_and_subsets,
         &array_subset.shape(),
         array.data_type(),
