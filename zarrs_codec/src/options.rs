@@ -2,21 +2,18 @@
 
 /// Per-operation codec options for encoding and decoding.
 ///
-/// These are passed at each encode/decode call and control runtime behaviour such as concurrency limits and checksum validation.
-/// They are distinct from [`CodecSpecificOptions`](super::CodecSpecificOptions), which carry codec-specific configuration.
+/// These are passed at each encode/decode call and control runtime behaviour such as checksum validation.
+/// They are distinct from [`CodecSpecificOptions`](super::CodecSpecificOptions), which carry codec-specific configuration,
+/// and [`Resources`](super::Resources), which set the resources (e.g. concurrency) an operation may use.
 ///
 /// The default values are:
 /// - `validate_checksums`: `true`
 /// - `store_empty_chunks`: `false`
-/// - `concurrent_target`: number of threads available to Rayon
-/// - `chunk_concurrent_minimum`: `4`
 /// - `experimental_partial_encoding`: `false`
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     validate_checksums: bool,
     store_empty_chunks: bool,
-    concurrent_target: usize,
-    chunk_concurrent_minimum: usize,
     experimental_partial_encoding: bool,
 }
 
@@ -25,8 +22,6 @@ impl Default for CodecOptions {
         Self {
             validate_checksums: true,
             store_empty_chunks: false,
-            concurrent_target: rayon::current_num_threads(),
-            chunk_concurrent_minimum: 4,
             experimental_partial_encoding: false,
         }
     }
@@ -68,48 +63,6 @@ impl CodecOptions {
     #[must_use]
     pub fn with_store_empty_chunks(mut self, store_empty_chunks: bool) -> Self {
         self.store_empty_chunks = store_empty_chunks;
-        self
-    }
-
-    /// Return the concurrent target.
-    #[must_use]
-    pub fn concurrent_target(&self) -> usize {
-        self.concurrent_target
-    }
-
-    /// Set the concurrent target.
-    pub fn set_concurrent_target(&mut self, concurrent_target: usize) -> &mut Self {
-        self.concurrent_target = concurrent_target;
-        self
-    }
-
-    /// Set the concurrent target.
-    #[must_use]
-    pub fn with_concurrent_target(mut self, concurrent_target: usize) -> Self {
-        self.concurrent_target = concurrent_target;
-        self
-    }
-
-    /// Return the chunk concurrent minimum.
-    ///
-    /// Array operations involving multiple chunks can tune the chunk and codec concurrency to improve performance/reduce memory usage.
-    /// This option sets the preferred minimum chunk concurrency.
-    /// The concurrency of internal codecs is adjusted to accomodate for the chunk concurrency in accordance with the concurrent target.
-    #[must_use]
-    pub fn chunk_concurrent_minimum(&self) -> usize {
-        self.chunk_concurrent_minimum
-    }
-
-    /// Set the chunk concurrent minimum.
-    pub fn set_chunk_concurrent_minimum(&mut self, chunk_concurrent_minimum: usize) -> &mut Self {
-        self.chunk_concurrent_minimum = chunk_concurrent_minimum;
-        self
-    }
-
-    /// Set the chunk concurrent minimum.
-    #[must_use]
-    pub fn with_chunk_concurrent_minimum(mut self, chunk_concurrent_minimum: usize) -> Self {
-        self.chunk_concurrent_minimum = chunk_concurrent_minimum;
         self
     }
 

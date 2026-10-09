@@ -363,7 +363,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// `zarrs` will automatically choose where to prioritise parallelism between codecs/chunks based on the codecs and number of chunks.
 ///
 /// By default, all available CPU cores will be used (where possible/efficient).
-/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`] manipulated with [`CodecOptions::set_concurrent_target`](CodecOptions::set_concurrent_target).
+/// Concurrency can be limited per operation with the [`Resources`] argument (see [`Resources::set_concurrent_target`]).
 ///
 /// ### Async API
 /// This crate is async runtime-agnostic.
@@ -373,7 +373,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Due the lack of parallelism, methods like [`async_retrieve_array_subset`](Array::async_retrieve_array_subset) or [`async_retrieve_chunks`](Array::async_retrieve_chunks) do not parallelise over chunks and can be slow compared to the sync API.
 /// Parallelism over chunks can be achieved by spawning tasks outside of `zarrs`.
 /// A crate like [`async-scoped`](https://crates.io/crates/async-scoped) can enable spawning non-`'static` futures.
-/// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](CodecOptions::set_concurrent_target).
+/// If executing many tasks concurrently, consider reducing the [`concurrent_target`](Resources::set_concurrent_target) of each task.
 ///
 /// ## Custom Extensions
 /// `zarrs` can be extended with custom data types, codecs, chunk grids, chunk key encodings, and storage transformers.
