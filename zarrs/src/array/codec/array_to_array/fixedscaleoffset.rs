@@ -34,8 +34,8 @@
 //!     "astype": "u1"
 //! }
 //! # "#;
-//! # use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfigurationNumcodecs;
-//! # let configuration: FixedScaleOffsetCodecConfigurationNumcodecs = serde_json::from_str(JSON).unwrap();
+//! # use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfigurationNumcodecsF64;
+//! # let configuration: FixedScaleOffsetCodecConfigurationNumcodecsF64 = serde_json::from_str(JSON).unwrap();
 //! ```
 
 mod fixedscaleoffset_codec;
@@ -47,8 +47,10 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
 use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
+#[allow(deprecated)]
+pub use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfigurationNumcodecs;
 pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
-    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
+    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecsF64,
 };
 
 zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
@@ -102,7 +104,9 @@ mod tests {
 
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
-    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
+    use zarrs_codec::{
+        CodecOptions, CodecSpecificOptions, CodecTraits, UnboundArrayToArrayCodecTraits,
+    };
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
@@ -227,6 +231,27 @@ mod tests {
         );
         assert_eq!(encoded, int16(&[2000, 0, 1270]));
         assert_eq!(decoded, [100i8.to_ne_bytes()[0], 156, 27]);
+    }
+
+    #[test]
+    fn codec_fixedscaleoffset_configuration_f64() {
+        // `offset` and `scale` are not rounded to f32 (e.g. to 0.10000000149011612)
+        let configuration: FixedScaleOffsetCodecConfiguration = serde_json::from_value(
+            serde_json::json!({"offset": 0.1, "scale": 0.3, "dtype": "<f8"}),
+        )
+        .unwrap();
+        assert!(matches!(
+            configuration,
+            FixedScaleOffsetCodecConfiguration::NumcodecsF64(_)
+        ));
+        let codec = FixedScaleOffsetCodec::new_with_configuration(&configuration).unwrap();
+        let configuration = codec
+            .configuration_v3(&zarrs_codec::CodecMetadataOptions::default())
+            .unwrap();
+        assert_eq!(
+            serde_json::to_string(&configuration).unwrap(),
+            r#"{"offset":0.1,"scale":0.3,"dtype":"<f8","astype":null}"#
+        );
     }
 
     #[test]
