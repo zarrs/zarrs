@@ -168,16 +168,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `packbits` partial decoding with a non-zero `first_bit`
 - Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
 - Fix the `numcodecs.fixedscaleoffset` codec rejecting single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-- Read `bz2` codec metadata written by `zarrs` 0.11 to 0.19, which used the `bz2` and `https://codec.zarrs.dev/bytes_to_bytes/bz2` names
-  - `bz2` is a non-conformant (unregistered) name, read for backwards compatibility
-- Read `gdeflate` codec metadata with the `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented) and `gdeflate` (written by `zarrs` 0.16 to 0.19) names
-  - `gdeflate` is a non-conformant (unregistered) name, read for backwards compatibility
-- Read `fletcher32` codec metadata with the `fletcher32` name written by `zarrs` 0.19
-  - `fletcher32` is a non-conformant (unregistered) name, read for backwards compatibility
-- Read `zarrs.vlen_v2` codec metadata with the `vlen_v2` name written by `zarrs` 0.19
-  - `vlen_v2` is a non-conformant (unregistered) name, read for backwards compatibility
-- Read `numcodecs.pcodec` codec metadata written by `zarrs` 0.11 to 0.15, which used the `pcodec` name and legacy configurations
-  - `pcodec` is a non-conformant (unregistered) name, read for backwards compatibility
+- Read codec metadata with names and configurations written by past `zarrs` versions, including non-conformant (unregistered) names, for backwards compatibility:
+  - `numcodecs.bz2`: `bz2` (0.11-0.12) and `https://codec.zarrs.dev/bytes_to_bytes/bz2` (0.13-0.19)
+  - `numcodecs.pcodec`: `pcodec` (0.11-0.12) and legacy configurations (0.11-0.15)
+  - `zarrs.gdeflate`: `gdeflate` (0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
+  - `numcodecs.fletcher32`: `fletcher32` (0.19)
+  - `zarrs.vlen_v2`: `vlen_v2` (0.19)
 - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, for compatibility with `zarr-python` and `tensorstore`
 - Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
 - Fix `numcodecs.fixedscaleoffset` with an `astype` whose range differs from the data type: values were saturated to the range of the data type (or `astype`) before the transform
