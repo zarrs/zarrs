@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
+    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecsF64,
     FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType,
 };
 use crate::array::{DataType, FillValue};
@@ -21,8 +21,8 @@ use zarrs_metadata::v2::DataTypeMetadataV2;
 /// A `fixedscaleoffset` codec implementation.
 #[derive(Clone, Debug)]
 pub struct FixedScaleOffsetCodec {
-    offset: f32,
-    scale: f32,
+    offset: f64,
+    scale: f64,
     dtype_str: String,
     astype_str: Option<String>,
     dtype: DataType,
@@ -55,6 +55,49 @@ fn add_byteorder_to_dtype(dtype: &str) -> String {
 }
 
 impl FixedScaleOffsetCodec {
+    fn new(
+        offset: f64,
+        scale: f64,
+        dtype_str: &str,
+        astype_str: Option<&str>,
+    ) -> Result<Self, PluginCreateError> {
+        // Add a byteorder to the data type name, byteorder may be omitted
+        // FixedScaleOffsets permits `dtype` / `astype` with and without a byteoder character, but it is irrelevant
+        let dtype = add_byteorder_to_dtype(dtype_str);
+        let astype = astype_str.map(add_byteorder_to_dtype);
+
+        // Get the data type metadata
+        let dtype = DataTypeMetadataV2::Simple(dtype);
+        let astype = astype
+            .as_ref()
+            .map(|dtype| DataTypeMetadataV2::Simple(dtype.clone()));
+
+        // Convert to a V3 data type
+        let dtype_err = |_| {
+            PluginCreateError::Other(
+                "fixedscaleoffset cannot interpret Zarr V2 data type as V3 equivalent".to_string(),
+            )
+        };
+        let dtype =
+            DataType::from_metadata(&data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?)?;
+        let astype = if let Some(astype) = astype {
+            Some(DataType::from_metadata(
+                &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            offset,
+            scale,
+            dtype,
+            astype,
+            dtype_str: dtype_str.to_string(),
+            astype_str: astype_str.map(str::to_string),
+        })
+    }
+
     /// Create a new `fixedscaleoffset` codec from a configuration.
     ///
     /// # Errors
@@ -63,48 +106,19 @@ impl FixedScaleOffsetCodec {
         configuration: &FixedScaleOffsetCodecConfiguration,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
-            FixedScaleOffsetCodecConfiguration::Numcodecs(configuration) => {
-                // Add a byteorder to the data type name, byteorder may be omitted
-                // FixedScaleOffsets permits `dtype` / `astype` with and without a byteoder character, but it is irrelevant
-                let dtype = add_byteorder_to_dtype(&configuration.dtype);
-                let astype = configuration
-                    .astype
-                    .as_ref()
-                    .map(|astype| add_byteorder_to_dtype(astype));
-
-                // Get the data type metadata
-                let dtype = DataTypeMetadataV2::Simple(dtype);
-                let astype = astype
-                    .as_ref()
-                    .map(|dtype| DataTypeMetadataV2::Simple(dtype.clone()));
-
-                // Convert to a V3 data type
-                let dtype_err = |_| {
-                    PluginCreateError::Other(
-                        "fixedscaleoffset cannot interpret Zarr V2 data type as V3 equivalent"
-                            .to_string(),
-                    )
-                };
-                let dtype = DataType::from_metadata(
-                    &data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?,
-                )?;
-                let astype = if let Some(astype) = astype {
-                    Some(DataType::from_metadata(
-                        &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
-                    )?)
-                } else {
-                    None
-                };
-
-                Ok(Self {
-                    offset: configuration.offset,
-                    scale: configuration.scale,
-                    dtype,
-                    astype,
-                    dtype_str: configuration.dtype.clone(),
-                    astype_str: configuration.astype.clone(),
-                })
-            }
+            FixedScaleOffsetCodecConfiguration::NumcodecsF64(configuration) => Self::new(
+                configuration.offset,
+                configuration.scale,
+                &configuration.dtype,
+                configuration.astype.as_deref(),
+            ),
+            #[allow(deprecated)]
+            FixedScaleOffsetCodecConfiguration::Numcodecs(configuration) => Self::new(
+                f64::from(configuration.offset),
+                f64::from(configuration.scale),
+                &configuration.dtype,
+                configuration.astype.as_deref(),
+            ),
             _ => Err(PluginCreateError::Other(
                 "this fixedscaleoffset codec configuration variant is unsupported".to_string(),
             )),
@@ -118,8 +132,8 @@ impl CodecTraits for FixedScaleOffsetCodec {
         _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
-        let configuration = FixedScaleOffsetCodecConfiguration::Numcodecs(
-            FixedScaleOffsetCodecConfigurationNumcodecs {
+        let configuration = FixedScaleOffsetCodecConfiguration::NumcodecsF64(
+            FixedScaleOffsetCodecConfigurationNumcodecsF64 {
                 offset: self.offset,
                 scale: self.scale,
                 dtype: self.dtype_str.clone(),
@@ -355,13 +369,13 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             &fill_value,
             &data_type,
             element_type,
-            f64::from(self.offset),
-            f64::from(self.scale),
+            self.offset,
+            self.scale,
             encoded_element_type,
         )?;
         Ok(Arc::new(FixedScaleOffsetCodecBound {
-            offset: f64::from(self.offset),
-            scale: f64::from(self.scale),
+            offset: self.offset,
+            scale: self.scale,
             element_type,
             encoded_element_type,
             data_type,

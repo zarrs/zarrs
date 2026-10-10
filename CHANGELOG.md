@@ -161,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `numcodecs.fixedscaleoffset` encoding to match `numcodecs`
   - Compute in `f32` for `float32` data and otherwise `f64`, rounding encoded values with ties to even and decoded integers to the nearest integer
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
+  - Represent `offset` and `scale` as `f64` rather than `f32`
 - Improve compatibility with other Zarr implementations and past `zarrs` versions:
   - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, as required by `zarr-python` and `tensorstore`
   - Write `bytes` data type fill values as base64-encoded strings rather than arrays of bytes (both conformant), as `zarr-python` only reads the former

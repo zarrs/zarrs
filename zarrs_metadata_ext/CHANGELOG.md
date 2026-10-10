@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `PcodecCodecConfigurationLegacy` and `PcodecCodecConfiguration::Legacy` for `pcodec` configurations written by `zarrs` 0.11 to 0.15
 - Add `ChunkEdgeLengths::decpde()` and `emcpde()` for expanding and compressing rectilinear chunk edge lengths
+- Add `FixedScaleOffsetCodecConfigurationNumcodecsF64` and `FixedScaleOffsetCodecConfiguration::NumcodecsF64`, preferred when deserializing
 
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
+
+### Deprecated
+- Deprecate `FixedScaleOffsetCodecConfigurationNumcodecs` and `FixedScaleOffsetCodecConfiguration::Numcodecs`, which round `offset` and `scale` to `f32`
 
 ### Fixed
 - Read metadata written by past `zarrs` versions:
