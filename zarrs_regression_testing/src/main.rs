@@ -369,7 +369,7 @@ fn format_failures(run: &summary::Run, failures: &[&summary::Failure], verbose: 
     }
 }
 
-/// Print the compatibility with older releases (if testing all releases) and non-conformant data written by releases.
+/// Print the compatibility with older releases (if testing all releases) and non-conformant data and unregistered names written by releases.
 fn print_releases(run: &summary::Run, failures: &[summary::Failure], args: &Args) {
     let latest = run.releases[0];
     if args.all {
@@ -390,7 +390,7 @@ fn print_releases(run: &summary::Run, failures: &[summary::Failure], args: &Args
     let non_conformances = run.format_non_conformances();
     if !non_conformances.is_empty() {
         println!(
-            "Non-conformant data written by releases (read by current zarrs for backwards compatibility where compatible):"
+            "Non-conformant data and unregistered names written by releases (read by current zarrs for backwards compatibility where compatible):"
         );
         println!("{non_conformances}");
     }

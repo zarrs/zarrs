@@ -1,6 +1,6 @@
-//! Known non-conformant data written by previous releases.
+//! Known non-conformant data and unregistered names written by previous releases.
 //!
-//! The current `zarrs` reads some non-conformant data for backwards compatibility (marked `NON-CONFORMANT` in its source).
+//! The current `zarrs` reads some non-conformant data and unregistered names for backwards compatibility (marked `NON-CONFORMANT` and `UNREGISTERED` in its source).
 //! Such data is reported even if the current `zarrs` reads it.
 
 use std::path::Path;

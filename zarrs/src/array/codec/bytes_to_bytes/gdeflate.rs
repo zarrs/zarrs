@@ -26,7 +26,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `zarrs.gdeflate`
 //! - `https://codec.zarrs.dev/bytes_to_bytes/gdeflate`
-//! - `gdeflate` (**non-conformant**, written by `zarrs` 0.16 to 0.19)
+//! - `gdeflate` (unregistered, written by `zarrs` 0.16 to 0.19)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! None
@@ -59,7 +59,7 @@ pub use zarrs_metadata_ext::codec::gdeflate::{
 zarrs_plugin::impl_extension_aliases!(GDeflateCodec,
     v3: "zarrs.gdeflate", [
         "https://codec.zarrs.dev/bytes_to_bytes/gdeflate",
-        // NON-CONFORMANT: An unregistered name written by zarrs 0.16 to 0.19, read for backwards compatibility
+        // UNREGISTERED: A name written by zarrs 0.16 to 0.19, read for backwards compatibility
         "gdeflate",
     ]
 );

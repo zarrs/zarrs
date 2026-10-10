@@ -17,7 +17,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `numcodecs.pcodec`
 //! - `https://codec.zarrs.dev/array_to_bytes/pcodec` (written by `zarrs` 0.13 to 0.19)
-//! - `pcodec` (**non-conformant**, written by `zarrs` 0.11 and 0.12)
+//! - `pcodec` (unregistered, written by `zarrs` 0.11 and 0.12)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! - `pcodec`
@@ -56,7 +56,7 @@ zarrs_plugin::impl_extension_aliases!(PcodecCodec,
     v3: "numcodecs.pcodec", [
         // Written by zarrs 0.13 to 0.19
         "https://codec.zarrs.dev/array_to_bytes/pcodec",
-        // NON-CONFORMANT: An unregistered name written by zarrs 0.11 and 0.12, read for backwards compatibility
+        // UNREGISTERED: A name written by zarrs 0.11 and 0.12, read for backwards compatibility
         "pcodec",
     ],
     v2: "pcodec"

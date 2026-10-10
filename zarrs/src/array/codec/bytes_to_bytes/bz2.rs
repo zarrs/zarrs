@@ -16,7 +16,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `numcodecs.bz2`
 //! - `https://codec.zarrs.dev/bytes_to_bytes/bz2` (written by `zarrs` 0.13 to 0.19)
-//! - `bz2` (**non-conformant**, written by `zarrs` 0.11 and 0.12)
+//! - `bz2` (unregistered, written by `zarrs` 0.11 and 0.12)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! - `bz2`
@@ -49,7 +49,7 @@ zarrs_plugin::impl_extension_aliases!(Bz2Codec,
     v3: "numcodecs.bz2", [
         // Written by zarrs 0.13 to 0.19
         "https://codec.zarrs.dev/bytes_to_bytes/bz2",
-        // NON-CONFORMANT: An unregistered name written by zarrs 0.11 and 0.12, read for backwards compatibility
+        // UNREGISTERED: A name written by zarrs 0.11 and 0.12, read for backwards compatibility
         "bz2",
     ],
     v2: "bz2", []
