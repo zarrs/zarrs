@@ -33,7 +33,7 @@ missing_errors_doc = "warn"
 single_range_in_vec_init = "allow"
 
 [workspace.dependencies.zarrs_chunk_grid]
-version = "0.6.1"
+version = "0.6.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]
