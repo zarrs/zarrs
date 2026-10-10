@@ -697,7 +697,7 @@ mod tests {
             .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
             .build_metadata()
             .unwrap();
-        // Non-conformant data types are not created
+        // Data types the registered codec is not compatible with are not created
         let metadata = builder(data_type::string(), "")
             .array_to_bytes_codec(Arc::new(VlenBytesCodec::new()))
             .build_metadata();

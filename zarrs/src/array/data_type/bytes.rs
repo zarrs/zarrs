@@ -10,9 +10,9 @@ pub struct BytesDataType;
 register_data_type_plugin!(BytesDataType);
 zarrs_plugin::impl_extension_aliases!(BytesDataType,
     v3: "bytes", [
-        // NON-CONFORMANT: An unregistered name written by zarrs 0.16 to 0.18, read for backwards compatibility
+        // UNREGISTERED: A name written by zarrs 0.16 to 0.18, read for backwards compatibility
         "binary",
-        // NON-CONFORMANT: An unregistered name written by zarr-python 3 (as of 3.4.1), read for compatibility
+        // UNREGISTERED: A name written by zarr-python 3 (as of 3.4.1), read for compatibility
         "variable_length_bytes",
     ],
     v2: "|VX", ["|VX"]
