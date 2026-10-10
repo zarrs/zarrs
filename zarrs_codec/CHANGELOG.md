@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bump `zarrs_chunk_grid` to 0.6.1
-- Bump `zarrs_storage` to 0.5.1
 - Bump `zarrs_metadata` to 0.7.6
 - **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
   - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
