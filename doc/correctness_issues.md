@@ -9,18 +9,18 @@
   - Values out of the range of the data type but in the range of `astype` (or vice versa) were saturated before the transform
   - Encoded values were rounded with ties away from zero rather than to even (`numpy.around`)
   - 8 and 16-bit integer data was computed in `f32`, losing precision
-- `zarrs: 0.18-0.23` it was possible to create non-conformant arrays with the `vlen-bytes` codec and a data type other than `bytes`, or the `vlen-utf8` codec and a data type other than `string`
+- `zarrs: 0.18-0.23` it was possible to create non-conformant arrays with the `vlen-bytes` codec and a data type other than `bytes`, or the `vlen-utf8` codec and a data type other than `string` (the registered codecs are only compatible with `bytes` and `string` respectively)
   - These arrays fail to be opened by other Zarr implementations (e.g. `zarr-python`)
   - `zarrs` 0.24+ `ArrayBuilder` returns an error for these combinations, but they are still read
-- `zarrs: 0.10-0.22` non-conformant metadata was written, which `zarrs` 0.24+ reads for backwards compatibility:
-  - `zarrs: 0.20-0.22` `numcodecs.zfpy` codec with a string `mode` rather than an integer
+- `zarrs: 0.10-0.22` metadata was written with unregistered names or non-conformant configurations, which `zarrs` 0.24+ reads for backwards compatibility:
+  - `zarrs: 0.20-0.22` `numcodecs.zfpy` codec with a string `mode` rather than an integer (as in `numcodecs`)
   - `zarrs: 0.19.x` `numcodecs.fletcher32` codec with the unregistered `fletcher32` name
   - `zarrs: 0.19.x` `zarrs.vlen_v2` codec with the unregistered `vlen_v2` name
   - `zarrs: 0.16-0.19` `zarrs.gdeflate` codec with the unregistered `gdeflate` name
   - `zarrs: 0.16-0.18` `bytes` data type with the unregistered `binary` name
   - `zarrs: 0.11-0.12` `numcodecs.pcodec` codec with the unregistered `pcodec` name (legacy configurations written by `zarrs` 0.11-0.15 are also read)
   - `zarrs: 0.11-0.12` `numcodecs.bz2` codec with the unregistered `bz2` name
-  - `zarrs: 0.10-0.12` `zfp` codec with the `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes
+  - `zarrs: 0.10-0.12` `zfp` codec with the non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (registered as `fixed_rate`, `fixed_precision`, and `fixed_accuracy`)
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`

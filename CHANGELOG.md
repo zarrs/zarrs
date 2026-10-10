@@ -21,9 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_partial_chunk_into`, `async_retrieve_chunk_into`, `async_retrieve_partial_chunk_into`
   - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants for interacting with nested subchunk grids
   - These are implemented as inherent traits on `Array` and `ArrayCached`
-- Implement the asynchronous operation traits for `ArrayCached`, so that chunk caches can be used with asynchronous stores
-  - `ArrayCached` now implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`
 - Add support for async caching
+  - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
   - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
   - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
   - Add the `AsyncChunkCache` trait and  `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
@@ -33,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
-- Add efficient asynchronous partial encoding for the `sharding_indexed` codec
+- Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`
 - Add `ArrayOps::codec_specific_options()`
@@ -41,15 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Tensor::into_dlpack()` for exporting a `Tensor<'static>` as a versioned DLPack managed tensor (requires the `dlpack` feature)
 - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
 - Implement `Clone` and `Debug` for `Tensor`
-- Support partial encoding with generic indexers in the `sharding_indexed` codec
 - Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
-- Bump `zarrs_chunk_grid` to 0.6.1
-- Bump `zarrs_storage` to 0.5.1
-- Bump `zarrs_metadata` to 0.7.6
+- **Breaking**: Bump `zarrs_storage` to 0.5.1, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.1
+- Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
@@ -63,7 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes
 - **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
 - **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
-- **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0 and `zarrs_chunk_key_encoding` to 0.3.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
@@ -72,7 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `CodecChain::with_context` takes `CodecSpecificOptions`
   - `Array::{with,set}_codec_specific_options` replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
   - `ArrayBuilder::from_array` retains the codec-specific options of the array
-- **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity
   - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
@@ -84,8 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
-- Bump `zarrs_storage` to 0.4.6
-- Bump `zarrs_data_type` to 0.9.1
 - Bump `rayon_iter_concurrent_limit` to 0.3.0
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
@@ -107,7 +100,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Make array codec-specific reconfiguration APIs fallible
 - **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
 - **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
-- Bump `zarrs_metadata_ext` to 0.4.5
 - **Breaking**: Change `ArrayOps::subchunk_grid()` to return `ChunkGridDecodedRef<'_>`, which distinguishes an absent subchunk grid from one that is only resolvable per chunk
   - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
   - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
@@ -123,9 +115,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `lru` to 0.18.2
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
-- Compute `numcodecs.fixedscaleoffset` in `f32` for `float32` data and otherwise `f64`, with encoded values rounded with ties to even, as in `numcodecs`, and round decoded integers to the nearest integer
-- Write the fill value of the `bytes` data type as a base64-encoded string rather than an array of bytes (both are conformant), as `zarr-python` only reads base64-encoded strings
-- `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as they are non-conformant (they are still read)
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
@@ -163,20 +152,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass the encoded shape and data type to the partial decoder cache in a codec chain
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 - Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- Fix missing sign extension of `int2`/`int4` data when partially decoding with the `packbits` codec
-- Fix `packbits` sign extension of data types wider than a byte, which only extended to the end of the byte holding the sign bit
-- Fix `packbits` partial decoding with a non-zero `first_bit`
+- Fix the `packbits` codec:
+  - Sign extension of `int2`/`int4` data when partially decoding
+  - Sign extension of data types wider than a byte, which only extended to the end of the byte holding the sign bit
+  - Partial decoding with a non-zero `first_bit`
 - Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
-- Fix the `numcodecs.fixedscaleoffset` codec rejecting single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-- Read codec metadata with names and configurations written by past `zarrs` versions, including non-conformant (unregistered) names, for backwards compatibility:
-  - `numcodecs.bz2`: `bz2` (0.11-0.12) and `https://codec.zarrs.dev/bytes_to_bytes/bz2` (0.13-0.19)
-  - `numcodecs.pcodec`: `pcodec` (0.11-0.12) and legacy configurations (0.11-0.15)
-  - `zarrs.gdeflate`: `gdeflate` (0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
-  - `numcodecs.fletcher32`: `fletcher32` (0.19)
-  - `zarrs.vlen_v2`: `vlen_v2` (0.19)
-- Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, for compatibility with `zarr-python` and `tensorstore`
 - Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
-- Fix `numcodecs.fixedscaleoffset` with an `astype` whose range differs from the data type: values were saturated to the range of the data type (or `astype`) before the transform
+- Fix `numcodecs.fixedscaleoffset` encoding to match `numcodecs`
+  - Compute in `f32` for `float32` data and otherwise `f64`, rounding encoded values with ties to even and decoded integers to the nearest integer
+  - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
+- Improve compatibility with other Zarr implementations and past `zarrs` versions:
+  - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, as required by `zarr-python` and `tensorstore`
+  - Write `bytes` data type fill values as base64-encoded strings rather than arrays of bytes (both conformant), as `zarr-python` only reads the former
+  - **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
+  - Read `numcodecs.fixedscaleoffset` single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
+  - Read codec metadata with names and configurations written by past `zarrs` versions:
+    - `numcodecs.bz2`: `bz2` (unregistered, 0.11-0.12) and `https://codec.zarrs.dev/bytes_to_bytes/bz2` (0.13-0.19)
+    - `numcodecs.pcodec`: `pcodec` (unregistered, 0.11-0.12) and legacy configurations (0.11-0.15)
+    - `zarrs.gdeflate`: `gdeflate` (unregistered, 0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
+    - `numcodecs.fletcher32`: `fletcher32` (unregistered, 0.19)
+    - `zarrs.vlen_v2`: `vlen_v2` (unregistered, 0.19)
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 
