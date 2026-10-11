@@ -209,7 +209,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
 
         let futures = chunks.iter_indices().map(retrieve_encoded_chunk);
         futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
+            // A zero target is unconstrained, but buffered(0) never makes progress.
+            .buffered(match options.concurrent_target() {
+                0 => usize::MAX,
+                target => target,
+            })
             .try_collect()
             .await
     }

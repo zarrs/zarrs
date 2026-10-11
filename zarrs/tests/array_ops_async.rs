@@ -481,3 +481,25 @@ async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn zero_concurrency_retrieve_encoded_chunks() -> TestResult {
+    let array =
+        fixed_fixture().with_codec_options(CodecOptions::default().with_concurrent_target(0));
+    populate(&array).await?;
+    let chunks = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+    let encoded = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        array.async_retrieve_encoded_chunks(&chunks),
+    )
+    .await??;
+    assert_eq!(encoded.len(), 4);
+    assert!(encoded.iter().all(Option::is_some));
+    let decoded: Vec<u8> = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        array.async_retrieve_array_subset(&array.subset_all()),
+    )
+    .await??;
+    assert_eq!(decoded, (1..=25).collect::<Vec<u8>>());
+    Ok(())
+}

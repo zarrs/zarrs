@@ -595,10 +595,7 @@ fn get_concurrent_target_and_codec_options(
     // Calculate subchunk/codec concurrency
     let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
         options.concurrent_target(),
-        &RecommendedConcurrency::new_maximum(std::cmp::min(
-            options.concurrent_target(),
-            num_subchunks,
-        )),
+        &RecommendedConcurrency::new_maximum(num_subchunks),
         &inner_codecs.recommended_concurrency(subchunk_shape)?,
     );
     let options = options.with_concurrent_target(concurrency_limit_codec);

@@ -71,7 +71,7 @@ impl CodecOptions {
         self
     }
 
-    /// Return the concurrent target.
+    /// Return the concurrent target. A target of zero is unconstrained.
     #[must_use]
     pub fn concurrent_target(&self) -> usize {
         self.concurrent_target

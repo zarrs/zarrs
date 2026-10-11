@@ -133,7 +133,11 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             }
         });
         let results: Vec<Option<_>> = futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
+            // A zero target is unconstrained, but buffered(0) never makes progress.
+            .buffered(match options.concurrent_target() {
+                0 => usize::MAX,
+                target => target,
+            })
             .try_collect()
             .await?;
         let results: Option<Vec<_>> = results.into_iter().collect();
@@ -205,6 +209,30 @@ mod tests {
         assert_eq!(
             async_decode(ByteRange::Suffix(6)).await,
             vec![0, 1, 2, 3, 4, 5]
+        );
+    }
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn zero_concurrency_strip_suffix_partial_decoder() {
+        let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
+        let decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        let options = CodecOptions::default().with_concurrent_target(0);
+        let ranges = [
+            ByteRange::Suffix(2),
+            ByteRange::FromStart(2, None),
+            ByteRange::FromStart(1, Some(2)),
+        ];
+        let decoded = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            decoder.partial_decode_many(Box::new(ranges.into_iter()), &options),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            decoded.iter().map(|b| b.as_ref()).collect::<Vec<_>>(),
+            vec![&[4, 5][..], &[2, 3, 4, 5][..], &[1, 2][..]]
         );
     }
 }
