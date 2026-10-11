@@ -49,7 +49,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
+                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length - offset))
             }
             ByteRange::FromStart(offset, Some(length)) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(length))
@@ -112,7 +112,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
+                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length - offset))
             }
             ByteRange::FromStart(offset, Some(length)) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(length))
@@ -128,5 +128,54 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
 
     fn supports_partial_decode(&self) -> bool {
         self.input_handle.supports_partial_decode()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn decode(byte_range: ByteRange) -> Vec<u8> {
+        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new((0..10u8).collect::<Vec<u8>>());
+        let decoder = ByteIntervalPartialDecoder::new(input, 2, 5);
+        decoder
+            .partial_decode(byte_range, &CodecOptions::default())
+            .unwrap()
+            .unwrap()
+            .to_vec()
+    }
+
+    #[test]
+    fn byte_interval_partial_decoder() {
+        assert_eq!(decode(ByteRange::FromStart(0, None)), vec![2, 3, 4, 5, 6]);
+        assert_eq!(decode(ByteRange::FromStart(1, None)), vec![3, 4, 5, 6]);
+        assert_eq!(decode(ByteRange::FromStart(1, Some(2))), vec![3, 4]);
+        assert_eq!(decode(ByteRange::Suffix(2)), vec![5, 6]);
+    }
+
+    #[cfg(feature = "async")]
+    fn async_decode(byte_range: ByteRange) -> Vec<u8> {
+        let input: Arc<dyn AsyncBytesPartialDecoderTraits> =
+            Arc::new((0..10u8).collect::<Vec<u8>>());
+        let decoder = AsyncByteIntervalPartialDecoder::new(input, 2, 5);
+        futures::executor::block_on(decoder.partial_decode(byte_range, &CodecOptions::default()))
+            .unwrap()
+            .unwrap()
+            .to_vec()
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn async_byte_interval_partial_decoder() {
+        assert_eq!(
+            async_decode(ByteRange::FromStart(0, None)),
+            vec![2, 3, 4, 5, 6]
+        );
+        assert_eq!(
+            async_decode(ByteRange::FromStart(1, None)),
+            vec![3, 4, 5, 6]
+        );
+        assert_eq!(async_decode(ByteRange::FromStart(1, Some(2))), vec![3, 4]);
+        assert_eq!(async_decode(ByteRange::Suffix(2)), vec![5, 6]);
     }
 }

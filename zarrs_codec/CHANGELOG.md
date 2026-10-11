@@ -52,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
 - **Breaking**: Remove `ArrayTo{Array,Bytes}CodecTraits::with_codec_specific_options`, codecs read their options in `UnboundArrayTo{Array,Bytes}CodecTraits::with_context` instead
 
+### Fixed
+- `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
+
 ## [0.2.1] - 2026-03-21
 
 ### Added
