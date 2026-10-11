@@ -132,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
 - Treat a concurrent target of zero as unconstrained in multi-chunk and sharding operations, and avoid stalled async encoded-chunk retrieval and suffix stripping
 - The `crc32c`, `adler32`, and `fletcher32` partial decoders return the correct bytes for a `ByteRange::Suffix` request with the checksum at the end
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy

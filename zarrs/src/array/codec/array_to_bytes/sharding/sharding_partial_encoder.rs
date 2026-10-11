@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
-#[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::IntoParallelIterator;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
 
@@ -11,6 +9,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, sharding_index_shape,
     subchunk_updates,
 };
+use crate::IntoConcurrentLimitIterator;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size, subchunk_grid,
@@ -220,19 +219,22 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             })
             .collect::<Vec<_>>();
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let iterator = updates.into_par_iter();
-        #[cfg(target_arch = "wasm32")]
-        let iterator = updates.into_iter();
-
-        let updated_subchunks = iterator
+        let (subchunk_concurrent_limit, subchunk_options) =
+            super::get_concurrent_target_and_codec_options(
+                &self.inner_codecs,
+                &self.subchunk_shape,
+                updates.len(),
+                options,
+            )?;
+        let updated_subchunks = updates
+            .concurrent_limit(subchunk_concurrent_limit)
             .map(|(update, subchunk_encoded)| {
                 let subchunk_decoded = if let Some(subchunk_encoded) = subchunk_encoded {
                     self.inner_codecs
                         .decode(
                             CowBytes::from(subchunk_encoded),
                             &update.subchunk_shape,
-                            options,
+                            &subchunk_options,
                         )?
                         .into_owned()
                 } else {
@@ -254,7 +256,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(subchunk_updated, &update.subchunk_shape, options)?
+                        .encode(subchunk_updated, &update.subchunk_shape, &subchunk_options)?
                         .into_static();
                     Ok((update.subchunk_index, Some(subchunk_encoded)))
                 }
