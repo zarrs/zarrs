@@ -120,7 +120,7 @@ features = ["bytemuck"]
 
 [dev-dependencies]
 chrono = "0.4.39"
-criterion = "0.8.1"
+criterion = { version = "0.8.1", features = ["async_tokio"] }
 serial_test = "3.5.0"
 tempfile = "3"
 testing_logger = "0.1.1"
@@ -188,3 +188,8 @@ required-features = ["filesystem"]
 [[bench]]
 name = "zero_copy_paths"
 harness = false
+
+[[bench]]
+name = "io_latency"
+harness = false
+required-features = ["zstd"]

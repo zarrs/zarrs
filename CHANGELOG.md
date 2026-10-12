@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Add sync/async array I/O latency benchmarks with a latency-injecting store, peak request concurrency, both Tokio runtime modes, and borrowed/owned writes
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 - Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
 - Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
