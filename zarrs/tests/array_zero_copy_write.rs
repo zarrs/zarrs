@@ -412,4 +412,24 @@ mod r#async {
         drop(data);
         Ok(())
     }
+    #[tokio::test]
+    async fn async_zero_copy_write_from_borrowed_slice() -> TestResult {
+        let store = Arc::new(AsyncPtrRecordingStore::default());
+        let builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8);
+        let array = builder.build(store.clone(), "/array")?;
+
+        let data = vec![1u8, 2, 3, 4];
+        let (expected_ptr, expected_len) = (data.as_ptr() as usize, data.len());
+
+        array.async_store_chunk(&[0, 0], data.as_slice()).await?;
+
+        let key = StoreKey::new("array/c/0/0")?;
+        assert_eq!(
+            store.ptrs.lock().unwrap().get(&key).copied(),
+            Some((expected_ptr, expected_len)),
+            "async pass-through chain should store a borrowed slice without a copy"
+        );
+        drop(data);
+        Ok(())
+    }
 }
