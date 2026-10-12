@@ -193,3 +193,8 @@ harness = false
 name = "io_latency"
 harness = false
 required-features = ["zstd"]
+
+[[bench]]
+name = "array_ops"
+harness = false
+required-features = ["zstd", "crc32c"]
