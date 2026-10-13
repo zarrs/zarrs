@@ -85,16 +85,17 @@ fn filesystem_sync_errors() -> Result<(), Box<dyn Error>> {
         assert_sync_error(store.set(&key, Bytes::from_static(b"value").into()));
         assert_sync_error(store.set(&key, Bytes::new().into()));
 
-        // Partial writes first read the key, but /dev/null has no regular-file size.
-        // Create the link while consuming the ranges, after reading the missing key,
-        // so that only the write targets /dev/null.
+        // Partial writes go to the key in place (no read of it first), so they reach
+        // /dev/null directly and must surface its sync error too.
         let partial_key: StoreKey = "partial".try_into()?;
-        let offset_values = std::iter::once_with(|| {
-            symlink("/dev/null", store.key_to_fspath(&partial_key)).unwrap();
-            (0, Bytes::from_static(b"first").into())
-        })
-        .chain(std::iter::once((8, Bytes::from_static(b"last").into())));
-        assert_sync_error(store.set_partial_many(&partial_key, Box::new(offset_values)));
+        symlink("/dev/null", store.key_to_fspath(&partial_key))?;
+        let offset_values = [
+            (0, Bytes::from_static(b"first").into()),
+            (8, Bytes::from_static(b"last").into()),
+        ];
+        assert_sync_error(
+            store.set_partial_many(&partial_key, Box::new(offset_values.into_iter())),
+        );
     }
     Ok(())
 }
@@ -183,6 +184,76 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
     zarrs_storage::store_test::store_list_size(&store)?;
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_set_partial_in_place() -> Result<(), Box<dyn Error>> {
+    // A partial write updates the file in place: the rest is kept, a gap past the end is
+    // zero-filled, and a missing key is created. With a handle cache, a later read sees it.
+    for cache_size in [0, 16] {
+        let path = tempfile::TempDir::new()?;
+        let mut opts = FilesystemStoreOptions::default();
+        opts.file_handle_cache_size(cache_size);
+        let store = FilesystemStore::new_with_options(path.path(), opts)?;
+
+        let key: StoreKey = "a/b".try_into()?;
+        store.set(&key, vec![9u8; 8].into())?;
+        assert_eq!(store.get(&key)?.unwrap(), Bytes::from(vec![9u8; 8])); // cache the handle
+        store.set_partial(&key, 2, vec![1, 2].into())?;
+        store.set_partial(&key, 10, vec![3].into())?;
+        assert_eq!(
+            store.get(&key)?.unwrap(),
+            Bytes::from(vec![9, 9, 1, 2, 9, 9, 9, 9, 0, 0, 3])
+        );
+
+        let missing: StoreKey = "c/d".try_into()?;
+        store.set_partial(&missing, 3, vec![7].into())?;
+        assert_eq!(store.get(&missing)?.unwrap(), Bytes::from(vec![0, 0, 0, 7]));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_set_partial_does_not_read_the_file() -> Result<(), Box<dyn Error>> {
+    // A partial write must not read the value back (e.g. to rewrite it whole): appending an
+    // inner chunk to a shard would then cost the whole shard. A write-only file proves it.
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = tempfile::TempDir::new()?;
+    let store = FilesystemStore::new(path.path())?;
+    let key: StoreKey = "shard".try_into()?;
+    let head: Vec<u8> = (0..1_000_000u32).map(|i| (i % 251) as u8).collect();
+    store.set(&key, head.clone().into())?;
+    let file = path.path().join("shard");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o200))?;
+    store.set_partial(&key, 1_000_000, vec![1u8; 4096].into())?;
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))?;
+
+    let bytes = store.get(&key)?.unwrap();
+    assert_eq!(bytes.len(), 1_004_096);
+    assert_eq!(&bytes[..1_000_000], &head[..]);
+    assert!(bytes[1_000_000..].iter().all(|&b| b == 1));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn direct_io_set_partial_keeps_the_file_length() -> Result<(), Box<dyn Error>> {
+    // The direct I/O path of `set` truncates to the written length; a partial write at offset
+    // 0 must not take it.
+    let store: FilesystemStore = create_direct_io_fs()?;
+    let key: StoreKey = "a".try_into()?;
+    store.set(&key, vec![5u8; 8192].into())?;
+    store.set_partial(&key, 0, vec![1, 2].into())?;
+    let bytes = store.get(&key)?.unwrap();
+    assert_eq!(bytes.len(), 8192);
+    assert_eq!(&bytes[..2], &[1, 2]);
+    assert!(bytes[2..].iter().all(|&b| b == 5));
     Ok(())
 }
 
