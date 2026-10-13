@@ -37,3 +37,7 @@ unsafe_cell_slice = "0.2.0"
 chrono = "0.4"
 tempfile = "3"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "adapters"
+required-features = ["async", "tests"]

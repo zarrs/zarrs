@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
+- Make test utilities available to unit tests without the `tests` feature, and require `async` and `tests` for the adapter integration tests so default all-targets checks compile
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
 - Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
 - Count async erase operations in `PerformanceMetricsStorageAdapter`

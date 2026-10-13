@@ -29,7 +29,7 @@ pub use maybe::{MaybeSend, MaybeSync};
 #[cfg(feature = "async")]
 mod storage_async;
 
-#[cfg(feature = "tests")]
+#[cfg(any(test, feature = "tests"))]
 /// Store test utilities (for external store development).
 pub mod store_test;
 
