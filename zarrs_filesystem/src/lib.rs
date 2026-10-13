@@ -13,9 +13,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    AtomicRenameStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, StorePrefixes, WritableStorageTraits,
+    AtomicRenameStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
