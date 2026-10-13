@@ -244,6 +244,12 @@ fn filesystem_set_partial_does_not_read_the_file() -> Result<(), Box<dyn Error>>
 #[test]
 #[cfg_attr(miri, ignore)]
 fn direct_io_set_partial_keeps_the_file_length() -> Result<(), Box<dyn Error>> {
+    let tmpfile = tempfile::NamedTempFile::new()?;
+    if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
+        // Skip this test if direct I/O is not supported
+        return Ok(());
+    }
+
     // The direct I/O path of `set` truncates to the written length; a partial write at offset
     // 0 must not take it.
     let store: FilesystemStore = create_direct_io_fs()?;
