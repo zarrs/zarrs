@@ -133,6 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
 - Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
 - Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
 - Treat a concurrent target of zero as unconstrained in multi-chunk and sharding operations, and avoid stalled async encoded-chunk retrieval and suffix stripping

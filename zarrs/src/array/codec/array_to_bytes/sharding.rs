@@ -586,6 +586,11 @@ fn subchunk_updates<'a>(
     }
 }
 
+/// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
+fn invalid_shard_index() -> CodecError {
+    CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
+}
+
 fn get_concurrent_target_and_codec_options(
     inner_codecs: &CodecChainBound,
     subchunk_shape: &[NonZeroU64],

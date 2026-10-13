@@ -144,7 +144,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     ) -> Result<(), super::CodecError> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
-        let mut shard_index = self.shard_index.lock().unwrap();
+        let mut shard_index_guard = self.shard_index.lock().unwrap();
+        let mut shard_index = shard_index_guard.clone();
 
         // Get the maximum offset of existing encoded chunks
         let max_data_offset = shard_index
@@ -152,13 +153,14 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .tuples()
             .map(|(&offset, &size)| {
                 if offset == u64::MAX && size == u64::MAX {
-                    0
+                    Ok(0)
                 } else {
-                    offset + size
+                    offset
+                        .checked_add(size)
+                        .ok_or_else(super::invalid_shard_index)
                 }
             })
-            .max()
-            .expect("shards cannot be empty");
+            .try_fold(0, |max, end| end.map(|end| end.max(max)))?;
 
         // Validate the indexer and bytes
         chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
@@ -269,12 +271,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
             shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
         }
-        let max_data_offset = if shard_index.par_iter().all(|&x| x == u64::MAX) {
-            self.input_output_handle.erase()?;
-            0
-        } else {
-            max_data_offset
-        };
+        let rewrite = shard_index.par_iter().all(|&x| x == u64::MAX);
+        let max_data_offset = if rewrite { 0 } else { max_data_offset };
 
         // Get the offset for new data
         let index_encoded_size =
@@ -283,6 +281,22 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             ShardingIndexLocation::Start => max_data_offset.max(index_encoded_size),
             ShardingIndexLocation::End => max_data_offset,
         };
+
+        // Validate the entire append before changing the cached index or storage.
+        let appended_size = updated_subchunks
+            .iter()
+            .try_fold(0u64, |size, (_, encoded)| {
+                size.checked_add(encoded.as_ref().map_or(0, |bytes| bytes.len() as u64))
+                    .ok_or_else(super::invalid_shard_index)
+            })?;
+        let data_end = offset_new_chunks
+            .checked_add(appended_size)
+            .ok_or_else(super::invalid_shard_index)?;
+        if self.index_location == ShardingIndexLocation::End {
+            data_end
+                .checked_add(index_encoded_size)
+                .ok_or_else(super::invalid_shard_index)?;
+        }
 
         // Update the shard index
         {
@@ -333,6 +347,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 }
             }
 
+            if rewrite {
+                self.input_output_handle.erase()?;
+            }
+
             // Write the encoded index and updated subchunks
             match self.index_location {
                 ShardingIndexLocation::Start => {
@@ -356,6 +374,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 }
             }
         }
+        *shard_index_guard = shard_index;
         Ok(())
     }
 
