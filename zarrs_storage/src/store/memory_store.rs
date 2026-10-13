@@ -79,8 +79,18 @@ impl ReadableStorageTraits for MemoryStore {
 impl WritableStorageTraits for MemoryStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
-        let mut data_map = self.data_map.lock().unwrap();
-        data_map.insert(key.clone(), value.into());
+        // The value is converted, and a replaced value dropped, outside of the lock.
+        let value: Bytes = value.into();
+        let replaced = {
+            let mut data_map = self.data_map.lock().unwrap();
+            if let Some(entry) = data_map.get_mut(key) {
+                Some(std::mem::replace(entry, value))
+            } else {
+                data_map.insert(key.clone(), value);
+                None
+            }
+        };
+        drop(replaced);
         Ok(())
     }
 
@@ -109,8 +119,9 @@ impl WritableStorageTraits for MemoryStore {
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().unwrap();
-        data_map.remove(key);
+        // The erased value is dropped outside of the lock
+        let erased = self.data_map.lock().unwrap().remove(key);
+        drop(erased);
         Ok(())
     }
 
