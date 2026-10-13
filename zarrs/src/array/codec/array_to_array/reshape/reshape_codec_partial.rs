@@ -40,7 +40,7 @@ where
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_encode(&reshaped_indexer, bytes, options)
+            .partial_encode(reshaped_indexer.as_indexer(), bytes, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -97,7 +97,7 @@ where
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_encode(&reshaped_indexer, bytes, options)
+            .partial_encode(reshaped_indexer.as_indexer(), bytes, options)
             .await
     }
 
@@ -145,7 +145,8 @@ where
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
-        self.input_handle.partial_decode(&reshaped_indexer, options)
+        self.input_handle
+            .partial_decode(reshaped_indexer.as_indexer(), options)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -200,7 +201,7 @@ where
         let reshaped_indexer =
             get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
         self.input_handle
-            .partial_decode(&reshaped_indexer, options)
+            .partial_decode(reshaped_indexer.as_indexer(), options)
             .await
     }
 

@@ -65,7 +65,7 @@ pub use reshape_codec::ReshapeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
-use crate::array::{ArrayIndices, ChunkShape, Indexer, IndexerError, unravel_index};
+use crate::array::{ArrayIndices, ArraySubset, ChunkShape, Indexer, IndexerError, unravel_index};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
@@ -136,11 +136,26 @@ fn get_encoded_shape(
     Ok(encoded_shape)
 }
 
+/// A mapped indexer, retaining dimensionality when no elements are selected.
+enum ReshapedIndexer {
+    Empty(ArraySubset),
+    Indices(Vec<ArrayIndices>),
+}
+
+impl ReshapedIndexer {
+    fn as_indexer(&self) -> &dyn Indexer {
+        match self {
+            Self::Empty(subset) => subset,
+            Self::Indices(indices) => indices,
+        }
+    }
+}
+
 fn get_reshaped_indexer(
     indexer: &dyn Indexer,
     decoded_shape: &[NonZeroU64],
     encoded_shape: &[NonZeroU64],
-) -> Result<impl Indexer, CodecError> {
+) -> Result<ReshapedIndexer, CodecError> {
     if indexer.dimensionality() != decoded_shape.len() {
         return Err(IndexerError::new_incompatible_dimensionality(
             indexer.dimensionality(),
@@ -162,7 +177,12 @@ fn get_reshaped_indexer(
         })
         .collect::<Result<Vec<ArrayIndices>, _>>()?;
 
-    Ok(indices)
+    if indices.is_empty() {
+        return Ok(ReshapedIndexer::Empty(ArraySubset::new_with_shape(
+            vec![0; encoded_shape.len()],
+        )));
+    }
+    Ok(ReshapedIndexer::Indices(indices))
 }
 
 zarrs_plugin::impl_extension_aliases!(ReshapeCodec, v3: "reshape");
@@ -194,6 +214,37 @@ mod tests {
         ArrayPartialDecoderTraits, ChunkGridDecoded, ChunkGridEncoded, CodecOptions,
         CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
+
+    #[test]
+    fn reshaped_indexer_empty() {
+        // An empty indexer maps to an empty indexer with the encoded dimensionality
+        let shape = |shape: &[u64]| -> Vec<NonZeroU64> {
+            shape.iter().map(|&s| NonZeroU64::new(s).unwrap()).collect()
+        };
+        let indexer = get_reshaped_indexer(
+            &ArraySubset::new_with_ranges(&[0..0, 0..0]),
+            &shape(&[8, 6]),
+            &shape(&[48]),
+        )
+        .unwrap();
+        assert_eq!(indexer.as_indexer().dimensionality(), 1);
+        assert!(indexer.as_indexer().is_empty());
+
+        let indexer = get_reshaped_indexer(
+            &ArraySubset::new_with_ranges(&[1..2, 2..4]),
+            &shape(&[8, 6]),
+            &shape(&[48]),
+        )
+        .unwrap();
+        assert_eq!(
+            indexer
+                .as_indexer()
+                .iter_indices()
+                .map(|indices| indices.to_vec())
+                .collect::<Vec<_>>(),
+            vec![vec![8], vec![9]]
+        );
+    }
 
     fn nz(value: u64) -> NonZeroU64 {
         NonZeroU64::new(value).unwrap()
@@ -1322,5 +1373,54 @@ mod tests {
                 22, 100,
             ]
         );
+    }
+    #[test]
+    fn codec_reshape_empty_partial_operations() {
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])));
+        let shape = [nz(8), nz(6)];
+        let elements: Vec<u16> = (0..48).collect();
+        let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
+        let decoder = partial_decoder_u16(codec.clone(), &shape, elements.clone());
+        assert!(partial_decode_u16(decoder.as_ref(), &empty).is_empty());
+        assert_eq!(
+            partial_encode_u16(codec, &shape, elements.clone(), &empty, vec![]),
+            elements
+        );
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn codec_reshape_async_empty_partial_operations() {
+        use crate::array::ArrayBuilder;
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])));
+        let array = ArrayBuilder::new(vec![8, 6], vec![8, 6], data_type::uint16(), 0u16)
+            .array_to_array_codecs(vec![codec])
+            .build(Arc::new(zarrs_storage::store::AsyncMemoryStore::new()), "/")
+            .unwrap()
+            .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
+        let elements: Vec<u16> = (0..48).collect();
+        array.async_store_chunk(&[0, 0], &elements).await.unwrap();
+        let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
+        let decoder = array.async_partial_decoder(&[0, 0]).await.unwrap();
+        let decoded = decoder
+            .partial_decode(&empty, &CodecOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(decoded.size(), 0);
+        let encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
+        encoder
+            .partial_encode(
+                &empty,
+                &ArrayBytes::new_flen(vec![]),
+                &CodecOptions::default(),
+            )
+            .await
+            .unwrap();
+        let decoded: Vec<u16> = array.async_retrieve_chunk(&[0, 0]).await.unwrap();
+        assert_eq!(decoded, elements);
     }
 }
