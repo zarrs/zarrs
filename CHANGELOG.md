@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.15...HEAD)
+
+## [0.23.15](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.15) - 2026-10-15
 
 ### Added
 - Efficient async sharding partial writes using the existing codec interface, including generic indexers (backport of #433, `0da2d1ce`)

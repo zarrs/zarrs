@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-15
+
 ### Changed
 - Make `async-trait` optional and enable it only with the `async` feature (backport of `57c9bf45`).
 - Add defaulted `ArrayToArrayCodecTraits::decoded_partial_decode_granularity` to compose granularity without changing existing method signatures or custom implementation requirements (backport of #388).
@@ -49,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Split from the `zarrs::array::codec` module of `zarrs` 0.23.0-beta.5
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_codec-v0.2.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_codec-v0.2.2...HEAD
+[0.2.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.2.2
 [0.2.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.2.1
 [0.2.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.2.0
 [0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.1.0

@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.14...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.15...HEAD)
+
+## [0.3.15](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.15) - 2026-10-15
 
 ### Changed
 - Skip direct I/O tests on unsupported filesystems; bump zarrs_storage to 0.4.6.

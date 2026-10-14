@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-15
+
 ### Changed
 - Add a conservative, defaulted bytes decode-passthrough predicate; bump zarrs_metadata to 0.7.6 and zarrs_plugin to 0.4.2.
 
@@ -157,7 +159,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.9.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.9.1...HEAD
+[0.9.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.9.1
 [0.9.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.9.0
 [0.8.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.1
 [0.8.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.0

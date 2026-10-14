@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-15
+
 ### Changed
 - Bump zarrs_metadata to 0.7.6, zarrs_plugin to 0.4.2 and zarrs_storage to 0.4.6 for metadata compatibility, reentrant factories and storage bounds fixes.
 - Bump `zarrs_storage` to 0.4.5
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Split from the `zarrs::array::chunk_key_encoding` module of `zarrs` 0.23.0-beta.5
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_key_encoding-v0.2.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_key_encoding-v0.2.1...HEAD
+[0.2.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_key_encoding-v0.2.1
 [0.2.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_key_encoding-v0.2.0
 [0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_key_encoding-v0.1.0
