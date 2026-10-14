@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Add a conservative, defaulted bytes decode-passthrough predicate; bump zarrs_metadata to 0.7.6 and zarrs_plugin to 0.4.2.
+
 ## [0.9.0] - 2026-02-02
 
 ### Added

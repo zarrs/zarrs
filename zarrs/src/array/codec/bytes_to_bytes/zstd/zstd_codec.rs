@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -11,6 +12,29 @@ use zarrs_codec::{
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
+
+thread_local! {
+    /// The decompression context of the thread, reused by decodes since creating one costs more than decompressing a
+    /// small frame.
+    static DECOMPRESSOR: RefCell<Option<zstd::bulk::Decompressor<'static>>> = const { RefCell::new(None) };
+}
+
+/// Run `f` with the decompression context of the thread.
+pub(super) fn with_decompressor<R>(
+    f: impl FnOnce(&mut zstd::bulk::Decompressor<'static>) -> std::io::Result<R>,
+) -> std::io::Result<R> {
+    DECOMPRESSOR.with(|decompressor| {
+        let Ok(mut decompressor) = decompressor.try_borrow_mut() else {
+            // The context is in use (e.g. by a decode reentered from a decode), so use a new one
+            return f(&mut zstd::bulk::Decompressor::new()?);
+        };
+        let decompressor = match &mut *decompressor {
+            Some(decompressor) => decompressor,
+            none => none.insert(zstd::bulk::Decompressor::new()?),
+        };
+        f(decompressor)
+    })
+}
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
@@ -123,8 +147,10 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
             // Bulk decompression
-            let result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
-            Ok(Cow::Owned(result))
+            let result = with_decompressor(|decompressor| {
+                decompressor.decompress(&encoded_value, upper_bound)
+            })?;
+            Ok(ArrayBytesRaw::from(result))
         } else {
             // Streaming decompression (slower)
             zstd::decode_all(std::io::Cursor::new(&encoded_value))

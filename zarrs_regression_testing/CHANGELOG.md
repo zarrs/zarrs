@@ -14,6 +14,10 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 ### Fixed
 - Remove a redundant offset cast in the 0.23 adapter so all-target Clippy checks pass
 
+### Changed
+- Preserve historical bytes cases when current writes base64 fill values, by giving pre-0.22 helpers their native array-of-bytes fill values
+- Adapt workspace APIs to 0.23 while retaining conformance reporting, historical adapters and original known-issue classification.
+
 ### Added
 - Report non-conformant `numcodecs.fletcher32` checksums written by releases, and add `schema::REJECTS_CONFORMANT` for releases that reject the conformant equivalent of the non-conformant data they write (known issues rather than regressions)
 - Compare lossy data read by other subjects approximately (`schema::Data::approx_eq`), as decodings may differ slightly between implementations, and add `schema::DataType::numeric`

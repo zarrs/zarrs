@@ -34,6 +34,16 @@ pub(crate) fn native_metadata(release: Release, metadata: &Value) -> Value {
         .as_str()
         .unwrap_or_default()
         .to_string();
+    // Bytes fill values were written as arrays before 0.22; those releases reject
+    // the conformant base64 string written by current zarrs. Preserve their native
+    // metadata so these historical cases are still written and decoded by current.
+    if minor <= 21
+        && data_type == "bytes"
+        && metadata["fill_value"].is_string()
+        && let Some(bytes) = fill_value(&metadata)
+    {
+        metadata["fill_value"] = serde_json::to_value(bytes).expect("bytes serialize");
+    }
     if (16..=18).contains(&minor) && data_type == "bytes" {
         metadata["data_type"] = Value::from("binary");
     }
@@ -192,6 +202,20 @@ mod tests {
             })
         );
         assert_eq!(native_metadata(Release(23), &metadata), metadata);
+    }
+
+    #[test]
+    fn native_bytes_fill_values() {
+        let metadata = json!({"data_type": "bytes", "fill_value": "AAH/"});
+        assert_eq!(
+            native_metadata(Release(21), &metadata)["fill_value"],
+            json!([0, 1, 255])
+        );
+        assert_eq!(
+            native_metadata(Release(18), &metadata),
+            json!({"data_type": "binary", "fill_value": [0, 1, 255]})
+        );
+        assert_eq!(native_metadata(Release(22), &metadata), metadata);
     }
 
     #[test]

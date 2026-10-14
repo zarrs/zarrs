@@ -7,11 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Add conservative, defaulted decode-passthrough detection and document zero as unconstrained concurrency; bump zarrs_data_type to 0.9.1, zarrs_metadata to 0.7.5, zarrs_plugin to 0.4.2 and zarrs_chunk_grid to 0.5.2.
+- Bump `zarrs_storage` to 0.4.6
+
 ### Fixed
 - Bound byte-interval reads, validate default partial decoder indexers, and compute disjoint-view regions lazily.
-
-### Changed
-- Bump `zarrs_storage` to 0.4.5
 
 ## [0.2.1] - 2026-03-21
 

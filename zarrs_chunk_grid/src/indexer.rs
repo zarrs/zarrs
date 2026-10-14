@@ -628,6 +628,7 @@ impl<const N: usize> Indexer for [Range<u64>; N] {
 }
 
 #[cfg(test)]
+#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
     use crate::ArraySubset;

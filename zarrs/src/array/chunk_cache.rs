@@ -544,11 +544,15 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
             let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset_start)?;
 
             // Retrieve the chunk subset bytes
-            let chunk_subset_bytes = cache.retrieve_chunk_subset_bytes(
-                &chunk_indices,
-                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                options,
-            )?;
+            let chunk_subset_bytes = if chunk_subset_overlap == chunk_subset {
+                cache.retrieve_chunk_bytes(&chunk_indices, options)?
+            } else {
+                cache.retrieve_chunk_subset_bytes(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    options,
+                )?
+            };
 
             // Create views for output
             let mut data_view = unsafe {

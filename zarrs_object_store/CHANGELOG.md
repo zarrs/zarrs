@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Bump `zarrs_storage` to 0.4.5
+- Bump zarrs_storage to 0.4.6 for storage bounds and adapter fixes.
+- Bump `zarrs_storage` to 0.4.6
 
 ### Fixed
 - Fix link to `version_compatibility_matrix.md` in README

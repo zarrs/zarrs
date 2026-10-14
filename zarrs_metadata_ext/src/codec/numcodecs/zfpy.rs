@@ -60,7 +60,7 @@ enum ZfpyCodecConfigurationModeTag {
 }
 
 // Custom deserialize because serde does not support integer tags https://github.com/serde-rs/serde/issues/745
-// Also supports string mode names (e.g., "fixed_rate") for backwards compatibility with older zarrs versions.
+// NON-CONFORMANT: Also supports string mode names (e.g., "fixed_rate") written by zarrs 0.20 to 0.22, read for backwards compatibility.
 impl<'de> Deserialize<'de> for ZfpyCodecConfigurationMode {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]

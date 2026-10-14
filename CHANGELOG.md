@@ -11,16 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 
 ### Changed
-- Bump `zarrs_filesystem` to 0.3.14 and `zarrs_storage` to 0.4.5
+- Reuse checksum buffers and per-thread Zstd decompressors, remove redundant shuffle/sharding/packbits/codec-chain copies and computations, retrieve complete cached chunks directly and decode async sharding subsets into disjoint outputs
+- Replace codec snapshots with the regression runner and retain reproducible JSON baselines/results; extend in-memory shard benchmarks
+- Bump `zarrs_filesystem` to 0.3.15 and `zarrs_storage` to 0.4.6
   - Includes optional filesystem read-handle caching, atomic rename support, and the atomic-write storage adapter
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Correct optional sharding and transpose decoding, generic sharding indexer batches, zero concurrency, partial-encode concurrency limits and append/index overflow before mutation
+- Propagate codec-specific options through optional, vlen and nested sharding chains
+- Serialize hierarchy tests that share configuration and read Node configuration before awaiting
+- Bump zarrs_data_type to 0.9.1, zarrs_chunk_key_encoding to 0.2.1 and zarrs_filesystem to 0.3.15
 - Backport codec and metadata correctness: blosc unaligned reads; packbits sign extension and bit offsets; bytes/packbits size overflow; bounded multipage gdeflate decoding; checksum suffix reads; legacy codec aliases/configurations; odd-length Fletcher32 with legacy checksum support; vlen malformed index lengths and index-width endianness
 - Correct fixedscaleoffset transforms, single-byte dtype parsing, fill-value transforms and f64 configuration precision
 - Preserve dimension names in stored metadata and V2-to-V3 conversion without changing mutator signatures
 - Validate partial decoded shapes and codec-chain cache representations; map empty reshape indexers to the encoded dimensionality
-- Bump zarrs_chunk_grid to 0.5.2, zarrs_codec to 0.2.2 and zarrs_metadata_ext to 0.4.5
+- Bump zarrs_chunk_grid to 0.5.2, zarrs_codec to 0.2.2, zarrs_metadata to 0.7.6 and zarrs_metadata_ext to 0.4.5
 - Backport storage read bounds, async metrics, usage logging and reentrant plugin factories; bump zarrs_storage to 0.4.6 and zarrs_plugin to 0.4.2
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 

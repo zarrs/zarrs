@@ -5,7 +5,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes, update_array_bytes};
-use crate::array::{ArrayBytes, ArraySubset, ArraySubsetTraits};
+#[cfg(feature = "ndarray")]
+use crate::array::ArraySubset;
+use crate::array::{ArrayBytes, ArraySubsetTraits};
 use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits,
     StoragePartialEncoder,

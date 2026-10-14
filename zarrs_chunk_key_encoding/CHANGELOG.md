@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Bump zarrs_metadata to 0.7.6, zarrs_plugin to 0.4.2 and zarrs_storage to 0.4.6 for metadata compatibility, reentrant factories and storage bounds fixes.
 - Bump `zarrs_storage` to 0.4.5
 
 ## [0.2.0] - 2026-02-02

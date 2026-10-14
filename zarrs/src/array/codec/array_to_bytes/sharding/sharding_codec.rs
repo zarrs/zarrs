@@ -33,7 +33,7 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_metadata::Configuration;
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -172,13 +172,21 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
     ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        let mut codec = (*self).clone();
         if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
-            let mut codec = self;
-            Arc::make_mut(&mut codec).options = sharding_opts.clone();
-            codec
-        } else {
-            self.into_dyn()
+            codec.options = sharding_opts.clone();
         }
+        codec.inner_codecs = Arc::new(
+            (*codec.inner_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        codec.index_codecs = Arc::new(
+            (*codec.index_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        Arc::new(codec)
     }
 
     fn encode<'a>(
@@ -251,10 +259,20 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
+            let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new(encoded_shard.into_owned());
+            return super::sharding_partial_decoder_sync::partial_decode(
+                &input,
+                data_type,
+                fill_value,
+                shape,
+                &self.subchunk_shape,
+                &self.inner_codecs,
+                Some(&shard_index),
+                &crate::array::ArraySubset::new_with_shape(
+                    bytemuck::must_cast_slice::<NonZeroU64, u64>(shape).to_vec(),
+                ),
+                &options,
+            );
         }
 
         let shard_shape_u64 = bytemuck::must_cast_slice(shape);
@@ -275,7 +293,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                             fill_value,
                         )?
                         .into_variable()?
-                    } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                    } else if offset
+                        .checked_add(size)
+                        .and_then(|end| usize::try_from(end).ok())
+                        .is_none_or(|end| end > encoded_shard.len())
+                    {
                         return Err(CodecError::Other(
                             "The shard index references out-of-bounds bytes. The chunk may be corrupted."
                                 .to_string(),
@@ -343,7 +365,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         let size = shard_index[chunk_index * 2 + 1];
                         if offset == u64::MAX && size == u64::MAX {
                             output_view_subchunk.fill(fill_value.as_ne_bytes())?;
-                        } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                        } else if offset
+                            .checked_add(size)
+                            .and_then(|end| usize::try_from(end).ok())
+                            .is_none_or(|end| end > encoded_shard.len())
+                        {
                             return Err(CodecError::Other(
                                 "The shard index references out-of-bounds bytes. The chunk may be corrupted."
                                     .to_string(),
@@ -372,7 +398,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         decode_chunk
                     )?;
                 }
-                unsafe { decoded_shard.set_len(decoded_shard.capacity()) };
+                unsafe { decoded_shard.set_len(size_output) };
                 Ok(ArrayBytes::from(decoded_shard))
             }
         }
@@ -491,14 +517,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        // Sharding currently only supports non-optional data
         let output_view = match output_target {
             ArrayBytesDecodeIntoTarget::Fixed(data) => data,
-            ArrayBytesDecodeIntoTarget::Optional(..) => {
-                return Err(CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::aliases_v3().default_name.to_string(),
-                ));
+            target @ ArrayBytesDecodeIntoTarget::Optional(..) => {
+                let decoded = self.decode(encoded_shard, shape, data_type, fill_value, options)?;
+                return zarrs_codec::decode_into_array_bytes_target(&decoded, target);
             }
         };
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
@@ -545,7 +568,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             let size = shard_index[chunk_index * 2 + 1];
             if offset == u64::MAX && size == u64::MAX {
                 output_view_subchunk.fill(fill_value.as_ne_bytes())?;
-            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+            } else if offset
+                .checked_add(size)
+                .and_then(|end| usize::try_from(end).ok())
+                .is_none_or(|end| end > encoded_shard.len())
+            {
                 return Err(CodecError::Other(
                     "The shard index references out-of-bounds bytes. The chunk may be corrupted."
                         .to_string(),
@@ -754,7 +781,7 @@ impl ShardingCodec {
                 options_inner,
             );
             match encoded_chunk {
-                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.into_owned()))),
                 Err(err) => Some(Err(err)),
             }
         }

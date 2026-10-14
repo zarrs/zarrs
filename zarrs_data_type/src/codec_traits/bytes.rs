@@ -11,6 +11,14 @@ pub struct BytesCodecEndiannessMissingError;
 
 /// Traits for a data type supporting the `bytes` codec.
 pub trait BytesDataTypeTraits {
+    /// Returns whether decoding with `endianness` preserves the native in-memory bytes.
+    ///
+    /// The default implementation is conservative and returns `false`.
+    #[allow(unused_variables)]
+    fn is_decode_passthrough(&self, endianness: Option<Endianness>) -> bool {
+        false
+    }
+
     /// Encode the bytes of a fixed-size data type to a specified endianness for the `bytes` codec.
     ///
     /// Returns the input bytes unmodified for fixed-size data where endianness is not applicable
@@ -66,6 +74,13 @@ macro_rules! _impl_bytes_data_type_traits {
     ($marker:ty, 1) => {
         // Passthrough for single-byte components (no endianness conversion needed)
         impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
+            fn is_decode_passthrough(
+                &self,
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> bool {
+                true
+            }
+
             fn encode<'a>(
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
@@ -97,6 +112,13 @@ macro_rules! _impl_bytes_data_type_traits {
     ($marker:ty, $component_size:tt) => {
         // Multi-byte components need endianness handling
         impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
+            fn is_decode_passthrough(
+                &self,
+                endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> bool {
+                endianness.is_some_and(::zarrs_metadata::Endianness::is_native)
+            }
+
             fn encode<'a>(
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,

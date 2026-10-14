@@ -27,7 +27,7 @@ pub struct ZfpCodecConfigurationV1 {
 /// The zfp mode.
 ///
 /// The `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes written by `zarrs` 0.10 to 0.15 are read for backwards compatibility.
-/// These are **non-conformant** with the `zfp` name (written by `zarrs` 0.10 to 0.12).
+/// These are **non-conformant** with the registered `zfp` name (written by `zarrs` 0.10 to 0.12), which uses `fixed_rate`, `fixed_precision`, and `fixed_accuracy`.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 // #[serde(deny_unknown_fields)]

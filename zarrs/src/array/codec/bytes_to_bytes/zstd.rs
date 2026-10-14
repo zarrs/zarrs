@@ -83,8 +83,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::array::{ArrayBytesRaw, BytesRepresentation};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -225,5 +227,49 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn decodes_reuse_the_decompression_context() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let encode = |decoded: &[u8]| -> Vec<u8> {
+            codec
+                .encode(ArrayBytesRaw::from(decoded), &options)
+                .unwrap()
+                .to_vec()
+        };
+        let decode = |encoded: Vec<u8>, len: usize| -> Result<Vec<u8>, CodecError> {
+            codec
+                .decode(
+                    ArrayBytesRaw::from(encoded),
+                    &BytesRepresentation::FixedSize(len as u64),
+                    &options,
+                )
+                .map(|decoded| decoded.to_vec())
+        };
+        let first = b"first".repeat(100);
+        let second = b"the second frame".repeat(50);
+        let (first_encoded, second_encoded) = (encode(&first), encode(&second));
+
+        // A failed decode does not affect later decodes on the thread
+        let mut corrupt = first_encoded.clone();
+        let middle = corrupt.len() / 2;
+        corrupt[middle..].fill(0xff);
+        assert!(decode(corrupt, first.len()).is_err());
+        for _ in 0..2 {
+            assert_eq!(decode(first_encoded.clone(), first.len()).unwrap(), first);
+            assert_eq!(
+                decode(second_encoded.clone(), second.len()).unwrap(),
+                second
+            );
+        }
+
+        // A decode while the context of the thread is in use uses another context
+        let nested = zstd_codec::with_decompressor(|_| {
+            Ok(decode(second_encoded.clone(), second.len()).unwrap())
+        })
+        .unwrap();
+        assert_eq!(nested, second);
     }
 }

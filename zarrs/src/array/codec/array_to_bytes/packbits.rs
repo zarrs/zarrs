@@ -108,6 +108,7 @@ fn sign_extend_component(
 }
 
 #[cfg(test)]
+#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use std::num::NonZeroU64;
     use std::sync::Arc;

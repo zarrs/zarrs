@@ -66,8 +66,7 @@ impl Default for PcodecCodecConfigurationV1 {
 
 /// `pcodec` codec configuration parameters written by `zarrs` 0.11 to 0.15, read for backwards compatibility.
 ///
-/// These are **non-conformant** with the `pcodec` name (written by `zarrs` 0.11 and 0.12).
-/// `zarrs` 0.13 to 0.15 wrote them with the `https://codec.zarrs.dev/array_to_bytes/pcodec` name, for which they were conformant.
+/// These were written with the unregistered `pcodec` name (`zarrs` 0.11 and 0.12) and the `https://codec.zarrs.dev/array_to_bytes/pcodec` name (`zarrs` 0.13 to 0.15).
 ///
 /// `zarrs` 0.11 to 0.14 wrote `int_mult_spec` and `float_mult_spec` rather than `mode_spec`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Display)]

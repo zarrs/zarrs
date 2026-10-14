@@ -16,7 +16,7 @@
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `zarrs.vlen_v2`
 //! - `https://codec.zarrs.dev/array_to_bytes/vlen_v2`
-//! - `vlen_v2` (**non-conformant**, written by `zarrs` 0.19)
+//! - `vlen_v2` (unregistered, written by `zarrs` 0.19)
 //!
 //! ### Codec `id` Aliases (Zarr V2)
 //! None
@@ -45,7 +45,7 @@ use zarrs_plugin::PluginCreateError;
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", [
         "https://codec.zarrs.dev/array_to_bytes/vlen_v2",
-        // NON-CONFORMANT: An unregistered name written by zarrs 0.19, read for backwards compatibility
+        // UNREGISTERED: A name written by zarrs 0.19, read for backwards compatibility
         "vlen_v2",
     ]
 );

@@ -19,12 +19,19 @@ pub use zarrs_codec::RecommendedConcurrency;
 /// Calculate the outer and inner concurrent limits given a concurrency target and their recommended concurrency.
 ///
 /// Return is (outer, inner).
+///
+/// A concurrency target of zero is unconstrained: the outer concurrency is its
+/// recommended maximum and the inner concurrency target remains zero.
 #[must_use]
 pub fn calc_concurrency_outer_inner(
     concurrency_target: usize,
     recommended_concurrency_outer: &RecommendedConcurrency,
     recommended_concurrency_inner: &RecommendedConcurrency,
 ) -> (usize, usize) {
+    if concurrency_target == 0 {
+        return (recommended_concurrency_outer.max(), 0);
+    }
+
     let mut concurrency_inner = recommended_concurrency_inner.min();
     let mut concurrency_outer = recommended_concurrency_outer.min();
 
@@ -103,5 +110,12 @@ mod tests {
             &RecommendedConcurrency::new(7..14),
         );
         assert_eq!((self_limit, inner_limit), (2, 14));
+
+        let (self_limit, inner_limit) = calc_concurrency_outer_inner(
+            0,
+            &RecommendedConcurrency::new_maximum(5),
+            &RecommendedConcurrency::new(7..14),
+        );
+        assert_eq!((self_limit, inner_limit), (5, 0));
     }
 }

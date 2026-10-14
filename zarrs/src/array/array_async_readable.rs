@@ -537,7 +537,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         let indices = chunks.indices();
         let futures = indices.into_iter().map(retrieve_encoded_chunk);
         futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
+            .buffered(match options.concurrent_target() {
+                0 => usize::MAX,
+                target => target,
+            })
             .try_collect()
             .await
     }

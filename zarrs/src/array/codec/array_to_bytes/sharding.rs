@@ -61,8 +61,10 @@ mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_chunk_grid::{ArrayIndicesTinyVec, Indexer, IndexerError, IndexerIterator};
 
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
@@ -161,6 +163,13 @@ fn decode_shard_index(
         options,
     )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
+    for entry in decoded_shard_index.as_chunks::<16>().0 {
+        let offset = u64::from_ne_bytes(entry[..8].try_into().unwrap());
+        let size = u64::from_ne_bytes(entry[8..].try_into().unwrap());
+        if !(offset == u64::MAX && size == u64::MAX) {
+            offset.checked_add(size).ok_or_else(invalid_shard_index)?;
+        }
+    }
     Ok(decoded_shard_index
         .as_chunks::<8>()
         .0
@@ -192,12 +201,17 @@ fn subchunk_byte_range(
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
 
-        let shard_index_idx =
-            ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
+        let shard_index_idx = ravel_indices(chunk_indices, &chunks_per_shard).ok_or_else(|| {
+            IndexerError::new_oob(chunk_indices.to_vec(), chunks_per_shard.to_vec())
+        })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
-        Ok(Some(ByteRange::new(offset..offset + size)))
+        if offset == u64::MAX && size == u64::MAX {
+            return Ok(None);
+        }
+        let end = offset.checked_add(size).ok_or_else(invalid_shard_index)?;
+        Ok(Some(ByteRange::new(offset..end)))
     } else {
         Ok(None)
     }
@@ -223,10 +237,7 @@ fn get_concurrent_target_and_codec_options(
     // Calculate subchunk/codec concurrency
     let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
         options.concurrent_target(),
-        &RecommendedConcurrency::new_maximum(std::cmp::min(
-            options.concurrent_target(),
-            num_chunks,
-        )),
+        &RecommendedConcurrency::new_maximum(num_chunks),
         &inner_codecs.recommended_concurrency(subchunk_shape, data_type)?,
     );
     let options = options.with_concurrent_target(concurrency_limit_codec);
@@ -282,6 +293,221 @@ async fn decode_shard_index_async_partial_decoder(
         )?),
         None => None,
     })
+}
+
+/// Selected elements in one subchunk, in their original indexer order.
+struct SubchunkIndices {
+    /// The indices of each element within the subchunk, flattened.
+    indices: Vec<u64>,
+    /// The position of each element in the shard indexer.
+    positions: Vec<usize>,
+    dimensionality: usize,
+}
+
+impl SubchunkIndices {
+    fn new(dimensionality: usize) -> Self {
+        Self {
+            indices: Vec::new(),
+            positions: Vec::new(),
+            dimensionality,
+        }
+    }
+
+    fn elements(&self) -> std::slice::ChunksExact<'_, u64> {
+        self.indices.chunks_exact(self.dimensionality)
+    }
+}
+
+impl Indexer for SubchunkIndices {
+    fn dimensionality(&self) -> usize {
+        self.dimensionality
+    }
+
+    fn len(&self) -> u64 {
+        self.positions.len() as u64
+    }
+
+    fn output_shape(&self) -> Vec<u64> {
+        vec![self.len()]
+    }
+
+    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+        if self.dimensionality != array_shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                self.dimensionality,
+                array_shape.len(),
+            ));
+        }
+        if self.dimensionality == 0 {
+            return Ok(());
+        }
+        self.elements().try_for_each(|indices| {
+            if std::iter::zip(indices, array_shape).any(|(index, size)| index >= size) {
+                Err(IndexerError::new_oob(
+                    indices.to_vec(),
+                    array_shape.to_vec(),
+                ))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+        let dimensionality = self.dimensionality;
+        let indices = self.indices.clone();
+        Box::new((0..self.positions.len()).map(move |element| {
+            indices[element * dimensionality..(element + 1) * dimensionality]
+                .iter()
+                .copied()
+                .collect()
+        }))
+    }
+
+    fn iter_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
+        if self.dimensionality != array_shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                self.dimensionality,
+                array_shape.len(),
+            ));
+        }
+        if self.dimensionality == 0 {
+            return Ok(Box::new(std::iter::repeat_n(0, self.positions.len())));
+        }
+        let linearised_indices = self
+            .elements()
+            .map(|indices| {
+                ravel_indices(indices, array_shape)
+                    .ok_or_else(|| IndexerError::new_oob(indices.to_vec(), array_shape.to_vec()))
+            })
+            .collect::<Result<Vec<u64>, _>>()?;
+        Ok(Box::new(linearised_indices.into_iter()))
+    }
+
+    fn iter_contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
+        Ok(Box::new(
+            self.iter_linearised_indices(array_shape)?
+                .map(|index| (index, 1)),
+        ))
+    }
+}
+
+/// Group a validated shard indexer by subchunk, retaining duplicate coordinates.
+///
+/// Groups are ordered by raveled subchunk index.
+fn group_indices_by_subchunk(
+    chunks_per_shard: &[u64],
+    subchunk_shape: &[NonZeroU64],
+    indexer: &dyn Indexer,
+) -> BTreeMap<u64, SubchunkIndices> {
+    let mut groups: BTreeMap<u64, SubchunkIndices> = BTreeMap::new();
+    for (position, indices) in indexer.iter_indices().enumerate() {
+        let subchunk_indices: ArrayIndicesTinyVec = std::iter::zip(&indices, subchunk_shape)
+            .map(|(&i, &cs)| i / cs)
+            .collect();
+        let subchunk_index =
+            ravel_indices(&subchunk_indices, chunks_per_shard).expect("validated indexer");
+        let group = groups
+            .entry(subchunk_index)
+            .or_insert_with(|| SubchunkIndices::new(subchunk_shape.len()));
+        group
+            .indices
+            .extend(std::iter::zip(&indices, subchunk_shape).map(|(&i, &cs)| i % cs));
+        group.positions.push(position);
+    }
+    groups
+}
+
+/// Restore indexer order after independently decoding each subchunk's selected elements.
+fn merge_indexer_subchunks(
+    groups: Vec<(Vec<usize>, ArrayBytes<'static>)>,
+    num_elements: usize,
+    data_type: &DataType,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let mut num_decoded = 0;
+    for (positions, bytes) in &groups {
+        bytes.validate(positions.len() as u64, data_type)?;
+        num_decoded += positions.len();
+    }
+    if num_decoded != num_elements {
+        return Err(CodecError::Other(format!(
+            "indexer yielded {num_decoded} elements, but has a length of {num_elements}"
+        )));
+    }
+    if groups.len() == 1 {
+        // Positions within a group are ascending and cover every element, so already in order
+        let (_, bytes) = groups.into_iter().next().expect("one group");
+        return Ok(bytes);
+    }
+    if let Some(inner_type) = data_type.optional_inner() {
+        let mut data = Vec::with_capacity(groups.len());
+        let mut masks = Vec::with_capacity(groups.len());
+        for (positions, bytes) in groups {
+            let (inner, mask) = bytes.into_optional()?.into_parts();
+            data.push((positions.clone(), *inner));
+            masks.push((positions, ArrayBytes::new_flen(mask)));
+        }
+        let data = merge_indexer_subchunks(data, num_elements, inner_type)?;
+        let masks =
+            merge_indexer_subchunks(masks, num_elements, &crate::array::data_type::uint8())?;
+        return Ok(data.with_optional_mask(masks.into_fixed()?));
+    }
+    if let Some(element_size) = data_type.fixed_size() {
+        let mut output = vec![0; num_elements * element_size];
+        for (positions, bytes) in groups {
+            let bytes = bytes.into_fixed()?;
+            for (element, position) in positions.into_iter().enumerate() {
+                output[position * element_size..(position + 1) * element_size]
+                    .copy_from_slice(&bytes[element * element_size..(element + 1) * element_size]);
+            }
+        }
+        Ok(output.into())
+    } else {
+        let groups = groups
+            .into_iter()
+            .map(|(positions, bytes)| Ok((positions, bytes.into_variable()?)))
+            .collect::<Result<Vec<_>, CodecError>>()?;
+        let mut elements: Vec<&[u8]> = vec![&[]; num_elements];
+        let mut bytes_len = 0;
+        for (positions, bytes) in &groups {
+            for (element, &position) in positions.iter().enumerate() {
+                let value = &bytes.bytes()[bytes.offsets()[element]..bytes.offsets()[element + 1]];
+                elements[position] = value;
+                bytes_len += value.len();
+            }
+        }
+        let mut bytes = Vec::with_capacity(bytes_len);
+        let mut offsets = Vec::with_capacity(num_elements + 1);
+        offsets.push(0);
+        for element in elements {
+            bytes.extend_from_slice(element);
+            offsets.push(bytes.len());
+        }
+        Ok(ArrayBytes::new_vlen(
+            bytes,
+            crate::array::ArrayBytesOffsets::new(offsets)?,
+        )?)
+    }
+}
+
+fn invalid_shard_index() -> CodecError {
+    CodecError::Other("the shard index references overflowing or out-of-bounds bytes".to_string())
+}
+
+fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u64, u64)> {
+    let offset = shard_index[subchunk_index * 2];
+    let size = shard_index[subchunk_index * 2 + 1];
+    if offset == u64::MAX && size == u64::MAX {
+        None
+    } else {
+        Some((offset, size))
+    }
 }
 
 #[cfg(test)]

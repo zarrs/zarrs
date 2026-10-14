@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.14...HEAD)
 
+### Changed
+- Skip direct I/O tests on unsupported filesystems; bump zarrs_storage to 0.4.6.
+
 ## [0.3.14](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.14) - 2026-10-13
 
 ### Fixed

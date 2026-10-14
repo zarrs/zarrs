@@ -45,12 +45,8 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     }
 
     /// Decode bytes, applying endianness conversion if required.
-    fn decode_bytes(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CodecError> {
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .decode(Cow::Owned(bytes), self.endian)?
-            .into_owned())
+    fn decode_bytes<'a>(&self, bytes: Cow<'a, [u8]>) -> Result<Cow<'a, [u8]>, CodecError> {
+        Ok(self.data_type.codec_bytes()?.decode(bytes, self.endian)?)
     }
 
     /// Encode bytes, applying endianness conversion if required.
@@ -110,8 +106,13 @@ where
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges), options)?;
 
-        let decoded = if let Some(decoded) = decoded {
-            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
+        let decoded = if let Some(mut decoded) = decoded {
+            let bytes = if decoded.len() == 1 {
+                decoded.remove(0)
+            } else {
+                Cow::Owned(decoded.concat())
+            };
+            ArrayBytes::from(self.decode_bytes(bytes)?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
@@ -176,8 +177,13 @@ where
             .partial_decode_many(Box::new(byte_ranges), options)
             .await?;
 
-        let decoded = if let Some(decoded) = decoded {
-            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
+        let decoded = if let Some(mut decoded) = decoded {
+            let bytes = if decoded.len() == 1 {
+                decoded.remove(0)
+            } else {
+                Cow::Owned(decoded.concat())
+            };
+            ArrayBytes::from(self.decode_bytes(bytes)?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };

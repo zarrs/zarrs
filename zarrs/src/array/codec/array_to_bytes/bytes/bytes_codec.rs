@@ -169,6 +169,41 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn is_decode_passthrough(
+        &self,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
+    ) -> Result<bool, CodecError> {
+        if !data_type.is_fixed() || data_type.is_optional() {
+            return Ok(false);
+        }
+        Ok(data_type.codec_bytes()?.is_decode_passthrough(self.endian))
+    }
+
+    fn decode_into(
+        &self,
+        bytes: ArrayBytesRaw<'_>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
+        output_target: zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if self.is_decode_passthrough(shape, data_type, fill_value)? {
+            let (_, len) = self.decoded_len(data_type, shape)?;
+            if bytes.len() != len {
+                return Err(zarrs_codec::InvalidBytesLengthError::new(bytes.len(), len).into());
+            }
+            return zarrs_codec::decode_into_array_bytes_target(
+                &ArrayBytes::new_flen(bytes),
+                output_target,
+            );
+        }
+        let bytes = self.decode(bytes, shape, data_type, fill_value, options)?;
+        zarrs_codec::decode_into_array_bytes_target(&bytes, output_target)
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,

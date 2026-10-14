@@ -4,6 +4,7 @@ use std::sync::Arc;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 #[cfg(feature = "async")]
@@ -109,17 +110,23 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         adler.write(&decoded_value);
         let checksum = adler.finish().to_le_bytes();
 
-        let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        match self.location {
+        let encoded_value = match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => {
-                encoded_value.extend_from_slice(&checksum);
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
+                let data_len = encoded_value.len();
+                encoded_value.resize(data_len + CHECKSUM_SIZE, 0);
+                encoded_value.copy_within(..data_len, CHECKSUM_SIZE);
+                encoded_value[..CHECKSUM_SIZE].copy_from_slice(&checksum);
+                encoded_value
             }
             Adler32CodecConfigurationChecksumLocation::End => {
-                encoded_value.extend_from_slice(&decoded_value);
+                let mut encoded_value =
+                    into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
                 encoded_value.extend_from_slice(&checksum);
+                encoded_value
             }
-        }
+        };
         Ok(Cow::Owned(encoded_value))
     }
 
@@ -132,9 +139,11 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {
-                    let (checksum, decoded_value) = encoded_value.split_at(CHECKSUM_SIZE);
-                    let checksum: [u8; CHECKSUM_SIZE] = checksum.try_into().unwrap();
-                    (Cow::Owned(decoded_value.to_vec()), checksum)
+                    let mut owned = encoded_value.into_owned();
+                    let checksum: [u8; CHECKSUM_SIZE] = owned[..CHECKSUM_SIZE].try_into().unwrap();
+                    owned.copy_within(CHECKSUM_SIZE.., 0);
+                    owned.truncate(owned.len() - CHECKSUM_SIZE);
+                    (Cow::Owned(owned), checksum)
                 }
                 Adler32CodecConfigurationChecksumLocation::End => {
                     let mut owned = encoded_value.into_owned();

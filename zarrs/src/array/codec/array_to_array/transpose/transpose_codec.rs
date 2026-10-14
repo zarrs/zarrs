@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
+use zarrs_plugin::ZarrVersion;
 
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
@@ -50,13 +50,7 @@ impl TransposeCodec {
     }
 
     /// Validate the shape and data type for this codec.
-    fn validate(&self, shape: &[NonZeroU64], data_type: &DataType) -> Result<(), CodecError> {
-        if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
+    fn validate(&self, shape: &[NonZeroU64], _data_type: &DataType) -> Result<(), CodecError> {
         if self.order.0.len() != shape.len() {
             return Err(CodecError::Other(
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
@@ -107,12 +101,6 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        if decoded_data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                decoded_data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
         Ok(decoded_data_type.clone())
     }
 

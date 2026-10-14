@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.4...HEAD)
 
+### Changed
+- Bump zarrs_metadata to 0.7.6 to preserve empty configurations and must_understand.
+
 ### Fixed
 - Read legacy pcodec and zfp configurations and integer/string zfpy modes; add an f64 fixedscaleoffset configuration while retaining the existing f32 variant.
 

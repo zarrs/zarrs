@@ -34,6 +34,7 @@ pub use linearised_indices_iterator::{
 };
 
 #[cfg(test)]
+#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use crate::ArrayIndicesTinyVec;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};

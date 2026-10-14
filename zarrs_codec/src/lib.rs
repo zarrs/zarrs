@@ -1398,6 +1398,22 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         self.into_dyn()
     }
 
+    /// Whether decoding valid encoded bytes preserves fixed bytes in native memory order.
+    ///
+    /// The default is conservative, so existing custom codecs retain their behavior.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded representation is unsupported.
+    #[allow(unused_variables)]
+    fn is_decode_passthrough(
+        &self,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
+    ) -> Result<bool, CodecError> {
+        Ok(false)
+    }
+
     /// Returns the size of the encoded representation given a size of the decoded representation.
     ///
     /// # Errors

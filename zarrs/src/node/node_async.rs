@@ -40,13 +40,18 @@ where
 {
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = async_discover_children(storage, &prefix).await?;
+    let child_metadata_results =
+        futures::future::try_join_all(prefixes.iter().map(|prefix| async move {
+            let path: NodePath = prefix
+                .try_into()
+                .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
+            let metadata = Node::async_get_metadata(storage, &path, version).await;
+            Ok::<_, NodeCreateError>((path, metadata))
+        }))
+        .await?;
     let mut nodes: Vec<Node> = Vec::new();
-    // TODO: Asynchronously get metadata of all prefixes
-    for prefix in &prefixes {
-        let path: NodePath = prefix
-            .try_into()
-            .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = match Node::async_get_metadata(storage, &path, version).await {
+    for (path, child_metadata_result) in child_metadata_results {
+        let child_metadata = match child_metadata_result {
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata(_)) => {
                 log::warn!(

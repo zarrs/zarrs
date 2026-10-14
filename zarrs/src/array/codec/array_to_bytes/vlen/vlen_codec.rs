@@ -161,6 +161,23 @@ impl ArrayToBytesCodecTraits for VlenCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &zarrs_codec::CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        let mut codec = (*self).clone();
+        codec.index_codecs = Arc::new(
+            (*codec.index_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        codec.data_codecs = Arc::new(
+            (*codec.data_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        Arc::new(codec)
+    }
 
     fn encode<'a>(
         &self,

@@ -214,13 +214,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
-            return BytesCodec::new(Some(Endianness::Little)).encode(
-                bytes.clone(),
-                shape,
-                data_type,
-                fill_value,
-                options,
-            );
+            return BytesCodec::new(Some(Endianness::Little))
+                .encode(bytes, shape, data_type, fill_value, options);
         }
 
         // Get the component and element size in bits
@@ -299,13 +294,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            return BytesCodec::new(Some(Endianness::Little)).decode(
-                bytes.clone(),
-                shape,
-                data_type,
-                fill_value,
-                options,
-            );
+            return BytesCodec::new(Some(Endianness::Little))
+                .decode(bytes, shape, data_type, fill_value, options);
         }
 
         // Get the component and element size in bits
