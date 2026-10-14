@@ -70,4 +70,3 @@ regression_json *args:
 # Remove regression testing helpers and work directories
 regression_clean:
     rm -rf target/zarrs_regression_testing
-
