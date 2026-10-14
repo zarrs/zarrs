@@ -1,3 +1,0 @@
-[submodule "zarrs/tests/data/snapshots"]
-	path = zarrs/tests/data/snapshots
-	url = https://github.com/zarrs/zarrs_snapshot_data.git

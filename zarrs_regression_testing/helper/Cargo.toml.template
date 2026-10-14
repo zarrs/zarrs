@@ -1,0 +1,18 @@
+# Dependencies are resolved as of this publish time (`none` for the latest dependencies)
+# publish-time: __PUBLISH_TIME__
+[package]
+name = "zarrs_regression_testing_helper___NAME__"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+zarrs_version = { package = "zarrs", version = "__VERSION__", default-features = false, features = __FEATURES__ }
+
+[[bin]]
+name = "__BIN__"
+path = "src/main.rs"

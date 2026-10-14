@@ -15,6 +15,7 @@ members = [
     "zarrs_filesystem",
     "zarrs_object_store",
     "zarrs_conformance",
+    "zarrs_regression_testing",
 ]
 
 [workspace.lints.rust]
