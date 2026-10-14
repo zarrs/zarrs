@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Backport storage read bounds, async metrics, usage logging and reentrant plugin factories; bump zarrs_storage to 0.4.6 and zarrs_plugin to 0.4.2
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15

@@ -69,12 +69,13 @@ impl<P> RuntimeRegistry<P> {
 
     /// Execute a closure with read access to all registered plugins.
     ///
-    /// This method holds a read lock for the duration of the closure, allowing concurrent reads but blocking writes.
+    /// The registry snapshots its handles and releases the read lock before invoking the closure.
+    /// Factories may therefore register or construct nested extensions without reentrant locking.
     ///
     /// # Panics
     /// Panics if the internal lock is poisoned.
     pub fn with_plugins<R>(&self, f: impl FnOnce(&[RuntimeRegistryHandle<P>]) -> R) -> R {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read().unwrap().clone();
         f(&plugins)
     }
 
@@ -166,6 +167,22 @@ mod tests {
 
         let sum = registry.with_plugins(|plugins| plugins.iter().map(|p| **p).sum::<i32>());
         assert_eq!(sum, 6);
+    }
+
+    #[test]
+    fn factories_can_register_nested_plugins() {
+        let registry = RuntimeRegistry::new();
+        let handle = registry.register(1);
+        registry.with_plugins(|plugins| {
+            assert_eq!(plugins.len(), 1);
+            assert!(registry.unregister(&handle));
+            registry.register(2);
+            assert_eq!(**plugins.first().unwrap(), 1);
+        });
+        assert_eq!(
+            registry.with_plugins(|plugins| **plugins.first().unwrap()),
+            2
+        );
     }
 
     #[test]

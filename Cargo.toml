@@ -58,11 +58,11 @@ version = "0.4.4"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]
-version = "0.4.1"
+version = "0.4.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.4.5"
+version = "0.4.6"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]

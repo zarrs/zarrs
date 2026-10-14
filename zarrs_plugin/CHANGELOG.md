@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Release runtime registry locks before invoking factories, allowing nested registration.
+
 ## [0.4.1] - 2026-02-02
 
 ### Added

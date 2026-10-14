@@ -22,6 +22,14 @@ use crate::{
 pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
 impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 
+struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
+
+impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
+    }
+}
+
 /// The usage log storage transformer. Logs storage method calls.
 ///
 /// It is intended to aid in debugging and optimising performance by revealing storage access patterns.
@@ -227,12 +235,6 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         key: &StoreKey,
         offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
-        impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
-            }
-        }
         let offset_values: Vec<_> = offset_values.collect();
         let result = self
             .storage
@@ -264,8 +266,8 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         writeln!(
             self.handle.lock().unwrap(),
             "{}erase_many([{}]) -> {result:?}",
-            keys.iter().format(", "),
-            (self.prefix_func)()
+            (self.prefix_func)(),
+            keys.iter().format(", ")
         )?;
         result
     }
@@ -430,8 +432,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         let result = self.storage.set(key, value).await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set({key}, len={len}) -> {result:?}",
-            (self.prefix_func)()
+            "{}set({key}, len={}) -> {result:?}",
+            (self.prefix_func)(),
+            len
         )?;
         result
     }
@@ -448,8 +451,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             .await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_many({key}, {offset_values:?}) -> {result:?}",
-            (self.prefix_func)()
+            "{}set_partial_many({:?}) -> {result:?}",
+            (self.prefix_func)(),
+            offset_values
+                .into_iter()
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
+                .collect_vec()
         )?;
         result
     }
