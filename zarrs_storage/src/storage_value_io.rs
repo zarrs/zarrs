@@ -75,7 +75,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         if let Some(data) = data {
             // Clamp in case a store returns more bytes than were requested
-            let len = data.len().min(buf.len());
+            let len = data.len().min(len);
             buf[..len].copy_from_slice(&data[..len]);
             self.pos += len as u64;
             Ok(len)
@@ -132,6 +132,19 @@ mod tests {
         let mut bytes = [0; 4];
         assert_eq!(reader.read(&mut bytes).unwrap(), 4);
         assert_eq!(&bytes, b"0123");
+    }
+
+    #[test]
+    fn overreading_store_cannot_read_past_eof() {
+        let mut reader = StorageValueIO::new(
+            Arc::new(OverreadingStore),
+            StoreKey::new("value").unwrap(),
+            10,
+        );
+        reader.seek(SeekFrom::Start(9)).unwrap();
+        let mut bytes = [0; 4];
+        assert_eq!(reader.read(&mut bytes).unwrap(), 1);
+        assert_eq!(reader.read(&mut bytes).unwrap(), 0);
     }
 
     #[test]

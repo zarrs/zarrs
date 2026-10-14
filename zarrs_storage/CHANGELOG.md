@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.5...HEAD)
 
 ### Fixed
+- Validate batched MemoryStore spans before mutation and retain no-op empty updates
 - Clamp value reads at EOF and output capacity; correct async erase metrics and usage logs; fix standalone test feature gates. Batch MemoryStore writes and drop replaced values outside the lock.
 
 ### Added

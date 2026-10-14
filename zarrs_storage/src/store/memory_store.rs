@@ -98,6 +98,21 @@ impl WritableStorageTraits for MemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
+        // Validate spans and evaluate the caller's iterator before taking or mutating an entry.
+        let updates = offset_values
+            .map(|(offset, value)| {
+                let offset = usize::try_from(offset).map_err(|_| {
+                    StorageError::Other("partial write offset exceeds usize::MAX".to_string())
+                })?;
+                let end = offset.checked_add(value.len()).ok_or_else(|| {
+                    StorageError::Other("partial write span overflows usize".to_string())
+                })?;
+                Ok((offset, end, value))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+        if updates.is_empty() {
+            return Ok(());
+        }
         let mut data_map = self.data_map.lock().unwrap();
         let entry = data_map.entry(key.clone()).or_default();
 
@@ -105,9 +120,7 @@ impl WritableStorageTraits for MemoryStore {
         let mut data = std::mem::take(entry)
             .try_into_mut()
             .unwrap_or_else(|bytes: Bytes| BytesMut::from(bytes.as_ref()));
-        for (offset, value) in offset_values {
-            let offset = usize::try_from(offset).unwrap();
-            let end = offset + value.len();
+        for (offset, end, value) in updates {
             if data.len() < end {
                 data.resize(end, 0);
             }
@@ -207,6 +220,34 @@ mod tests {
         crate::store_test::store_list(&store)?;
         crate::store_test::store_list_size(&store)?;
         Ok(())
+    }
+
+    #[test]
+    fn invalid_partial_write_leaves_value_unchanged() {
+        let store = MemoryStore::new();
+        let key = StoreKey::new("value").unwrap();
+        store.set(&key, Bytes::from_static(b"original")).unwrap();
+        assert!(store
+            .set_partial_many(
+                &key,
+                Box::new(
+                    [
+                        (0, Bytes::from_static(b"ok")),
+                        (u64::MAX, Bytes::from_static(b"bad"))
+                    ]
+                    .into_iter()
+                )
+            )
+            .is_err());
+        assert_eq!(
+            store.get(&key).unwrap().unwrap(),
+            Bytes::from_static(b"original")
+        );
+        let absent = StoreKey::new("absent").unwrap();
+        store
+            .set_partial_many(&absent, Box::new(std::iter::empty()))
+            .unwrap();
+        assert_eq!(store.get(&absent).unwrap(), None);
     }
 
     #[test]
