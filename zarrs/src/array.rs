@@ -859,6 +859,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &mut self,
         dimension_names: Option<Vec<DimensionName>>,
     ) -> &mut Self {
+        if let ArrayMetadata::V3(metadata) = &mut self.metadata {
+            metadata.dimension_names.clone_from(&dimension_names);
+        }
         self.dimension_names = dimension_names;
         self
     }
@@ -924,11 +927,29 @@ impl<TStorage: ?Sized> Array<TStorage> {
             (AM::V3(metadata), V::Default | V::V3) => ArrayMetadata::V3(metadata),
             (AM::V2(metadata), V::Default) => ArrayMetadata::V2(metadata),
             (AM::V2(metadata), V::V3) => {
-                let metadata = array_metadata_v2_to_v3(&metadata)
+                let mut metadata = array_metadata_v2_to_v3(&metadata)
                     .expect("conversion succeeded on array creation");
+                metadata.dimension_names.clone_from(&self.dimension_names);
                 AM::V3(metadata)
             }
         };
+
+        // Write codecs and storage transformers as objects with a `configuration` (even if empty), as
+        // Zarr 3.0 implementations reject short-hand names and zarr-python requires a `configuration`
+        // for `numcodecs.*` codecs (see `MetadataV3`)
+        if let AM::V3(metadata) = &mut metadata {
+            for metadata in metadata
+                .codecs
+                .iter_mut()
+                .chain(&mut metadata.storage_transformers)
+            {
+                if metadata.configuration().is_none() {
+                    *metadata =
+                        MetadataV3::new_with_configuration(metadata.name(), serde_json::Map::new())
+                            .with_must_understand(metadata.must_understand());
+                }
+            }
+        }
 
         // Convert aliased extension names
         if options.convert_aliased_extension_names() {
@@ -1162,7 +1183,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
         match self.metadata {
             ArrayMetadata::V2(metadata) => {
-                let metadata: ArrayMetadata = array_metadata_v2_to_v3(&metadata)?.into();
+                let mut metadata = array_metadata_v2_to_v3(&metadata)?;
+                metadata.dimension_names.clone_from(&self.dimension_names);
+                let metadata: ArrayMetadata = metadata.into();
                 Ok(Self {
                     storage: self.storage,
                     path: self.path,
@@ -1554,6 +1577,48 @@ mod tests {
     use super::*;
     use zarrs_metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
     use zarrs_storage::store::MemoryStore;
+
+    #[test]
+    fn array_metadata_opt_codecs_as_objects() {
+        let metadata: ArrayMetadata = r#"{
+            "zarr_format": 3,
+            "node_type": "array",
+            "shape": [8],
+            "data_type": "uint8",
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4]}},
+            "chunk_key_encoding": {"name": "default"},
+            "fill_value": 0,
+            "codecs": [{"name": "bytes"}, "crc32c", {"name": "crc32c"}]
+        }"#
+        .parse()
+        .unwrap();
+        let array = Array::new_with_metadata(Arc::new(MemoryStore::new()), "/", metadata).unwrap();
+
+        // The array metadata is unchanged
+        let ArrayMetadata::V3(metadata) = array.metadata() else {
+            unreachable!()
+        };
+        assert!(
+            metadata
+                .codecs
+                .iter()
+                .all(|codec| codec.configuration().is_none())
+        );
+
+        // The stored metadata has codecs as objects with a configuration
+        let stored_metadata =
+            serde_json::to_value(array.metadata_opt(&ArrayMetadataOptions::default())).unwrap();
+        assert_eq!(
+            stored_metadata["codecs"],
+            serde_json::json!([
+                {"name": "bytes", "configuration": {}},
+                {"name": "crc32c", "configuration": {}},
+                {"name": "crc32c", "configuration": {}}
+            ])
+        );
+        // Other metadata is not changed
+        assert_eq!(stored_metadata["data_type"], "uint8");
+    }
 
     #[test]
     fn test_array_metadata_write_read() {

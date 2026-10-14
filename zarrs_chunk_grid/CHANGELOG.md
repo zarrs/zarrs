@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Correct range-indexer subset detection, dimensionality checks and empty-indexer bounds; add defaulted Indexer::validate to preserve custom implementations.
+
+### Fixed
 - Remove redundant slice conversions in the `Vec<ArrayIndices>` indexer implementation to satisfy Clippy
 
 ## [0.5.1] - 2026-02-08

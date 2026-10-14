@@ -9,7 +9,9 @@ use num::Integer;
 use std::num::NonZeroU64;
 
 use super::PackBitsCodecComponents;
-use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, pack_bits_components};
+use crate::array::codec::array_to_bytes::packbits::{
+    div_rem_8bit, pack_bits_components, sign_extend_component,
+};
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
@@ -107,7 +109,8 @@ fn partial_decode<'a>(
 
             // Decode the components
             for component_idx in 0..num_elements * num_components {
-                let bit_dec0 = (component_idx_outer + component_idx) * component_size_bits;
+                let bit_dec0 =
+                    (component_idx_outer + component_idx) * component_size_bits + first_bit;
                 let bit_enc0 = component_idx * component_size_bits_extracted;
                 for bit in 0..component_size_bits_extracted {
                     let bit_in = bit_enc0 + bit + bit_offset_from_contiguous_byte_range;
@@ -119,20 +122,12 @@ fn partial_decode<'a>(
                             << bit_dec;
                 }
                 if sign_extension {
-                    let signed: bool = {
-                        let (byte_dec, bit_dec) = div_rem_8bit(
-                            bit_dec0 + component_size_bits_extracted.saturating_sub(1),
-                            component_size_bits,
-                        );
-                        bytes_dec[usize::try_from(byte_dec).unwrap()] >> bit_dec & 0x1 == 1
-                    };
-                    if signed {
-                        for bit in component_size_bits_extracted..component_size_bits {
-                            let (byte_dec, bit_dec) =
-                                div_rem_8bit(bit_dec0 + bit, component_size_bits);
-                            bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                        }
-                    }
+                    sign_extend_component(
+                        &mut bytes_dec,
+                        component_idx_outer + component_idx,
+                        last_bit,
+                        component_size_bits,
+                    );
                 }
             }
             component_idx_outer += num_elements * num_components;

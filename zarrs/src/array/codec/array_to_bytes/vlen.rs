@@ -103,8 +103,7 @@ use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
-    data_type,
+    ArrayBytesRaw, ChunkShape, CodecChain, Endianness, convert_from_bytes_slice, data_type,
 };
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
@@ -148,7 +147,14 @@ fn get_vlen_bytes_and_offsets(
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
     let index_shape = ChunkShape::from(vec![
-        NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
+        NonZeroU64::try_from(
+            shape
+                .iter()
+                .try_fold(1u64, |n, d| n.checked_mul(d.get()))
+                .and_then(|n| n.checked_add(1))
+                .ok_or("vlen index element count overflows u64")?,
+        )
+        .unwrap(),
     ]);
     let (data_type, fill_value) = match index_data_type {
         VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
@@ -170,6 +176,13 @@ fn get_vlen_bytes_and_offsets(
     let index_len = usize::try_from(index_len)
         .map_err(|_| CodecError::Other("index length exceeds usize::MAX".to_string()))?;
 
+    if index_len > bytes_main.len() {
+        return Err(CodecError::Other(format!(
+            "index length {index_len} exceeds the available encoded length {}",
+            bytes_main.len()
+        )));
+    }
+
     // Get the encoded index and data
     let (index_enc, data_enc) = match index_location {
         VlenIndexLocation::Start => bytes_main.split_at(index_len),
@@ -189,8 +202,15 @@ fn get_vlen_bytes_and_offsets(
             options,
         )?
         .into_fixed()?;
+    let expected_index_len = usize::try_from(index_shape[0].get())
+        .ok()
+        .and_then(|n| n.checked_mul(data_type.fixed_size().unwrap()))
+        .ok_or("vlen decoded index length overflows usize")?;
+    if index.len() != expected_index_len {
+        return Err(InvalidBytesLengthError::new(index.len(), expected_index_len).into());
+    }
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &data_type::uint64());
+        reverse_endianness(index.to_mut(), &data_type);
     }
     let index = match index_data_type {
         VlenIndexDataType::UInt32 => {

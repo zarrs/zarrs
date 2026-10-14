@@ -1943,10 +1943,8 @@ mod tests {
         let fill_value_from_str = data_type.fill_value_v3(&metadata_from_str).unwrap();
         assert_eq!(fill_value_from_str.as_ne_bytes(), expected_bytes,);
 
-        // change to `metadata_from_str` when these land:
-        // - https://github.com/zarr-developers/zarr-extensions/pull/38
-        // - https://github.com/zarr-developers/zarr-python/pull/3559
-        let expected_ser = metadata_from_arr;
+        // Base64-encoded, as zarr-python (as of 3.4.1) does not read arrays of bytes (https://github.com/zarr-developers/zarr-python/pull/3559)
+        let expected_ser = metadata_from_str;
         assert_eq!(
             expected_ser,
             data_type.metadata_fill_value(&fill_value_from_arr).unwrap()

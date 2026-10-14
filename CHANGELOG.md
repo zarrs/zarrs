@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Backport codec and metadata correctness: blosc unaligned reads; packbits sign extension and bit offsets; bytes/packbits size overflow; bounded multipage gdeflate decoding; checksum suffix reads; legacy codec aliases/configurations; odd-length Fletcher32 with legacy checksum support; vlen malformed index lengths and index-width endianness
+- Correct fixedscaleoffset transforms, single-byte dtype parsing, fill-value transforms and f64 configuration precision
+- Preserve dimension names in stored metadata and V2-to-V3 conversion without changing mutator signatures
+- Validate partial decoded shapes and codec-chain cache representations; map empty reshape indexers to the encoded dimensionality
+- Bump zarrs_chunk_grid to 0.5.2, zarrs_codec to 0.2.2 and zarrs_metadata_ext to 0.4.5
 - Backport storage read bounds, async metrics, usage logging and reentrant plugin factories; bump zarrs_storage to 0.4.6 and zarrs_plugin to 0.4.2
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 

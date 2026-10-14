@@ -8,6 +8,16 @@ use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
+/// Map a byte range of the decoded bytes to a byte range of the encoded bytes.
+///
+/// The returned byte range includes the suffix if it extends to the end of the encoded bytes.
+fn encoded_region(decoded_region: ByteRange, suffix_size: usize) -> ByteRange {
+    match decoded_region {
+        ByteRange::FromStart(_, _) => decoded_region,
+        ByteRange::Suffix(length) => ByteRange::Suffix(length + suffix_size as u64),
+    }
+}
+
 /// Partial decoder for stripping a suffix (e.g. checksum).
 pub(crate) struct StripSuffixPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
@@ -43,18 +53,13 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
     ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
-                let bytes = self.input_handle.partial_decode(decoded_region, options)?;
+                let bytes = self
+                    .input_handle
+                    .partial_decode(encoded_region(decoded_region, self.suffix_size), options)?;
                 Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
                     ByteRange::FromStart(_, Some(_)) => bytes,
-                    ByteRange::FromStart(_, None) => {
+                    ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                         let length = bytes.len() - self.suffix_size;
-                        let mut bytes = bytes.into_owned();
-                        bytes.truncate(length);
-                        Cow::Owned(bytes)
-                    }
-                    ByteRange::Suffix(_) => {
-                        let length = bytes.len() as u64 - (self.suffix_size as u64);
-                        let length = usize::try_from(length).unwrap();
                         let mut bytes = bytes.into_owned();
                         bytes.truncate(length);
                         Cow::Owned(bytes)
@@ -119,7 +124,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode(decoded_region, options)
+                        .partial_decode(encoded_region(decoded_region, self.suffix_size), options)
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
@@ -142,5 +147,69 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
 
     fn supports_partial_decode(&self) -> bool {
         self.input_handle.supports_partial_decode()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ENCODED: [u8; 8] = [0, 1, 2, 3, 4, 5, 98, 99];
+    const SUFFIX_SIZE: usize = 2;
+
+    fn decode(byte_range: ByteRange) -> Vec<u8> {
+        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
+        let decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        decoder
+            .partial_decode(byte_range, &CodecOptions::default())
+            .unwrap()
+            .unwrap()
+            .to_vec()
+    }
+
+    #[test]
+    fn strip_suffix_partial_decoder() {
+        assert_eq!(
+            decode(ByteRange::FromStart(0, None)),
+            vec![0, 1, 2, 3, 4, 5]
+        );
+        assert_eq!(decode(ByteRange::FromStart(2, None)), vec![2, 3, 4, 5]);
+        assert_eq!(decode(ByteRange::FromStart(1, Some(2))), vec![1, 2]);
+        assert_eq!(decode(ByteRange::Suffix(2)), vec![4, 5]);
+        assert_eq!(decode(ByteRange::Suffix(6)), vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_decode(byte_range: ByteRange) -> Vec<u8> {
+        let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
+        let decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        decoder
+            .partial_decode(byte_range, &CodecOptions::default())
+            .await
+            .unwrap()
+            .unwrap()
+            .to_vec()
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_strip_suffix_partial_decoder() {
+        assert_eq!(
+            async_decode(ByteRange::FromStart(0, None)).await,
+            vec![0, 1, 2, 3, 4, 5]
+        );
+        assert_eq!(
+            async_decode(ByteRange::FromStart(2, None)).await,
+            vec![2, 3, 4, 5]
+        );
+        assert_eq!(
+            async_decode(ByteRange::FromStart(1, Some(2))).await,
+            vec![1, 2]
+        );
+        assert_eq!(async_decode(ByteRange::Suffix(2)).await, vec![4, 5]);
+        assert_eq!(
+            async_decode(ByteRange::Suffix(6)).await,
+            vec![0, 1, 2, 3, 4, 5]
+        );
     }
 }

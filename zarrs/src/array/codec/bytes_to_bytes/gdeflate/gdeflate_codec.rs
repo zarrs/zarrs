@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -126,16 +125,19 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         // Data
         encoded_value.extend_from_slice(&encoded_bytes);
 
-        Ok(Cow::Owned(encoded_value))
+        Ok(ArrayBytesRaw::from(encoded_value))
     }
 
     fn decode<'a>(
         &self,
         encoded_value: ArrayBytesRaw<'a>,
-        _decoded_representation: &BytesRepresentation,
+        decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        Ok(Cow::Owned(gdeflate_decode(&encoded_value)?))
+        Ok(ArrayBytesRaw::from(gdeflate_decode(
+            &encoded_value,
+            decoded_representation,
+        )?))
     }
 
     fn encoded_representation(

@@ -1,9 +1,29 @@
 ## Correctness Issues with Past Versions
+- `zarrs: <0.24` `must_understand: false` was dropped from metadata (e.g. codecs) with an empty or no `configuration`
+  - Implementations that do not support the extension fail to open these arrays, rather than ignoring it
+  - `zarrs` 0.24+ preserves it
+- `zarrs: 0.19-0.23` `numcodecs.fletcher32` checksums of data with an odd length omitted the last byte
+  - These chunks fail checksum validation in other Zarr implementations (e.g. `numcodecs`)
+  - `zarrs` 0.24+ accepts these checksums for backwards compatibility
+- `zarrs: 0.20-0.22` `numcodecs.zfpy` codec metadata incorrectly serialised a string representation of the `zfp` mode rather than integer
+  - `zarrs` 0.24+ supports deserialising the erroneous metadata
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
+- `zarrs: 0.16-0.19` `gdeflate` codec metadata was written with the non-conformant (unregistered) `gdeflate` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
+- `zarrs: 0.19.x` `numcodecs.fletcher32` codec metadata was written with the non-conformant (unregistered) `fletcher32` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
+- `zarrs: 0.19.x` `zarrs.vlen_v2` codec metadata was written with the non-conformant (unregistered) `vlen_v2` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`
   - `zarr-python` shared this bug (see https://github.com/zarr-developers/zarr-python/issues/2842)
+- `zarrs: 0.11-0.12` `pcodec` codec metadata was written with the non-conformant (unregistered) `pcodec` name
+  - `zarrs` 0.24+ reads it, and the legacy configurations written by `zarrs` 0.11 to 0.15, for backwards compatibility
+- `zarrs: 0.10-0.12` `zfp` codec metadata was written with non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes
+  - `zarrs` 0.24+ reads them for backwards compatibility
+- `zarrs: 0.11-0.12` `bz2` codec metadata was written with the non-conformant (unregistered) `bz2` name
+  - `zarrs` 0.24+ reads it for backwards compatibility
 - † `zarrs: <0.11.5`: arrays that used the `crc32c` codec have invalid chunk checksums
   - These arrays will fail to be read by Zarr implementations if they validate checksums
   - These arrays can be read by zarrs if the [validate checksums](crate::config::Config#validate-checksums) global configuration option is disabled or the relevant codec option is set explicitly

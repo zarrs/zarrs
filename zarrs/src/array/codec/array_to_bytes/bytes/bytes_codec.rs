@@ -8,10 +8,7 @@ use super::{
     BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
     bytes_codec_partial,
 };
-use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
-    FillValue,
-};
+use crate::array::{ArrayBytes, ArrayBytesRaw, BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -105,6 +102,40 @@ impl CodecTraits for BytesCodec {
     }
 }
 
+impl BytesCodec {
+    fn decoded_size(
+        &self,
+        data_type: &DataType,
+        shape: &[NonZeroU64],
+    ) -> Result<(u64, u64), CodecError> {
+        let data_type_size = data_type.fixed_size().ok_or_else(|| {
+            CodecError::UnsupportedDataType(
+                data_type.clone(),
+                BytesCodec::aliases_v3().default_name.to_string(),
+            )
+        })?;
+        let num_elements = shape
+            .iter()
+            .try_fold(1u64, |count, d| count.checked_mul(d.get()))
+            .ok_or("the decoded chunk element count overflows u64")?;
+        let num_bytes = num_elements
+            .checked_mul(data_type_size as u64)
+            .ok_or("the decoded chunk size in bytes overflows u64")?;
+        Ok((num_elements, num_bytes))
+    }
+
+    fn decoded_len(
+        &self,
+        data_type: &DataType,
+        shape: &[NonZeroU64],
+    ) -> Result<(u64, usize), CodecError> {
+        let (num_elements, num_bytes) = self.decoded_size(data_type, shape)?;
+        let len = usize::try_from(num_bytes)
+            .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
+        Ok((num_elements, len))
+    }
+}
+
 impl ArrayCodecTraits for BytesCodec {
     fn recommended_concurrency(
         &self,
@@ -116,7 +147,7 @@ impl ArrayCodecTraits for BytesCodec {
         //     if !endian.is_native() {
         //         FIXME: Support parallel
         //         let min_elements_per_thread = 32768; // 32^3
-        //         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        //         let (num_elements, _) = self.decoded_len(data_type, shape)?;
         //         unsafe {
         //             NonZeroU64::new_unchecked(
         //                 num_elements.div_ceil(min_elements_per_thread),
@@ -154,7 +185,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
             ));
         }
 
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let (num_elements, _) = self.decoded_len(data_type, shape)?;
         bytes.validate(num_elements, data_type)?;
         let bytes = bytes.into_fixed()?;
 
@@ -180,7 +211,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
 
         let bytes_decoded: ArrayBytes = data_type.codec_bytes()?.decode(bytes, self.endian)?.into();
 
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let (num_elements, _) = self.decoded_len(data_type, shape)?;
         bytes_decoded.validate(num_elements, data_type)?;
 
         Ok(bytes_decoded)
@@ -270,14 +301,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
             ));
         }
 
-        match data_type.size() {
-            DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            )),
-            DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
-                shape.num_elements_u64() * data_type_size as u64,
-            )),
-        }
+        let (_, size) = self.decoded_size(data_type, shape)?;
+        Ok(BytesRepresentation::FixedSize(size))
     }
 }

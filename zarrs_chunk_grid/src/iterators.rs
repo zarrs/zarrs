@@ -38,7 +38,7 @@ mod tests {
     use crate::ArrayIndicesTinyVec;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-    use crate::ArraySubset;
+    use crate::{ArraySubset, IndexerError};
 
     #[test]
     fn array_subset_iter_indices() {
@@ -177,5 +177,43 @@ mod tests {
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.into_par_iter().collect::<Vec<_>>(), expected);
+    }
+
+    /// An empty array subset references no elements, so it is in-bounds irrespective of its start.
+    /// `LinearisedIndices` and `ContiguousIndices` must agree on this.
+    #[test]
+    fn array_subset_iter_empty_subset_bounds() {
+        for (region, array_shape) in [
+            // ... at the origin
+            (ArraySubset::new_with_ranges(&[0..0, 0..2]), vec![4, 4]),
+            // ... at the end of a dimension
+            (ArraySubset::new_with_ranges(&[4..4]), vec![4]),
+            (ArraySubset::new_with_ranges(&[4..4, 1..3]), vec![4, 4]),
+            // ... beyond the end of a dimension
+            (ArraySubset::new_with_ranges(&[5..5]), vec![4]),
+            (ArraySubset::new_with_ranges(&[9..9, 1..3]), vec![4, 4]),
+            // ... of a zero-sized array
+            (ArraySubset::new_with_ranges(&[0..0, 0..2]), vec![0, 4]),
+        ] {
+            let linearised = region.linearised_indices(&array_shape).unwrap();
+            assert_eq!(linearised.into_iter().count(), 0);
+            let contiguous = region.contiguous_indices(&array_shape).unwrap();
+            assert_eq!(contiguous.into_iter().count(), 0);
+            let contiguous = region.contiguous_linearised_indices(&array_shape).unwrap();
+            assert_eq!(contiguous.into_iter().count(), 0);
+            assert!(region.inbounds_shape(&array_shape));
+        }
+
+        // ... but an empty subset with an incompatible dimensionality is not in-bounds
+        let region = ArraySubset::new_with_ranges(&[0..0]);
+        assert!(matches!(
+            region.linearised_indices(&[4, 4]),
+            Err(IndexerError::IncompatibleDimensionality(_))
+        ));
+        assert!(matches!(
+            region.contiguous_indices(&[4, 4]),
+            Err(IndexerError::IncompatibleDimensionality(_))
+        ));
+        assert!(!region.inbounds_shape(&[4, 4]));
     }
 }

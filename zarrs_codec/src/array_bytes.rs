@@ -299,7 +299,7 @@ impl<'a> ArrayBytes<'a> {
     /// Extract a subset of the array bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` is incompatible with `subset`.
+    /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` has an incompatible dimensionality with, or is out-of-bounds of, `array_shape`.
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].
@@ -600,7 +600,7 @@ fn update_bytes_vlen_indexer<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_subset` and `data_type_size`,
-/// - `update_subset` is not within the bounds of `shape`
+/// - `update_subset` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 fn update_array_bytes_array_subset<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -681,7 +681,7 @@ fn update_array_bytes_array_subset<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
-/// - `update_indexer` is not within the bounds of `shape`
+/// - `update_indexer` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 fn update_array_bytes_indexer<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -769,7 +769,7 @@ fn update_array_bytes_indexer<'a>(
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
-/// - `update_indexer` is not within the bounds of `shape`
+/// - `update_indexer` has an incompatible dimensionality with, or is not within the bounds of, `shape`
 ///
 /// # Panics
 /// Panics if the indexer references bytes beyond [`usize::MAX`].

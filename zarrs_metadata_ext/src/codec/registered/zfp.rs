@@ -25,6 +25,9 @@ pub struct ZfpCodecConfigurationV1 {
 }
 
 /// The zfp mode.
+///
+/// The `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes written by `zarrs` 0.10 to 0.15 are read for backwards compatibility.
+/// These are **non-conformant** with the `zfp` name (written by `zarrs` 0.10 to 0.12).
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 // #[serde(deny_unknown_fields)]
@@ -54,16 +57,23 @@ pub enum ZfpMode {
         minexp: i32,
     },
     /// Fixed rate mode.
+    // NON-CONFORMANT: zarrs 0.10 to 0.12 wrote mode names without underscores with the `zfp` name, read for backwards compatibility.
+    // zarrs 0.13 to 0.15 also wrote them with the `https://codec.zarrs.dev/array_to_bytes/zfp` name, for which they were conformant.
+    #[serde(alias = "fixedrate")]
     FixedRate {
         /// The rate is the number of compressed bits per value.
         rate: f64,
     },
     /// Fixed precision mode.
+    // NON-CONFORMANT: see `FixedRate`.
+    #[serde(alias = "fixedprecision")]
     FixedPrecision {
         /// The precision specifies how many uncompressed bits per value to store, and indirectly governs the relative error.
         precision: u32,
     },
     /// Fixed accuracy mode.
+    // NON-CONFORMANT: see `FixedRate`.
+    #[serde(alias = "fixedaccuracy")]
     FixedAccuracy {
         /// The tolerance ensures that values in the decompressed array differ from the input array by no more than this tolerance.
         tolerance: f64,
@@ -113,6 +123,32 @@ mod tests {
         "tolerance": 0.001
     }"#;
         serde_json::from_str::<ZfpCodecConfiguration>(JSON).unwrap();
+    }
+
+    #[test]
+    fn codec_zfp_configuration_legacy_modes() {
+        for (json, mode) in [
+            (
+                r#"{"mode": "fixedrate", "rate": 12}"#,
+                ZfpMode::FixedRate { rate: 12.0 },
+            ),
+            (
+                r#"{"mode": "fixedprecision", "precision": 12}"#,
+                ZfpMode::FixedPrecision { precision: 12 },
+            ),
+            (
+                r#"{"mode": "fixedaccuracy", "tolerance": 0.5}"#,
+                ZfpMode::FixedAccuracy { tolerance: 0.5 },
+            ),
+        ] {
+            let ZfpCodecConfiguration::V1(configuration) =
+                serde_json::from_str::<ZfpCodecConfiguration>(json).unwrap();
+            assert_eq!(configuration.mode, mode);
+            // Conformant mode names are written
+            assert!(serde_json::to_string(&configuration)
+                .unwrap()
+                .contains("fixed_"));
+        }
     }
 
     #[test]

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
-    FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
+    FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecsF64,
+    FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType,
 };
 use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
@@ -20,25 +20,70 @@ use zarrs_metadata::v2::DataTypeMetadataV2;
 /// A `fixedscaleoffset` codec implementation.
 #[derive(Clone, Debug)]
 pub struct FixedScaleOffsetCodec {
-    offset: f32,
-    scale: f32,
+    offset: f64,
+    scale: f64,
     dtype_str: String,
     astype_str: Option<String>,
     dtype: DataType,
     astype: Option<DataType>,
 }
 
-fn add_byteoder_to_dtype(dtype: &str) -> String {
-    if dtype == "u1" {
-        "|u1".to_string()
-    } else if !(dtype.starts_with('<') | dtype.starts_with('>')) {
-        format!("<{dtype}")
-    } else {
+/// Add a byteorder to a numpy data type string (e.g. `f8` -> `<f8`, `i1` -> `|i1`) if it does not have one.
+fn add_byteorder_to_dtype(dtype: &str) -> String {
+    if dtype.starts_with(['<', '>', '|']) {
         dtype.to_string()
+    } else if matches!(dtype, "b1" | "i1" | "u1") {
+        // Single byte data types are not applicable to byte ordering
+        format!("|{dtype}")
+    } else {
+        format!("<{dtype}")
     }
 }
 
 impl FixedScaleOffsetCodec {
+    fn new(
+        offset: f64,
+        scale: f64,
+        dtype_str: &str,
+        astype_str: Option<&str>,
+    ) -> Result<Self, PluginCreateError> {
+        // Add a byteorder to the data type name, byteorder may be omitted
+        // FixedScaleOffsets permits `dtype` / `astype` with and without a byteoder character, but it is irrelevant
+        let dtype = add_byteorder_to_dtype(dtype_str);
+        let astype = astype_str.map(add_byteorder_to_dtype);
+
+        // Get the data type metadata
+        let dtype = DataTypeMetadataV2::Simple(dtype);
+        let astype = astype
+            .as_ref()
+            .map(|dtype| DataTypeMetadataV2::Simple(dtype.clone()));
+
+        // Convert to a V3 data type
+        let dtype_err = |_| {
+            PluginCreateError::Other(
+                "fixedscaleoffset cannot interpret Zarr V2 data type as V3 equivalent".to_string(),
+            )
+        };
+        let dtype =
+            DataType::from_metadata(&data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?)?;
+        let astype = if let Some(astype) = astype {
+            Some(DataType::from_metadata(
+                &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            offset,
+            scale,
+            dtype,
+            astype,
+            dtype_str: dtype_str.to_string(),
+            astype_str: astype_str.map(str::to_string),
+        })
+    }
+
     /// Create a new `fixedscaleoffset` codec from a configuration.
     ///
     /// # Errors
@@ -47,48 +92,18 @@ impl FixedScaleOffsetCodec {
         configuration: &FixedScaleOffsetCodecConfiguration,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
-            FixedScaleOffsetCodecConfiguration::Numcodecs(configuration) => {
-                // Add a byteorder to the data type name, byteorder may be omitted
-                // FixedScaleOffsets permits `dtype` / `astype` with and without a byteoder character, but it is irrelevant
-                let dtype = add_byteoder_to_dtype(&configuration.dtype);
-                let astype = configuration
-                    .astype
-                    .as_ref()
-                    .map(|astype| add_byteoder_to_dtype(astype));
-
-                // Get the data type metadata
-                let dtype = DataTypeMetadataV2::Simple(dtype);
-                let astype = astype
-                    .as_ref()
-                    .map(|dtype| DataTypeMetadataV2::Simple(dtype.clone()));
-
-                // Convert to a V3 data type
-                let dtype_err = |_| {
-                    PluginCreateError::Other(
-                        "fixedscaleoffset cannot interpret Zarr V2 data type as V3 equivalent"
-                            .to_string(),
-                    )
-                };
-                let dtype = DataType::from_metadata(
-                    &data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?,
-                )?;
-                let astype = if let Some(astype) = astype {
-                    Some(DataType::from_metadata(
-                        &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
-                    )?)
-                } else {
-                    None
-                };
-
-                Ok(Self {
-                    offset: configuration.offset,
-                    scale: configuration.scale,
-                    dtype,
-                    astype,
-                    dtype_str: configuration.dtype.clone(),
-                    astype_str: configuration.astype.clone(),
-                })
-            }
+            FixedScaleOffsetCodecConfiguration::NumcodecsF64(configuration) => Self::new(
+                configuration.offset,
+                configuration.scale,
+                &configuration.dtype,
+                configuration.astype.as_deref(),
+            ),
+            FixedScaleOffsetCodecConfiguration::Numcodecs(configuration) => Self::new(
+                f64::from(configuration.offset),
+                f64::from(configuration.scale),
+                &configuration.dtype,
+                configuration.astype.as_deref(),
+            ),
             _ => Err(PluginCreateError::Other(
                 "this fixedscaleoffset codec configuration variant is unsupported".to_string(),
             )),
@@ -106,8 +121,8 @@ impl CodecTraits for FixedScaleOffsetCodec {
         _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
-        let configuration = FixedScaleOffsetCodecConfiguration::Numcodecs(
-            FixedScaleOffsetCodecConfigurationNumcodecs {
+        let configuration = FixedScaleOffsetCodecConfiguration::NumcodecsF64(
+            FixedScaleOffsetCodecConfigurationNumcodecsF64 {
                 offset: self.offset,
                 scale: self.scale,
                 dtype: self.dtype_str.clone(),
@@ -149,256 +164,154 @@ fn get_element_type(
     Ok(fso.fixedscaleoffset_element_type())
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::cast_sign_loss
-)]
-fn scale_array(
-    bytes: &mut [u8],
-    data_type: &DataType,
-    offset: f32,
-    scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
-    let float_type = element_type.intermediate_float();
-
-    macro_rules! scale_impl {
-        ($ty:ty, $float:ty) => {{
-            for chunk in bytes.as_chunks_mut::<{ std::mem::size_of::<$ty>() }>().0 {
-                let element = <$ty>::from_ne_bytes(*chunk);
-                let element =
-                    ((element as $float - offset as $float) * scale as $float).round() as $ty;
-                *chunk = element.to_ne_bytes();
+/// Bind `$T` to the Rust type of the `$element_type` elements, and optionally `$F` to the float type that `numpy` computes in for them (`f32` for `float32`, otherwise `f64`).
+macro_rules! with_element_type {
+    ($element_type:expr, $T:ident $(, $F:ident)?, $body:block) => {
+        match $element_type {
+            FixedScaleOffsetElementType::I8 => {
+                type $T = i8;
+                $(type $F = f64;)?
+                $body
             }
-        }};
-    }
-
-    match (element_type, float_type) {
-        (FixedScaleOffsetElementType::I8, FixedScaleOffsetFloatType::F32) => scale_impl!(i8, f32),
-        (FixedScaleOffsetElementType::I16, FixedScaleOffsetFloatType::F32) => scale_impl!(i16, f32),
-        (FixedScaleOffsetElementType::I32, FixedScaleOffsetFloatType::F64) => scale_impl!(i32, f64),
-        (FixedScaleOffsetElementType::I64, FixedScaleOffsetFloatType::F64) => scale_impl!(i64, f64),
-        (FixedScaleOffsetElementType::U8, FixedScaleOffsetFloatType::F32) => scale_impl!(u8, f32),
-        (FixedScaleOffsetElementType::U16, FixedScaleOffsetFloatType::F32) => scale_impl!(u16, f32),
-        (FixedScaleOffsetElementType::U32, FixedScaleOffsetFloatType::F64) => scale_impl!(u32, f64),
-        (FixedScaleOffsetElementType::U64, FixedScaleOffsetFloatType::F64) => scale_impl!(u64, f64),
-        (FixedScaleOffsetElementType::F32, FixedScaleOffsetFloatType::F32) => scale_impl!(f32, f32),
-        (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => scale_impl!(f64, f64),
-        _ => {
-            // FIXME: make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
+            FixedScaleOffsetElementType::I16 => {
+                type $T = i16;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::I32 => {
+                type $T = i32;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::I64 => {
+                type $T = i64;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::U8 => {
+                type $T = u8;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::U16 => {
+                type $T = u16;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::U32 => {
+                type $T = u32;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::U64 => {
+                type $T = u64;
+                $(type $F = f64;)?
+                $body
+            }
+            FixedScaleOffsetElementType::F32 => {
+                type $T = f32;
+                $(type $F = f32;)?
+                $body
+            }
+            FixedScaleOffsetElementType::F64 => {
+                type $T = f64;
+                $(type $F = f64;)?
+                $body
+            }
         }
-    }
-    Ok(())
+    };
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::cast_sign_loss
-)]
-fn unscale_array(
-    bytes: &mut [u8],
-    data_type: &DataType,
-    offset: f32,
-    scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
-    let float_type = element_type.intermediate_float();
-
-    macro_rules! unscale_impl {
-        ($ty:ty, $float:ty) => {{
-            for chunk in bytes.as_chunks_mut::<{ std::mem::size_of::<$ty>() }>().0 {
-                let element = <$ty>::from_ne_bytes(*chunk);
-                let element = ((element as $float / scale as $float) + offset as $float) as $ty;
-                *chunk = element.to_ne_bytes();
-            }
-        }};
-    }
-
-    match (element_type, float_type) {
-        (FixedScaleOffsetElementType::I8, FixedScaleOffsetFloatType::F32) => unscale_impl!(i8, f32),
-        (FixedScaleOffsetElementType::I16, FixedScaleOffsetFloatType::F32) => {
-            unscale_impl!(i16, f32);
-        }
-        (FixedScaleOffsetElementType::I32, FixedScaleOffsetFloatType::F64) => {
-            unscale_impl!(i32, f64);
-        }
-        (FixedScaleOffsetElementType::I64, FixedScaleOffsetFloatType::F64) => {
-            unscale_impl!(i64, f64);
-        }
-        (FixedScaleOffsetElementType::U8, FixedScaleOffsetFloatType::F32) => unscale_impl!(u8, f32),
-        (FixedScaleOffsetElementType::U16, FixedScaleOffsetFloatType::F32) => {
-            unscale_impl!(u16, f32);
-        }
-        (FixedScaleOffsetElementType::U32, FixedScaleOffsetFloatType::F64) => {
-            unscale_impl!(u32, f64);
-        }
-        (FixedScaleOffsetElementType::U64, FixedScaleOffsetFloatType::F64) => {
-            unscale_impl!(u64, f64);
-        }
-        (FixedScaleOffsetElementType::F32, FixedScaleOffsetFloatType::F32) => {
-            unscale_impl!(f32, f32);
-        }
-        (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => {
-            unscale_impl!(f64, f64);
-        }
-        _ => {
-            // FIXME: Make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
-        }
-    }
-    Ok(())
+/// Transform elements of `from` to elements of `to` with `$transform`, a function of an element `x` and `offset` and `scale` (`$offset` and `$scale` as the float type `x` is computed in).
+///
+/// As in `numpy`, elements are computed in [`f32`] if `from` is `float32`, otherwise [`f64`].
+/// Integer elements of `to` are rounded to the nearest integer (ties to even) and saturated to the range of the type.
+macro_rules! transform {
+    ($bytes:expr, $from:expr, $to:expr, $offset:expr, $scale:expr, |$x:ident, $o:ident, $s:ident| $transform:expr) => {{
+        let bytes: &[u8] = $bytes;
+        let to_integer = !matches!(
+            $to,
+            FixedScaleOffsetElementType::F32 | FixedScaleOffsetElementType::F64
+        );
+        with_element_type!($from, T, F, {
+            let ($o, $s) = ($offset as F, $scale as F);
+            let elements = bytes.as_chunks::<{ size_of::<T>() }>().0;
+            with_element_type!($to, U, {
+                let mut out = Vec::with_capacity(elements.len() * size_of::<U>());
+                for element in elements {
+                    let $x = <T>::from_ne_bytes(*element) as F;
+                    let value = $transform;
+                    let value = if to_integer {
+                        value.round_ties_even()
+                    } else {
+                        value
+                    };
+                    out.extend_from_slice(&(value as U).to_ne_bytes());
+                }
+                out
+            })
+        })
+    }};
 }
 
+/// Encode elements of `element_type` as elements of `encoded_element_type`: `round((x - offset) * scale)`.
+///
+/// As in `numcodecs`, the transform is computed in [`f32`] for `float32` elements and otherwise [`f64`], and rounded to the nearest integer with ties to even (`numpy.around`).
+/// Values out of the range of `encoded_element_type` are saturated (unspecified in `numcodecs`).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_lossless,
     clippy::cast_sign_loss,
-    clippy::too_many_lines
+    clippy::unnecessary_cast
 )]
-fn cast_array(
-    bytes: &[u8],
-    data_type: &DataType,
-    as_type: &DataType,
-) -> Result<Vec<u8>, zarrs_data_type::DataTypeCodecError> {
-    let from_type = get_element_type(data_type)?;
-    let to_type = get_element_type(as_type)?;
-
-    // First cast to f32
-    let elements: Vec<f32> = match from_type {
-        FixedScaleOffsetElementType::I8 => bytes
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|c| i8::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::I16 => bytes
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|c| i16::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::I32 => bytes
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|c| i32::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::I64 => bytes
-            .as_chunks::<8>()
-            .0
-            .iter()
-            .map(|c| i64::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::U8 => bytes
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|c| u8::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::U16 => bytes
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|c| u16::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::U32 => bytes
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|c| u32::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::U64 => bytes
-            .as_chunks::<8>()
-            .0
-            .iter()
-            .map(|c| u64::from_ne_bytes(*c) as f32)
-            .collect(),
-        FixedScaleOffsetElementType::F32 => bytes
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|c| f32::from_ne_bytes(*c))
-            .collect(),
-        FixedScaleOffsetElementType::F64 => bytes
-            .as_chunks::<8>()
-            .0
-            .iter()
-            .map(|c| f64::from_ne_bytes(*c) as f32)
-            .collect(),
-    };
-
-    // Then cast from f32 to target type
-    let result: Vec<u8> = match to_type {
-        FixedScaleOffsetElementType::I8 => elements
-            .into_iter()
-            .flat_map(|e| (e as i8).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::I16 => elements
-            .into_iter()
-            .flat_map(|e| (e as i16).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::I32 => elements
-            .into_iter()
-            .flat_map(|e| (e as i32).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::I64 => elements
-            .into_iter()
-            .flat_map(|e| (e as i64).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::U8 => elements
-            .into_iter()
-            .flat_map(|e| (e as u8).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::U16 => elements
-            .into_iter()
-            .flat_map(|e| (e as u16).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::U32 => elements
-            .into_iter()
-            .flat_map(|e| (e as u32).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::U64 => elements
-            .into_iter()
-            .flat_map(|e| (e as u64).to_ne_bytes())
-            .collect(),
-        FixedScaleOffsetElementType::F32 => {
-            elements.into_iter().flat_map(f32::to_ne_bytes).collect()
-        }
-        FixedScaleOffsetElementType::F64 => elements
-            .into_iter()
-            .flat_map(|e| (e as f64).to_ne_bytes())
-            .collect(),
-    };
-
-    Ok(result)
+fn do_encode(
+    bytes: ArrayBytes<'_>,
+    element_type: FixedScaleOffsetElementType,
+    offset: f64,
+    scale: f64,
+    encoded_element_type: FixedScaleOffsetElementType,
+) -> Result<ArrayBytes<'_>, CodecError> {
+    let bytes = bytes.into_fixed()?;
+    let encoded = transform!(
+        &bytes,
+        element_type,
+        encoded_element_type,
+        offset,
+        scale,
+        |x, offset, scale| ((x - offset) * scale).round_ties_even()
+    );
+    Ok(encoded.into())
 }
 
-fn do_encode<'a>(
-    bytes: ArrayBytes<'a>,
-    data_type: &DataType,
-    offset: f32,
-    scale: f32,
-    astype: Option<&DataType>,
-) -> Result<ArrayBytes<'a>, CodecError> {
-    let mut bytes = bytes.into_fixed()?.into_owned();
-    scale_array(&mut bytes, data_type, offset, scale)?;
-    if let Some(astype) = astype {
-        Ok(cast_array(&bytes, data_type, astype)?.into())
-    } else {
-        Ok(bytes.into())
-    }
+/// Decode elements of `encoded_element_type` as elements of `element_type`: `x / scale + offset`.
+///
+/// As in `numcodecs`, the transform is computed in [`f32`] for `float32` encoded elements and otherwise [`f64`].
+/// `numcodecs` truncates decoded integer elements, whereas they are rounded to the nearest integer (ties to even) here, so they may differ by one (the transform is lossy).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_cast
+)]
+fn do_decode(
+    bytes: ArrayBytes<'_>,
+    element_type: FixedScaleOffsetElementType,
+    offset: f64,
+    scale: f64,
+    encoded_element_type: FixedScaleOffsetElementType,
+) -> Result<ArrayBytes<'_>, CodecError> {
+    let bytes = bytes.into_fixed()?;
+    let decoded = transform!(
+        &bytes,
+        encoded_element_type,
+        element_type,
+        offset,
+        scale,
+        |x, offset, scale| x / scale + offset
+    );
+    Ok(decoded.into())
 }
 
 #[cfg_attr(
@@ -428,10 +341,10 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
 
         do_encode(
             bytes,
-            data_type,
+            get_element_type(data_type)?,
             self.offset,
             self.scale,
-            self.astype.as_ref(),
+            get_element_type(self.astype.as_ref().unwrap_or(data_type))?,
         )
     }
 
@@ -450,14 +363,29 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             ));
         }
 
-        let bytes = bytes.into_fixed()?.into_owned();
-        let mut bytes = if let Some(astype) = &self.astype {
-            cast_array(&bytes, astype, data_type)?
-        } else {
-            bytes
-        };
-        unscale_array(&mut bytes, data_type, self.offset, self.scale)?;
-        Ok(bytes.into())
+        do_decode(
+            bytes,
+            get_element_type(data_type)?,
+            self.offset,
+            self.scale,
+            get_element_type(self.astype.as_ref().unwrap_or(data_type))?,
+        )
+    }
+
+    fn encoded_fill_value(
+        &self,
+        data_type: &DataType,
+        fill_value: &FillValue,
+    ) -> Result<FillValue, CodecError> {
+        let bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?;
+        let encoded = do_encode(
+            bytes,
+            get_element_type(data_type)?,
+            self.offset,
+            self.scale,
+            get_element_type(self.astype.as_ref().unwrap_or(data_type))?,
+        )?;
+        Ok(FillValue::new(encoded.into_fixed()?.into_owned()))
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {

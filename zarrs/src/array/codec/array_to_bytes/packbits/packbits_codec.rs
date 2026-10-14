@@ -18,10 +18,8 @@ use super::{
 };
 use crate::array::codec::BytesCodec;
 use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
-use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
-use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
-};
+use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, sign_extend_component};
+use crate::array::{ArrayBytes, ArrayBytesRaw, BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -47,11 +45,6 @@ impl Default for PackBitsCodec {
         Self::new(PackBitsPaddingEncoding::default(), None, None)
             .expect("this configuration is supported")
     }
-}
-
-fn padding_bits(num_elements: u64, element_size_bits: u64) -> u8 {
-    let rem = ((num_elements * element_size_bits) % 8) as u8;
-    if rem == 0 { 0 } else { 8 - rem }
 }
 
 impl PackBitsCodec {
@@ -132,6 +125,56 @@ impl CodecTraits for PackBitsCodec {
     }
 }
 
+struct PackBitsSizes {
+    num_elements: u64,
+    /// The size of the decoded elements in bytes.
+    elements_size_dec_bytes: u64,
+    /// The size of the packed elements in bits, excluding padding.
+    elements_size_bits: u64,
+    /// The size of the packed elements in bytes, excluding the padding encoding byte.
+    elements_size_bytes: usize,
+}
+
+impl PackBitsCodec {
+    /// Returns the sizes of an array with `shape`.
+    ///
+    /// # Errors
+    /// Returns an error if the data type does not have a fixed size, or a size overflows.
+    fn sizes(
+        &self,
+        data_type: &DataType,
+        shape: &[NonZeroU64],
+    ) -> Result<PackBitsSizes, CodecError> {
+        let data_type_size_dec = data_type
+            .fixed_size()
+            .ok_or("data type must have a fixed size for the packbits codec")?;
+        let components = pack_bits_components(data_type)?;
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(components.component_size_bits - 1);
+        let num_elements = shape
+            .iter()
+            .try_fold(1u64, |count, d| count.checked_mul(d.get()))
+            .ok_or("the decoded chunk element count overflows u64")?;
+        let elements_size_dec_bytes = num_elements
+            .checked_mul(data_type_size_dec as u64)
+            .ok_or("the decoded chunk size in bytes overflows u64")?;
+        let element_size_bits = (last_bit - first_bit + 1)
+            .checked_mul(components.num_components)
+            .ok_or("the packed element size in bits overflows u64")?;
+        let elements_size_bits = num_elements
+            .checked_mul(element_size_bits)
+            .ok_or("the packed chunk size in bits overflows u64")?;
+        let elements_size_bytes = usize::try_from(elements_size_bits.div_ceil(8))
+            .map_err(|_| CodecError::from("the packed chunk size in bytes overflows usize"))?;
+        Ok(PackBitsSizes {
+            num_elements,
+            elements_size_dec_bytes,
+            elements_size_bits,
+            elements_size_bytes,
+        })
+    }
+}
+
 impl ArrayCodecTraits for PackBitsCodec {
     fn recommended_concurrency(
         &self,
@@ -181,21 +224,22 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let PackBitsSizes {
+            num_elements,
+            elements_size_dec_bytes,
+            elements_size_bits,
+            elements_size_bytes,
+        } = self.sizes(data_type, shape)?;
         let component_size_bits_extracted = last_bit - first_bit + 1;
-        let element_size_bits = component_size_bits_extracted * num_components;
-        let elements_size_bytes =
-            usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
 
         // Input checks
         let bytes = bytes.into_fixed()?;
-        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
-            CodecError::Other("data type must have a fixed size for the packbits codec".to_string())
-        })?;
-        if bytes.len() as u64 != num_elements * data_type_size_dec as u64 {
+        if bytes.len() as u64 != elements_size_dec_bytes {
             return Err(InvalidBytesLengthError::new(
                 bytes.len(),
-                usize::try_from(num_elements * data_type_size_dec as u64).unwrap(),
+                usize::try_from(elements_size_dec_bytes).map_err(|_| {
+                    CodecError::from("the decoded chunk size in bytes overflows usize")
+                })?,
             )
             .into());
         }
@@ -208,7 +252,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         let mut bytes_enc = vec![0u8; elements_size_bytes + padding_encoding_byte];
 
         // Set the padding encoding byte and grab the element bytes
-        let padding_bits = padding_bits(num_elements, element_size_bits);
+        let padding_bits = (8 - elements_size_bits % 8) as u8 % 8;
         let packed_elements = match self.padding_encoding {
             PackBitsPaddingEncoding::None => &mut bytes_enc[..],
             PackBitsPaddingEncoding::FirstByte => {
@@ -265,16 +309,15 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         }
 
         // Get the component and element size in bits
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let PackBitsSizes {
+            num_elements,
+            elements_size_dec_bytes,
+            elements_size_bits,
+            elements_size_bytes,
+        } = self.sizes(data_type, shape)?;
         let component_size_bits_extracted = last_bit - first_bit + 1;
-        let element_size_bits = component_size_bits_extracted * num_components;
-        let elements_size_bytes =
-            usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
 
         // Input checks
-        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
-            CodecError::Other("data type must have a fixed size for packbits codec".to_string())
-        })?;
         let expected_length = elements_size_bytes
             + match self.padding_encoding {
                 PackBitsPaddingEncoding::None => 0,
@@ -284,7 +327,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             return Err(InvalidBytesLengthError::new(bytes.len(), expected_length).into());
         }
 
-        let padding_bits = padding_bits(num_elements, element_size_bits);
+        let padding_bits = (8 - elements_size_bits % 8) as u8 % 8;
         let packed_elements = match self.padding_encoding {
             PackBitsPaddingEncoding::None => &bytes[..],
             PackBitsPaddingEncoding::FirstByte => {
@@ -306,8 +349,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         };
 
         // Allocate the output
-        let mut bytes_dec =
-            vec![0u8; usize::try_from(num_elements * data_type_size_dec as u64).unwrap()];
+        let mut bytes_dec = vec![
+            0u8;
+            usize::try_from(elements_size_dec_bytes).map_err(|_| {
+                CodecError::from("the decoded chunk size in bytes overflows usize")
+            })?
+        ];
 
         // Decode the components
         for component_idx in 0..num_elements * num_components {
@@ -321,24 +368,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
                         << bit_dec;
             }
             if sign_extension {
-                let signed: bool = {
-                    let bit_enc0 = component_idx * component_size_bits_extracted;
-                    let (byte_enc, bit_enc) =
-                        (bit_enc0 + component_size_bits_extracted.saturating_sub(1)).div_rem(&8);
-                    ((packed_elements[usize::try_from(byte_enc).unwrap()] >> bit_enc) & 0b1) == 1
-                };
-                if signed {
-                    let (byte_dec, bit_dec) = div_rem_8bit(
-                        bit_dec0 + component_size_bits_extracted.saturating_sub(1),
-                        component_size_bits,
-                    );
-                    // Sign-extend to all remaining bits in the byte
-                    // This differs from the spec which says sign extend to N (component_size_bits) bits
-                    // This makes it just work with int4 / int2 -> int8
-                    for bit_dec in bit_dec + 1..8 {
-                        bytes_dec[usize::try_from(byte_dec).unwrap()] |= 1 << bit_dec;
-                    }
-                }
+                sign_extend_component(&mut bytes_dec, component_idx, last_bit, component_size_bits);
             }
         }
 
@@ -430,18 +460,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let PackBitsCodecComponents {
-            component_size_bits,
-            num_components,
-            sign_extension: _,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
-
-        let num_elements = shape.num_elements_u64();
-        let component_size_bits_extracted = last_bit - first_bit + 1;
-        let element_size_bits = component_size_bits_extracted * num_components;
-        let elements_size_bytes = (num_elements * element_size_bits).div_ceil(8);
+        let elements_size_bytes = self.sizes(data_type, shape)?.elements_size_bytes as u64;
 
         let padding_encoding_byte = match self.padding_encoding {
             PackBitsPaddingEncoding::None => 0,
