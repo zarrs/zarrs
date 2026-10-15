@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Make `async-trait` optional and enable it only with the `async` feature (backport of `57c9bf45`).
 - Add defaulted `ArrayToArrayCodecTraits::decoded_partial_decode_granularity` to compose granularity without changing existing method signatures or custom implementation requirements (backport of #388).
 - Add conservative, defaulted decode-passthrough detection and document zero as unconstrained concurrency; bump zarrs_data_type to 0.9.1, zarrs_metadata to 0.7.6, zarrs_plugin to 0.4.2 and zarrs_chunk_grid to 0.5.2.
 - Bump `zarrs_storage` to 0.4.6
