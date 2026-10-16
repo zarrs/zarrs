@@ -252,23 +252,15 @@ impl ShardUpdate {
         let mut encoded_subchunks = Vec::with_capacity(values.len());
         let mut offset = offset_new;
         for (&subchunk_index, value) in std::iter::zip(subchunks, values) {
-            match value {
-                TaskValue::Bytes(Some(encoded)) => {
-                    let len = encoded.len() as u64;
-                    shard_index[subchunk_index * 2] = offset;
-                    shard_index[subchunk_index * 2 + 1] = len;
-                    encoded_subchunks.push(encoded);
-                    offset = offset.checked_add(len).ok_or_else(invalid_index)?;
-                }
-                TaskValue::Bytes(None) => {}
-                TaskValue::None
-                | TaskValue::Array(_)
-                | TaskValue::Prepared(_)
-                | TaskValue::Any(_) => {
-                    return Err(CodecError::Other(
-                        "a subchunk update did not produce encoded bytes".to_string(),
-                    ));
-                }
+            let encoded = value.into_bytes().ok_or_else(|| {
+                CodecError::Other("a subchunk update did not produce encoded bytes".to_string())
+            })?;
+            if let Some(encoded) = encoded {
+                let len = encoded.len() as u64;
+                shard_index[subchunk_index * 2] = offset;
+                shard_index[subchunk_index * 2 + 1] = len;
+                encoded_subchunks.push(encoded);
+                offset = offset.checked_add(len).ok_or_else(invalid_index)?;
             }
         }
         let data_end = offset;

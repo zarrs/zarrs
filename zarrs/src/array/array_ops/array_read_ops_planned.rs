@@ -888,13 +888,7 @@ pub(super) fn plan_encoded_chunks(num_chunks: usize) -> Task<'static> {
             join: Some(Join::new(|values, _ctx| {
                 let chunks: Vec<Option<Bytes>> = values
                     .into_iter()
-                    .map(|value| match value {
-                        TaskValue::Bytes(bytes) => bytes.map(CowBytes::into_bytes),
-                        TaskValue::None
-                        | TaskValue::Array(_)
-                        | TaskValue::Prepared(_)
-                        | TaskValue::Any(_) => None,
-                    })
+                    .map(|value| value.into_bytes().flatten().map(CowBytes::into_bytes))
                     .collect();
                 Ok(Outcome::Value(TaskValue::Any(Box::new(chunks))))
             })),
@@ -904,25 +898,17 @@ pub(super) fn plan_encoded_chunks(num_chunks: usize) -> Task<'static> {
 
 /// The encoded chunks of the value of a task planned by [`plan_encoded_chunks`].
 pub(super) fn encoded_chunks(value: TaskValue<'_>) -> Result<Vec<Option<Bytes>>, ArrayError> {
-    match value {
-        TaskValue::Any(any) => any
-            .downcast::<Vec<Option<Bytes>>>()
-            .map(|chunks| *chunks)
-            .map_err(|_| CodecError::Other("expected encoded chunks".to_string()).into()),
-        TaskValue::None | TaskValue::Array(_) | TaskValue::Bytes(_) | TaskValue::Prepared(_) => {
-            Err(CodecError::Other("expected encoded chunks".to_string()).into())
-        }
-    }
+    value
+        .downcast()
+        .ok_or_else(|| CodecError::Other("expected encoded chunks".to_string()).into())
 }
 
 /// The encoded subchunk that is the value of a task planned by [`Array::plan_encoded_subchunk`].
 pub(super) fn encoded_subchunk(value: TaskValue<'_>) -> Result<Option<Bytes>, ArrayError> {
-    match value {
-        TaskValue::Bytes(bytes) => Ok(bytes.map(CowBytes::into_bytes)),
-        TaskValue::None | TaskValue::Array(_) | TaskValue::Prepared(_) | TaskValue::Any(_) => {
-            Err(CodecError::Other("expected an encoded subchunk".to_string()).into())
-        }
-    }
+    let bytes = value
+        .into_bytes()
+        .ok_or_else(|| CodecError::Other("expected an encoded subchunk".to_string()))?;
+    Ok(bytes.map(CowBytes::into_bytes))
 }
 
 pub(super) fn whole_views<'a>(
@@ -950,20 +936,14 @@ pub(super) fn check_target_len(
 fn chunk_if_exists(value: TaskValue<'static>) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
     match value {
         TaskValue::None => Ok(None),
-        TaskValue::Array(bytes) => Ok(Some(bytes)),
-        value @ (TaskValue::Bytes(_) | TaskValue::Prepared(_) | TaskValue::Any(_)) => {
-            Ok(Some(array_value(value)?))
-        }
+        value => Ok(Some(array_value(value)?)),
     }
 }
 
 pub(super) fn array_value(value: TaskValue<'_>) -> Result<ArrayBytes<'_>, CodecError> {
-    match value {
-        TaskValue::Array(bytes) => Ok(bytes),
-        TaskValue::None | TaskValue::Bytes(_) | TaskValue::Prepared(_) | TaskValue::Any(_) => Err(
-            CodecError::Other("expected decoded chunk array bytes".to_string()),
-        ),
-    }
+    value
+        .into_array()
+        .ok_or_else(|| CodecError::Other("expected decoded chunk array bytes".to_string()))
 }
 
 /// The shape of a chunk with `chunk_subset`.

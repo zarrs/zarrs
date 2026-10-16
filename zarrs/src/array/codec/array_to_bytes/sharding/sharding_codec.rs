@@ -19,7 +19,7 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::plan::{
-    ByteSource, DecodeRequest, PlanIndexer, TargetViews, TaskTarget, TaskValue, drive_memory_one,
+    ByteSource, DecodeRequest, PlanIndexer, TargetViews, TaskTarget, drive_memory_one,
     encoded_value,
 };
 use zarrs_codec::{
@@ -396,14 +396,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             },
             options,
         )?;
-        match drive_memory_one(task, resources)? {
-            TaskValue::Array(bytes) => Ok(bytes),
-            TaskValue::None | TaskValue::Bytes(_) | TaskValue::Prepared(_) | TaskValue::Any(_) => {
-                Err(CodecError::Other(
-                    "a shard decode did not produce array bytes".to_string(),
-                ))
-            }
-        }
+        drive_memory_one(task, resources)?
+            .into_array()
+            .ok_or_else(|| {
+                CodecError::Other("a shard decode did not produce array bytes".to_string())
+            })
     }
 
     fn compact<'a>(

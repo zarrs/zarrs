@@ -24,16 +24,9 @@ pub fn encode_hint(bytes: &ArrayBytes<'_>) -> TaskHint {
 /// # Errors
 /// Returns a [`CodecError`] if `value` is not encoded bytes.
 pub fn encoded_value(value: TaskValue<'_>) -> Result<CowBytes<'_>, CodecError> {
-    match value {
-        TaskValue::Bytes(Some(bytes)) => Ok(bytes),
-        TaskValue::None
-        | TaskValue::Array(_)
-        | TaskValue::Bytes(None)
-        | TaskValue::Prepared(_)
-        | TaskValue::Any(_) => Err(CodecError::Other(
-            "an encode task did not produce encoded bytes".to_string(),
-        )),
-    }
+    value.into_bytes().flatten().ok_or_else(|| {
+        CodecError::Other("an encode task did not produce encoded bytes".to_string())
+    })
 }
 
 /// Plan the encoding of a chunk of `shape` with one compute step that calls [`ArrayToBytesCodecTraits::encode`].
@@ -99,13 +92,5 @@ pub fn partial_encode_value<'a>(state: PartialEncodeState) -> TaskValue<'a> {
 /// Returns [`None`] if `value` is not a partial encode state.
 #[must_use]
 pub fn partial_encode_state(value: TaskValue<'_>) -> Option<PartialEncodeState> {
-    match value {
-        TaskValue::Any(any) => any
-            .downcast::<PartialEncodeState>()
-            .ok()
-            .map(|state| *state),
-        TaskValue::None | TaskValue::Array(_) | TaskValue::Bytes(_) | TaskValue::Prepared(_) => {
-            None
-        }
-    }
+    value.downcast()
 }

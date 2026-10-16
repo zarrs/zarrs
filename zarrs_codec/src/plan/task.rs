@@ -388,6 +388,44 @@ pub enum TaskValue<'a> {
     Any(Box<dyn AnyValue>),
 }
 
+impl<'a> TaskValue<'a> {
+    /// The array bytes of a [`TaskValue::Array`].
+    #[must_use]
+    pub fn into_array(self) -> Option<ArrayBytes<'a>> {
+        match self {
+            Self::Array(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    /// The bytes of a [`TaskValue::Bytes`].
+    #[must_use]
+    pub fn into_bytes(self) -> Option<Option<CowBytes<'a>>> {
+        match self {
+            Self::Bytes(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    /// The prepared decoder of a [`TaskValue::Prepared`].
+    #[must_use]
+    pub fn into_prepared(self) -> Option<std::sync::Arc<dyn super::PreparedDecoder>> {
+        match self {
+            Self::Prepared(decoder) => Some(decoder),
+            _ => None,
+        }
+    }
+
+    /// The value of a [`TaskValue::Any`] if it is a `T`.
+    #[must_use]
+    pub fn downcast<T: Any>(self) -> Option<T> {
+        match self {
+            Self::Any(any) => any.downcast().ok().map(|value| *value),
+            _ => None,
+        }
+    }
+}
+
 /// A value of any type, which is [`Send`] and [`Sync`] on targets with threads.
 pub trait AnyValue: Any + zarrs_plugin::MaybeSend + zarrs_plugin::MaybeSync {}
 

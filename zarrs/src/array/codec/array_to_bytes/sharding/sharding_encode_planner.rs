@@ -167,16 +167,7 @@ impl<'a> ShardEncode<'a> {
                 join: Some(Join::new(move |values, ctx| {
                     let blocks = values
                         .into_iter()
-                        .map(|value| match value {
-                            TaskValue::Any(any) => any
-                                .downcast::<EncodedBlock>()
-                                .map(|block| *block)
-                                .map_err(|_| block_error()),
-                            TaskValue::None
-                            | TaskValue::Array(_)
-                            | TaskValue::Bytes(_)
-                            | TaskValue::Prepared(_) => Err(block_error()),
-                        })
+                        .map(|value| value.downcast::<EncodedBlock>().ok_or_else(block_error))
                         .collect::<Result<Vec<_>, _>>()?;
                     self.assemble(&blocks, ctx)
                 })),

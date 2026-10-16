@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToArrayCodecTraits::decoded_local_subchunk_grid`, which maps a subchunk grid through an array-to-array codec
   - `plan::{local_subchunk_grids_value,local_subchunk_grids}`
 - Add `plan::AnyValue`, the value of `plan::TaskValue::Any`
+- Add `plan::TaskValue::{into_array,into_bytes,into_prepared,downcast}`
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`

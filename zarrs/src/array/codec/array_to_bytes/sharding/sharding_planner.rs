@@ -778,10 +778,7 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                         // A partial decode planned tasks (e.g. a transpose of the decoded region), which only read memory
                         match drive_memory_one(Task::compute(move |_| Ok(outcome)), ctx.resources())? {
                             TaskValue::None => Ok(()),
-                            TaskValue::Array(_)
-                            | TaskValue::Bytes(_)
-                            | TaskValue::Prepared(_)
-                            | TaskValue::Any(_) => Err(unexpected_value()),
+                            _ => Err(unexpected_value()),
                         }
                     }
                 }
@@ -979,10 +976,7 @@ fn subset_shape(subchunk_subset: &ArraySubset) -> &[NonZeroU64] {
 }
 
 fn array_value(value: TaskValue<'_>) -> Result<ArrayBytes<'_>, CodecError> {
-    match value {
-        TaskValue::Array(bytes) => Ok(bytes),
-        TaskValue::None | TaskValue::Bytes(_) | TaskValue::Prepared(_) | TaskValue::Any(_) => Err(
-            CodecError::Other("expected decoded subchunk array bytes".to_string()),
-        ),
-    }
+    value
+        .into_array()
+        .ok_or_else(|| CodecError::Other("expected decoded subchunk array bytes".to_string()))
 }

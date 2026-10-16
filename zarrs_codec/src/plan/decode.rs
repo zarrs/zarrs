@@ -233,17 +233,7 @@ pub fn local_subchunk_grids_value<'a>(grids: Vec<Option<crate::ChunkGrid>>) -> T
 pub fn local_subchunk_grids(
     value: TaskValue<'_>,
 ) -> Result<Vec<Option<crate::ChunkGrid>>, CodecError> {
-    match value {
-        TaskValue::Any(any) => any
-            .downcast::<Vec<Option<crate::ChunkGrid>>>()
-            .map(|grids| *grids)
-            .map_err(|_| {
-                CodecError::Other("a task did not produce chunk-local subchunk grids".to_string())
-            }),
-        TaskValue::None | TaskValue::Array(_) | TaskValue::Bytes(_) | TaskValue::Prepared(_) => {
-            Err(CodecError::Other(
-                "a task did not produce chunk-local subchunk grids".to_string(),
-            ))
-        }
-    }
+    value.downcast().ok_or_else(|| {
+        CodecError::Other("a task did not produce chunk-local subchunk grids".to_string())
+    })
 }

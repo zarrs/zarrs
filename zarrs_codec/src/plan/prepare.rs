@@ -73,12 +73,9 @@ impl PrepareDecode {
 /// # Errors
 /// Returns a [`CodecError`] if `value` is not a prepared decoder.
 pub fn prepared(value: TaskValue<'_>) -> Result<Arc<dyn PreparedDecoder>, CodecError> {
-    match value {
-        TaskValue::Prepared(decoder) => Ok(decoder),
-        TaskValue::None | TaskValue::Array(_) | TaskValue::Bytes(_) | TaskValue::Any(_) => {
-            Err(CodecError::Other("expected a prepared decoder".to_string()))
-        }
-    }
+    value
+        .into_prepared()
+        .ok_or_else(|| CodecError::Other("expected a prepared decoder".to_string()))
 }
 
 /// A decoder that plans each request from a source with [`ArrayToBytesCodecTraits::plan_decode`].

@@ -56,14 +56,10 @@ pub fn partial_decode_memory(
         },
         options,
     )?;
-    let bytes = match drive_one(task, &MemoryValueIo::default(), resources)? {
-        TaskValue::Array(bytes) => bytes.into_owned(),
-        TaskValue::None | TaskValue::Bytes(_) | TaskValue::Prepared(_) | TaskValue::Any(_) => {
-            return Err(CodecError::Other(
-                "a decode task did not produce array bytes".to_string(),
-            ));
-        }
-    };
+    let bytes = drive_one(task, &MemoryValueIo::default(), resources)?
+        .into_array()
+        .ok_or_else(|| CodecError::Other("a decode task did not produce array bytes".to_string()))?
+        .into_owned();
     bytes.validate(indexer.len(), &data_type)?;
     Ok(bytes)
 }
