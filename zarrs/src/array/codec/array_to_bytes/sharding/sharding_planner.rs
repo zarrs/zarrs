@@ -10,8 +10,8 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Generator, Join, MissingDecoder, Outcome, PlanIndexer,
-    PrepareDecode, PreparedDecoder, SharedOutput, TargetViews, Task, TaskHint, TaskTarget,
-    TaskValue, decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
+    PrepareDecode, PreparedDecoder, SharedOutput, TargetViews, Task, TaskTarget, TaskValue,
+    decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
     whole_chunk_hint,
 };
 use zarrs_codec::{
@@ -22,8 +22,8 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 
 use super::{
-    ShardingCodecBound, calculate_chunks_per_shard, decode_shard_index, get_index_byte_range,
-    group_indices_by_subchunk, merge_indexer_subchunks, sharding_index_shape, subchunk_grid,
+    IndexRead, ShardingCodecBound, calculate_chunks_per_shard, decode_shard_index,
+    group_indices_by_subchunk, index_read, merge_indexer_subchunks, subchunk_grid,
     subchunk_offset_size,
 };
 use crate::array::array_bytes_internal::{
@@ -50,10 +50,11 @@ impl ShardingCodecBound {
             .as_indexer()
             .validate(bytemuck::must_cast_slice(shape))?;
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let index_shape = sharding_index_shape(&chunks_per_shard);
-        let index_byte_range =
-            get_index_byte_range(&index_shape, &self.index_codecs, self.index_location)?;
-        let index_size = index_byte_range.length(u64::MAX);
+        let IndexRead {
+            shape: index_shape,
+            range: index_byte_range,
+            hint: index_hint,
+        } = index_read(&self, &chunks_per_shard)?;
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         let options = *options;
 
@@ -98,10 +99,7 @@ impl ShardingCodecBound {
                 drop(encoded_index);
                 self.plan_subchunks(source, shard_index, subchunk_grid, request, &options, ctx)
             })
-            .with_hint(TaskHint {
-                read_bytes: Some(index_size),
-                compute_bytes: index_size,
-            }),
+            .with_hint(index_hint),
         )
     }
 
@@ -127,10 +125,11 @@ impl ShardingCodecBound {
                 ))
             })?;
         let subchunk_index = usize::try_from(subchunk_index).unwrap();
-        let index_shape = sharding_index_shape(&chunks_per_shard);
-        let index_byte_range =
-            get_index_byte_range(&index_shape, &self.index_codecs, self.index_location)?;
-        let index_size = index_byte_range.length(u64::MAX);
+        let IndexRead {
+            shape: index_shape,
+            range: index_byte_range,
+            hint: index_hint,
+        } = index_read(&self, &chunks_per_shard)?;
         let options = *options;
         Ok(
             Task::read(source.clone(), [index_byte_range], move |mut reads, ctx| {
@@ -154,10 +153,7 @@ impl ShardingCodecBound {
                     }),
                 })
             })
-            .with_hint(TaskHint {
-                read_bytes: Some(index_size),
-                compute_bytes: index_size,
-            }),
+            .with_hint(index_hint),
         )
     }
 
@@ -169,10 +165,11 @@ impl ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<PrepareDecode, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let index_shape = sharding_index_shape(&chunks_per_shard);
-        let index_byte_range =
-            get_index_byte_range(&index_shape, &self.index_codecs, self.index_location)?;
-        let index_size = index_byte_range.length(u64::MAX);
+        let IndexRead {
+            shape: index_shape,
+            range: index_byte_range,
+            hint: index_hint,
+        } = index_read(&self, &chunks_per_shard)?;
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
         let options = *options;
@@ -194,10 +191,7 @@ impl ShardingCodecBound {
                     };
                 Ok(Outcome::Value(TaskValue::Prepared(decoder)))
             })
-            .with_hint(TaskHint {
-                read_bytes: Some(index_size),
-                compute_bytes: index_size,
-            }),
+            .with_hint(index_hint),
         ))
     }
 
@@ -323,7 +317,6 @@ impl ShardingCodecBound {
                     };
                     let child = self
                         .plan_subchunk(
-                            &self.inner_codecs,
                             &source,
                             &shard_index,
                             &subchunk_grid,
@@ -425,7 +418,6 @@ impl ShardingCodecBound {
                 target: TaskTarget::Views(subchunk_views),
             };
             self.plan_subchunk(
-                &self.inner_codecs,
                 &source,
                 &shard_index,
                 &subchunk_grid,
@@ -460,7 +452,6 @@ impl ShardingCodecBound {
             positions.push(group.positions.clone());
             let child = self
                 .plan_subchunk(
-                    &self.inner_codecs,
                     source,
                     shard_index,
                     subchunk_grid,
@@ -495,7 +486,6 @@ impl ShardingCodecBound {
     #[allow(clippy::too_many_arguments)]
     fn plan_subchunk<'a>(
         &self,
-        inner_codecs: &Arc<CodecChainBound>,
         source: &ByteSource<'a>,
         shard_index: &[u64],
         subchunk_grid: &RegularBoundedChunkGrid,
@@ -514,7 +504,7 @@ impl ShardingCodecBound {
                         .to_string(),
                 )
             })?;
-            Ok(Some(inner_codecs.clone().plan_decode(
+            Ok(Some(self.inner_codecs.clone().plan_decode(
                 subchunk_source,
                 subchunk_shape,
                 request,
@@ -862,7 +852,6 @@ impl PreparedDecoder for ShardDecoder {
                 target: request.target,
             };
             let task = self.codec.plan_subchunk(
-                &self.codec.inner_codecs,
                 &self.source,
                 &self.shard_index,
                 &self.subchunk_grid,

@@ -233,13 +233,41 @@ fn get_index_byte_range(
     })
 }
 
+/// The marker of an empty subchunk in a shard index.
+const EMPTY: u64 = u64::MAX;
+
+/// The shard index of a shard: its shape, its byte range, and the hints of a task that reads and decodes it.
+struct IndexRead {
+    shape: ChunkShape,
+    range: ByteRange,
+    hint: zarrs_codec::plan::TaskHint,
+}
+
+/// The [`IndexRead`] of a shard of `codec` with `chunks_per_shard` subchunks.
+fn index_read(
+    codec: &ShardingCodecBound,
+    chunks_per_shard: &[NonZeroU64],
+) -> Result<IndexRead, CodecError> {
+    let shape = sharding_index_shape(chunks_per_shard);
+    let range = get_index_byte_range(&shape, &codec.index_codecs, codec.index_location)?;
+    let size = range.length(u64::MAX);
+    Ok(IndexRead {
+        shape,
+        range,
+        hint: zarrs_codec::plan::TaskHint {
+            read_bytes: Some(size),
+            compute_bytes: size,
+        },
+    })
+}
+
 /// Returns the byte offset and size of the subchunk at `subchunk_index` in a shard index.
 ///
 /// Returns [`None`] if the subchunk is empty.
 fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u64, u64)> {
     let offset = shard_index[subchunk_index * 2];
     let size = shard_index[subchunk_index * 2 + 1];
-    if offset == u64::MAX && size == u64::MAX {
+    if offset == EMPTY && size == EMPTY {
         None
     } else {
         Some((offset, size))

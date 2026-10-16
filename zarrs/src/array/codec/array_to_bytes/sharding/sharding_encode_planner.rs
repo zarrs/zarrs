@@ -18,8 +18,9 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 
 use super::sharding_codec::subchunk_subset;
 use super::{
-    ShardingCodecBound, ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
-    compute_index_encoded_size, num_subchunks, sharding_index_shape, subchunk_grid,
+    EMPTY, ShardingCodecBound, ShardingIndexLocation, SubchunkWriteOrder,
+    calculate_chunks_per_shard, compute_index_encoded_size, num_subchunks, sharding_index_shape,
+    subchunk_grid,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{ArrayBytes, BytesRepresentation, ChunkShape, transmute_to_bytes_vec};
@@ -27,9 +28,6 @@ use zarrs_chunk_grid::ChunkGridTraits;
 
 /// The maximum number of subchunks encoded by a task.
 const MAX_BLOCK_LEN: usize = 8;
-
-/// The marker of an empty subchunk in a shard index.
-const EMPTY: u64 = u64::MAX;
 
 impl ShardingCodecBound {
     /// Plan the encoding of `bytes`, a shard of `shape`. See [`ArrayToBytesCodecTraits::plan_encode`].

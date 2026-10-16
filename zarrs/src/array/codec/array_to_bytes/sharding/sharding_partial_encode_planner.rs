@@ -16,15 +16,12 @@ use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOp
 use zarrs_storage::byte_range::ByteRange;
 
 use super::{
-    ShardingCodecBound, ShardingIndexLocation, SubchunkUpdate, calculate_chunks_per_shard,
-    compute_index_encoded_size, decode_shard_index, get_index_byte_range, num_subchunks,
-    sharding_index_shape, subchunk_grid, subchunk_offset_size, subchunk_updates,
+    EMPTY, IndexRead, ShardingCodecBound, ShardingIndexLocation, SubchunkUpdate,
+    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index, index_read,
+    num_subchunks, subchunk_grid, subchunk_offset_size, subchunk_updates,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{ArrayBytes, ChunkShape, transmute_to_bytes};
-
-/// The marker of an empty subchunk in a shard index.
-const EMPTY: u64 = u64::MAX;
 
 impl ShardingCodecBound {
     /// Plan a partial encode of the shard `key`. See [`ArrayToBytesCodecTraits::plan_partial_encode`].
@@ -45,10 +42,11 @@ impl ShardingCodecBound {
             .validate(bytemuck::must_cast_slice(shape))?;
         bytes.validate(indexer.as_indexer().len(), self.inner_codecs.data_type())?;
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let index_shape = sharding_index_shape(&chunks_per_shard);
-        let index_byte_range =
-            get_index_byte_range(&index_shape, &self.index_codecs, self.index_location)?;
-        let index_size = index_byte_range.length(u64::MAX);
+        let IndexRead {
+            shape: index_shape,
+            range: index_byte_range,
+            hint: index_hint,
+        } = index_read(&self, &chunks_per_shard)?;
         let chunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         let index_len = num_subchunks(&chunk_grid) * 2;
         let update = ShardUpdate {
@@ -84,10 +82,7 @@ impl ShardingCodecBound {
                 update.plan_subchunks(index, &indexer, &bytes, ctx)
             },
         )
-        .with_hint(TaskHint {
-            read_bytes: Some(index_size),
-            compute_bytes: index_size,
-        }))
+        .with_hint(index_hint))
     }
 }
 
