@@ -50,6 +50,21 @@ struct Node<'a> {
     value: TaskValue<'a>,
 }
 
+impl Node<'_> {
+    /// A node whose compute step is queued.
+    fn new(parent: Parent, depth: usize) -> Self {
+        Self {
+            parent,
+            depth,
+            computing: true,
+            pending: 0,
+            join: None,
+            values: Vec::new(),
+            value: TaskValue::None,
+        }
+    }
+}
+
 /// A compute step ready to run.
 pub(crate) enum Work<'a> {
     /// The compute step of a task.
@@ -898,7 +913,6 @@ pub(crate) struct Scheduler<'a> {
     io: DepthQueue<IoWork<'a>>,
     writes: Vec<WriteWork<'a>>,
     generators: Vec<ActiveGenerator<'a>>,
-    live: usize,
     error: Option<CodecError>,
     /// The number of compute steps that run in parallel, the maximum number of jobs of an indexed generator.
     parallelism: usize,
@@ -926,7 +940,6 @@ impl<'a> Scheduler<'a> {
             io: DepthQueue::new(),
             writes: Vec::new(),
             generators: Vec::new(),
-            live: 0,
             error: None,
             parallelism: 1,
             max_deferred: 64,
@@ -951,15 +964,7 @@ impl<'a> Scheduler<'a> {
     pub(crate) fn from_root_outcome(outcome: Outcome<'a>) -> Self {
         let mut scheduler = Self::new(Vec::new());
         scheduler.roots.push(TaskValue::None);
-        let root = scheduler.insert(Node {
-            parent: Parent::Root(0),
-            depth: 0,
-            computing: true,
-            pending: 0,
-            join: None,
-            values: Vec::new(),
-            value: TaskValue::None,
-        });
+        let root = scheduler.insert(Node::new(Parent::Root(0), 0));
         scheduler.complete(root, Ok(outcome));
         scheduler
     }
@@ -972,20 +977,11 @@ impl<'a> Scheduler<'a> {
             self.nodes.push(Some(node));
             self.nodes.len() - 1
         };
-        self.live += 1;
         id
     }
 
     fn submit(&mut self, parent: Parent, depth: usize, task: Task<'a>) {
-        let id = self.insert(Node {
-            parent,
-            depth,
-            computing: true,
-            pending: 0,
-            join: None,
-            values: Vec::new(),
-            value: TaskValue::None,
-        });
+        let id = self.insert(Node::new(parent, depth));
         let needs_io = task.needs_io();
         let hint = *task.hint();
         let (source, ranges, step) = task.into_parts();
@@ -1001,7 +997,7 @@ impl<'a> Scheduler<'a> {
                 },
             );
         } else {
-            self.push_compute(
+            self.compute.push(
                 depth,
                 Work::Compute {
                     node: id,
@@ -1014,10 +1010,6 @@ impl<'a> Scheduler<'a> {
                 },
             );
         }
-    }
-
-    fn push_compute(&mut self, depth: usize, work: Work<'a>) {
-        self.compute.push(depth, work);
     }
 
     fn node(&mut self, id: NodeId) -> &mut Node<'a> {
@@ -1208,7 +1200,7 @@ impl<'a> Scheduler<'a> {
                 Work::Range(range) => range.state.node(),
             };
             let depth = self.node(node).depth;
-            self.push_compute(depth, work);
+            self.compute.push(depth, work);
         }
     }
 
@@ -1277,15 +1269,7 @@ impl<'a> Scheduler<'a> {
             node.values[index] = value;
         }
         for (index, outcome) in outcomes {
-            let child = self.insert(Node {
-                parent: parent(index),
-                depth,
-                computing: true,
-                pending: 0,
-                join: None,
-                values: Vec::new(),
-                value: TaskValue::None,
-            });
+            let child = self.insert(Node::new(parent(index), depth));
             self.complete(child, Ok(outcome));
         }
         for (index, task) in tasks {
@@ -1482,7 +1466,7 @@ impl<'a> Scheduler<'a> {
                     });
                     let depth = active.depth;
                     self.generators.push(active);
-                    self.push_compute(depth, work);
+                    self.compute.push(depth, work);
                     continue;
                 }
                 Generating::Iter(generator) => generator,
@@ -1525,7 +1509,7 @@ impl<'a> Scheduler<'a> {
                 node.computing = true;
                 let values = std::mem::take(&mut node.values);
                 let depth = node.depth;
-                self.push_compute(
+                self.compute.push(
                     depth,
                     Work::Join {
                         node: id,
@@ -1537,7 +1521,6 @@ impl<'a> Scheduler<'a> {
             }
             let node = self.nodes[id].take().expect("the node is live");
             self.free.push(id);
-            self.live -= 1;
             match node.parent {
                 Parent::Root(i) => {
                     self.roots[i] = node.value;
@@ -1576,7 +1559,7 @@ impl<'a> Scheduler<'a> {
         if let Some(err) = self.error {
             return Err(err);
         }
-        debug_assert_eq!(self.live, 0, "all tasks completed");
+        debug_assert_eq!(self.nodes.len(), self.free.len(), "all tasks completed");
         Ok(self.roots)
     }
 }

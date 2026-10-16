@@ -102,7 +102,8 @@ pub struct CodecChainBound {
     array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    cache_index: Option<usize>, // for partial decoders
+    /// True if an array codec cannot decode part of a chunk, so prepared decoders decode the whole chunk once.
+    decodes_whole: bool,
     /// The array-to-bytes and bytes-to-bytes codecs of the chain, if it has array-to-array codecs (for planning).
     bytes_chain: Option<Arc<CodecChainBound>>,
 }
@@ -144,56 +145,21 @@ impl CodecChain {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut cache_index_must = None;
-        let mut cache_index_should = None;
-        let mut codec_index = 0;
-        for codec in bytes_to_bytes.iter().rev() {
-            let capability = codec.partial_decoder_capability();
-            if !capability.partial_read {
-                cache_index_should = Some(codec_index);
-            }
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
-            codec_index += 1;
-        }
-
-        {
-            let codec = &self.array_to_bytes;
-            let capability = codec.partial_decoder_capability();
-            if !capability.partial_read {
-                cache_index_should = Some(codec_index);
-            }
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
-            codec_index += 1;
-        }
-
-        for codec in self.array_to_array.iter().rev() {
-            let capability = codec.partial_decoder_capability();
-            if !capability.partial_read {
-                cache_index_should = Some(codec_index);
-            }
-            if !capability.partial_decode {
-                cache_index_must = Some(codec_index + 1);
-            }
-            codec_index += 1;
-        }
-
-        let cache_index = match (cache_index_must, cache_index_should) {
-            (Some(m), Some(s)) => Some(m.max(s)),
-            (Some(m), None) => Some(m),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        };
+        let decodes_whole = !self
+            .array_to_bytes
+            .partial_decoder_capability()
+            .partial_decode
+            || self.array_to_array.iter().any(|codec| {
+                let capability = codec.partial_decoder_capability();
+                !capability.partial_read || !capability.partial_decode
+            });
 
         let bytes_chain = (!array_to_array.is_empty()).then(|| {
             Arc::new(CodecChainBound {
                 array_to_array: vec![],
                 array_to_bytes: array_to_bytes.clone(),
                 bytes_to_bytes: bytes_to_bytes.clone(),
-                cache_index: None,
+                decodes_whole: false,
                 bytes_chain: None,
             })
         });
@@ -202,7 +168,7 @@ impl CodecChain {
             array_to_array,
             array_to_bytes,
             bytes_to_bytes,
-            cache_index,
+            decodes_whole,
             bytes_chain,
         }))
     }
@@ -1137,10 +1103,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<PrepareDecode, CodecError> {
-        if self
-            .cache_index
-            .is_some_and(|index| index > self.bytes_to_bytes.len())
-        {
+        if self.decodes_whole {
             // An array codec cannot decode part of a chunk, so decode the whole chunk once
             let hint = whole_chunk_hint(&*self, &source, shape);
             let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();

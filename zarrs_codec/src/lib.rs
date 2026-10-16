@@ -32,7 +32,6 @@ pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,
     ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
 };
-pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::{
     BytesToBytesCodecTraits, copy_decoded_bytes_into, read_decoded_bytes_into,
 };
@@ -42,10 +41,6 @@ pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 pub use codec_traits::array_partial_async::{
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncArrayPartialEncoderTraits,
-};
-#[cfg(feature = "async")]
-pub use codec_traits::bytes_partial_async::{
-    AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 
 mod bytes_representation;

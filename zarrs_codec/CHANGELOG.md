@@ -18,7 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
-- Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 - Add `Resources`, which sets the resources available to an operation
@@ -102,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `partial_decoder`, `partial_encoder`, `async_partial_decoder` and `async_partial_encoder` from `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits` and `BytesToBytesCodecTraits`
   - Plan partial decodes and encodes instead (`plan_decode`, `plan_partial_encode`, and `plan::{partial_decode_memory,partial_encode_memory}` for chunks in memory)
 - **Breaking**: Remove `CodecPartialDefault` and `[Async]ByteIntervalPartialDecoder`
+- **Breaking**: Remove `[Async]BytesPartial{Encoder,Decoder}Traits`
 - **Breaking**: Remove `RecommendedConcurrency` and `{ArrayCodecTraits,BytesToBytesCodecTraits}::recommended_concurrency`, concurrency is managed by the drivers of `plan`
 - **Breaking**: Remove `Resources::{chunk_concurrent_minimum,set_chunk_concurrent_minimum,with_chunk_concurrent_minimum}`
 

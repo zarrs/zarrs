@@ -69,17 +69,16 @@ pub use zarrs_codec::{
     ArrayBytesOptional, ArrayBytesVariableLength, ArrayCodecTraits,
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesDecodeSource, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
-    ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, CowBytes, Resources,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
-    update_array_bytes,
+    ArrayToBytesCodecTraits, BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2,
+    CodecTraitsV3, CowBytes, Resources, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
+    AsyncArrayPartialEncoderTraits,
 };
 pub use zarrs_data_type::{
     DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3, FillValue,
@@ -396,11 +395,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Chunk grids ([`zarrs_chunk_grid`]): [`ChunkGridTraits`]
 ///   - Chunk key encodings ([`zarrs_chunk_key_encoding`]): [`ChunkKeyEncodingTraits`]
 ///   - Storage transformers ([`crate::array::storage_transformer`]): [`StorageTransformerTraits`]
