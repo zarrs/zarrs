@@ -380,6 +380,7 @@ impl ShardingCodecBound {
         let regular_shape: &[u64] = bytemuck::must_cast_slice(&self.subchunk_shape);
         let whole_subchunk: Arc<dyn Indexer> =
             Arc::new(ArraySubset::new_with_shape(regular_shape.to_vec()));
+        let views = views.with_local_keepalive();
         Generator::indexed(subchunk_indices.num_elements_usize(), move |i| {
             let subchunk = subset_indices_at(&subchunk_indices, i as u64);
             let subchunk_subset = subchunk_grid

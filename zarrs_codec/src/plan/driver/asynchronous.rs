@@ -59,7 +59,7 @@ pub async fn drive_async<'a>(
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
-    drive(tasks, io, resources, |_| true, |work, ctx| Err((work, ctx))).await
+    drive(tasks, io, resources, |_| true, |work, _| Err(work)).await
 }
 
 /// Execute `task` as [`drive_async`], returning its value.
@@ -71,7 +71,7 @@ pub async fn drive_async_one<'a>(
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
-    drive_one(task, io, resources, |_| true, |work, ctx| Err((work, ctx))).await
+    drive_one(task, io, resources, |_| true, |work, _| Err(work)).await
 }
 
 /// Execute `tasks` asynchronously, offloading compute steps to Rayon.
@@ -132,14 +132,15 @@ fn polled_on_rayon() -> bool {
 #[cfg(not(target_arch = "wasm32"))]
 fn offload(
     work: Work<'static>,
-    ctx: ComputeCtx,
-) -> Result<EventFuture<'static, 'static>, (Work<'static>, ComputeCtx)> {
+    ctx: &dyn Fn() -> ComputeCtx,
+) -> Result<EventFuture<'static, 'static>, Work<'static>> {
     // Jobs of generators whose tasks compute (rather than read) plan and run several tasks
     if (!work.is_computing_range() && work.hint().compute_bytes < OFFLOAD_THRESHOLD)
         || polled_on_rayon()
     {
-        return Err((work, ctx));
+        return Err(work);
     }
+    let ctx = ctx();
     let (sender, receiver) = futures::channel::oneshot::channel();
     let fetched = work.fetched();
     rayon::spawn(move || {
@@ -168,7 +169,7 @@ async fn drive<'a, 'f>(
     io: &'f dyn AsyncIo,
     resources: &'f Resources,
     runs_inline: impl Fn(&Task<'a>) -> bool,
-    offload: impl Fn(Work<'a>, ComputeCtx) -> Result<EventFuture<'a, 'a>, (Work<'a>, ComputeCtx)>,
+    offload: impl Fn(Work<'a>, &dyn Fn() -> ComputeCtx) -> Result<EventFuture<'a, 'a>, Work<'a>>,
 ) -> Result<Vec<TaskValue<'a>>, CodecError>
 where
     'a: 'f,
@@ -193,7 +194,7 @@ async fn drive_one<'a, 'f>(
     io: &'f dyn AsyncIo,
     resources: &'f Resources,
     runs_inline: impl Fn(&Task<'a>) -> bool,
-    offload: impl Fn(Work<'a>, ComputeCtx) -> Result<EventFuture<'a, 'a>, (Work<'a>, ComputeCtx)>,
+    offload: impl Fn(Work<'a>, &dyn Fn() -> ComputeCtx) -> Result<EventFuture<'a, 'a>, Work<'a>>,
 ) -> Result<TaskValue<'a>, CodecError>
 where
     'a: 'f,
@@ -237,7 +238,7 @@ async fn drive_scheduler<'a, 'f>(
     mut scheduler: Scheduler<'a>,
     io: &'f dyn AsyncIo,
     resources: &'f Resources,
-    offload: impl Fn(Work<'a>, ComputeCtx) -> Result<EventFuture<'a, 'a>, (Work<'a>, ComputeCtx)>,
+    offload: impl Fn(Work<'a>, &dyn Fn() -> ComputeCtx) -> Result<EventFuture<'a, 'a>, Work<'a>>,
 ) -> Result<Vec<TaskValue<'a>>, CodecError>
 where
     'a: 'f,
@@ -282,11 +283,16 @@ where
                 let Some(work) = scheduler.pop_compute() else {
                     break;
                 };
-                let busy = compute_futures.len() + scheduler.compute_queued() + 1;
-                match offload(work, ComputeCtx::new(resources.with_compute_share(busy))) {
+                let running = compute_futures.len() + 1;
+                let queued = scheduler.compute_queued();
+                let offload_ctx =
+                    || ComputeCtx::new(resources.with_compute_share(running + queued));
+                match offload(work, &offload_ctx) {
                     Ok(future) => compute_futures.push(future),
                     Err(work) => {
-                        inline = Some(work);
+                        // Queued work does not run alongside work on the polling task
+                        inline =
+                            Some((work, ComputeCtx::new(resources.with_compute_share(running))));
                         break;
                     }
                 }

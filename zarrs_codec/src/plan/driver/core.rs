@@ -157,6 +157,10 @@ impl<'a> IndexedState<'a> {
 
     /// Register a job with the generator if it has tasks left.
     fn try_join(&self) -> bool {
+        // The cursor only advances, so an exhausted generator is skipped without registering
+        if self.cursor.load(Ordering::Relaxed) >= self.len {
+            return false;
+        }
         // Registering before checking the cursor ensures the scheduler cannot complete the generator in between
         self.unreported.fetch_add(1, Ordering::SeqCst);
         if self.cursor.load(Ordering::SeqCst) < self.len {

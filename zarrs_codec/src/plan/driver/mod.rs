@@ -47,7 +47,15 @@ pub fn drive_memory_one<'a>(
     task: super::Task<'a>,
     resources: &crate::Resources,
 ) -> Result<super::TaskValue<'a>, crate::CodecError> {
-    drive_blocking_one(task, &NoIo, resources)
+    // The tasks never read, so the drive needs no I/O pool
+    if resources.read_dispatch() == Some(crate::ReadDispatch::Inline) {
+        drive_blocking_one(task, &NoIo, resources)
+    } else {
+        let resources = resources
+            .clone()
+            .with_read_dispatch(Some(crate::ReadDispatch::Inline));
+        drive_blocking_one(task, &NoIo, &resources)
+    }
 }
 
 /// The I/O backend of drives of tasks whose byte sources are all in memory.

@@ -62,7 +62,8 @@ impl ShardingCodecBound {
             .filter(|index| index.len() == index_len);
         if let Some(index) = known_index {
             return Ok(Task::compute(move |ctx| {
-                update.plan_subchunks(index.as_ref().clone(), &indexer, &bytes, ctx)
+                let index = Arc::try_unwrap(index).unwrap_or_else(|index| index.as_ref().clone());
+                update.plan_subchunks(index, &indexer, &bytes, ctx)
             }));
         }
         Ok(Task::read(
