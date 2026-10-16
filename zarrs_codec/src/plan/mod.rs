@@ -39,9 +39,8 @@ pub use memory::{partial_decode_memory, partial_encode_memory};
 pub use prepare::{
     DecodedDecoder, MissingDecoder, PrepareDecode, PreparedDecoder, SourceDecoder, prepared,
 };
-pub use source::{
-    ByteSource, RangeDecoder, ResolvedRange, SourceKey, SourceRoot, SourceStep, Window,
-};
+pub(crate) use source::SourceRoot;
+pub use source::{ByteSource, RangeDecoder, SourceKey, SourceStep};
 pub use target::{DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget};
 pub use task::{
     AnyValue, ComputeCtx, Generator, Join, Outcome, Reads, Task, TaskHint, TaskValue, WriteOp,

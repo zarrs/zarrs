@@ -54,7 +54,7 @@ pub struct SourceKey(pub usize);
 
 /// The root of a [`ByteSource`].
 #[derive(Debug, Clone)]
-pub enum SourceRoot<'a> {
+pub(crate) enum SourceRoot<'a> {
     /// Bytes retrieved by the I/O backend of a drive.
     External(SourceKey),
     /// Bytes in memory.
@@ -74,7 +74,7 @@ pub enum SourceRoot<'a> {
 
 /// A window into a root byte source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Window {
+pub(crate) enum Window {
     /// The `len` bytes starting at `offset`.
     Known {
         /// The offset of the window in the root.
@@ -93,7 +93,7 @@ pub enum Window {
 
 /// A byte range of a [`ByteSource`] resolved to its root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ResolvedRange {
+pub(crate) struct ResolvedRange {
     /// The byte range to read from the root.
     pub range: ByteRange,
     /// The number of bytes to drop from the end of the bytes read.
@@ -105,7 +105,7 @@ impl ResolvedRange {
     ///
     /// # Errors
     /// Returns [`InvalidByteRangeError`] if `bytes` is shorter than `drop_tail`.
-    pub fn finish<'a>(
+    pub(crate) fn finish<'a>(
         &self,
         mut bytes: CowBytes<'a>,
         requested: ByteRange,
@@ -185,14 +185,8 @@ impl<'a> ByteSource<'a> {
 
     /// The root of the source.
     #[must_use]
-    pub fn root(&self) -> &SourceRoot<'a> {
+    pub(crate) fn root(&self) -> &SourceRoot<'a> {
         &self.root
-    }
-
-    /// The window of the source in its root.
-    #[must_use]
-    pub fn window(&self) -> Window {
-        self.window
     }
 
     /// The length of the source, if known.
@@ -204,7 +198,7 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// The bytes of a source with a [`SourceRoot::Memory`] root, borrowed from the root.
+    /// The bytes of a source whose root is in memory (see [`ByteSource::memory`]), borrowed from the root.
     ///
     /// Returns [`None`] if the root is not in memory.
     ///
@@ -331,7 +325,7 @@ impl<'a> ByteSource<'a> {
     /// # Errors
     /// Returns [`InvalidByteRangeError`] if `range` exceeds the known length of the source,
     /// or its position in the root overflows.
-    pub fn resolve(&self, range: ByteRange) -> Result<ResolvedRange, InvalidByteRangeError> {
+    pub(crate) fn resolve(&self, range: ByteRange) -> Result<ResolvedRange, InvalidByteRangeError> {
         match self.window {
             Window::Known { offset, len } => {
                 let invalid = || InvalidByteRangeError::new(range, len);
@@ -434,7 +428,7 @@ impl<'a> ByteSource<'a> {
     /// Read `ranges` of this source if its root is in memory.
     ///
     /// Returns [`None`] if the root is external.
-    /// The bytes of a [`SourceRoot::Memory`] root are zero-copy slices of the root.
+    /// The bytes of a root in memory are zero-copy slices of the root.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if a range exceeds the length of the source or cannot be decoded.
