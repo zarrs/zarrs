@@ -29,9 +29,10 @@ where
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_chunk(chunk_indices, chunk_data)
+            .async_store_chunk(chunk_indices, chunk_data, resources)
             .await?;
         self.cache().invalidate_chunk(chunk_indices).await;
         Ok(())
@@ -42,8 +43,11 @@ where
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().async_store_chunks(chunks, chunks_data).await?;
+        self.array()
+            .async_store_chunks(chunks, chunks_data, resources)
+            .await?;
         self.cache().invalidate_chunks(chunks).await;
         Ok(())
     }
@@ -56,8 +60,12 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
-        self.array().async_erase_chunks(chunks).await?;
+    pub async fn async_erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.array().async_erase_chunks(chunks, resources).await?;
         let _ = self.cache().invalidate_chunks(chunks).await;
         Ok(())
     }

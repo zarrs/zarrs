@@ -6,7 +6,7 @@ use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -39,6 +39,24 @@ impl ShuffleCodec {
             )),
         }
     }
+
+    /// Unshuffle `encoded_value` into `decoded_value`, which must be the same length.
+    fn unshuffle(&self, encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+        if !encoded_value.len().is_multiple_of(self.elementsize) {
+            return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
+        }
+        debug_assert_eq!(encoded_value.len(), decoded_value.len());
+
+        let count = decoded_value.len().div_ceil(self.elementsize);
+        for i in 0..self.elementsize {
+            let offset = i * count;
+            for byte_index in 0..count {
+                let j = byte_index * self.elementsize + i;
+                decoded_value[j] = encoded_value[offset + byte_index];
+            }
+        }
+        Ok(())
+    }
 }
 
 impl CodecTraits for ShuffleCodec {
@@ -67,27 +85,16 @@ impl CodecTraits for ShuffleCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for ShuffleCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if !decoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
@@ -110,21 +117,29 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        if !encoded_value.len().is_multiple_of(self.elementsize) {
-            return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
-        }
-
         let mut decoded_value = vec![0u8; encoded_value.len()];
-        let count = decoded_value.len().div_ceil(self.elementsize);
-        for i in 0..self.elementsize {
-            let offset = i * count;
-            for byte_index in 0..count {
-                let j = byte_index * self.elementsize + i;
-                decoded_value[j] = encoded_value[offset + byte_index];
-            }
-        }
+        self.unshuffle(&encoded_value, &mut decoded_value)?;
         Ok(CowBytes::from(decoded_value))
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
+        if encoded_value.len() != output.len() {
+            return Err(InvalidBytesLengthError::new(encoded_value.len(), output.len()).into());
+        }
+        self.unshuffle(&encoded_value, output)
     }
 
     fn encoded_representation(

@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `ArrayToBytesCodecTraits::is_decode_passthrough`
+- Add `BytesToBytesCodecTraits::decode_into`
+- Add `ArrayBytesFixedDisjointView::as_mut_slice`
+- Add `ArrayBytesFixedDisjointView::try_copy_from_slice_with`
+- Add `ArrayBytesDecodeIntoInput` and single-use `BytesDecodeSource` for deferred decoding
+- Add `BytesToBytesCodecTraits::is_decode_into_efficient` producer cost hint
+- Add `{copy,read}_decoded_bytes_into`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
@@ -16,11 +21,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `Resources`, which sets the resources available to an operation
+  - A compute target, an I/O target, an optional `IoLimiter` shared between operations, a fetched bytes limit, a read dispatch override, and an `IoPool`
+- Add `IoLimiter` and `IoPermit`, a limit on concurrent storage requests that synchronous and asynchronous operations can share
+- Add the `plan` module for planned (sans-I/O) operations, whose I/O and compute run with separate concurrency limits
+  - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
+  - `TargetViews`, `SharedOutput`, `TaskTarget`, `DecodeRequest` and `PlanIndexer`
+  - The `SyncIo` and `AsyncIo` backends, and the `drive_serial`, `drive_sync`, `drive_async` and `drive_async_offload` drivers
+  - `IoPool`, a scoped thread pool for blocking I/O
+- Add `build_nested_optional_target` and `extract_target_views`
+- Add planned decoding to the codec traits
+  - `ArrayToBytesCodecTraits::plan_decode`, which plans the decoding of a request from a `plan::ByteSource` (by default, `plan::plan_decode_whole`)
+  - `ArrayToBytesCodecTraits::prepare_decode`, which prepares a `plan::PreparedDecoder` of a chunk that plans many requests (e.g. reading a shard index once)
+  - `ArrayToBytesCodecTraits::plans_subtasks`, which is true if planning the decoding of a whole chunk plans tasks of its own
+  - `ArrayToArrayCodecTraits::plan_decode_request`, which maps a request through an array-to-array codec (`plan::ArrayToArrayDecodePlan`)
+  - `BytesToBytesCodecTraits::source_step`, which describes how partial reads pass through a bytes-to-bytes codec (`plan::SourceStep` and `plan::RangeDecoder`)
+- Add `plan::Generator`, `plan::Outcome::Generate` and `plan::Join::after` for generating the tasks of an operation as they are needed
+- Add `plan::{decode_whole,place_decoded,is_whole_chunk,whole_chunk_hint,plan_decode_request_elementwise}` for codec planners
+- Add `plan::{PrepareDecode,SourceDecoder,MissingDecoder,DecodedDecoder,prepared}` and `plan::TaskValue::Prepared`
+- Add `plan::ByteSource::{memory_slice,size_held}` and `plan::TargetViews::{with_subdivided,with_local_keepalive}`
+- Add `ReadDispatch` and `Resources::{read_dispatch,set_read_dispatch,with_read_dispatch}`, which override how synchronous drives dispatch reads
+  - By default, a synchronous drive reads on compute threads while storage requests are fast (under 100 µs on average), and otherwise on the I/O pool, and performs writes the same way
+- Add planned encoding to the codec traits
+  - `ArrayToBytesCodecTraits::plan_encode` (by default, `plan::plan_encode_whole`) and `ArrayToBytesCodecTraits::plans_encode_subtasks`
+  - `ArrayToBytesCodecTraits::plan_partial_encode` and `ArrayToBytesCodecTraits::plans_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
+- Add `plan::{encode_hint,encoded_value}`
+- Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec, and `plan::partial_encode_request_elementwise`
+- Add planned resolution of chunk-local subchunk grids
+  - `ArrayToBytesCodecTraits::plan_local_subchunk_grids`, which plans the resolution of the subchunk grids of a chunk from its encoded bytes
+  - `ArrayToArrayCodecTraits::decoded_local_subchunk_grid`, which maps a subchunk grid through an array-to-array codec
+  - `plan::{local_subchunk_grids_value,local_subchunk_grids}`
+- Add `plan::AnyValue`, the value of `plan::TaskValue::Any`
+- Add `plan::drive_memory_one` for drives whose byte sources are all in memory
+- Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
+- Add `plan::TargetViews::from_target`
+- Coalesce queued reads of nearby byte ranges of the same key into one request in the `drive_sync` (reads on the I/O pool) and `drive_async` drivers
+  - Add `plan::{SyncIo,AsyncIo}::read_coalescing`, the hint of the backend (e.g. of a store), and `Resources::{read_coalescing,set_read_coalescing,with_read_coalescing}` to override it
+  - The bytes of each read are slices of the bytes of the request
 
 ### Changed
 - Make `async-trait` optional and enable it only with the `async` feature.
-- Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
+- **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput` rather than `CowBytes`
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6
 - **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
@@ -48,15 +90,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - Bump `itertools` to 0.15.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: Codec, partial decoder, and partial encoder trait methods that take `&CodecOptions` also take `&Resources`
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
 - **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`
 - **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
 - **Breaking**: Remove `ArrayTo{Array,Bytes}CodecTraits::with_codec_specific_options`, codecs read their options in `UnboundArrayTo{Array,Bytes}CodecTraits::with_context` instead
+- **Breaking**: Remove `CodecOptions::{concurrent_target,chunk_concurrent_minimum}` and their `set_`/`with_` variants, use `Resources` instead
+- **Breaking**: Remove `CodecOptions::{experimental_partial_encoding,set_experimental_partial_encoding,with_experimental_partial_encoding}`
+- **Breaking**: Remove `partial_decoder`, `partial_encoder`, `async_partial_decoder` and `async_partial_encoder` from `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits` and `BytesToBytesCodecTraits`
+  - Plan partial decodes and encodes instead (`plan_decode`, `plan_partial_encode`, and `plan::{partial_decode_memory,partial_encode_memory}` for chunks in memory)
+- **Breaking**: Remove `CodecPartialDefault` and `[Async]ByteIntervalPartialDecoder`
+- **Breaking**: Remove `RecommendedConcurrency` and `{ArrayCodecTraits,BytesToBytesCodecTraits}::recommended_concurrency`, concurrency is managed by the drivers of `plan`
+- **Breaking**: Remove `Resources::{chunk_concurrent_minimum,set_chunk_concurrent_minimum,with_chunk_concurrent_minimum}`
 
-### Fixed
-- `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
 
 ## [0.2.1] - 2026-03-21
 

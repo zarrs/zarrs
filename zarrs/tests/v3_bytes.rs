@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs_filesystem::FilesystemStore;
 
@@ -12,7 +13,8 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let cities_out: Vec<Vec<u8>> = array.retrieve_array_subset(&subset_all)?;
+    let cities_out: Vec<Vec<u8>> =
+        array.retrieve_array_subset(&subset_all, &Resources::default())?;
 
     assert_eq!(cities_out[0], b"New York");
     assert_eq!(cities_out[1], b"Los Angeles");

@@ -78,14 +78,14 @@ impl CodecTraitsV2 for ZstdCodec {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
-    };
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecError, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -124,10 +124,19 @@ mod tests {
         let codec = ZstdCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -143,30 +152,24 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zstd partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap()
-            .concat();
+        let decoded_partial_chunk = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        )
+        .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .as_chunks::<2>()
@@ -178,53 +181,6 @@ mod tests {
         assert_eq!(answer, decoded_partial_chunk);
     }
 
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn codec_zstd_async_partial_decode() {
-        let elements: Vec<u16> = (0..8).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        let configuration: ZstdCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
-        let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
-
-        let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [
-            ByteRange::FromStart(4, Some(4)),
-            ByteRange::FromStart(10, Some(2)),
-        ];
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap()
-            .unwrap()
-            .concat();
-
-        let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u16> = vec![2, 3, 5];
-        assert_eq!(answer, decoded_partial_chunk);
-    }
     #[test]
     #[cfg_attr(miri, ignore)]
     fn decodes_reuse_the_decompression_context() {
@@ -232,7 +188,7 @@ mod tests {
         let options = CodecOptions::default();
         let encode = |decoded: &[u8]| -> Vec<u8> {
             codec
-                .encode(CowBytes::from(decoded), &options)
+                .encode(CowBytes::from(decoded), &options, &Resources::default())
                 .unwrap()
                 .to_vec()
         };
@@ -242,6 +198,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::FixedSize(len as u64),
                     &options,
+                    &Resources::default(),
                 )
                 .map(|decoded| decoded.to_vec())
         };
@@ -268,5 +225,104 @@ mod tests {
         })
         .unwrap();
         assert_eq!(nested, second);
+    }
+
+    #[test]
+    fn decode_into() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"decode directly into this buffer".repeat(32);
+        let len = decoded.len();
+        let encoded = codec
+            .encode(
+                CowBytes::from(decoded.as_slice()),
+                &options,
+                &Resources::default(),
+            )
+            .unwrap();
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                encoded.clone(),
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+                &Resources::default(),
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        assert!(decode_into(&mut vec![0; len + 1]).is_err());
+        assert!(decode_into(&mut output[..len - 1]).is_err());
+    }
+
+    #[test]
+    fn decode_into_unknown_content_size() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"streamed frame without content size".repeat(32);
+        let len = decoded.len();
+        // The streaming encoder does not write the content size into the frame header
+        let encoded = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        assert!(matches!(
+            zstd::zstd_safe::get_frame_content_size(&encoded),
+            Ok(None)
+        ));
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                CowBytes::from(encoded.as_slice()),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+                &Resources::default(),
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(&mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // A too-small output returns the bounded decoder's error without a second decode.
+        assert!(matches!(
+            decode_into(&mut output[..len - 1]),
+            Err(CodecError::IOError(_))
+        ));
+        // Successful decompression reports its actual length for a too-large output.
+        assert!(matches!(
+            decode_into(&mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+    }
+
+    #[test]
+    fn decode_into_oversized_frame_does_not_materialise_output() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = vec![0u8; 8 * 1024 * 1024];
+        let known_size = codec
+            .encode(
+                CowBytes::from(decoded.as_slice()),
+                &options,
+                &Resources::default(),
+            )
+            .unwrap();
+        let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        for encoded in [known_size, CowBytes::from(unknown_size)] {
+            let mut output = [0u8; 8];
+            // The old allocating retry returned UnexpectedChunkDecodedSize only
+            // after expanding the entire 8 MiB frame. Preserve the direct error.
+            assert!(matches!(
+                codec.decode_into(
+                    encoded,
+                    &BytesRepresentation::FixedSize(8),
+                    &mut output,
+                    &options,
+                    &Resources::default(),
+                ),
+                Err(CodecError::IOError(_))
+            ));
+        }
     }
 }

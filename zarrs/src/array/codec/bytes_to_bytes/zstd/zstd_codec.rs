@@ -8,7 +8,7 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -102,28 +102,16 @@ impl CodecTraits for ZstdCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for ZstdCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: zstd supports multithread, but at what point is it good to kick in?
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
         compressor.include_checksum(self.checksum)?;
@@ -138,6 +126,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
@@ -152,6 +141,28 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 .map_err(CodecError::from)
                 .map(CowBytes::from)
         }
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
+        // Never materialise an oversized frame just to improve a length diagnostic.
+        let decoded_len = with_decompressor(|decompressor| {
+            decompressor.decompress_to_buffer(&encoded_value, output)
+        })?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        Ok(())
     }
 
     fn encoded_representation(

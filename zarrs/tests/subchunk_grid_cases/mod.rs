@@ -18,8 +18,8 @@ use zarrs::array::codec::{CastValueCodec, ReshapeCodec, SqueezeCodec};
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, data_type,
+    CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue, Resources,
+    UnboundArrayToArrayCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
@@ -32,10 +32,10 @@ pub(crate) const fn nz(value: u64) -> NonZeroU64 {
     NonZeroU64::new(value).unwrap()
 }
 
-/// An identity array-to-array codec that deliberately does not implement `partial_decoder`.
+/// An identity array-to-array codec that implements only the required codec methods.
 ///
-/// It therefore always resolves to [`CodecPartialDefault`](zarrs_codec::CodecPartialDefault),
-/// unlike any real codec, which may gain a bespoke partial codec at any time.
+/// It therefore always uses the default planning of array-to-array codecs, unlike any real codec, which may gain a
+/// bespoke planner at any time.
 #[derive(Debug)]
 pub(crate) struct IdentityCodec;
 
@@ -101,13 +101,6 @@ impl ArrayCodecTraits for IdentityCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl ArrayToArrayCodecSubchunkingIdentityTraits for IdentityCodecBound {}
@@ -130,6 +123,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -139,6 +133,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -274,7 +269,7 @@ pub(crate) fn cases() -> Vec<Case> {
             absent_chunk_indices: vec![1, 0],
             local_subchunk_shape: vec![nz(2), nz(2)],
         },
-        // `IdentityCodec` has no bespoke partial decoder, so it exercises `CodecPartialDefault`.
+        // `IdentityCodec` has no bespoke planning, so it exercises the defaults.
         Case {
             name: "identity",
             codec: Some(Arc::new(IdentityCodec)),

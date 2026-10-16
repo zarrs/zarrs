@@ -6,20 +6,16 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CowBytes, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
 use zarrs_metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
 };
-
-use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 
 /// A `zfpy` codec implementation.
 ///
@@ -122,11 +118,6 @@ impl CodecTraits for ZfpyCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
@@ -156,22 +147,10 @@ impl ArrayCodecTraits for ZfpyCodecBound {
     fn fill_value(&self) -> &FillValue {
         self.inner.fill_value()
     }
-
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        self.inner.recommended_concurrency(shape)
-    }
 }
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for ZfpyCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for ZfpyCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -182,8 +161,9 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        self.inner.encode(bytes, shape, options)
+        self.inner.encode(bytes, shape, options, resources)
     }
 
     fn decode<'a>(
@@ -191,32 +171,21 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.inner.decode(bytes, shape, options)
+        self.inner.decode(bytes, shape, options, resources)
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
         self.inner
-            .clone()
-            .partial_decoder(input_handle, shape, options)
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        self.inner
-            .clone()
-            .async_partial_decoder(input_handle, shape, options)
-            .await
+            .decode_into(input, shape, output_target, options, resources)
     }
 
     fn encoded_representation(

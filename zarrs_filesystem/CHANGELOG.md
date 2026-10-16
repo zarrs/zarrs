@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.14...HEAD)
 
 ### Changed
+- `FilesystemStore` hints that reads of byte ranges with gaps of up to 4 KiB should be coalesced, up to 1 MiB (`ReadableStorageTraits::read_coalescing`)
 - **Behavioural change**: `FilesystemStore` no longer serialises operations on the same key
   - A read of a key concurrent with a write of that key is now undefined, which is aligned with the `zarrs` store expectations
 - **Breaking**: Bump `zarrs_storage` to 0.5.0

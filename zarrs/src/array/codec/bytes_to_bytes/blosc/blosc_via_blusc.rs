@@ -177,6 +177,31 @@ pub fn blosc_decompress_bytes(
     }
 }
 
+/// Decompress a blosc buffer into `dest`, which must be the length of the uncompressed bytes.
+pub(super) fn blosc_decompress_bytes_into(
+    src: &[u8],
+    dest: &mut [u8],
+    numinternalthreads: usize,
+) -> Result<(), BloscError> {
+    let numinternalthreads = if dest.len() >= MIN_PARALLEL_LENGTH {
+        std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
+    } else {
+        1
+    };
+
+    let decompressed_len = {
+        let mut dparams = BLOSC2_DPARAMS_DEFAULTS;
+        dparams.nthreads = numinternalthreads as i16;
+        let context = blosc2_create_dctx(dparams);
+        blosc2_decompress_ctx(&context, src, dest)
+    };
+    if usize::try_from(decompressed_len) == Ok(dest.len()) {
+        Ok(())
+    } else {
+        Err(BloscError::from("blosc_decompress_ctx failed"))
+    }
+}
+
 pub fn blosc_decompress_bytes_partial(
     src: &[u8],
     offset: usize,

@@ -95,18 +95,18 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::MemoryPartialDecoder;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
+    use super::super::decode_into_test_util::decode_into_view;
     use super::*;
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
-        transmute_to_bytes_vec,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CowBytes, DataType, FillValue,
+        data_type, transmute_to_bytes_vec,
     };
-    use zarrs_codec::{
-        BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
-        UnboundArrayToBytesCodecTraits,
-    };
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToBytesCodecTraits};
 
     const JSON_VALID: &str = r#"{
         "level": 8,
@@ -165,12 +165,129 @@ mod tests {
             bytes.clone(),
             chunk_shape.as_slice(),
             &CodecOptions::default(),
+            &Resources::default(),
         )?;
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
         let decoded = codec
-            .decode(encoded, chunk_shape.as_slice(), &CodecOptions::default())
+            .decode(
+                encoded,
+                chunk_shape.as_slice(),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
+        Ok(())
+    }
+
+    /// `decode_into` decompresses into an output that is one contiguous region and is aligned to
+    /// the element type, and otherwise decodes and copies. Both match `decode`.
+    #[test]
+    fn codec_pcodec_decode_into() -> Result<(), Box<dyn std::error::Error>> {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let configuration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = PcodecCodec::new_with_configuration(&configuration).unwrap();
+        let cases: Vec<(DataType, FillValue)> = vec![
+            (data_type::uint16(), FillValue::from(0u16)),
+            (data_type::int64(), FillValue::from(0i64)),
+            (
+                data_type::float16(),
+                FillValue::from(half::f16::from_f32(0.0)),
+            ),
+            (data_type::float32(), FillValue::from(0f32)),
+            (
+                data_type::complex64(),
+                FillValue::from(num::complex::Complex32::new(0.0, 0.0)),
+            ),
+        ];
+        for (data_type, fill_value) in cases {
+            let element_size = data_type.fixed_size().unwrap();
+            let bytes: Vec<u8> = (0..16 * element_size)
+                .map(|i| u8::try_from(i * 7 % 256).unwrap())
+                .collect();
+            let codec = Arc::new(codec.clone()).with_context(
+                data_type,
+                fill_value,
+                &CodecSpecificOptions::default(),
+            )?;
+            let encoded = codec.encode(
+                bytes.clone().into(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
+            let decoded = codec
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )?
+                .into_fixed()?
+                .to_vec();
+            assert_eq!(decoded, bytes);
+
+            // One contiguous region, aligned and not aligned to the element type
+            for offset in [0, 1] {
+                let output = decode_into_view(
+                    &codec,
+                    &encoded,
+                    &chunk_shape,
+                    [4, 4],
+                    4,
+                    offset,
+                    element_size,
+                );
+                assert_eq!(output?, decoded);
+            }
+
+            // Four contiguous regions, with the rest of the output unchanged
+            let output =
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, element_size)?;
+            let row = 4 * element_size;
+            for (output_row, decoded_row) in
+                std::iter::zip(output.chunks_exact(2 * row), decoded.chunks_exact(row))
+            {
+                assert_eq!(&output_row[..row], decoded_row);
+                assert!(output_row[row..].iter().all(|byte| *byte == 0xFF));
+            }
+
+            // Truncated encoded bytes, and an output with fewer and more elements than the chunk
+            let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
+            assert!(
+                decode_into_view(&codec, &truncated, &chunk_shape, [4, 4], 4, 0, element_size)
+                    .is_err()
+            );
+            assert!(
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 2], 2, 0, element_size)
+                    .is_err()
+            );
+            assert!(
+                decode_into_view(&codec, &encoded, &chunk_shape, [4, 8], 8, 0, element_size)
+                    .is_err()
+            );
+
+            // A stream with fewer and more elements than the output is an error
+            for (stream_bytes, stream_columns) in [
+                (bytes[..8 * element_size].to_vec(), 2),
+                ([&bytes[..], &bytes[..]].concat(), 8),
+            ] {
+                let stream_shape = vec![
+                    NonZeroU64::new(4).unwrap(),
+                    NonZeroU64::new(stream_columns).unwrap(),
+                ];
+                let stream = codec.encode(
+                    stream_bytes.into(),
+                    &stream_shape,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )?;
+                assert!(matches!(
+                    decode_into_view(&codec, &stream, &chunk_shape, [4, 4], 4, 0, element_size),
+                    Err(zarrs_codec::CodecError::UnexpectedChunkDecodedSize(_))
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -361,63 +478,22 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
-            .unwrap();
-
-        let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_fixed()
-            .unwrap()
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|b| u8::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u32> = vec![4, 8];
-        assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_pcodec_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_type::uint32();
-        let fill_value = FillValue::from(0u32);
-        let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
-        let bytes = transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-
-        let codec = Arc::new(
-            PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
-                .unwrap(),
-        )
-        .with_context(
-            data_type.clone(),
-            fill_value.clone(),
-            &CodecSpecificOptions::default(),
-        )
-        .unwrap();
-
-        let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
-            .await
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk

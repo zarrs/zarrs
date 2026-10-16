@@ -1,26 +1,26 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
 use zarrs_plugin::PluginCreateError;
 
-use super::reshape_codec_grid_mapping::{decoded_subchunk_grid, encoded_chunk_grid};
+use super::reshape_codec_grid_mapping::{
+    decoded_subchunk_grid, encoded_chunk_grid, reshape_rectilinear_grid,
+};
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]
@@ -61,22 +61,6 @@ impl ReshapeCodec {
     }
 }
 
-impl ReshapeCodecBound {
-    fn new_partial<T: ?Sized>(
-        &self,
-        input_handle: Arc<T>,
-        decoded_shape: &[NonZeroU64],
-    ) -> Result<super::reshape_codec_partial::ReshapeCodecPartial<T>, CodecError> {
-        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape)?;
-        Ok(super::reshape_codec_partial::ReshapeCodecPartial::new(
-            input_handle,
-            decoded_shape,
-            &self.data_type,
-            encoded_shape,
-        ))
-    }
-}
-
 impl CodecTraits for ReshapeCodec {
     fn configuration(
         &self,
@@ -103,11 +87,6 @@ impl CodecTraits for ReshapeCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToArrayCodecTraits for ReshapeCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -139,13 +118,6 @@ impl ArrayCodecTraits for ReshapeCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
@@ -165,14 +137,52 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for ReshapeCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        reshape_rectilinear_grid(&self.encoded_shape(shape)?, shape, encoded_subchunk_grid)
+            .map_err(|err| CodecError::Other(err.to_string()))
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        let _ = (options, resources);
+        // The reshaped indices select the same elements in the same order
+        let encoded_shape = self.encoded_shape(shape)?;
+        let indexer = super::get_reshaped_indexer(indexer.as_indexer(), shape, &encoded_shape)?;
+        Ok(Some((indexer, bytes)))
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
+    }
+
+    fn plan_decode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+    ) -> Result<ArrayToArrayDecodePlan<'a>, CodecError> {
+        // The reshaped indices select the same elements in the same order
+        let encoded_shape = self.encoded_shape(shape)?;
+        let indexer =
+            super::get_reshaped_indexer(request.indexer.as_indexer(), shape, &encoded_shape)?;
+        Ok(ArrayToArrayDecodePlan::Forward(DecodeRequest {
+            indexer,
+            target: request.target,
+        }))
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -192,6 +202,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -201,45 +212,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(self.new_partial(input_handle, shape)?))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(self.new_partial(input_output_handle, shape)?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(self.new_partial(input_handle, shape)?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(self.new_partial(input_output_handle, shape)?))
     }
 }

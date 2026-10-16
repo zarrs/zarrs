@@ -13,6 +13,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod maybe;
+mod read_coalescing;
 pub mod storage_adapter;
 mod storage_handle;
 mod storage_sync;
@@ -25,6 +26,7 @@ pub mod byte_range;
 use byte_range::{ByteOffset, InvalidByteRangeError};
 pub use cowbytes::CowBytes;
 pub use maybe::{MaybeSend, MaybeSync};
+pub use read_coalescing::ReadCoalescing;
 
 #[cfg(feature = "async")]
 mod storage_async;

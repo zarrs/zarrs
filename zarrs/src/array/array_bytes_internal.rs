@@ -1,17 +1,16 @@
 //! Internal utilities for handling array bytes.
 
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArraySubset, DataType, FillValue, Indexer};
+use super::{ArraySubset, DataType};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
-    ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
+    ArrayBytesVariableLength, CodecError,
 };
+pub(crate) use zarrs_codec::{build_nested_optional_target, extract_target_views};
 
 pub(crate) fn offsets_from_usize(
     offsets: Vec<usize>,
@@ -140,43 +139,6 @@ impl FixedDecodeBuffers {
     }
 }
 
-/// Fill every element of `target` with `fill_value`.
-///
-/// # Errors
-/// Returns a [`CodecError`] if `fill_value` is incompatible with `data_type` or `target`.
-pub(crate) fn fill_target(
-    target: ArrayBytesDecodeIntoTarget<'_>,
-    data_type: &DataType,
-    fill_value: &FillValue,
-) -> Result<(), CodecError> {
-    match target {
-        ArrayBytesDecodeIntoTarget::Fixed(view) => view
-            .fill(fill_value.as_ne_bytes())
-            .map_err(CodecError::from),
-        target @ ArrayBytesDecodeIntoTarget::Optional(..) => {
-            let fill_bytes =
-                ArrayBytes::new_fill_value(data_type, target.num_elements(), fill_value)?;
-            decode_into_array_bytes_target(&fill_bytes, target)
-        }
-    }
-}
-
-/// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
-/// The `mask_views` slice should be ordered from outermost to innermost mask.
-pub(crate) fn build_nested_optional_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((first_mask, rest_masks)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(build_nested_optional_target(data_view, rest_masks)),
-            first_mask,
-        )
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
-}
-
 /// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
 ///
 /// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
@@ -189,25 +151,6 @@ pub(crate) fn wrap_optional_masks<'a>(
         .into_iter()
         .rev()
         .fold(bytes, ArrayBytes::with_optional_mask)
-}
-
-/// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
-///
-/// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
-pub(crate) fn extract_target_views<'a, 'b>(
-    target: &'b ArrayBytesDecodeIntoTarget<'a>,
-) -> (
-    &'b ArrayBytesFixedDisjointView<'a>,
-    Vec<&'b ArrayBytesFixedDisjointView<'a>>,
-) {
-    match target {
-        ArrayBytesDecodeIntoTarget::Fixed(view) => (view, vec![]),
-        ArrayBytesDecodeIntoTarget::Optional(inner, mask_view) => {
-            let (data_view, mut mask_views) = extract_target_views(inner);
-            mask_views.insert(0, mask_view);
-            (data_view, mask_views)
-        }
-    }
 }
 
 /// Split keyed optional array bytes into keyed inner data and keyed validity masks.
@@ -360,42 +303,6 @@ pub(crate) fn merge_cached_chunks(
         .map(|(bytes, subset)| (Arc::unwrap_or_clone(bytes), subset))
         .collect();
     merge_chunks(chunk_bytes_and_subsets, array_shape, data_type)
-}
-
-/// Extract decoded variable-length regions from bytes and offsets using an indexer.
-///
-/// # Errors
-/// Returns a [`CodecError`] if the indexer is incompatible with the array shape.
-///
-/// # Panics
-/// Panics if indices in the indexer exceed [`usize::MAX`].
-pub(crate) fn extract_decoded_regions_vlen<'a>(
-    bytes: &[u8],
-    offsets: &ArrayBytesOffsets,
-    indexer: &dyn Indexer,
-    array_shape: &[NonZeroU64],
-) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
-    let indices = indexer.iter_linearised_indices(bytemuck::must_cast_slice(array_shape))?;
-    let indices: Vec<_> = indices.into_iter().collect();
-    let mut region_bytes_len = 0;
-    for index in &indices {
-        let index = usize::try_from(*index).unwrap();
-        region_bytes_len += offsets.element_range(index).len();
-    }
-    let mut region_offsets = Vec::with_capacity(usize::try_from(indexer.len() + 1).unwrap());
-    let mut region_bytes = Vec::with_capacity(region_bytes_len);
-    for index in &indices {
-        region_offsets.push(region_bytes.len());
-        let index = usize::try_from(*index).unwrap();
-        region_bytes.extend_from_slice(&bytes[offsets.element_range(index)]);
-    }
-    region_offsets.push(region_bytes.len());
-    let region_offsets = offsets_from_usize(region_offsets).unwrap();
-    let array_bytes = unsafe {
-        // SAFETY: The last offset is equal to the length of the bytes
-        ArrayBytesVariableLength::new_unchecked(region_bytes, region_offsets)
-    };
-    Ok(array_bytes)
 }
 
 #[cfg(test)]

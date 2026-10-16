@@ -4,31 +4,34 @@ use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
-use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
-    bytes_codec_partial,
-};
+use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
+use smallvec::SmallVec;
 use std::num::NonZeroU64;
-use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+use zarrs_chunk_grid::IndexerError;
+use zarrs_codec::plan::{
+    ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, SourceKey,
+    Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_whole, encode_hint, is_whole_chunk,
+    partial_encode_value, plan_decode_whole,
 };
-#[cfg(feature = "async")]
 use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target, update_array_bytes,
 };
 use zarrs_metadata::Configuration;
+use zarrs_storage::byte_range::ByteRange;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]
 pub struct BytesCodec {
     endian: Option<Endianness>,
 }
+
+/// The state of a chunk partially encoded by the `bytes` codec: it exists.
+struct ChunkExists;
 
 /// A `bytes` codec implementation bound to a data type and fill value.
 #[derive(Debug, Clone)]
@@ -107,11 +110,6 @@ impl CodecTraits for BytesCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToBytesCodecTraits for BytesCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
@@ -176,48 +174,13 @@ impl ArrayCodecTraits for BytesCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: Recomment > 1 if endianness needs changing and input is sufficiently large
-        // if let Some(endian) = &self.endian {
-        //     if !endian.is_native() {
-        //         FIXME: Support parallel
-        //         let min_elements_per_thread = 32768; // 32^3
-        //         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        //         unsafe {
-        //             NonZeroU64::new_unchecked(
-        //                 num_elements.div_ceil(min_elements_per_thread),
-        //             )
-        //         }
-        //     }
-        // }
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for BytesCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for BytesCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
-    }
-
-    fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
-            return Ok(false);
-        }
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .is_decode_passthrough(self.endian))
     }
 
     fn encode<'a>(
@@ -225,6 +188,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
         bytes.validate(num_elements, &self.data_type)?;
@@ -238,6 +202,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
         let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
@@ -248,66 +213,245 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(bytes_decoded)
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
-            input_handle,
-            shape,
-            &self.data_type,
-            &self.fill_value,
-            self.endian,
-        )))
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        match output_target {
+            ArrayBytesDecodeIntoTarget::Fixed(output) if self.data_type.is_fixed() => {
+                let (num_elements, expected_len) = self.decoded_len(shape)?;
+                if output.num_elements() != num_elements {
+                    return Err("the decoded element count does not match the output target".into());
+                }
+                let codec = self.data_type.codec_bytes()?;
+                let passthrough = codec.is_decode_passthrough(self.endian);
+                let input = match input {
+                    ArrayBytesDecodeIntoInput::Deferred(source)
+                        if source.is_decode_into_efficient()
+                            && (passthrough || codec.is_decode_in_place_efficient())
+                            && source.decoded_representation()
+                                == &BytesRepresentation::FixedSize(expected_len as u64) =>
+                    {
+                        if let Some(bytes) = output.as_mut_slice()
+                            && bytes.len() == expected_len
+                        {
+                            if !passthrough {
+                                // Validate endianness before the producer writes anything.
+                                // `decode_in_place` must check it even for empty bytes.
+                                codec.decode_in_place(&mut [], self.endian)?;
+                            }
+                            source.decode_into(bytes, options, resources)?;
+                            return if passthrough {
+                                Ok(())
+                            } else {
+                                Ok(codec.decode_in_place(bytes, self.endian)?)
+                            };
+                        }
+                        ArrayBytesDecodeIntoInput::Deferred(source)
+                    }
+                    input @ (ArrayBytesDecodeIntoInput::Bytes(_)
+                    | ArrayBytesDecodeIntoInput::Deferred(_)) => input,
+                };
+
+                // Keep owned intermediates intact when direct output is unsuitable.
+                let bytes = input.into_bytes(options, resources)?;
+                if bytes.len() != expected_len {
+                    return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
+                }
+                if passthrough {
+                    Ok(output.copy_from_slice(&bytes)?)
+                } else if codec.is_decode_in_place_efficient() {
+                    // Validate endianness before anything is written to the output.
+                    codec.decode_in_place(&mut [], self.endian)?;
+                    output.try_copy_from_slice_with(&bytes, |source, destination| {
+                        destination.copy_from_slice(source);
+                        Ok::<_, CodecError>(codec.decode_in_place(destination, self.endian)?)
+                    })
+                } else {
+                    let decoded = codec.decode(bytes, self.endian)?;
+                    Ok(output.copy_from_slice(&decoded)?)
+                }
+            }
+            target @ (ArrayBytesDecodeIntoTarget::Fixed(_)
+            | ArrayBytesDecodeIntoTarget::Optional(..)) => {
+                let bytes = input.into_bytes(options, resources)?;
+                let decoded = self.decode(bytes, shape, options, resources)?;
+                decode_into_array_bytes_target(&decoded, target)
+            }
+        }
     }
 
-    fn partial_encoder(
+    fn plan_decode<'a>(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        source: ByteSource<'a>,
         shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
-            input_output_handle,
-            shape,
-            &self.data_type,
-            &self.fill_value,
-            self.endian,
-        )))
+        request: DecodeRequest<'a>,
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        let indexer = request.indexer.as_indexer();
+        let Some(data_type_size) = self.data_type.fixed_size() else {
+            return plan_decode_whole(self, source, shape, request, options);
+        };
+        if is_whole_chunk(indexer, shape) {
+            return plan_decode_whole(self, source, shape, request, options);
+        }
+        if indexer.dimensionality() != shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
+                shape.len(),
+            )
+            .into());
+        }
+
+        // Read only the bytes of the requested elements
+        let ranges: SmallVec<[ByteRange; 1]> = indexer
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(shape), data_type_size)?
+            .map(ByteRange::new)
+            .collect();
+        let num_bytes = indexer.len() * data_type_size as u64;
+        let shape = shape.to_vec();
+        let options = *options;
+        Ok(Task::read(source, ranges, move |reads, ctx| {
+            if reads.iter().any(Option::is_none) {
+                return decode_whole(&*self, None, &shape, request, &options, ctx.resources());
+            }
+            let num_reads = reads.len();
+            let mut reads = reads.into_iter().flatten();
+            let bytes = if num_reads == 1 {
+                reads.next().expect("one read")
+            } else {
+                let mut bytes = Vec::with_capacity(usize::try_from(num_bytes).unwrap());
+                reads.for_each(|read| bytes.extend_from_slice(&read));
+                CowBytes::from(bytes)
+            };
+            let num_elements = request.indexer.as_indexer().len();
+            let Some(num_elements) = NonZeroU64::new(num_elements) else {
+                return Ok(match request.target {
+                    TaskTarget::Views(_) => Outcome::Done,
+                    TaskTarget::Value => {
+                        Outcome::Value(TaskValue::Array(ArrayBytes::new_flen(Vec::new())))
+                    }
+                });
+            };
+            // The bytes codec decodes elementwise, so the requested elements decode as a 1D chunk
+            match request.target {
+                TaskTarget::Views(views) => {
+                    views.with_target(|target| {
+                        self.decode_into(
+                            ArrayBytesDecodeIntoInput::Bytes(bytes),
+                            &[num_elements],
+                            target,
+                            &options,
+                            ctx.resources(),
+                        )
+                    })?;
+                    Ok(Outcome::Done)
+                }
+                TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(self.decode(
+                    bytes,
+                    &[num_elements],
+                    &options,
+                    ctx.resources(),
+                )?))),
+            }
+        })
+        .with_hint(TaskHint {
+            read_bytes: Some(num_bytes),
+            compute_bytes: num_bytes,
+        }))
     }
 
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
+    fn plan_partial_encode<'a>(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        key: SourceKey,
         shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
-            input_handle,
-            shape,
-            &self.data_type,
-            &self.fill_value,
-            self.endian,
-        )))
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        state: Option<PartialEncodeState>,
+        options: &CodecOptions,
+    ) -> Result<Option<Task<'a>>, CodecError> {
+        let Some(data_type_size) = self.data_type.fixed_size() else {
+            return Ok(None);
+        };
+        indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        bytes.validate(indexer.as_indexer().len(), &self.data_type)?;
+        let (_, chunk_size) = self.decoded_len(shape)?;
+        let hint = encode_hint(&bytes);
+        let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+
+        // The encoded elements are written in place if the chunk exists, otherwise the chunk is written in full
+        let update = move |exists: bool, ctx: &ComputeCtx| {
+            let op = if exists {
+                let bytes = self
+                    .data_type
+                    .codec_bytes()?
+                    .encode(bytes.into_fixed()?, self.endian)?;
+                let mut offset_in = 0;
+                let offset_values = indexer
+                    .as_indexer()
+                    .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)?
+                    .map(|range| {
+                        let len = usize::try_from(range.end - range.start).unwrap();
+                        let value = bytes.slice(offset_in..offset_in + len);
+                        offset_in += len;
+                        (range.start, value)
+                    })
+                    .collect();
+                WriteOp::SetPartial(key, offset_values)
+            } else {
+                let chunk = ArrayBytes::new_fill_value(
+                    &self.data_type,
+                    shape.iter().map(|d| d.get()).product(),
+                    &self.fill_value,
+                )?;
+                let chunk = update_array_bytes(
+                    chunk,
+                    bytemuck::must_cast_slice(&shape),
+                    indexer.as_indexer(),
+                    &bytes,
+                    self.data_type.size(),
+                )?;
+                if !options.store_empty_chunks() && chunk.is_fill_value(&self.fill_value) {
+                    // The chunk remains missing
+                    return Ok(Outcome::Value(TaskValue::None));
+                }
+                WriteOp::Set(
+                    key,
+                    self.encode(chunk, &shape, &options, ctx.resources())?
+                        .into_static(),
+                )
+            };
+            Ok(Outcome::Write {
+                ops: smallvec::smallvec![op],
+                then: partial_encode_value(Arc::new(ChunkExists)),
+            })
+        };
+        let known_to_exist = state.is_some_and(|state| state.is::<ChunkExists>());
+        let task = if known_to_exist {
+            Task::compute(move |ctx| update(true, ctx))
+        } else if chunk_size == 0 {
+            // An empty chunk is written in full
+            Task::compute(move |ctx| update(false, ctx))
+        } else {
+            // Read the first byte of the chunk to check if it exists
+            Task::read(
+                ByteSource::external(key),
+                [ByteRange::FromStart(0, Some(1))],
+                move |mut reads, ctx| update(reads.pop().flatten().is_some(), ctx),
+            )
+        };
+        Ok(Some(task.with_hint(hint)))
     }
 
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
-            input_output_handle,
-            shape,
-            &self.data_type,
-            &self.fill_value,
-            self.endian,
-        )))
+    fn plans_partial_encode(&self) -> bool {
+        self.data_type.is_fixed()
     }
 
     fn encoded_representation(
@@ -322,7 +466,136 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::data_type;
+    use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, data_type};
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    fn decode_into_view(
+        codec: &Arc<dyn ArrayToBytesCodecTraits>,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        chunk_shape: &[NonZeroU64],
+        array_shape: &[u64],
+    ) -> (Vec<u16>, Result<(), CodecError>) {
+        let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+        let mut output = vec![0u16; num_elements];
+        let result = {
+            let mut view = unsafe {
+                // SAFETY: the only view of output, used synchronously.
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                    size_of::<u16>(),
+                    array_shape,
+                    ArraySubset::new_with_shape(chunk_shape.iter().map(|d| d.get()).collect()),
+                )
+            }
+            .unwrap();
+            codec.decode_into(
+                input,
+                chunk_shape,
+                (&mut view).into(),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
+        };
+        (output, result)
+    }
+
+    #[test]
+    fn decode_into_endianness_and_noncontiguous_views() {
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        for (endian, encoded) in [
+            (Endianness::Little, values.map(u16::to_le_bytes).concat()),
+            (Endianness::Big, values.map(u16::to_be_bytes).concat()),
+        ] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    FillValue::from(0u16),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            for (array_shape, expected) in [
+                ([2, 2], values.to_vec()),
+                ([2, 4], vec![1, 2, 0, 0, 3, 4, 0, 0]),
+            ] {
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(encoded.as_slice()).into(),
+                    &shape,
+                    &array_shape,
+                );
+                result.unwrap();
+                assert_eq!(output, expected);
+
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(&encoded[1..]).into(),
+                    &shape,
+                    &array_shape,
+                );
+                assert!(result.is_err());
+                assert!(output.iter().all(|&value| value == 0));
+            }
+        }
+        let codec = BytesCodec::new(None)
+            .with_context(
+                data_type::uint16(),
+                FillValue::from(0u16),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        for array_shape in [[2, 2], [2, 4]] {
+            let (output, result) = decode_into_view(
+                &codec,
+                CowBytes::from(&[1; 8][..]).into(),
+                &shape,
+                &array_shape,
+            );
+            assert!(result.is_err());
+            assert!(output.iter().all(|&value| value == 0));
+        }
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn decode_deferred_zstd_input() {
+        use zarrs_codec::{BytesDecodeSource, BytesToBytesCodecTraits};
+
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        let producer = crate::array::codec::ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        for endian in [Endianness::Little, Endianness::Big] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    FillValue::from(0u16),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            let encoded = if endian == Endianness::Little {
+                values.map(u16::to_le_bytes).concat()
+            } else {
+                values.map(u16::to_be_bytes).concat()
+            };
+            let compressed = producer
+                .encode(encoded.into(), &options, &Resources::default())
+                .unwrap();
+            for representation in [
+                BytesRepresentation::FixedSize(8),
+                BytesRepresentation::BoundedSize(8),
+            ] {
+                let input = ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    &producer,
+                    compressed.clone(),
+                    representation,
+                ));
+                let (output, result) = decode_into_view(&codec, input, &shape, &[2, 2]);
+                result.unwrap();
+                assert_eq!(output, values);
+            }
+        }
+    }
 
     #[test]
     fn decoded_size_overflow() {
@@ -341,47 +614,30 @@ mod tests {
             assert!(codec.encoded_representation(&shape).is_err());
             assert!(
                 codec
-                    .encode(ArrayBytes::new_flen(vec![0; 2]), &shape, &options)
+                    .encode(
+                        ArrayBytes::new_flen(vec![0; 2]),
+                        &shape,
+                        &options,
+                        &Resources::default()
+                    )
                     .is_err()
             );
             assert!(
                 codec
-                    .decode(CowBytes::from(&[0; 2][..]), &shape, &options)
+                    .decode(
+                        CowBytes::from(&[0; 2][..]),
+                        &shape,
+                        &options,
+                        &Resources::default()
+                    )
                     .is_err()
             );
         }
     }
 
     #[test]
-    fn decode_passthrough() {
-        let shape = [NonZeroU64::new(1).unwrap()];
+    fn unsupported_data_types() {
         let options = CodecSpecificOptions::default();
-        assert!(
-            BytesCodec::new(None)
-                .with_context(data_type::uint8(), FillValue::from(0u8), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        assert!(
-            BytesCodec::new(Some(Endianness::native()))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
-        let non_native = if Endianness::native() == Endianness::Little {
-            Endianness::Big
-        } else {
-            Endianness::Little
-        };
-        assert!(
-            !BytesCodec::new(Some(non_native))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
-                .unwrap()
-                .is_decode_passthrough(&shape)
-                .unwrap()
-        );
         assert!(
             BytesCodec::new(None)
                 .with_context(

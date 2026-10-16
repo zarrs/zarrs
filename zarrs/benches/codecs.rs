@@ -1,16 +1,14 @@
 //! Benchmark various codecs.
 #![allow(missing_docs)]
 
-use zarrs::array::{CodecSpecificOptions, CowBytes};
+use zarrs::array::{CodecSpecificOptions, CowBytes, Resources};
 
 use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
     criterion_main,
 };
-#[cfg(feature = "zstd")]
-use zarrs::array::codec::ZstdCodec;
 use zarrs::array::codec::bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode};
-use zarrs::array::codec::{BloscCodec, BytesCodec, ShardingCodecBuilder};
+use zarrs::array::codec::{BloscCodec, BytesCodec, ShardingCodecBuilder, ZstdCodec};
 use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
 use zarrs_data_type::FillValue;
@@ -44,7 +42,12 @@ fn codec_bytes(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode_decode", num_elements), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &shape, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -71,13 +74,21 @@ fn codec_blosc(c: &mut Criterion) {
 
         let data_decoded: Vec<u8> = (0..size3).map(|i| i as u8).collect();
         let data_encoded = codec
-            .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&data_decoded),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         group.throughput(Throughput::Bytes(size3));
         group.bench_function(BenchmarkId::new("encode", size3), |b| {
             b.iter(|| {
                 codec
-                    .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+                    .encode(
+                        CowBytes::Borrowed(&data_decoded),
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -88,6 +99,7 @@ fn codec_blosc(c: &mut Criterion) {
                         CowBytes::Borrowed(&data_encoded),
                         &rep,
                         &CodecOptions::default(),
+                        &Resources::default(),
                     )
                     .unwrap()
             });
@@ -105,13 +117,7 @@ fn codec_sharding(c: &mut Criterion) {
         .collect();
     let bytes = Element::into_array_bytes(&data_type::uint16(), data).unwrap();
     for (subchunk, zstd) in [(32, false), (32, true), (128, true)] {
-        #[cfg_attr(not(feature = "zstd"), allow(unused_mut))]
         let mut builder = ShardingCodecBuilder::new(vec![nz(subchunk); 2], &data_type::uint16());
-        #[cfg(not(feature = "zstd"))]
-        if zstd {
-            continue;
-        }
-        #[cfg(feature = "zstd")]
         if zstd {
             builder.bytes_to_bytes_codecs(vec![std::sync::Arc::new(ZstdCodec::new(1, false))]);
         }
@@ -124,7 +130,12 @@ fn codec_sharding(c: &mut Criterion) {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .into_static();
         let label = format!("{subchunk}{}", if zstd { "_zstd" } else { "" });
@@ -132,14 +143,24 @@ fn codec_sharding(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode", &label), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &shape, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });
         group.bench_function(BenchmarkId::new("decode", &label), |b| {
             b.iter(|| {
                 codec
-                    .decode(encoded.clone(), &shape, &CodecOptions::default())
+                    .decode(
+                        encoded.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &Resources::default(),
+                    )
                     .unwrap()
             });
         });

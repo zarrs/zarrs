@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -13,7 +14,7 @@ use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -340,11 +341,6 @@ fn encode_fill_value(
     ))
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -398,25 +394,31 @@ impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl ArrayToArrayCodecSubchunkingIdentityTraits for FixedScaleOffsetCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        partial_encode_request_elementwise(self, indexer, bytes, options, resources).map(Some)
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -432,6 +434,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_encode(
             bytes,
@@ -447,6 +450,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_decode(
             bytes,

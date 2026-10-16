@@ -9,22 +9,21 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec,
-    CodecChain, CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, CowBytes, DataType, DataTypeSize, FillValue, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayToBytesCodecTraits, BytesRepresentation, ChunkGrid,
+    ChunkShape, ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, DataType, DataTypeSize, FillValue,
+    Resources, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
-use zarrs::storage::StorageError;
 use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_codec::plan::{ByteSource, Outcome, Task, local_subchunk_grids_value};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
+    CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
     UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
@@ -36,12 +35,6 @@ struct DynamicLocalSubchunkCodec;
 struct DynamicLocalSubchunkCodecBound {
     data_type: DataType,
     fill_value: FillValue,
-}
-
-struct DynamicLocalSubchunkPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    shape: ChunkShape,
-    data_type: DataType,
 }
 
 static NEXT_SHAPE: AtomicU64 = AtomicU64::new(0);
@@ -168,13 +161,6 @@ impl zarrs_codec::ArrayCodecTraits for DynamicLocalSubchunkCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCodecBound {
@@ -203,6 +189,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
         Ok(CowBytes::from(encode_shape_header(&next_subchunk_shape(
@@ -215,69 +202,38 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         decode_shape_header(&bytes, shape.len())?;
         zero_bytes(&self.data_type, shape.num_elements_u64()).map(ArrayBytes::into_owned)
     }
 
-    fn partial_decoder(
+    fn plan_local_subchunk_grids<'a>(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        source: ByteSource<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(DynamicLocalSubchunkPartialDecoder {
-            input_handle,
-            shape: shape.to_vec(),
-            data_type: self.data_type.clone(),
-        }))
-    }
-}
-
-impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        let Some(header) = self.input_handle.partial_decode(
-            ByteRange::FromStart(0, Some(header_len(self.shape.len()))),
-            options,
-        )?
-        else {
-            return Ok(vec![None]);
-        };
-        let subchunk_shape = decode_shape_header(&header, self.shape.len())?;
-        let chunk_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(vec![Some(ChunkGrid::new(
-            RegularChunkGrid::new(chunk_shape, subchunk_shape)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))])
-    }
-}
-
-impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_handle.size_held()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn zarrs::array::Indexer,
-        _options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        zero_bytes(&self.data_type, indexer.len())
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        true
+    ) -> Result<Task<'a>, CodecError> {
+        // The subchunk grid is read from the header of the chunk
+        let shape = shape.to_vec();
+        Ok(Task::read(
+            source,
+            [ByteRange::FromStart(0, Some(header_len(shape.len())))],
+            move |mut reads, _ctx| {
+                let grids = match reads.pop().flatten() {
+                    Some(header) => {
+                        let subchunk_shape = decode_shape_header(&header, shape.len())?;
+                        let chunk_shape = bytemuck::must_cast_slice(&shape).to_vec();
+                        vec![Some(ChunkGrid::new(
+                            RegularChunkGrid::new(chunk_shape, subchunk_shape)
+                                .map_err(|err| CodecError::Other(err.to_string()))?,
+                        ))]
+                    }
+                    None => vec![None],
+                };
+                Ok(Outcome::Value(local_subchunk_grids_value(grids)))
+            },
+        ))
     }
 }
 
@@ -297,7 +253,7 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
     array.store_metadata()?;
 
     let data = vec![1u16; 12 * 6];
-    array.store_array_subset(&array.subset_all(), &data)?;
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
     assert!(matches!(
@@ -310,14 +266,18 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
         ChunkGridDecodedRef::ChunkLocal
     ));
 
-    let first = reopened.local_subchunk_grid_at_level(0, &[0, 0])?.unwrap();
-    let second = reopened.local_subchunk_grid(&[1, 0])?.unwrap();
+    let first = reopened
+        .local_subchunk_grid_at_level(0, &[0, 0], &Resources::default())?
+        .unwrap();
+    let second = reopened
+        .local_subchunk_grid(&[1, 0], &Resources::default())?
+        .unwrap();
     assert_ne!(
         first.chunk_shape(&[0, 0])?.unwrap(),
         second.chunk_shape(&[0, 0])?.unwrap()
     );
 
-    let decoded: Vec<u16> = reopened.retrieve_chunk(&[0, 0])?;
+    let decoded: Vec<u16> = reopened.retrieve_chunk(&[0, 0], &Resources::default())?;
     assert_eq!(decoded, vec![0u16; 36]);
 
     assert!(unregister_codec_v3(&handle));
@@ -344,10 +304,12 @@ fn dynamic_local_subchunk_grid_transforms_through_transpose()
     array.store_metadata()?;
 
     let data = vec![1u16; 4 * 7];
-    array.store_array_subset(&array.subset_all(), &data)?;
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
 
     let reopened: Array<MemoryStore> = Array::open(store, "/array")?;
-    let local_grid = reopened.local_subchunk_grid(&[0, 0])?.unwrap();
+    let local_grid = reopened
+        .local_subchunk_grid(&[0, 0], &Resources::default())?
+        .unwrap();
     assert_eq!(local_grid.array_shape(), &[4, 7]);
     assert_eq!(
         local_grid.chunk_shape(&[0, 0])?.unwrap(),
@@ -430,13 +392,6 @@ impl ArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCodecBound {
@@ -487,6 +442,7 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -496,6 +452,7 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -573,13 +530,6 @@ impl ArrayCodecTraits for TestSubchunkingCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBound {
@@ -621,6 +571,7 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -630,6 +581,7 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }

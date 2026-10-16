@@ -99,7 +99,7 @@ use std::sync::Arc;
 
 use zarrs_metadata::v3::MetadataV3;
 pub use zfp_codec::ZfpCodec;
-use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
+use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpFieldMut, ZfpHeaderMask, ZfpScalarType};
 
 use self::zfp_array::{ZfpArray, zfp_dims};
 use self::zfp_config::zfp_config;
@@ -209,7 +209,58 @@ fn zfp_decode(
     let mut field = zfp_dims(shape)
         .and_then(|dims| array.field_mut(dims))
         .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
+    zfp_decompress(config, write_header, encoded_value, &mut field)?;
+    Ok(array.into_bytes())
+}
 
+/// Decode `encoded_value` into `output`, which holds the decoded bytes of an array with `shape`.
+///
+/// Returns `false` if `output` cannot be decoded into.
+/// This is the case if zfp decodes the encoding to elements that are not the decoded elements (they are promoted or clamped), if `output` is not aligned to the element type, or if it is not the length of the array.
+fn zfp_decode_into(
+    config: &ZfpConfig,
+    write_header: bool,
+    encoded_value: &[u8],
+    shape: &[NonZeroU64],
+    encoding: ZfpEncoding,
+    output: &mut [u8],
+) -> Result<bool, CodecError> {
+    let num_elements = shape.num_elements_usize();
+    macro_rules! zfp_decode_into {
+        ( $t:ty ) => {
+            match bytemuck::try_cast_slice_mut::<u8, $t>(output) {
+                Ok(output) if output.len() == num_elements => {
+                    let mut field = zfp_dims(shape)
+                        .and_then(|dims| ZfpFieldMut::new(output, dims).ok())
+                        .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
+                    zfp_decompress(config, write_header, encoded_value, &mut field)?;
+                    Ok(true)
+                }
+                _ => Ok(false),
+            }
+        };
+    }
+
+    match encoding {
+        ZfpEncoding::Int32 => zfp_decode_into!(i32),
+        ZfpEncoding::Int64 => zfp_decode_into!(i64),
+        ZfpEncoding::Float32 => zfp_decode_into!(f32),
+        ZfpEncoding::Float64 => zfp_decode_into!(f64),
+        ZfpEncoding::Int8
+        | ZfpEncoding::Int16
+        | ZfpEncoding::UInt8
+        | ZfpEncoding::UInt16
+        | ZfpEncoding::UInt32
+        | ZfpEncoding::UInt64 => Ok(false),
+    }
+}
+
+fn zfp_decompress(
+    config: &ZfpConfig,
+    write_header: bool,
+    encoded_value: &[u8],
+    field: &mut ZfpFieldMut<'_>,
+) -> Result<(), CodecError> {
     let mut bitstream = ZfpBitStream::from_bytes(encoded_value)
         .map_err(|err| CodecError::Other(format!("failed to allocate zfp bitstream: {err}")))?;
     let header_config;
@@ -234,29 +285,30 @@ fn zfp_decode(
     };
 
     bitstream
-        .decompress(config, &mut field)
+        .decompress(config, field)
         .map_err(|err| CodecError::Other(format!("zfp decompression failed: {err}")))?;
-
-    Ok(array.into_bytes())
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::MemoryPartialDecoder;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use num::traits::AsPrimitive;
 
+    use super::super::decode_into_test_util::decode_into_view;
     use super::*;
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
-        data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, CowBytes, DataType,
+        FillValue, data_type,
     };
     use zarrs_codec::{
-        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
-        UnboundArrayToBytesCodecTraits,
+        ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
     };
 
     const JSON_REVERSIBLE: &str = r#"{
@@ -312,14 +364,133 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded.clone(), chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded.clone(),
+                chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
         assert_eq!(elements, decoded_elements);
+    }
+
+    /// `decode_into` decodes directly into an output that is one contiguous region and aligned to
+    /// the element type if zfp decodes the encoding to the element type, and otherwise decodes and
+    /// copies. Both match `decode`.
+    fn codec_zfp_decode_into<T: ElementOwned + Copy + 'static>(
+        data_type: DataType,
+        fill_value: FillValue,
+        write_header: bool,
+    ) where
+        u64: num::traits::AsPrimitive<T>,
+    {
+        let chunk_shape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let elements: Vec<T> = (0..16u64).map(num::traits::AsPrimitive::<T>::as_).collect();
+        let bytes = T::to_array_bytes(&data_type, &elements).unwrap();
+        let element_size = data_type.fixed_size().unwrap();
+        let codec = ZfpCodec::new_reversible()
+            .with_write_header(write_header)
+            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .unwrap();
+        let options = CodecOptions::default();
+        let encoded = codec
+            .encode(bytes.clone(), &chunk_shape, &options, &Resources::default())
+            .unwrap();
+        let decoded = codec
+            .decode(
+                encoded.clone(),
+                &chunk_shape,
+                &options,
+                &Resources::default(),
+            )
+            .unwrap()
+            .into_fixed()
+            .unwrap()
+            .to_vec();
+        assert_eq!(decoded, bytes.into_fixed().unwrap().to_vec());
+
+        // One contiguous region, aligned and not aligned to the element type
+        for offset in [0, 1] {
+            let output = decode_into_view(
+                &codec,
+                &encoded,
+                &chunk_shape,
+                [4, 4],
+                4,
+                offset,
+                element_size,
+            );
+            assert_eq!(output.unwrap(), decoded);
+        }
+
+        // Four contiguous regions, with the rest of the output unchanged
+        let output =
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 4], 8, 0, element_size).unwrap();
+        let row = 4 * element_size;
+        for (output_row, decoded_row) in
+            std::iter::zip(output.chunks_exact(2 * row), decoded.chunks_exact(row))
+        {
+            assert_eq!(&output_row[..row], decoded_row);
+            assert!(output_row[row..].iter().all(|byte| *byte == 0xFF));
+        }
+
+        // Truncated encoded bytes are decoded as they are by `decode`
+        let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
+        let decoded_truncated = codec.decode(
+            truncated.clone(),
+            &chunk_shape,
+            &options,
+            &Resources::default(),
+        );
+        let output = decode_into_view(&codec, &truncated, &chunk_shape, [4, 4], 4, 0, element_size);
+        match (decoded_truncated, output) {
+            (Ok(decoded), Ok(output)) => {
+                assert_eq!(decoded.into_fixed().unwrap().to_vec(), output);
+            }
+            (Err(_), Err(_)) => {}
+            (decoded, output) => panic!("{decoded:?} and {output:?} are not both ok or errors"),
+        }
+
+        // An output with fewer and more elements than the chunk
+        assert!(
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 2], 2, 0, element_size).is_err()
+        );
+        assert!(
+            decode_into_view(&codec, &encoded, &chunk_shape, [4, 8], 8, 0, element_size).is_err()
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfp_decode_into_native() {
+        for write_header in [false, true] {
+            codec_zfp_decode_into::<i32>(data_type::int32(), FillValue::from(0i32), write_header);
+            codec_zfp_decode_into::<i64>(data_type::int64(), FillValue::from(0i64), write_header);
+            codec_zfp_decode_into::<f32>(data_type::float32(), FillValue::from(0f32), write_header);
+            codec_zfp_decode_into::<f64>(data_type::float64(), FillValue::from(0f64), write_header);
+        }
+    }
+
+    /// Encodings that zfp decodes to promoted or clamped elements
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_zfp_decode_into_promoted() {
+        for write_header in [false, true] {
+            codec_zfp_decode_into::<u8>(data_type::uint8(), FillValue::from(0u8), write_header);
+            codec_zfp_decode_into::<u16>(data_type::uint16(), FillValue::from(0u16), write_header);
+            codec_zfp_decode_into::<i8>(data_type::int8(), FillValue::from(0i8), write_header);
+            codec_zfp_decode_into::<u32>(data_type::uint32(), FillValue::from(0u32), write_header);
+        }
     }
 
     #[test]
@@ -339,14 +510,18 @@ mod tests {
             .unwrap();
         let options = CodecOptions::default();
 
-        let encoded = codec.encode(bytes, &shape, &options).unwrap();
+        let encoded = codec
+            .encode(bytes, &shape, &options, &Resources::default())
+            .unwrap();
         let mut bitstream = ZfpBitStream::from_bytes(&encoded).unwrap();
         let header = bitstream.read_header(ZfpHeaderMask::FULL).unwrap();
         let metadata = header.metadata.unwrap();
         assert_eq!(metadata.scalar_type, ZfpScalarType::F32);
         assert_eq!(metadata.dims, [3, 3, 3, 0]);
 
-        let decoded = codec.decode(encoded, &shape, &options).unwrap();
+        let decoded = codec
+            .decode(encoded, &shape, &options, &Resources::default())
+            .unwrap();
         assert_eq!(
             f32::from_array_bytes(&data_type, decoded).unwrap(),
             elements
@@ -519,87 +694,31 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_shape(vec![1, 2, 3]),
-            ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
-        ];
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zfp partial decoder does not hold bytes
-
-        for (decoded_region, expected) in decoded_regions.into_iter().zip([
-            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
-            vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
-        ]) {
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .unwrap();
-
-            let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
-                .into_fixed()
-                .unwrap()
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| f32::from_ne_bytes(*b))
-                .collect();
-            assert_eq!(decoded_partial_chunk, expected);
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn codec_zfp_async_partial_decode() {
-        let chunk_shape = ChunkShape::from(vec![
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-            NonZeroU64::new(3).unwrap(),
-        ]);
-        let data_type = data_type::float32();
-        let fill_value = FillValue::from(0.0f32);
-        let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-
-        let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
-        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(
-                data_type.clone(),
-                fill_value.clone(),
-                &CodecSpecificOptions::default(),
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
-
-        let max_encoded_size = codec.encoded_representation(&chunk_shape).unwrap();
-        let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
-            .await
-            .unwrap();
-
         let decoded_regions = [
             ArraySubset::new_with_shape(vec![1, 2, 3]),
             ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
         ];
+
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
 
         for (decoded_region, expected) in decoded_regions.into_iter().zip([
             vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
             vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .await
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
 
             let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk

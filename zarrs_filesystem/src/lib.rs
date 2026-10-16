@@ -13,8 +13,8 @@ use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
+    OffsetBytesIterator, ReadCoalescing, ReadableStorageTraits, StorageError, StoreKey,
+    StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -520,6 +520,11 @@ impl ReadableStorageTraits for FilesystemStore {
 
     fn supports_get_partial(&self) -> bool {
         true
+    }
+
+    fn read_coalescing(&self) -> Option<ReadCoalescing> {
+        // Bridge gaps of up to a page, which costs little compared to another request
+        Some(ReadCoalescing::new(4096, 1024 * 1024))
     }
 }
 

@@ -8,6 +8,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
@@ -32,11 +33,15 @@ fn retrieve_chunk_bytes(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(num_elements * 2));
     let array = uncompressed_array(CHUNK);
     let data = vec![1u16; num_elements as usize];
-    array.store_chunk(&[0, 0, 0], &data).unwrap();
+    array
+        .store_chunk(&[0, 0, 0], &data, &Resources::default())
+        .unwrap();
 
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
         b.iter(|| {
-            let bytes: ArrayBytes = array.retrieve_chunk(&[0, 0, 0]).unwrap();
+            let bytes: ArrayBytes = array
+                .retrieve_chunk(&[0, 0, 0], &Resources::default())
+                .unwrap();
             std::hint::black_box(bytes);
         });
     });
@@ -54,11 +59,15 @@ fn retrieve_chunk_vec(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(num_elements * 2));
     let array = uncompressed_array(CHUNK);
     let data = vec![1u16; num_elements as usize];
-    array.store_chunk(&[0, 0, 0], &data).unwrap();
+    array
+        .store_chunk(&[0, 0, 0], &data, &Resources::default())
+        .unwrap();
 
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
         b.iter(|| {
-            let elements: Vec<u16> = array.retrieve_chunk(&[0, 0, 0]).unwrap();
+            let elements: Vec<u16> = array
+                .retrieve_chunk(&[0, 0, 0], &Resources::default())
+                .unwrap();
             std::hint::black_box(elements);
         });
     });
@@ -79,7 +88,9 @@ fn store_chunk_borrowed(c: &mut Criterion) {
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
         b.iter(|| {
             let array = uncompressed_array(CHUNK);
-            array.store_chunk(&[0, 0, 0], data.as_slice()).unwrap();
+            array
+                .store_chunk(&[0, 0, 0], data.as_slice(), &Resources::default())
+                .unwrap();
         });
     });
     group.finish();
@@ -98,7 +109,9 @@ fn store_chunk_shared(c: &mut Criterion) {
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
         b.iter(|| {
             let array = uncompressed_array(CHUNK);
-            array.store_chunk(&[0, 0, 0], &bytes).unwrap();
+            array
+                .store_chunk(&[0, 0, 0], &bytes, &Resources::default())
+                .unwrap();
         });
     });
     group.finish();
@@ -121,14 +134,20 @@ fn sharded_subchunk_read(c: &mut Criterion) {
         .unwrap();
     let data = vec![1u16; num_elements as usize];
     array
-        .store_array_subset(&ArraySubset::new_with_shape(vec![size; 3]), &data)
+        .store_array_subset(
+            &ArraySubset::new_with_shape(vec![size; 3]),
+            &data,
+            &Resources::default(),
+        )
         .unwrap();
 
     // Read a single inner chunk out of the shard.
     let subset = ArraySubset::new_with_ranges(&[0..32, 0..32, 0..32]);
     group.bench_function(BenchmarkId::from_parameter(size), |b| {
         b.iter(|| {
-            let bytes: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+            let bytes: ArrayBytes = array
+                .retrieve_array_subset(&subset, &Resources::default())
+                .unwrap();
             std::hint::black_box(bytes);
         });
     });

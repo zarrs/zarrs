@@ -13,11 +13,14 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ///
     /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
+    /// The chunk is partially encoded if its codecs support it and the store supports partial writes: only the parts of
+    /// the encoded chunk that change are read and written (e.g. the updated subchunks and the index of a shard).
+    /// Partial encoding is supported by the `sharding_indexed` and `bytes` codecs, optionally preceded by array-to-array
+    /// codecs such as `transpose`, but not followed by bytes-to-bytes codecs.
+    ///
     /// # Errors
     /// Returns an [`ArrayError`] if
     ///  - `indexer` is out-of-bounds of the chunk or has an incompatible dimensionality,
-    ///  - `indexer` is not an [`ArraySubset`] and the chunk is encoded with the `sharding_indexed`
-    ///    codec while experimental partial encoding is enabled (not yet supported),
     ///  - there is a codec encoding error, or
     ///  - an underlying store error.
     ///
@@ -28,11 +31,13 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Encode `subset_data` and store in `array_subset`.
     ///
     /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::ArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
+    /// Chunks partially covered by `array_subset` are partially encoded where possible, as in [`store_partial_chunk`](Self::store_partial_chunk).
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -48,6 +53,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Retrieve the chunk at `chunk_indices`, compact it if possible, and store the compacted chunk back.
@@ -58,7 +64,11 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Returns an [`ArrayError`] if
     ///  - there is a codec error, or
     ///  - an underlying store error.
-    fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
+    fn compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;
@@ -76,5 +86,6 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     fn partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
 }

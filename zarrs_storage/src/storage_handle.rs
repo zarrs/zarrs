@@ -45,6 +45,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     fn supports_get_partial(&self) -> bool {
         self.0.supports_get_partial()
     }
+
+    fn read_coalescing(&self) -> Option<crate::ReadCoalescing> {
+        self.0.read_coalescing()
+    }
 }
 
 impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for StorageHandle<TStorage> {
@@ -133,6 +137,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
 
     fn supports_get_partial(&self) -> bool {
         self.0.supports_get_partial()
+    }
+
+    fn read_coalescing(&self) -> Option<crate::ReadCoalescing> {
+        self.0.read_coalescing()
     }
 }
 

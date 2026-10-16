@@ -5,7 +5,8 @@ use crate::array::chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, chunk_shape_to_array_shape,
+    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, Resources,
+    chunk_shape_to_array_shape,
 };
 use zarrs_codec::ArrayPartialDecoderTraits;
 use zarrs_storage::ReadableStorageTraits;
@@ -22,6 +23,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
@@ -30,7 +32,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         validate_chunk_indices(array, chunk_indices)?;
         cache
             .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                array.partial_decoder_with_options(chunk_indices, options)
+                array.partial_decoder_with_options(chunk_indices, options, resources)
             })
             .map_err(cache_error)
     }
@@ -40,17 +42,18 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
-        let decoder = Self::partial_decoder(cache, array, chunk_indices, options)?;
+        let decoder = Self::partial_decoder(cache, array, chunk_indices, options, resources)?;
         if decoder.exists()? {
             Ok(Some(
                 decoder
-                    .partial_decode(&ArraySubset::new_with_shape(shape), options)?
+                    .partial_decode(&ArraySubset::new_with_shape(shape), options, resources)?
                     .into_owned()
                     .into(),
             ))
@@ -65,14 +68,17 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        Ok(Self::partial_decoder(cache, array, chunk_indices, options)?
-            .partial_decode(indexer, options)?
-            .into_owned()
-            .into())
+        Ok(
+            Self::partial_decoder(cache, array, chunk_indices, options, resources)?
+                .partial_decode(indexer, options, resources)?
+                .into_owned()
+                .into(),
+        )
     }
 }

@@ -48,24 +48,10 @@ macro_rules! vlen_v2_codec {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-        #[cfg(feature = "async")]
-        use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-        use zarrs_codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-            CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-            PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-            UnboundArrayToBytesCodecTraits,
-        };
-        use crate::array::{
-            codec::VlenV2Codec,
-            ArrayBytes, CowBytes, BytesRepresentation,
-        };
+        use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, Resources, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits};
+        use crate::array::{codec::VlenV2Codec, ArrayBytes, CowBytes, BytesRepresentation};
         use zarrs_metadata::Configuration;
-        use zarrs_plugin::{
-            ExtensionAliasesConfig, ExtensionAliases,
-            ZarrVersion2, ZarrVersion3,
-        };
+        use zarrs_plugin::{ExtensionAliasesConfig, ExtensionAliases, ZarrVersion2, ZarrVersion3};
 
         #[doc = concat!("The `", $default_name, "` codec implementation.")]
         #[derive(Debug, Clone)]
@@ -168,12 +154,6 @@ macro_rules! vlen_v2_codec {
                 self.inner.fill_value()
             }
 
-            fn recommended_concurrency(
-                &self,
-                shape: &[std::num::NonZeroU64],
-            ) -> Result<RecommendedConcurrency, CodecError> {
-                self.inner.recommended_concurrency(shape)
-            }
         }
 
         impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for [<$struct Bound>] {}
@@ -193,8 +173,9 @@ macro_rules! vlen_v2_codec {
                 bytes: ArrayBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
+                resources: &Resources,
             ) -> Result<CowBytes<'a>, CodecError> {
-                self.inner.encode(bytes, shape, options)
+                self.inner.encode(bytes, shape, options, resources)
             }
 
             fn decode<'a>(
@@ -202,39 +183,9 @@ macro_rules! vlen_v2_codec {
                 bytes: CowBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
+                resources: &Resources,
             ) -> Result<ArrayBytes<'a>, CodecError> {
-                self.inner.decode(bytes, shape, options)
-            }
-
-            fn partial_decoder(
-                self: Arc<Self>,
-                input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                shape: &[std::num::NonZeroU64],
-                options: &CodecOptions,
-            ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-                self.inner.clone().partial_decoder(input_handle, shape, options)
-            }
-
-            fn partial_encoder(
-                self: Arc<Self>,
-                input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-                shape: &[std::num::NonZeroU64],
-                options: &CodecOptions,
-            ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-                self.inner.clone().partial_encoder(input_output_handle, shape, options)
-            }
-
-            #[cfg(feature = "async")]
-            async fn async_partial_decoder(
-                self: Arc<Self>,
-                input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-                shape: &[std::num::NonZeroU64],
-                options: &CodecOptions,
-            ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-                self.inner
-                    .clone()
-                    .async_partial_decoder(input_handle, shape, options)
-                    .await
+                self.inner.decode(bytes, shape, options, resources)
             }
 
             fn encoded_representation(

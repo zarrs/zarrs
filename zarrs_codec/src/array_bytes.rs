@@ -895,6 +895,42 @@ impl<'a, const N: usize> From<&'a [u8; N]> for ArrayBytes<'a> {
     }
 }
 
+/// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
+/// The `mask_views` slice should be ordered from outermost to innermost mask.
+pub fn build_nested_optional_target<'a>(
+    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+) -> ArrayBytesDecodeIntoTarget<'a> {
+    if let Some((first_mask, rest_masks)) = mask_views.split_first_mut() {
+        ArrayBytesDecodeIntoTarget::Optional(
+            Box::new(build_nested_optional_target(data_view, rest_masks)),
+            first_mask,
+        )
+    } else {
+        ArrayBytesDecodeIntoTarget::Fixed(data_view)
+    }
+}
+
+/// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
+///
+/// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
+#[must_use]
+pub fn extract_target_views<'a, 'b>(
+    target: &'b ArrayBytesDecodeIntoTarget<'a>,
+) -> (
+    &'b ArrayBytesFixedDisjointView<'a>,
+    Vec<&'b ArrayBytesFixedDisjointView<'a>>,
+) {
+    match target {
+        ArrayBytesDecodeIntoTarget::Fixed(view) => (view, vec![]),
+        ArrayBytesDecodeIntoTarget::Optional(inner, mask_view) => {
+            let (data_view, mut mask_views) = extract_target_views(inner);
+            mask_views.insert(0, mask_view);
+            (data_view, mask_views)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

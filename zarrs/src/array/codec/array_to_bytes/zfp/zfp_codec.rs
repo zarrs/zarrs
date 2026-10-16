@@ -5,15 +5,17 @@ use zfp_rs::{ZfpBitStream, ZfpConfig, ZfpHeaderMask, ZfpScalarType};
 
 use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
-    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_dims, zfp_native_type_to_scalar_type,
+    promote_before_zfp_encoding, zfp_config, zfp_decode, zfp_decode_into, zfp_dims,
+    zfp_native_type_to_scalar_type,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CowBytes, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -152,11 +154,6 @@ impl CodecTraits for ZfpCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToBytesCodecTraits for ZfpCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
@@ -194,14 +191,6 @@ impl ArrayCodecTraits for ZfpCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: zfp supports multi thread, when is it optimal to kick in?
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for ZfpCodecBound {}
@@ -216,6 +205,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         let bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding);
@@ -249,6 +239,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         zfp_decode(
             &self.config,
@@ -258,6 +249,34 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             self.encoding,
         )
         .map(ArrayBytes::from)
+    }
+
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        mut output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        let bytes = input.into_bytes(options, resources)?;
+        // Decode directly into an output that is one contiguous region
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+            && let Some(output) = output.as_mut_slice()
+            && zfp_decode_into(
+                &self.config,
+                self.write_header,
+                &bytes,
+                shape,
+                self.encoding,
+                output,
+            )?
+        {
+            return Ok(());
+        }
+
+        let bytes = self.decode(bytes, shape, options, resources)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn encoded_representation(

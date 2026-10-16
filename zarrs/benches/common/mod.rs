@@ -117,6 +117,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Latency
     fn supports_get_partial(&self) -> bool {
         self.storage.supports_get_partial()
     }
+
+    fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
+        self.storage.read_coalescing()
+    }
 }
 
 impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for LatencyStore<TStorage> {
@@ -192,6 +196,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
 
     fn supports_get_partial(&self) -> bool {
         self.storage.supports_get_partial()
+    }
+
+    fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
+        self.storage.read_coalescing()
     }
 }
 

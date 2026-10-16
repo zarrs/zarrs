@@ -77,12 +77,14 @@ impl zarrs_codec::CodecTraitsV2 for ShuffleCodec {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecError, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
@@ -97,13 +99,64 @@ mod tests {
         let codec = ShuffleCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
+
+    #[test]
+    fn codec_shuffle_decode_into() {
+        let codec = ShuffleCodec::new(2);
+        let options = CodecOptions::default();
+        let decoded = crate::array::transmute_to_bytes_vec((0..32u16).collect::<Vec<_>>());
+        let len = decoded.len();
+        let encoded = codec
+            .encode(
+                CowBytes::from(decoded.as_slice()),
+                &options,
+                &Resources::default(),
+            )
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+                &Resources::default(),
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 2]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded, &mut output[..len - 2]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // The input must be a multiple of the element size
+        assert!(decode_into(CowBytes::from(vec![0u8; 3]), &mut [0; 3]).is_err());
+    }
+
     #[test]
     fn codec_shuffle_partial_decode() {
         let elements: Vec<u16> = (0..8).collect();
@@ -114,77 +167,24 @@ mod tests {
         let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // shuffle partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap()
-            .concat();
-
-        let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u16> = vec![2, 3, 5];
-        assert_eq!(answer, decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_shuffle_async_partial_decode() {
-        let elements: Vec<u16> = (0..8).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        let configuration: ShuffleCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
-        let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration).unwrap());
-
-        let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [
-            ByteRange::FromStart(4, Some(4)),
-            ByteRange::FromStart(10, Some(2)),
-        ];
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap()
-            .unwrap()
-            .concat();
+        let decoded_partial_chunk = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        )
+        .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .as_chunks::<2>()

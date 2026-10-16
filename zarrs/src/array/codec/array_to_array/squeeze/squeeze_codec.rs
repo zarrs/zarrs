@@ -1,5 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
@@ -7,14 +8,11 @@ use zarrs_plugin::ZarrVersion;
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
 use zarrs_plugin::PluginCreateError;
@@ -79,6 +77,40 @@ impl Default for SqueezeCodec {
     }
 }
 
+/// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `shape`.
+pub(super) fn decoded_local_subchunk_grid(
+    shape: &[NonZeroU64],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, CodecError> {
+    let expected_dimensionality = shape.iter().filter(|dim| dim.get() > 1).count().max(1);
+    if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
+        return Err(CodecError::Other(
+                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
+                    .to_string(),
+            ));
+    }
+
+    let mut encoded_dim = 0;
+    let chunk_shapes = shape
+        .iter()
+        .map(|dim| {
+            if dim.get() == 1 {
+                Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
+            } else {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                encoded_dim += 1;
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            }
+        })
+        .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+        .map_err(|err| CodecError::Other(err.to_string()))?;
+    let array_shape = bytemuck::must_cast_slice(shape).to_vec();
+    Ok(ChunkGrid::new(
+        RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+            .map_err(|err| CodecError::Other(err.to_string()))?,
+    ))
+}
+
 impl CodecTraits for SqueezeCodec {
     fn configuration(
         &self,
@@ -103,11 +135,6 @@ impl CodecTraits for SqueezeCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToArrayCodecTraits for SqueezeCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -137,13 +164,6 @@ impl ArrayCodecTraits for SqueezeCodecBound {
 
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
 
@@ -247,14 +267,58 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(shape, encoded_subchunk_grid).map(Some)
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        let _ = (options, resources);
+        // The squeezed indexer selects the same elements in the same order
+        let indexer = indexer.as_indexer();
+        let indexer = if let Some(subset) = indexer.as_array_subset() {
+            PlanIndexer::Subset(super::get_squeezed_array_subset(subset, shape)?)
+        } else {
+            PlanIndexer::Shared(Arc::new(super::get_squeezed_indexer(indexer, shape)?))
+        };
+        Ok(Some((indexer, bytes)))
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
+    }
+
+    fn plan_decode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+    ) -> Result<ArrayToArrayDecodePlan<'a>, CodecError> {
+        // The squeezed indexer selects the same elements in the same order
+        let indexer = request.indexer.as_indexer();
+        let indexer = if let Some(subset) = indexer.as_array_subset() {
+            PlanIndexer::Subset(super::get_squeezed_array_subset(subset, shape)?)
+        } else {
+            PlanIndexer::Shared(Arc::new(super::get_squeezed_indexer(indexer, shape)?))
+        };
+        Ok(ArrayToArrayDecodePlan::Forward(DecodeRequest {
+            indexer,
+            target: request.target,
+        }))
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -283,6 +347,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -292,73 +357,8 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::squeeze_codec_partial::SqueezeCodecPartial::new(
-                input_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-            ),
-        ))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::squeeze_codec_partial::SqueezeCodecPartial::new(
-                input_output_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-            ),
-        ))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::squeeze_codec_partial::SqueezeCodecPartial::new(
-                input_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-            ),
-        ))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::squeeze_codec_partial::SqueezeCodecPartial::new(
-                input_output_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-            ),
-        ))
     }
 }

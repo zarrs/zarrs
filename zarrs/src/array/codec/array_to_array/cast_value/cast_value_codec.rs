@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
 
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    Resources, UnboundArrayToArrayCodecTraits,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_data_type::codec_traits::cast_value::{
     CastValueDataTypeExt, CastValueDataTypeTraits, CastValueKernel,
     CastValueOutOfRangeMode as DataTypeCastValueOutOfRangeMode,
@@ -100,11 +98,6 @@ impl CodecTraits for CastValueCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToArrayCodecTraits for CastValueCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -205,25 +198,31 @@ impl ArrayCodecTraits for CastValueCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl ArrayToArrayCodecSubchunkingIdentityTraits for CastValueCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for CastValueCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        partial_encode_request_elementwise(self, indexer, bytes, options, resources).map(Some)
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -239,6 +238,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.data_type.codec_castvalue()?;
         let target = self.encoded_data_type.codec_castvalue()?;
@@ -262,6 +262,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.encoded_data_type.codec_castvalue()?;
         let target = self.data_type.codec_castvalue()?;
@@ -279,78 +280,9 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
             },
         )?))
     }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        self.validate_partial_handle_data_type(input_handle.data_type())?;
-        Ok(Arc::new(self.partial(input_handle)?))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        self.validate_partial_handle_data_type(input_output_handle.data_type())?;
-        Ok(Arc::new(self.partial(input_output_handle)?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        self.validate_partial_handle_data_type(input_handle.data_type())?;
-        Ok(Arc::new(self.partial(input_handle)?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        self.validate_partial_handle_data_type(input_output_handle.data_type())?;
-        Ok(Arc::new(self.partial(input_output_handle)?))
-    }
 }
 
-impl CastValueCodecBound {
-    fn validate_partial_handle_data_type(&self, data_type: &DataType) -> Result<(), CodecError> {
-        if data_type != &self.encoded_data_type {
-            return Err(CodecError::Other(format!(
-                "cast_value partial handle data type {data_type} does not match encoded data type {}",
-                self.encoded_data_type
-            )));
-        }
-        Ok(())
-    }
-
-    fn partial<T: ?Sized>(
-        &self,
-        input_output_handle: Arc<T>,
-    ) -> Result<super::cast_value_codec_partial::CastValueCodecPartial<T>, CodecError> {
-        super::cast_value_codec_partial::CastValueCodecPartial::new(
-            input_output_handle,
-            &self.data_type,
-            &self.encoded_data_type,
-            self.encode_scalar_map.clone(),
-            self.decode_scalar_map.clone(),
-            self.rounding,
-            self.out_of_range,
-            self.encode_kernel,
-            self.decode_kernel,
-        )
-    }
-}
+impl CastValueCodecBound {}
 
 fn build_scalar_map(
     map: &[[zarrs_metadata::FillValueMetadata; 2]],

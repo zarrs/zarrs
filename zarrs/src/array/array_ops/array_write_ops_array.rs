@@ -2,15 +2,10 @@ use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
-#[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
-use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayWriteOps, *};
-use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
+use crate::array::ChunkShapeTraits;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
+use zarrs_codec::CodecError;
 use zarrs_storage::StorageHandle;
 
 #[inherent]
@@ -84,14 +79,16 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options())
+        self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options(), resources)
     }
 
     pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
@@ -102,37 +99,19 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_with_options(&chunk_indices, chunks_data, options)?;
+                self.store_chunk_with_options(&chunk_indices, chunks_data, options, resources)?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
                 let array_subset = self.chunks_subset(chunks)?;
                 chunks_bytes.validate(array_subset.num_elements(), self.data_type())?;
-
-                // Calculate chunk/codec concurrency
-                let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-                let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
+                self.store_chunks_planned(
+                    chunks,
+                    &array_subset,
+                    &chunks_bytes,
                     options,
-                    &codec_concurrency,
-                );
-
-                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_bytes = chunks_bytes.extract_array_subset(
-                        &chunk_subset.relative_to(array_subset.start())?,
-                        array_subset.shape(),
-                        self.data_type(),
-                    )?;
-                    self.store_chunk_with_options(&chunk_indices, chunk_bytes, &options)
-                };
-
-                let indices = chunks.indices();
-                indices
-                    .concurrent_limit(chunk_concurrent_limit)
-                    .try_for_each(store_chunk)?;
+                    resources,
+                )?;
             }
         }
 
@@ -147,26 +126,15 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
+    pub fn erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
-            Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
-        };
-
-        // FIXME: Bound concurrency
-        let chunk_indices = chunks.iter_indices().collect::<Vec<_>>();
-        #[cfg(not(target_arch = "wasm32"))]
-        chunk_indices.into_par_iter().try_for_each(erase_chunk)?;
-        #[cfg(target_arch = "wasm32")]
-        chunk_indices.into_iter().try_for_each(erase_chunk)?;
-
-        Ok(())
+        self.erase_chunks_planned(chunks, resources)
     }
 
     #[allow(clippy::missing_safety_doc)]
@@ -191,24 +159,13 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_data: T,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
         // Validation
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
-
-        let is_fill_value =
-            !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());
-        if is_fill_value {
-            self.erase_chunk(chunk_indices)?;
-        } else {
-            let chunk_encoded = self
-                .codecs_bound()
-                .encode(chunk_bytes, &chunk_shape, options)
-                .map_err(ArrayError::CodecError)?;
-            unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
-        }
-        Ok(())
+        self.store_chunk_planned(chunk_indices, chunk_bytes, options, resources)
     }
 }

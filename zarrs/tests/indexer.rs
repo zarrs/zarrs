@@ -2,7 +2,8 @@
 #![cfg(feature = "async")]
 
 use std::num::NonZeroU64;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use zarrs::array::Resources;
 
 use itertools::Itertools;
 use zarrs::array::codec::{BytesCodec, ShardingCodecBuilder, SqueezeCodec, VlenCodec};
@@ -12,9 +13,9 @@ use zarrs::array::{
     ArrayIndices, ArrayIndicesTinyVec, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain,
     DataType, ElementOwned, Indexer, IndexerError, data_type,
 };
+use zarrs_codec::plan::{partial_decode_memory, partial_encode_memory};
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions, CodecSpecificOptions,
-    UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;
 
@@ -242,7 +243,32 @@ fn indexer_array_subsets_vec() {
     );
 }
 
-#[async_generic::async_generic]
+/// Bind `codec` to `data_type` and encode `bytes`, a chunk of `shape`.
+fn encode_chunk<T: ElementOwned>(
+    codec: &Arc<dyn UnboundArrayToBytesCodecTraits>,
+    shape: &[NonZeroU64],
+    data_type: &DataType,
+    bytes: &[T],
+) -> (Arc<dyn ArrayToBytesCodecTraits>, Vec<u8>) {
+    let bound_codec = codec
+        .with_context(
+            data_type.clone(),
+            FillValue::from(0u32),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    let encoded_chunk = bound_codec
+        .encode(
+            T::to_array_bytes(data_type, bytes).unwrap(),
+            shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .unwrap()
+        .into_vec();
+    (bound_codec, encoded_chunk)
+}
+
 fn indexer_partial_decode_impl<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
@@ -250,53 +276,19 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     data_type: DataType,
     bytes: &[T],
 ) -> Vec<T> {
-    let fill_value = FillValue::from(0u32);
-    let bound_codec = codec
-        .with_context(
-            data_type.clone(),
-            fill_value,
-            &CodecSpecificOptions::default(),
-        )
-        .unwrap();
-    let encoded_chunk = Arc::new(
-        bound_codec
-            .encode(
-                T::to_array_bytes(&data_type, bytes).unwrap(),
-                shape,
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .into_vec(),
-    );
-
-    let partial_decoder = if _async {
-        bound_codec
-            .clone()
-            .async_partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
-            .await
-            .unwrap()
-    } else {
-        bound_codec
-            .clone()
-            .partial_decoder(encoded_chunk, shape, &CodecOptions::default())
-            .unwrap()
-    };
-
-    T::from_array_bytes(
-        &data_type,
-        if _async {
-            partial_decoder
-                .partial_decode(indexer, &CodecOptions::default())
-                .await
-        } else {
-            partial_decoder.partial_decode(indexer, &CodecOptions::default())
-        }
-        .unwrap(),
+    let (bound_codec, encoded_chunk) = encode_chunk(&codec, shape, &data_type, bytes);
+    let decoded = partial_decode_memory(
+        bound_codec,
+        Some(encoded_chunk.into()),
+        shape,
+        indexer,
+        &CodecOptions::default(),
+        &Resources::default(),
     )
-    .unwrap()
+    .unwrap();
+    T::from_array_bytes(&data_type, decoded).unwrap()
 }
 
-// #[async_generic::async_generic]
 fn indexer_partial_encode_impl<T: ElementOwned>(
     codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
@@ -305,53 +297,27 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     data_type: DataType,
     bytes: &[T],
 ) -> Vec<T> {
-    let fill_value = FillValue::from(0u32);
-    let bound_codec = codec
-        .with_context(
-            data_type.clone(),
-            fill_value,
-            &CodecSpecificOptions::default(),
-        )
-        .unwrap();
-    let encoded_chunk = Arc::new(
-        bound_codec
-            .encode(
-                T::to_array_bytes(&data_type, bytes).unwrap(),
-                shape,
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .into_vec(),
-    );
-
-    // TODO: Async partial encoder
-    let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
-    let partial_encoder = bound_codec
-        .clone()
-        .partial_encoder(output.clone(), shape, &CodecOptions::default())
-        .unwrap();
-    assert_eq!(
-        partial_encoder.supports_partial_encode(),
-        codec.partial_encoder_capability().partial_encode && output.supports_partial_encode()
-    );
-    assert_eq!(
-        partial_encoder.supports_partial_decode(),
-        codec.partial_decoder_capability().partial_decode && output.supports_partial_decode()
-    );
-
-    partial_encoder
-        .partial_encode(
-            indexer,
-            &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
-            &CodecOptions::default(),
-        )
-        .unwrap();
-
-    let output = output.lock().unwrap().clone().unwrap();
+    let (bound_codec, encoded_chunk) = encode_chunk(&codec, shape, &data_type, bytes);
+    let mut encoded_chunk = Some(encoded_chunk);
+    partial_encode_memory(
+        bound_codec.clone(),
+        &mut encoded_chunk,
+        shape,
+        indexer,
+        &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
+        &CodecOptions::default(),
+        &Resources::default(),
+    )
+    .unwrap();
     T::from_array_bytes(
         &data_type,
         bound_codec
-            .decode(output.into(), shape, &CodecOptions::default())
+            .decode(
+                encoded_chunk.unwrap().into(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap(),
     )
     .unwrap()
@@ -424,18 +390,6 @@ async fn async_indexer_array_subsets_fixed() {
                 data_type::float32(),
                 &elements
             ),
-            expected
-        );
-        #[cfg(feature = "async")]
-        assert_eq!(
-            indexer_partial_decode_impl_async(
-                codec.clone(),
-                &shape,
-                &indexer,
-                data_type::float32(),
-                &elements
-            )
-            .await,
             expected
         );
         if test_partial_encoding {
@@ -554,17 +508,6 @@ async fn async_indexer_array_subsets_variable() {
                 &elements
             ),
             expected
-        );
-        assert_eq!(
-            indexer_partial_decode_impl_async(
-                codec.clone(),
-                &shape,
-                &indexer,
-                data_type::string(),
-                &elements
-            )
-            .await,
-            expected,
         );
         if test_partial_encoding {
             assert_eq!(

@@ -3,7 +3,7 @@
 //! It accepts uint compatible fill values.
 
 use std::sync::Arc;
-use zarrs::array::CowBytes;
+use zarrs::array::{CowBytes, Resources};
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -190,6 +190,7 @@ impl ElementOwned for CustomDataTypeUInt12Element {
 }
 
 fn main() {
+    let resources = Resources::default();
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";
     let fill_value = CustomDataTypeUInt12Element::try_from(15).unwrap();
@@ -222,17 +223,18 @@ fn main() {
         .collect();
 
     array
-        .store_array_subset(&array.subset_all(), &data)
+        .store_array_subset(&array.subset_all(), &data, &resources)
         .unwrap();
 
-    let mut data: Vec<CustomDataTypeUInt12Element> =
-        array.retrieve_array_subset(&array.subset_all()).unwrap();
+    let mut data: Vec<CustomDataTypeUInt12Element> = array
+        .retrieve_array_subset(&array.subset_all(), &resources)
+        .unwrap();
 
     for (i, d) in data.drain(0..4096).enumerate() {
         let element = CustomDataTypeUInt12Element::try_from(i as u64).unwrap();
         assert_eq!(d, element);
         let element_pd: Vec<CustomDataTypeUInt12Element> = array
-            .retrieve_array_subset(&[(i as u64)..i as u64 + 1, 0..1])
+            .retrieve_array_subset(&[(i as u64)..i as u64 + 1, 0..1], &resources)
             .unwrap();
         assert_eq!(element_pd[0], element);
     }

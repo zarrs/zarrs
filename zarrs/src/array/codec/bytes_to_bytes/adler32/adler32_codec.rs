@@ -4,20 +4,11 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
 use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
-use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::{
-    strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder,
-    strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
-};
 use crate::array::{BytesRepresentation, CowBytes};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
@@ -79,27 +70,16 @@ impl CodecTraits for Adler32Codec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for Adler32Codec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut adler = simd_adler32::Adler32::new();
         adler.write(&decoded_value);
@@ -130,6 +110,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
@@ -166,36 +147,17 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         }
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+    fn source_step(&self) -> SourceStep {
+        let size = CHECKSUM_SIZE as u64;
         match self.location {
-            Adler32CodecConfigurationChecksumLocation::Start => Ok(Arc::new(
-                StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
-            Adler32CodecConfigurationChecksumLocation::End => Ok(Arc::new(
-                StripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
-        }
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        match self.location {
-            Adler32CodecConfigurationChecksumLocation::Start => Ok(Arc::new(
-                AsyncStripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
-            Adler32CodecConfigurationChecksumLocation::End => Ok(Arc::new(
-                AsyncStripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
+            Adler32CodecConfigurationChecksumLocation::Start => SourceStep::Window {
+                prefix: size,
+                suffix: 0,
+            },
+            Adler32CodecConfigurationChecksumLocation::End => SourceStep::Window {
+                prefix: 0,
+                suffix: size,
+            },
         }
     }
 

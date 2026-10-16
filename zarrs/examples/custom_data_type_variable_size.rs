@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use derive_more::Deref;
 use serde::{Deserialize, Serialize};
@@ -166,6 +167,7 @@ impl DataTypeTraits for CustomDataTypeVariableSize {
 }
 
 fn main() {
+    let resources = Resources::default();
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";
     let array = ArrayBuilder::new(
@@ -196,10 +198,11 @@ fn main() {
         CustomDataTypeVariableSizeElement::from(None),
         CustomDataTypeVariableSizeElement::from(Some(3.0)),
     ];
-    array.store_chunk(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data, &resources).unwrap();
 
-    let data: Vec<CustomDataTypeVariableSizeElement> =
-        array.retrieve_array_subset(&array.subset_all()).unwrap();
+    let data: Vec<CustomDataTypeVariableSizeElement> = array
+        .retrieve_array_subset(&array.subset_all(), &resources)
+        .unwrap();
 
     assert_eq!(data[0], CustomDataTypeVariableSizeElement::from(Some(1.0)));
     assert_eq!(data[1], CustomDataTypeVariableSizeElement::from(None));

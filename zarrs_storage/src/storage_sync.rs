@@ -7,7 +7,7 @@ use super::{
     MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
-use crate::CowBytes;
+use crate::{CowBytes, ReadCoalescing};
 
 /// Readable storage traits.
 #[auto_impl(Arc)]
@@ -68,6 +68,13 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     /// If this returns `true`, the store can efficiently handle `get_partial` and `get_partial_many` operations.
     /// If this returns `false`, partial reads will fall back to a full read operation.
     fn supports_get_partial(&self) -> bool;
+
+    /// Returns how reads of nearby byte ranges of the same value should be coalesced into one request, if at all.
+    ///
+    /// The default is [`None`] (no coalescing), which suits stores where requests are cheap (e.g. in memory).
+    fn read_coalescing(&self) -> Option<ReadCoalescing> {
+        None
+    }
 }
 
 /// Listable storage traits.

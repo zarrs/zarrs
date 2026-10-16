@@ -9,11 +9,9 @@
 
 mod codec_specific_options;
 mod options;
+pub mod plan;
+mod resources;
 pub use codec_specific_options::CodecSpecificOptions;
-
-mod codec_partial_default;
-use codec_partial_default::BytesToBytesCodecPartialDefault;
-pub use codec_partial_default::CodecPartialDefault;
 
 mod array_bytes_fixed_disjoint_view;
 pub use array_bytes_fixed_disjoint_view::{
@@ -35,7 +33,9 @@ pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
-pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;
+pub use codec_traits::bytes_to_bytes::{
+    BytesToBytesCodecTraits, copy_decoded_bytes_into, read_decoded_bytes_into,
+};
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 
 #[cfg(feature = "async")]
@@ -48,11 +48,11 @@ pub use codec_traits::bytes_partial_async::{
     AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 
-mod recommended_concurrency;
-pub use recommended_concurrency::RecommendedConcurrency;
-
 mod bytes_representation;
 pub use bytes_representation::BytesRepresentation;
+
+mod array_bytes_decode_into_input;
+pub use array_bytes_decode_into_input::{ArrayBytesDecodeIntoInput, BytesDecodeSource};
 
 mod array_bytes;
 pub use array_bytes::{
@@ -60,19 +60,15 @@ pub use array_bytes::{
     ArrayBytesOffsetsElement, ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError,
     ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
     ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
-    update_array_bytes,
+    ExpectedVariableLengthBytesError, build_nested_optional_target, copy_fill_value_into,
+    decode_into_array_bytes_target, extract_target_views, update_array_bytes,
 };
-
-mod byte_interval_partial_decoder;
-#[cfg(feature = "async")]
-pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
-pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 
 use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
+pub use resources::{IoLimiter, IoPermit, ReadDispatch, Resources};
 use thiserror::Error;
-use zarrs_metadata::{ArrayShape, ChunkShape, Configuration};
+use zarrs_metadata::{ArrayShape, Configuration};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::InvalidByteRangeError;
 
@@ -729,6 +725,12 @@ impl From<String> for CodecError {
 
 impl From<zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError> for CodecError {
     fn from(err: zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError) -> Self {
+        Self::Other(err.to_string())
+    }
+}
+
+impl From<zarrs_data_type::codec_traits::bytes::BytesCodecDecodeInPlaceError> for CodecError {
+    fn from(err: zarrs_data_type::codec_traits::bytes::BytesCodecDecodeInPlaceError) -> Self {
         Self::Other(err.to_string())
     }
 }

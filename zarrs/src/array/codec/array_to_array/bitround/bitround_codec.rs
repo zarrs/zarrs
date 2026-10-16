@@ -1,22 +1,21 @@
 use std::sync::Arc;
 
+use zarrs_codec::plan::{
+    ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer, partial_encode_request_elementwise,
+};
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
-    BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
-    bitround_codec_partial, round_bytes,
+    BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt, round_bytes,
 };
 use crate::array::{ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    Resources, UnboundArrayToArrayCodecTraits,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 
 /// A `bitround` codec implementation.
@@ -140,26 +139,44 @@ impl ArrayCodecTraits for BitroundCodecBound {
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: bitround is well suited to multithread, when is it optimal to kick in?
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
 }
 
 impl ArrayToArrayCodecSubchunkingIdentityTraits for BitroundCodecBound {}
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        partial_encode_request_elementwise(self, indexer, bytes, options, resources).map(Some)
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
+    }
+
+    fn plan_decode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+    ) -> Result<ArrayToArrayDecodePlan<'a>, CodecError> {
+        // Decoding is the identity
+        request
+            .indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        Ok(ArrayToArrayDecodePlan::Forward(request))
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -179,6 +196,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
         bytes.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
@@ -190,61 +208,8 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
-            input_handle,
-            &self.data_type,
-            self.keepbits,
-        )?))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
-            input_output_handle,
-            &self.data_type,
-            self.keepbits,
-        )?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
-            input_handle,
-            &self.data_type,
-            self.keepbits,
-        )?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
-            input_output_handle,
-            &self.data_type,
-            self.keepbits,
-        )?))
     }
 }

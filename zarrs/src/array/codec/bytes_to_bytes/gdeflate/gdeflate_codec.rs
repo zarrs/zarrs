@@ -5,11 +5,12 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
+    gdeflate_decode_into,
 };
-use crate::array::{BytesRepresentation, CowBytes, RecommendedConcurrency};
+use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -75,27 +76,16 @@ impl CodecTraits for GDeflateCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for GDeflateCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
@@ -129,11 +119,27 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         encoded_value: CowBytes<'a>,
         decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(CowBytes::from(gdeflate_decode(
             &encoded_value,
             decoded_representation,
         )?))
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
+        gdeflate_decode_into(&encoded_value, output)
     }
 
     fn encoded_representation(

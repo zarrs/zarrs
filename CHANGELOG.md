@@ -35,7 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
-- Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
+- Re-export `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` from `zarrs::array`
+- Add `[Async]ArrayReadOps::[async_]retrieve_encoded_subchunk` for low-level encoded subchunk access of sharded chunks
+  - Expose `ShardingCodecBound`, whose `plan_retrieve_subchunk_encoded` plans the same read of a shard in another source (see `sharding` module docs)
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`
@@ -47,14 +49,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
+- Add `Resources` (re-exported from `zarrs_codec`), which sets the resources (e.g. concurrency) available to an operation
 
 ### Changed
+- Array reads are planned as tasks and executed by the drivers of `zarrs_codec::plan`, with separate I/O and compute concurrency limits (`Resources::{compute_target,io_target}`)
+  - Applies to the `retrieve_*` methods and their async and `_into` variants, `retrieve_chunk_if_exists`, `partial_decoder`, and the filling of chunk caches
+  - I/O and compute are interleaved, so a chunk or subchunk decodes as soon as its bytes are read
+  - Synchronous reads from slow stores can have more requests in flight than there are Rayon threads, which can be several times faster at high latency
+  - Asynchronous reads into a new output decode on Rayon rather than on the polling task
+  - Whole shards are read in one request, and the subchunks of a shard in memory are decoded in blocks
+  - Partial decoders read and decode what every request needs once (e.g. a shard index, or the bytes of a chunk compressed with a codec that cannot decode part of it)
+  - `Resources::chunk_concurrent_minimum` no longer affects reads
+  - Reads of many tiny chunks from memory (e.g. 64-byte chunks, or 2 KiB chunks asynchronously) can be about 10% slower, as each chunk is planned as a task
+- Array writes are planned as tasks and executed by the drivers of `zarrs_codec::plan`, with separate I/O and compute concurrency limits
+  - Applies to `store_chunk[s]`, `store_array_subset`, `store_partial_chunk` and their async variants, the partial encoders of sharded chunks, `retrieve_encoded_chunks` and `erase_chunks`
+  - The chunks that `store_array_subset` covers partially are read, decoded, updated and encoded in the same operation as the other chunks, interleaved with their writes
+  - Synchronous writes to slow stores can have more requests in flight than there are Rayon threads, which can be several times faster at high latency
+  - Asynchronous writes of owned data (e.g. a `Vec`) encode on Rayon rather than on the polling task, and asynchronous writes of borrowed data overlap their requests
+  - Chunks are partially encoded whenever their codecs support it (`bytes` and `sharding_indexed`, including after the `transpose`, `reshape`, `squeeze`, `bitround`, `fixedscaleoffset` and `cast_value` array-to-array codecs) and the store supports partial writes
+    - A shard with no other subchunks is rewritten with one write
+    - The partial encoders of other chunks read, decode, update and encode the chunk
+  - `Resources::chunk_concurrent_minimum` no longer affects writes
+- `sharding_indexed` decodes and encodes shards in memory as planned tasks, so subchunks are decoded and encoded with the compute target of the operation
+- Chunk-local subchunk grids are resolved by planned tasks, so a codec may read (or partially decode) a chunk to resolve its subchunk grid
+- Reads of nearby byte ranges of the same chunk (e.g. the subchunks of a shard) are coalesced into one request as hinted by the store (`ReadableStorageTraits::read_coalescing`) or set by `Resources::read_coalescing`
+  - For example, a read of a 112 x 112 region straddling four shards of 8 x 8 subchunks made 8 rather than 20 requests to a store hinting object store coalescing
+- Reuse a `zstd` decompression context per thread when decoding
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- Reuse a `zstd` decompression context per thread for bulk decoding, with a fresh context when decoding reenters on the same thread
 - Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
+- Decode `zstd`, `blosc`, `gzip`, `zlib`, `bz2`, `shuffle`, and `gdeflate` directly into preallocated byte buffers
+- Let the `bytes` codec choose final-output placement for efficient deferred producers, while retaining fused copy-and-endianness conversion for ordinary input
+  - *Behavioural Change*: if decoding into an output fails, the output may have been partially written, including with undecoded bytes
+- Defer the final bytes-to-bytes stage in a codec chain so its array-to-bytes receiver chooses placement before decoding, preserving owned intermediates for fallback codecs
+- Decode `packbits`, `pcodec`, and `zfp` directly into an output that is one contiguous region, and forward deferred input through `packbits` and `zfpy`
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
   - These operations now accept `&dyn Indexer`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
@@ -122,13 +152,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `lru` to 0.18.2
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
+- **Breaking**: Array operations that encode, decode, or access multiple chunks take a per-call `resources: &Resources` argument, including async variants
+  - This applies to the `retrieve_*` (except `retrieve_encoded_chunk`), `store_chunk[s]`, `store_partial_chunk`, `store_array_subset`, `compact_chunk`, `erase_chunks`, `partial_{en,de}coder`, and `local_subchunk_grid[_at_level]` operations
+  - Concurrency is now set per call rather than per array via `CodecOptions`
+- `erase_chunks` and `async_erase_chunks` are bounded by the concurrent target of their `Resources`
 
 ### Removed
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
   - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
-  - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
+  - `[async_]retrieve_encoded_subchunk` is now part of `[Async]ArrayReadOps`
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
 - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
 - **Breaking**: Remove `CodecChain::with_codec_specific_options`, pass `CodecSpecificOptions` to `CodecChain::with_context` instead
@@ -136,12 +170,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+- **Breaking**: Remove `Config::{[set_]codec_concurrent_target,[set_]chunk_concurrent_minimum}`, use `Resources` instead
+  - Serialized configs containing `codec_concurrent_target` or `chunk_concurrent_minimum` still deserialize, but these fields are ignored
+- **Breaking**: Remove `{CodecOptions,Config}::experimental_partial_encoding` and their setters, chunks are partially encoded whenever their codecs and store support it
+- **Breaking**: Remove the partial decoders and partial encoders of codecs, including `[Async]ShardingPartialDecoder`, as partial decoding and encoding is planned (see `zarrs_codec`)
+  - `Array::[async_]partial_{de,en}coder` are unchanged
+- **Breaking**: Remove the `concurrency` module and the `RecommendedConcurrency` re-export, concurrency is managed by the drivers of `zarrs_codec::plan`
+- Remove the `async-generic` dependency
 
 ### Fixed
 - Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
 - Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
-- Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
-- Treat a concurrent target of zero as unconstrained in multi-chunk and sharding operations, and avoid stalled async encoded-chunk retrieval and suffix stripping
 - The `crc32c`, `adler32`, and `fletcher32` partial decoders return the correct bytes for a `ByteRange::Suffix` request with the checksum at the end
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 - Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
@@ -167,6 +206,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid redundant copy in `shuffle` codec
 - Validate that tensor bytes cover the shape and data type during DLPack export
 - Pass the encoded shape and data type to the partial decoder cache in a codec chain
+- A concurrent target of zero is unconstrained, as documented
+  - Previously, `async_retrieve_encoded_chunks` and async `strip_suffix` partial decoding never completed, and multi-chunk and sharding operations used their minimum concurrency
+- `sharding_indexed` partial encoding limits subchunk concurrency and splits the concurrent target between subchunks and inner codecs
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 - Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
 - Fix the `packbits` codec:

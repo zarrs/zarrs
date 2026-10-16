@@ -66,10 +66,10 @@ pub use bytes_to_bytes::zlib::*;
 #[cfg(feature = "zstd")]
 pub use bytes_to_bytes::zstd::*;
 
-mod array_partial_decoder_cache;
-mod bytes_partial_decoder_cache;
-pub(crate) use array_partial_decoder_cache::ArrayPartialDecoderCache;
-pub(crate) use bytes_partial_decoder_cache::BytesPartialDecoderCache;
+#[cfg(test)]
+pub(crate) mod plan_parity;
+#[cfg(test)]
+pub(crate) mod test_util;
 
 /// Re-export the `zarrs_codec` API.
 ///

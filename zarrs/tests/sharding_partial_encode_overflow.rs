@@ -4,7 +4,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::codec::ShardingCodecBuilder;
-use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, data_type};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
@@ -48,7 +48,9 @@ fn partial_encode_rejects_overflowing_shard_index() {
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]).unwrap();
             store.set(&key, encoded.clone().into()).unwrap();
-            let encoder = array.partial_encoder(&[0, 0]).unwrap();
+            let encoder = array
+                .partial_encoder(&[0, 0], &Resources::default())
+                .unwrap();
             store.reset();
             // Reusing the encoder after an error must still reject its original corrupt index.
             for _ in 0..2 {
@@ -57,7 +59,8 @@ fn partial_encode_rejects_overflowing_shard_index() {
                         .partial_encode(
                             &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                             &ArrayBytes::new_flen(vec![7u8; 4]),
-                            &CodecOptions::default()
+                            &CodecOptions::default(),
+                            &Resources::default(),
                         )
                         .is_err()
                 );
@@ -81,7 +84,10 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]).unwrap();
             store.set(&key, encoded.clone().into()).await.unwrap();
-            let encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
+            let encoder = array
+                .async_partial_encoder(&[0, 0], &Resources::default())
+                .await
+                .unwrap();
             store.reset();
             for _ in 0..2 {
                 assert!(
@@ -89,7 +95,8 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
                         .partial_encode(
                             &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                             &ArrayBytes::new_flen(vec![7u8; 4]),
-                            &CodecOptions::default()
+                            &CodecOptions::default(),
+                            &Resources::default(),
                         )
                         .await
                         .is_err()

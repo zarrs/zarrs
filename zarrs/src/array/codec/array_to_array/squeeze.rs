@@ -28,7 +28,6 @@
 //! ```
 
 mod squeeze_codec;
-mod squeeze_codec_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -84,7 +83,7 @@ fn get_squeezed_array_subset(
 fn get_squeezed_indexer(
     indexer: &dyn Indexer,
     shape: &[NonZeroU64],
-) -> Result<impl Indexer, CodecError> {
+) -> Result<Vec<ArrayIndices>, CodecError> {
     // The indices of size-1 dimensions are dropped below, so they cannot be bounds checked by the inner codec.
     indexer.validate(bytemuck::must_cast_slice(shape))?;
 
@@ -104,6 +103,8 @@ fn get_squeezed_indexer(
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -114,7 +115,6 @@ mod tests {
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
         ChunkGridDecoded, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
-        UnboundArrayToBytesCodecTraits,
     };
 
     const fn nz(value: u64) -> NonZeroU64 {
@@ -152,10 +152,20 @@ mod tests {
         );
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -235,31 +245,17 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-            .unwrap();
-        let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let encoded_shape = codec.encoded_shape(&shape).unwrap();
-        let encoded_data_type = codec.encoded_data_type().clone();
-        let encoded_fill_value = codec.encoded_fill_value().clone();
-        let bytes_codec = bytes_codec
-            .with_context(
-                encoded_data_type,
-                encoded_fill_value,
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
-            .unwrap();
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // squeeze partial decoder does not hold bytes
+        let partial_decoder = MemoryPartialDecoder::encode(
+            chain(
+                vec![codec],
+                Arc::new(BytesCodec::default()),
+                vec![],
+                data_type,
+                fill_value,
+            ),
+            bytes,
+            &shape,
+        );
 
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..1, 0..4, 0..1, 0..4, 0..1]),
@@ -276,7 +272,11 @@ mod tests {
             vec![8.0, 9.0, 12.0, 13.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),

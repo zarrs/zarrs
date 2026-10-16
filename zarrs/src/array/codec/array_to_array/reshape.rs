@@ -55,7 +55,6 @@
 
 mod reshape_codec;
 mod reshape_codec_grid_mapping;
-mod reshape_codec_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -66,6 +65,7 @@ use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
 use crate::array::{ArrayIndices, ArraySubset, ChunkShape, Indexer, IndexerError, unravel_index};
+use zarrs_codec::plan::PlanIndexer;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
@@ -136,26 +136,11 @@ fn get_encoded_shape(
     Ok(encoded_shape)
 }
 
-/// A mapped indexer, retaining dimensionality when no elements are selected.
-enum ReshapedIndexer {
-    Empty(ArraySubset),
-    Indices(Vec<ArrayIndices>),
-}
-
-impl ReshapedIndexer {
-    fn as_indexer(&self) -> &dyn Indexer {
-        match self {
-            Self::Empty(subset) => subset,
-            Self::Indices(indices) => indices,
-        }
-    }
-}
-
 fn get_reshaped_indexer(
     indexer: &dyn Indexer,
     decoded_shape: &[NonZeroU64],
     encoded_shape: &[NonZeroU64],
-) -> Result<ReshapedIndexer, CodecError> {
+) -> Result<PlanIndexer<'static>, CodecError> {
     if indexer.dimensionality() != decoded_shape.len() {
         return Err(IndexerError::new_incompatible_dimensionality(
             indexer.dimensionality(),
@@ -176,13 +161,15 @@ fn get_reshaped_indexer(
             })
         })
         .collect::<Result<Vec<ArrayIndices>, _>>()?;
-
     if indices.is_empty() {
-        return Ok(ReshapedIndexer::Empty(ArraySubset::new_with_shape(
-            vec![0; encoded_shape.len()],
-        )));
+        // An empty list of indices has no dimensionality
+        return Ok(PlanIndexer::Subset(ArraySubset::new_with_shape(vec![
+            0;
+            encoded_shape.len()
+        ])));
     }
-    Ok(ReshapedIndexer::Indices(indices))
+
+    Ok(PlanIndexer::Shared(Arc::new(indices)))
 }
 
 zarrs_plugin::impl_extension_aliases!(ReshapeCodec, v3: "reshape");
@@ -202,8 +189,11 @@ impl CodecTraitsV3 for ReshapeCodec {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
+    use crate::array::{CodecChainBound, Resources};
     use std::num::NonZeroU64;
-    use std::sync::Mutex;
+    use zarrs_codec::ArrayToBytesCodecTraits;
+    use zarrs_codec::plan::partial_encode_memory;
 
     use super::*;
     use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid, RegularChunkGrid};
@@ -211,8 +201,8 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
-        ArrayPartialDecoderTraits, ChunkGridDecoded, ChunkGridEncoded, CodecOptions,
-        CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+        ChunkGridDecoded, ChunkGridEncoded, CodecOptions, CodecSpecificOptions,
+        UnboundArrayToArrayCodecTraits,
     };
 
     #[test]
@@ -274,8 +264,18 @@ mod tests {
         )?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
-        let encoded = codec.encode(bytes.clone(), &shape, &CodecOptions::default())?;
-        let decoded = codec.decode(encoded, &shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            bytes.clone(),
+            &shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
+        let decoded = codec.decode(
+            encoded,
+            &shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
         assert_eq!(bytes, decoded);
         Ok(())
     }
@@ -959,47 +959,31 @@ mod tests {
         );
     }
 
+    fn chain_u16(codec: Arc<ReshapeCodec>) -> Arc<CodecChainBound> {
+        chain(
+            vec![codec],
+            Arc::new(BytesCodec::default()),
+            vec![],
+            data_type::uint16(),
+            FillValue::from(0u16),
+        )
+    }
+
     fn partial_decoder_u16(
         codec: Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
-    ) -> Arc<dyn ArrayPartialDecoderTraits> {
-        let data_type = data_type::uint16();
-        let fill_value = FillValue::from(0u16);
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-        let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-            .unwrap();
-        let encoded = codec
-            .encode(bytes, shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let encoded_shape = codec.encoded_shape(shape).unwrap();
-        let encoded_data_type = codec.encoded_data_type().clone();
-        let encoded_fill_value = codec.encoded_fill_value().clone();
-        let bytes_codec = bytes_codec
-            .with_context(
-                encoded_data_type,
-                encoded_fill_value,
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
-            .unwrap();
-        codec
-            .partial_decoder(input_handle, shape, &CodecOptions::default())
-            .unwrap()
+    ) -> MemoryPartialDecoder {
+        let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
+        MemoryPartialDecoder::encode(chain_u16(codec), bytes, shape)
     }
 
     fn partial_decode_u16(
-        partial_decoder: &dyn ArrayPartialDecoderTraits,
+        partial_decoder: &MemoryPartialDecoder,
         indexer: &dyn Indexer,
     ) -> Vec<u16> {
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(indexer, &CodecOptions::default())
+            .partial_decode(indexer, &CodecOptions::default(), &Resources::default())
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded_partial_chunk.into_fixed().unwrap())
     }
@@ -1011,54 +995,38 @@ mod tests {
         indexer: &dyn Indexer,
         elements_partial_encode: Vec<u16>,
     ) -> Vec<u16> {
-        let data_type = data_type::uint16();
-        let fill_value = FillValue::from(0u16);
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-        let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-            .unwrap();
-        let encoded = codec
-            .encode(bytes, shape, &CodecOptions::default())
-            .unwrap();
-
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let encoded_shape = codec.encoded_shape(shape).unwrap();
-        let encoded_data_type = codec.encoded_data_type().clone();
-        let encoded_fill_value = codec.encoded_fill_value().clone();
-        let bytes_codec = bytes_codec
-            .with_context(
-                encoded_data_type,
-                encoded_fill_value,
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let encoded_chunk = bytes_codec
-            .encode(encoded, &encoded_shape, &CodecOptions::default())
-            .unwrap()
-            .into_vec();
-        let output = Arc::new(Mutex::new(Some(encoded_chunk)));
-        let input_output_handle = bytes_codec
-            .clone()
-            .partial_encoder(output.clone(), &encoded_shape, &CodecOptions::default())
-            .unwrap();
-        let partial_encoder = codec
-            .clone()
-            .partial_encoder(input_output_handle, shape, &CodecOptions::default())
-            .unwrap();
-        assert!(partial_encoder.supports_partial_encode());
-
+        let codecs = chain_u16(codec);
+        assert!(codecs.plans_partial_encode());
+        let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
+        let mut encoded = Some(
+            codecs
+                .encode(
+                    bytes,
+                    shape,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
+                .unwrap()
+                .into_vec(),
+        );
         let bytes = crate::array::transmute_to_bytes_vec(elements_partial_encode);
-        partial_encoder
-            .partial_encode(indexer, &ArrayBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-
-        let output = output.lock().unwrap().clone().unwrap();
-        let decoded_encoded = bytes_codec
-            .decode(output.into(), &encoded_shape, &CodecOptions::default())
-            .unwrap();
-        let decoded = codec
-            .decode(decoded_encoded, shape, &CodecOptions::default())
+        partial_encode_memory(
+            codecs.clone(),
+            &mut encoded,
+            shape,
+            indexer,
+            &ArrayBytes::from(bytes),
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .unwrap();
+        let decoded = codecs
+            .decode(
+                encoded.unwrap().into(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap())
     }
@@ -1091,7 +1059,7 @@ mod tests {
 
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
         assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &decoded_region),
+            partial_decode_u16(&partial_decoder, &decoded_region),
             [17, 18, 19, 21, 22, 23]
         );
     }
@@ -1128,10 +1096,7 @@ mod tests {
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
-        assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &indexer),
-            [23, 1, 14]
-        );
+        assert_eq!(partial_decode_u16(&partial_decoder, &indexer), [23, 1, 14]);
     }
 
     #[test]
@@ -1157,7 +1122,7 @@ mod tests {
 
         let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..3, 2..4]);
         assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &decoded_region),
+            partial_decode_u16(&partial_decoder, &decoded_region),
             [6, 7, 10, 11, 18, 19, 22, 23]
         );
     }
@@ -1194,10 +1159,7 @@ mod tests {
         let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![0, 2, 3], vec![1, 0, 0], vec![1, 2, 2]];
-        assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &indexer),
-            [11, 12, 22]
-        );
+        assert_eq!(partial_decode_u16(&partial_decoder, &indexer), [11, 12, 22]);
     }
 
     #[test]
@@ -1222,7 +1184,7 @@ mod tests {
 
         let decoded_region = ArraySubset::new_with_ranges(&[3..10]);
         assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &decoded_region),
+            partial_decode_u16(&partial_decoder, &decoded_region),
             [3, 4, 5, 6, 7, 8, 9]
         );
     }
@@ -1255,7 +1217,7 @@ mod tests {
             ArraySubset::new_with_ranges(&[1..2, 2..3, 0..2]),
         ];
         assert_eq!(
-            partial_decode_u16(partial_decoder.as_ref(), &decoded_regions),
+            partial_decode_u16(&partial_decoder, &decoded_regions),
             [2, 3, 20, 21]
         );
     }
@@ -1276,14 +1238,22 @@ mod tests {
         let wrong_dimensionality = ArraySubset::new_with_ranges(&[0..1, 0..1]);
         assert!(
             partial_decoder
-                .partial_decode(&wrong_dimensionality, &CodecOptions::default())
+                .partial_decode(
+                    &wrong_dimensionality,
+                    &CodecOptions::default(),
+                    &Resources::default()
+                )
                 .is_err()
         );
 
         let out_of_bounds = vec![vec![2, 0, 0]];
         assert!(
             partial_decoder
-                .partial_decode(&out_of_bounds, &CodecOptions::default())
+                .partial_decode(
+                    &out_of_bounds,
+                    &CodecOptions::default(),
+                    &Resources::default()
+                )
                 .is_err()
         );
     }
@@ -1373,54 +1343,5 @@ mod tests {
                 22, 100,
             ]
         );
-    }
-    #[test]
-    fn codec_reshape_empty_partial_operations() {
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0, 1]),
-        ])));
-        let shape = [nz(8), nz(6)];
-        let elements: Vec<u16> = (0..48).collect();
-        let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
-        let decoder = partial_decoder_u16(codec.clone(), &shape, elements.clone());
-        assert!(partial_decode_u16(decoder.as_ref(), &empty).is_empty());
-        assert_eq!(
-            partial_encode_u16(codec, &shape, elements.clone(), &empty, vec![]),
-            elements
-        );
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_reshape_async_empty_partial_operations() {
-        use crate::array::ArrayBuilder;
-        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
-            ReshapeDim::InputDims(vec![0, 1]),
-        ])));
-        let array = ArrayBuilder::new(vec![8, 6], vec![8, 6], data_type::uint16(), 0u16)
-            .array_to_array_codecs(vec![codec])
-            .build(Arc::new(zarrs_storage::store::AsyncMemoryStore::new()), "/")
-            .unwrap()
-            .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
-        let elements: Vec<u16> = (0..48).collect();
-        array.async_store_chunk(&[0, 0], &elements).await.unwrap();
-        let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
-        let decoder = array.async_partial_decoder(&[0, 0]).await.unwrap();
-        let decoded = decoder
-            .partial_decode(&empty, &CodecOptions::default())
-            .await
-            .unwrap();
-        assert_eq!(decoded.size(), 0);
-        let encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
-        encoder
-            .partial_encode(
-                &empty,
-                &ArrayBytes::new_flen(vec![]),
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap();
-        let decoded: Vec<u16> = array.async_retrieve_chunk(&[0, 0]).await.unwrap();
-        assert_eq!(decoded, elements);
     }
 }

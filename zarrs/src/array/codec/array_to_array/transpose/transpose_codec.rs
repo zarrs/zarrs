@@ -1,5 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
@@ -10,14 +11,11 @@ use super::{
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
 };
-#[cfg(feature = "async")]
-use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
 use zarrs_plugin::PluginCreateError;
@@ -74,6 +72,34 @@ impl TransposeCodecBound {
     }
 }
 
+/// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `shape`.
+pub(super) fn decoded_local_subchunk_grid(
+    shape: &[NonZeroU64],
+    order_inverse: &[usize],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, CodecError> {
+    if order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+        return Err(CodecError::Other(
+            "Length of transpose codec `order` does not match local subchunk grid dimensionality"
+                .to_string(),
+        ));
+    }
+
+    let chunk_shapes = order_inverse
+        .iter()
+        .map(|&encoded_dim| {
+            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+            Ok(ChunkEdgeLengths::encode(&edge_lengths))
+        })
+        .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
+        .map_err(|err| CodecError::Other(err.to_string()))?;
+    let array_shape = bytemuck::must_cast_slice(shape).to_vec();
+    Ok(ChunkGrid::new(
+        RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+            .map_err(|err| CodecError::Other(err.to_string()))?,
+    ))
+}
+
 impl CodecTraits for TransposeCodec {
     fn configuration(
         &self,
@@ -100,11 +126,6 @@ impl CodecTraits for TransposeCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToArrayCodecTraits for TransposeCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
         self as Arc<dyn UnboundArrayToArrayCodecTraits>
@@ -135,14 +156,6 @@ impl ArrayCodecTraits for TransposeCodecBound {
 
     fn fill_value(&self) -> &FillValue {
         &self.fill_value
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: This could be increased, need to implement `transpose_array` without ndarray
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
 
@@ -210,14 +223,83 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(
+            shape,
+            &inverse_permutation(&self.order.0),
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+    }
+
+    fn partial_encode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+        let _ = (options, resources);
+        let indexer = indexer.as_indexer();
+        if let Some(subset) = indexer.as_array_subset() {
+            // Transpose the region, which updates the transposed region
+            let transposed = super::get_transposed_array_subset(&self.order.0, shape, subset)?;
+            let bytes = apply_permutation(&bytes, &subset.shape(), &self.order.0, &self.data_type)?;
+            Ok(Some((PlanIndexer::Subset(transposed), bytes)))
+        } else {
+            // The transposed indices select the same elements in the same order
+            let transposed = super::get_transposed_indexer(&self.order.0, shape, indexer)?;
+            Ok(Some((PlanIndexer::Shared(Arc::new(transposed)), bytes)))
+        }
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        true
+    }
+
+    fn plan_decode_request<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+    ) -> Result<ArrayToArrayDecodePlan<'a>, CodecError> {
+        let indexer = request.indexer.as_indexer();
+        if let Some(subset) = indexer.as_array_subset() {
+            // Decode the transposed region, then transpose it
+            let transposed = super::get_transposed_array_subset(&self.order.0, shape, subset)?;
+            let region_shape: Option<Vec<NonZeroU64>> = subset
+                .shape()
+                .iter()
+                .map(|&size| NonZeroU64::new(size))
+                .collect();
+            Ok(match region_shape {
+                Some(region_shape) => ArrayToArrayDecodePlan::Decode {
+                    indexer: PlanIndexer::Subset(transposed),
+                    shape: region_shape,
+                    target: request.target,
+                },
+                None => ArrayToArrayDecodePlan::Forward(DecodeRequest {
+                    indexer: PlanIndexer::Subset(transposed),
+                    target: request.target,
+                }),
+            })
+        } else {
+            // The transposed indices select the same elements in the same order
+            let transposed = super::get_transposed_indexer(&self.order.0, shape, indexer)?;
+            Ok(ArrayToArrayDecodePlan::Forward(DecodeRequest {
+                indexer: PlanIndexer::Shared(Arc::new(transposed)),
+                target: request.target,
+            }))
+        }
     }
 
     fn encoded_data_type(&self) -> &DataType {
@@ -242,6 +324,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 
@@ -255,6 +338,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 
@@ -267,75 +351,5 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             &inverse_permutation(&self.order.0),
             &self.data_type,
         )
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::transpose_codec_partial::TransposeCodecPartial::new(
-                input_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-                self.order.0.clone(),
-            ),
-        ))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::transpose_codec_partial::TransposeCodecPartial::new(
-                input_output_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-                self.order.0.clone(),
-            ),
-        ))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::transpose_codec_partial::TransposeCodecPartial::new(
-                input_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-                self.order.0.clone(),
-            ),
-        ))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::transpose_codec_partial::TransposeCodecPartial::new(
-                input_output_handle,
-                shape,
-                &self.data_type,
-                &self.fill_value,
-                self.order.0.clone(),
-            ),
-        ))
     }
 }

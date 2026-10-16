@@ -10,7 +10,7 @@ use super::{
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, Resources, read_decoded_bytes_into,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -75,27 +75,16 @@ impl CodecTraits for GzipCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for GzipCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder = GzEncoder::new(
             Cursor::new(decoded_value),
@@ -111,11 +100,27 @@ impl BytesToBytesCodecTraits for GzipCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = GzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
         Ok(CowBytes::from(out))
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
+        read_decoded_bytes_into(GzDecoder::new(&encoded_value[..]), output)
     }
 
     fn encoded_representation(

@@ -65,29 +65,19 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
-//! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
-//! 2. create a storage partial decoder for the shard object,
-//! 3. construct the sharding partial decoder with the bound codec accessors, and
-//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
-//!
-//! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
+//! Encoded subchunk bytes can be retrieved with [`ArrayReadOps::retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk)
+//! or [`AsyncArrayReadOps::async_retrieve_encoded_subchunk`](crate::array::AsyncArrayReadOps::async_retrieve_encoded_subchunk),
+//! with subchunk indices local to the shard.
+//! A shard in another source can be read with a task planned by [`ShardingCodecBound::plan_retrieve_subchunk_encoded`].
 
 #[cfg(test)]
 mod indexer_tests;
 mod sharding_codec;
 mod sharding_codec_builder;
+mod sharding_encode_planner;
 mod sharding_options;
-#[cfg(feature = "async")]
-mod sharding_partial_decoder_async;
-mod sharding_partial_decoder_sync;
-mod sharding_partial_encoder;
-#[cfg(feature = "async")]
-mod sharding_partial_encoder_async;
-
-#[cfg(feature = "async")]
-pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
+mod sharding_partial_encode_planner;
+mod sharding_planner;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -99,19 +89,17 @@ use zarrs_codec::CowBytes;
 
 use crate::array::array_bytes_internal::split_optional;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
-use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayIndices, ArrayIndicesTinyVec, BytesRepresentation, ChunkGrid, ChunkShape,
-    CodecChain, CodecChainBound, DataType, FillValue, Indexer, IndexerError,
-    RecommendedConcurrency, ravel_indices,
+    CodecChain, CodecChainBound, DataType, Indexer, IndexerError, ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub(crate) use sharding_options::RequireDivisibleSubchunks;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, ChunkGridDecoded, Codec,
-    CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
+    ArrayToBytesCodecTraits, ChunkGridDecoded, Codec, CodecError, CodecOptions, CodecPluginV3,
+    CodecTraitsV3, Resources,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -214,12 +202,14 @@ fn decode_shard_index(
     index_shape: &[NonZeroU64],
     index_codecs: &CodecChainBound,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
     let decoded_shard_index = index_codecs.decode(
         CowBytes::Borrowed(encoded_shard_index),
         index_shape,
         options,
+        resources,
     )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
@@ -243,26 +233,6 @@ fn get_index_byte_range(
     })
 }
 
-fn subchunk_byte_range(
-    shard_index: Option<&[u64]>,
-    subchunk_grid: &RegularBoundedChunkGrid,
-    chunk_indices: &[u64],
-) -> Result<Option<ByteRange>, CodecError> {
-    if let Some(shard_index) = shard_index {
-        let chunks_per_shard = subchunk_grid.grid_shape();
-        let shard_index_idx = ravel_indices(chunk_indices, chunks_per_shard).ok_or_else(|| {
-            CodecError::Other(format!(
-                "subchunk indices {chunk_indices:?} are out of bounds for chunks per shard {chunks_per_shard:?}"
-            ))
-        })?;
-        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        Ok(subchunk_offset_size(shard_index, shard_index_idx)
-            .map(|(offset, size)| ByteRange::new(offset..offset + size)))
-    } else {
-        Ok(None)
-    }
-}
-
 /// Returns the byte offset and size of the subchunk at `subchunk_index` in a shard index.
 ///
 /// Returns [`None`] if the subchunk is empty.
@@ -274,14 +244,6 @@ fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u
     } else {
         Some((offset, size))
     }
-}
-
-fn partial_decode_empty_shard<'a>(
-    data_type: &DataType,
-    fill_value: &FillValue,
-    indexer: &dyn crate::array::Indexer,
-) -> Result<ArrayBytes<'a>, CodecError> {
-    ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
 }
 
 /// Selected elements in one subchunk, in their original indexer order.
@@ -586,85 +548,14 @@ fn subchunk_updates<'a>(
     }
 }
 
-/// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
-fn invalid_shard_index() -> CodecError {
-    CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
-}
-
-fn get_concurrent_target_and_codec_options(
-    inner_codecs: &CodecChainBound,
-    subchunk_shape: &[NonZeroU64],
-    num_subchunks: usize,
-    options: &CodecOptions,
-) -> Result<(usize, CodecOptions), CodecError> {
-    // Calculate subchunk/codec concurrency
-    let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
-        options.concurrent_target(),
-        &RecommendedConcurrency::new_maximum(num_subchunks),
-        &inner_codecs.recommended_concurrency(subchunk_shape)?,
-    );
-    let options = options.with_concurrent_target(concurrency_limit_codec);
-    Ok((subchunk_concurrent_limit, options))
-}
-
-/// Returns `None` if there is no shard.
-fn decode_shard_index_partial_decoder(
-    input_handle: &dyn BytesPartialDecoderTraits,
-    index_codecs: &CodecChainBound,
-    index_location: ShardingIndexLocation,
-    shard_shape: &[NonZeroU64],
-    subchunk_shape: &[NonZeroU64],
-    options: &CodecOptions,
-) -> Result<Option<Vec<u64>>, CodecError> {
-    let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
-    let index_shape = sharding_index_shape(&chunks_per_shard);
-    let index_byte_range = get_index_byte_range(&index_shape, index_codecs, index_location)?;
-    let encoded_shard_index = input_handle.partial_decode(index_byte_range, options)?;
-    Ok(match encoded_shard_index {
-        Some(encoded_shard_index) => Some(decode_shard_index(
-            &encoded_shard_index,
-            &index_shape,
-            index_codecs,
-            options,
-        )?),
-        None => None,
-    })
-}
-
-#[cfg(feature = "async")]
-/// Returns `None` if there is no shard.
-async fn decode_shard_index_async_partial_decoder(
-    input_handle: &dyn zarrs_codec::AsyncBytesPartialDecoderTraits,
-    index_codecs: &CodecChainBound,
-    index_location: ShardingIndexLocation,
-    shard_shape: &[NonZeroU64],
-    subchunk_shape: &[NonZeroU64],
-    options: &CodecOptions,
-) -> Result<Option<Vec<u64>>, CodecError> {
-    let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
-    let index_shape = sharding_index_shape(&chunks_per_shard);
-    let index_byte_range = get_index_byte_range(&index_shape, index_codecs, index_location)?;
-    let encoded_shard_index = input_handle
-        .partial_decode(index_byte_range, options)
-        .await?;
-    Ok(match encoded_shard_index {
-        Some(encoded_shard_index) => Some(decode_shard_index(
-            &encoded_shard_index,
-            &index_shape,
-            index_codecs,
-            options,
-        )?),
-        None => None,
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use crate::array::codec::test_util::MemoryPartialDecoder;
+    use std::sync::Arc;
 
     use super::*;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
-    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, data_type};
+    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, FillValue, data_type};
     use zarrs_chunk_grid::Indexer;
     use zarrs_codec::{
         BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
@@ -734,6 +625,7 @@ mod tests {
 
     fn codec_sharding_round_trip_impl(
         options: &CodecOptions,
+        resources: &Resources,
         unbounded: bool,
         index_at_end: bool,
         fill_value_amount: &FillValueAmount,
@@ -789,9 +681,11 @@ mod tests {
             unbounded,
         );
         let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
-        let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
+        let encoded = codec
+            .encode(bytes.clone(), &chunk_shape, options, resources)
+            .unwrap();
         let decoded = codec
-            .decode(encoded.clone(), &chunk_shape, options)
+            .decode(encoded.clone(), &chunk_shape, options, resources)
             .unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
@@ -800,6 +694,7 @@ mod tests {
                 &encoded,
                 &[NonZeroU64::new(chunk_size / subchunk_size).unwrap(); NUM_AXES],
                 options,
+                resources,
             )
             .unwrap();
         match fill_value_amount {
@@ -856,10 +751,12 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options =
-                                CodecOptions::default().with_concurrent_target(concurrent_target);
+                            let options = CodecOptions::default();
+                            let resources =
+                                Resources::default().with_compute_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
+                                &resources,
                                 unbounded,
                                 index_at_end,
                                 &fill_value_amount,
@@ -888,10 +785,12 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options =
-                                CodecOptions::default().with_concurrent_target(concurrent_target);
+                            let options = CodecOptions::default();
+                            let resources =
+                                Resources::default().with_compute_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
+                                &resources,
                                 unbounded,
                                 index_at_end,
                                 &fill_value_amount,
@@ -1021,13 +920,14 @@ mod tests {
                     vec![],
                     unbounded,
                 );
-                let options =
-                    CodecOptions::default().with_concurrent_target(get_concurrent_target(parallel));
+                let options = CodecOptions::default();
+                let resources =
+                    Resources::default().with_compute_target(get_concurrent_target(parallel));
                 let encoded = codec
-                    .encode(bytes.clone(), &shard_shape_nz, &options)
+                    .encode(bytes.clone(), &shard_shape_nz, &options, &resources)
                     .unwrap();
                 let decoded = codec
-                    .decode(encoded.clone(), &shard_shape_nz, &options)
+                    .decode(encoded.clone(), &shard_shape_nz, &options, &resources)
                     .unwrap();
                 assert_eq!(bytes, decoded);
 
@@ -1036,7 +936,7 @@ mod tests {
                     .as_any()
                     .downcast_ref::<ShardingCodecBound>()
                     .unwrap()
-                    .decode_index(&encoded, chunks_per_shard.as_slice(), &options)
+                    .decode_index(&encoded, chunks_per_shard.as_slice(), &options, &resources)
                     .unwrap();
                 assert_eq!(index.len() as u64, chunks_per_shard.num_elements_u64() * 2);
                 assert_eq!(&index[..2], &[u64::MAX, u64::MAX]);
@@ -1053,7 +953,7 @@ mod tests {
                     vec![0u8; usize::try_from(output_shape.iter().product::<u64>()).unwrap() * 2];
                 codec
                     .decode_into(
-                        encoded,
+                        encoded.into(),
                         &shard_shape_nz,
                         zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
                             &mut super::indexer_tests::fixed_view(
@@ -1063,6 +963,7 @@ mod tests {
                             ),
                         ),
                         &options,
+                        &resources,
                     )
                     .unwrap();
                 let output: ArrayBytes = output.into();
@@ -1106,9 +1007,16 @@ mod tests {
                         unbounded,
                     );
                     let encoded = codec
-                        .encode(bytes.clone(), &shard_shape_nz, &options)
+                        .encode(
+                            bytes.clone(),
+                            &shard_shape_nz,
+                            &options,
+                            &Resources::default(),
+                        )
                         .unwrap();
-                    let decoded = codec.decode(encoded, &shard_shape_nz, &options).unwrap();
+                    let decoded = codec
+                        .decode(encoded, &shard_shape_nz, &options, &Resources::default())
+                        .unwrap();
                     assert_eq!(bytes, decoded);
                 }
             }
@@ -1144,6 +1052,7 @@ mod tests {
                             bytes.clone(),
                             &to_nonzero(&shard_shape),
                             &CodecOptions::default(),
+                            &Resources::default(),
                         )
                         .unwrap();
                     let indexers: Vec<Box<dyn Indexer>> = vec![
@@ -1183,36 +1092,15 @@ mod tests {
     fn codec_sharding_partial_decode_nondivisible() {
         let options = CodecOptions::default();
         for case in nondivisible_partial_decode_cases() {
-            let partial_decoder = case
-                .codec
-                .partial_decoder(Arc::new(case.encoded), &case.shard_shape, &options)
-                .unwrap();
+            let partial_decoder = MemoryPartialDecoder::new(
+                case.codec.clone(),
+                Some(case.encoded.to_vec()),
+                &case.shard_shape,
+            );
             for (indexer, expected) in case.expected {
                 assert_eq!(
                     partial_decoder
-                        .partial_decode(indexer.as_ref(), &options)
-                        .unwrap(),
-                    expected
-                );
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_sharding_async_partial_decode_nondivisible() {
-        let options = CodecOptions::default();
-        for case in nondivisible_partial_decode_cases() {
-            let partial_decoder = case
-                .codec
-                .async_partial_decoder(Arc::new(case.encoded), &case.shard_shape, &options)
-                .await
-                .unwrap();
-            for (indexer, expected) in case.expected {
-                assert_eq!(
-                    partial_decoder
-                        .partial_decode(indexer.as_ref(), &options)
-                        .await
+                        .partial_decode(indexer.as_ref(), &options, &Resources::default())
                         .unwrap(),
                     expected
                 );
@@ -1237,8 +1125,9 @@ mod tests {
         let bytes: ArrayBytes = vec![1u8; 65536].into();
         for index_at_end in [true, false] {
             for parallel in [true, false] {
-                let options =
-                    CodecOptions::default().with_concurrent_target(get_concurrent_target(parallel));
+                let options = CodecOptions::default();
+                let resources =
+                    Resources::default().with_compute_target(get_concurrent_target(parallel));
                 let codec = Arc::new(
                     ShardingCodecBuilder::new(subchunk_shape.clone(), &data_type::uint8())
                         .index_location(if index_at_end {
@@ -1255,8 +1144,12 @@ mod tests {
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
-                let encoded = codec.encode(bytes.clone(), &shard_shape, &options).unwrap();
-                let decoded = codec.decode(encoded, &shard_shape, &options).unwrap();
+                let encoded = codec
+                    .encode(bytes.clone(), &shard_shape, &options, &resources)
+                    .unwrap();
+                let decoded = codec
+                    .decode(encoded, &shard_shape, &options, &resources)
+                    .unwrap();
                 assert_eq!(bytes, decoded);
             }
         }
@@ -1265,6 +1158,7 @@ mod tests {
     #[cfg(feature = "async")]
     async fn codec_sharding_async_round_trip_impl(
         options: &CodecOptions,
+        resources: &Resources,
         unbounded: bool,
         index_at_end: bool,
         all_fill_value: bool,
@@ -1296,8 +1190,12 @@ mod tests {
                 .with_context(data_type, fill_value, &CodecSpecificOptions::default())
                 .unwrap();
 
-        let encoded = codec.encode(bytes.clone(), &shape, options).unwrap();
-        let decoded = codec.decode(encoded.clone(), &shape, options).unwrap();
+        let encoded = codec
+            .encode(bytes.clone(), &shape, options, resources)
+            .unwrap();
+        let decoded = codec
+            .decode(encoded.clone(), &shape, options, resources)
+            .unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
     }
@@ -1310,10 +1208,11 @@ mod tests {
                 for unbounded in [true, false] {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
-                        let options =
-                            CodecOptions::default().with_concurrent_target(concurrent_target);
+                        let options = CodecOptions::default();
+                        let resources = Resources::default().with_compute_target(concurrent_target);
                         codec_sharding_async_round_trip_impl(
                             &options,
+                            &resources,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -1328,6 +1227,7 @@ mod tests {
 
     fn codec_sharding_partial_decode(
         options: &CodecOptions,
+        resources: &Resources,
         unbounded: bool,
         index_at_end: bool,
         all_fill_value: bool,
@@ -1370,14 +1270,14 @@ mod tests {
         )
         .unwrap();
 
-        let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
-        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle, &chunk_shape, options)
+        let encoded = codec
+            .encode(bytes.clone(), &chunk_shape, options, resources)
             .unwrap();
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, options)
+            .partial_decode(&decoded_region, options, resources)
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
@@ -1398,100 +1298,15 @@ mod tests {
                 for unbounded in [true, false] {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
-                        let options =
-                            CodecOptions::default().with_concurrent_target(concurrent_target);
+                        let options = CodecOptions::default();
+                        let resources = Resources::default().with_compute_target(concurrent_target);
                         codec_sharding_partial_decode(
                             &options,
+                            &resources,
                             unbounded,
                             all_fill_value,
                             index_at_end,
                         );
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "async")]
-    async fn codec_sharding_async_partial_decode(
-        options: &CodecOptions,
-        unbounded: bool,
-        index_at_end: bool,
-        all_fill_value: bool,
-    ) {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_type::uint8();
-        let fill_value = FillValue::from(0u8);
-        let elements: Vec<u8> = if all_fill_value {
-            vec![0; chunk_shape.num_elements_usize()]
-        } else {
-            (0..chunk_shape.num_elements_usize() as u8).collect()
-        };
-        let answer: Vec<u8> = if all_fill_value {
-            vec![0, 0]
-        } else {
-            vec![4, 8]
-        };
-        let bytes: ArrayBytes = elements.into();
-
-        let bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>> = if unbounded {
-            vec![Arc::new(TestUnboundedCodec::new())]
-        } else {
-            vec![]
-        };
-        let codec = Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint8())
-                .index_location(if index_at_end {
-                    ShardingIndexLocation::End
-                } else {
-                    ShardingIndexLocation::Start
-                })
-                .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build(),
-        )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-        .unwrap();
-
-        let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
-        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, options)
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, options)
-            .await
-            .unwrap()
-            .into_fixed()
-            .unwrap();
-
-        let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|b| u8::from_ne_bytes(*b))
-            .collect();
-        assert_eq!(answer, decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_sharding_async_partial_decode_all() {
-        for index_at_end in [true, false] {
-            for all_fill_value in [true, false] {
-                for unbounded in [true, false] {
-                    for parallel in [true, false] {
-                        let concurrent_target = get_concurrent_target(parallel);
-                        let options =
-                            CodecOptions::default().with_concurrent_target(concurrent_target);
-                        codec_sharding_async_partial_decode(
-                            &options,
-                            unbounded,
-                            all_fill_value,
-                            index_at_end,
-                        )
-                        .await;
                     }
                 }
             }
@@ -1520,19 +1335,22 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes, &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(
-            partial_decoder.size_held(),
-            input_handle.size_held() + size_of::<u64>() * 2 * 2 * 2 * 2
-        ); // sharding partial decoder holds the shard index
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         println!("decoded_partial_chunk {decoded_partial_chunk:?}");
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
@@ -1563,19 +1381,22 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes, &chunk_shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(
-            partial_decoder.size_held(),
-            input_handle.size_held() + size_of::<u64>() * 2 * 2 * 2
-        ); // sharding partial decoder holds the shard index
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
@@ -1617,6 +1438,7 @@ mod tests {
                 original_bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         let original_size = original_encoded.len();
@@ -1627,39 +1449,30 @@ mod tests {
                 original_encoded.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(original_bytes, decoded);
 
         // Step 2: Update a subchunk using partial encoder
-        let input_output_handle = Arc::new(Mutex::new(Some(original_encoded.to_vec())));
+        let mut updated_encoded = Some(original_encoded.to_vec());
         {
             // Update a single subchunk (e.g., chunk at position [0, 1])
             let subchunk_subset = ArraySubset::new_with_ranges(&[0..2, 2..4]);
             let updated_elements: Vec<u16> = vec![100, 101, 102, 103]; // New values for this subchunk
             let updated_bytes = crate::array::transmute_to_bytes_vec(updated_elements);
-            let partial_encoder = codec
-                .clone()
-                .partial_encoder(
-                    input_output_handle.clone(),
-                    &chunk_shape,
-                    &CodecOptions::default(),
-                )
-                .unwrap();
-
-            partial_encoder
-                .partial_encode(
-                    &subchunk_subset,
-                    &ArrayBytes::from(updated_bytes),
-                    &CodecOptions::default(),
-                )
-                .unwrap();
+            zarrs_codec::plan::partial_encode_memory(
+                codec.clone(),
+                &mut updated_encoded,
+                &chunk_shape,
+                &subchunk_subset,
+                &ArrayBytes::from(updated_bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
+            .unwrap();
         }
-        let updated_encoded = Arc::try_unwrap(input_output_handle)
-            .unwrap()
-            .into_inner()
-            .expect("single ref")
-            .expect("non-empty shard");
+        let updated_encoded = updated_encoded.expect("non-empty shard");
 
         // The updated shard should be larger due to gaps from partial encoding
         let updated_size = updated_encoded.len();
@@ -1674,6 +1487,7 @@ mod tests {
                 updated_encoded.into(),
                 &chunk_shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         let compacted = compacted.expect("compaction should have occurred");
@@ -1687,7 +1501,12 @@ mod tests {
 
         // Verify the compacted shard decodes correctly
         let decoded_after_compact = codec
-            .decode(compacted.clone(), &chunk_shape, &CodecOptions::default())
+            .decode(
+                compacted.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         // Build expected result: original data with the updated subchunk
@@ -1707,6 +1526,7 @@ mod tests {
                 CowBytes::Borrowed(&compacted),
                 &chunk_shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert!(compacted_again.is_none());
@@ -1717,6 +1537,7 @@ mod tests {
                 CowBytes::Borrowed(&original_encoded),
                 &chunk_shape,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert!(original_compacted.is_none());

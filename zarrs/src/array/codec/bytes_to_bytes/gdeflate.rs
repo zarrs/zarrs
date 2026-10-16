@@ -234,6 +234,31 @@ fn gdeflate_decode(
     }
 }
 
+/// Decode into a buffer whose length must match the decoded length in the header.
+fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    if decoded_value.len() != header.decoded_len {
+        return Err(InvalidBytesLengthError::new(header.decoded_len, decoded_value.len()).into());
+    }
+
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = decoded_value;
+    for _ in 0..header.num_pages {
+        let (page, rest) =
+            remaining.split_at_mut(remaining.len().min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED));
+        pages.decode_next(page)?;
+        remaining = rest;
+    }
+    if remaining.is_empty() {
+        Ok(())
+    } else {
+        Err(
+            InvalidBytesLengthError::new(header.decoded_len - remaining.len(), header.decoded_len)
+                .into(),
+        )
+    }
+}
+
 struct GDeflateCompressor(*mut gdeflate_sys::libdeflate_gdeflate_compressor);
 
 impl GDeflateCompressor {
@@ -359,11 +384,13 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
 
     use super::*;
     use crate::array::{BytesRepresentation, CowBytes};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -421,17 +448,69 @@ mod tests {
         ] {
             let bytes: Vec<u8> = (0..len).map(|i| u8::try_from(i % 251).unwrap()).collect();
             let encoded = codec
-                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+                .encode(
+                    CowBytes::Borrowed(&bytes),
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded = codec
                 .decode(
                     encoded,
                     &BytesRepresentation::FixedSize(len as u64),
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
         }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gdeflate_decode_into() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        let options = CodecOptions::default();
+        let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        let len = decoded.len();
+        let encoded = codec
+            .encode(
+                CowBytes::from(decoded.as_slice()),
+                &options,
+                &Resources::default(),
+            )
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+                &Resources::default(),
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        let truncated = CowBytes::from(encoded[..encoded.len() - 10].to_vec());
+        assert!(decode_into(truncated, &mut output).is_err());
+        let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+        let mut corrupt = encoded.to_vec();
+        corrupt[header_length..].fill(0xFF);
+        assert!(decode_into(CowBytes::from(corrupt), &mut output).is_err());
     }
 
     /// Headers that are inconsistent with the encoded bytes are an error rather than a panic or a
@@ -449,6 +528,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::UnboundedSize,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
         };
         // The length of the page sizes overflows when added to the length of the static header
@@ -474,7 +554,8 @@ mod tests {
                 codec.decode(
                     CowBytes::from(encoded.clone()),
                     &representation,
-                    &CodecOptions::default()
+                    &CodecOptions::default(),
+                    &Resources::default()
                 ),
                 Err(CodecError::UnexpectedChunkDecodedSize(_))
             ));
@@ -490,6 +571,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .is_err()
         );
@@ -517,6 +599,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .is_err()
         );
@@ -532,7 +615,11 @@ mod tests {
             .map(|i| u8::try_from(i % 251).unwrap())
             .collect();
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .to_vec();
         let decode = |encoded: Vec<u8>| {
@@ -540,6 +627,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::FixedSize(bytes.len() as u64),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
         };
         assert!(decode(encoded.clone()).is_ok());
@@ -566,10 +654,19 @@ mod tests {
         let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -585,78 +682,24 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // gdeflate partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap()
-            .concat();
-
-        let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u16> = vec![2, 3, 5];
-        assert_eq!(answer, decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn codec_gdeflate_async_partial_decode() {
-        let elements: Vec<u16> = (0..8).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
-        let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
-
-        let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [
-            ByteRange::FromStart(4, Some(4)),
-            ByteRange::FromStart(10, Some(2)),
-        ];
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap()
-            .unwrap()
-            .concat();
+        let decoded_partial_chunk = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        )
+        .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .as_chunks::<2>()

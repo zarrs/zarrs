@@ -2,7 +2,7 @@
 
 use itertools::Itertools;
 use ndarray::ArrayD;
-use zarrs::array::bytes_to_ndarray;
+use zarrs::array::{Resources, bytes_to_ndarray};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_codec::CodecOptions;
@@ -15,6 +15,8 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::node::Node;
     use zarrs::storage::store;
 
+    let resources = Resources::default();
+
     // Create a store
     // let path = tempfile::TempDir::new()?;
     // let mut store: ReadableWritableListableStorage =
@@ -22,6 +24,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableWritableListableStorage = Arc::new(
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/sharded_array_write_read.zarr")?,
     // );
+
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
@@ -95,7 +98,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                         + ij[1] as u64) as u16
                 },
             );
-            array.store_chunk(&chunk_indices, chunk_array)
+            array.store_chunk(&chunk_indices, chunk_array, &resources)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices,
@@ -104,35 +107,36 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // Read the whole array
-    let data_all: ArrayD<u16> = array.retrieve_array_subset(&array.subset_all())?;
+    let data_all: ArrayD<u16> = array.retrieve_array_subset(&array.subset_all(), &resources)?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a shard back from the store
     let shard_indices = vec![1, 0];
-    let data_shard: ArrayD<u16> = array.retrieve_chunk(&shard_indices)?;
+    let data_shard: ArrayD<u16> = array.retrieve_chunk(&shard_indices, &resources)?;
     println!("Shard [1,0] is:\n{data_shard}\n");
 
     // Read a subchunk from the store
     let subset_chunk_1_0 = ArraySubset::new_with_ranges(&[4..8, 0..4]);
-    let data_chunk: ArrayD<u16> = array.retrieve_array_subset(&subset_chunk_1_0)?;
+    let data_chunk: ArrayD<u16> = array.retrieve_array_subset(&subset_chunk_1_0, &resources)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2: ArrayD<u16> = array.retrieve_array_subset(&subset_4x2)?;
+    let data_4x2: ArrayD<u16> = array.retrieve_array_subset(&subset_4x2, &resources)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     // Decode subchunks
     // In some cases, it might be preferable to decode subchunks in a shard directly.
     // If using the partial decoder, then the shard index will only be read once from the store.
-    let partial_decoder = array.partial_decoder(&[0, 0])?;
+    let partial_decoder = array.partial_decoder(&[0, 0], &resources)?;
     println!("Decoded subchunks:");
     for subchunk_subset in [
         ArraySubset::new_with_start_shape(vec![0, 0], subchunk_shape.clone())?,
         ArraySubset::new_with_start_shape(vec![0, 4], subchunk_shape.clone())?,
     ] {
         println!("{subchunk_subset}");
-        let decoded_subchunk_bytes = partial_decoder.partial_decode(&subchunk_subset, &options)?;
+        let decoded_subchunk_bytes =
+            partial_decoder.partial_decode(&subchunk_subset, &options, &resources)?;
         let ndarray = bytes_to_ndarray::<u16>(
             &subchunk_shape,
             decoded_subchunk_bytes.into_fixed()?.into_vec(),

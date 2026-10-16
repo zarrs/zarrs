@@ -34,7 +34,6 @@
 //! ```
 
 mod bitround_codec;
-mod bitround_codec_partial;
 
 use std::sync::Arc;
 
@@ -83,6 +82,8 @@ fn round_bytes(
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -91,10 +92,7 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::{
-        CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
-        UnboundArrayToBytesCodecTraits,
-    };
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
 
     #[test]
     fn codec_bitround_float() {
@@ -125,10 +123,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<f32>(decoded.into_fixed().unwrap().into_vec());
@@ -170,10 +178,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<u32>(decoded.into_fixed().unwrap().into_vec());
@@ -202,10 +220,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<u32>(decoded.into_fixed().unwrap().into_vec());
@@ -225,30 +253,20 @@ mod tests {
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
-        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-            .unwrap();
 
-        let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
-            .unwrap()
-            .into_owned();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let bytes_codec = bytes_codec
-            .with_context(
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .unwrap();
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bitround partial decoder does not hold bytes
+        let partial_decoder = MemoryPartialDecoder::encode(
+            chain(
+                vec![Arc::new(
+                    BitroundCodec::new_with_configuration(&codec_configuration).unwrap(),
+                )],
+                Arc::new(BytesCodec::default()),
+                vec![],
+                data_type,
+                fill_value,
+            ),
+            bytes,
+            &shape,
+        );
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[3..5]),
             ArraySubset::new_with_ranges(&[17..21]),
@@ -256,66 +274,11 @@ mod tests {
         let answer: &[Vec<f32>] = &[vec![3.0, 4.0], vec![16.0, 16.0, 20.0, 20.0]];
         for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .unwrap();
-            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
-                &decoded_partial_chunk.into_fixed().unwrap(),
-            );
-            assert_eq!(expected, &decoded_partial_chunk);
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_bitround_async_partial_decode() {
-        use zarrs_data_type::FillValue;
-
-        const JSON: &str = r#"{ "keepbits": 2 }"#;
-        let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
-
-        let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = data_type::float32();
-        let fill_value = FillValue::from(0.0f32);
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes = ArrayBytes::from(bytes);
-        let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(
-                data_type.clone(),
-                fill_value.clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-
-        let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let bytes_codec = bytes_codec
-            .with_context(
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .await
-            .unwrap();
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .await
-            .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[3..5]),
-            ArraySubset::new_with_ranges(&[17..21]),
-        ];
-        let answer: &[Vec<f32>] = &[vec![3.0, 4.0], vec![16.0, 16.0, 20.0, 20.0]];
-        for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .await
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),

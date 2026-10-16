@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
+- Add `ReadCoalescing` and `[Async]ReadableStorageTraits::read_coalescing`, a hint of how reads of nearby byte ranges of a value should be coalesced into one request (default none)
+  - The storage adapters and `StorageHandle` forward the hint of their storage
 
 ### Changed
 - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
 - Bump `itertools` to 0.15.0
 - Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
+- Convert the value and drop a replaced or erased value outside of the lock in `MemoryStore::{set,erase}`, and clone the key only when it is inserted
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed

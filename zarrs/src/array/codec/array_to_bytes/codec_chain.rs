@@ -6,29 +6,37 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
-use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
+use zarrs_codec::plan::{
+    ArrayToArrayDecodePlan, ByteSource, DecodeRequest, DecodedDecoder, Join, MissingDecoder,
+    Outcome, PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey,
+    SourceStep, Task, TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value,
+    is_whole_chunk, local_subchunk_grids, local_subchunk_grids_value, place_decoded,
+    plan_decode_whole, plan_encode_whole, whole_chunk_hint,
+};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeSource, BytesToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
-};
-#[cfg(feature = "async")]
-use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    PartialDecoderCapability, PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_storage::byte_range::ByteRange;
 
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
+
+/// The error of a codec of a chain that plans partial encodes not planning a partial encode.
+fn not_partially_encoded() -> CodecError {
+    CodecError::Other(
+        "a codec that plans partial encodes did not plan a partial encode".to_string(),
+    )
+}
 
 fn cumulative_boundaries(edge_lengths: &[NonZeroU64]) -> Vec<u64> {
     let mut offset = 0;
@@ -95,6 +103,8 @@ pub struct CodecChainBound {
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     cache_index: Option<usize>, // for partial decoders
+    /// The array-to-bytes and bytes-to-bytes codecs of the chain, if it has array-to-array codecs (for planning).
+    bytes_chain: Option<Arc<CodecChainBound>>,
 }
 
 impl CodecChain {
@@ -178,11 +188,22 @@ impl CodecChain {
             (None, None) => None,
         };
 
+        let bytes_chain = (!array_to_array.is_empty()).then(|| {
+            Arc::new(CodecChainBound {
+                array_to_array: vec![],
+                array_to_bytes: array_to_bytes.clone(),
+                bytes_to_bytes: bytes_to_bytes.clone(),
+                cache_index: None,
+                bytes_chain: None,
+            })
+        });
+
         Ok(Arc::new(CodecChainBound {
             array_to_array,
             array_to_bytes,
             bytes_to_bytes,
             cache_index,
+            bytes_chain,
         }))
     }
 
@@ -304,7 +325,174 @@ impl CodecChain {
     }
 }
 
+/// A prepared decoder of a chain with array-to-array codecs, which maps each request through the array-to-array
+/// codecs to the prepared decoder of the rest of the chain.
+#[derive(Debug)]
+struct ArrayToArrayDecoder {
+    chain: Arc<CodecChainBound>,
+    shape: smallvec::SmallVec<[NonZeroU64; 4]>,
+    inner: Arc<dyn PreparedDecoder>,
+}
+
+impl PreparedDecoder for ArrayToArrayDecoder {
+    fn plan_decode<'a>(
+        self: Arc<Self>,
+        request: DecodeRequest<'a>,
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        self.chain
+            .plan_decode_array_to_array(&self.shape, request, options, |_, request| {
+                self.inner.clone().plan_decode(request, options)
+            })
+    }
+
+    fn exists(&self) -> Option<bool> {
+        self.inner.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.inner.size_held()
+    }
+}
+
 impl CodecChainBound {
+    /// Plan decoding through the array-to-array codecs, then the rest of the chain with `plan_inner`, which plans a
+    /// request of the encoded shape of the array-to-array codecs.
+    fn plan_decode_array_to_array<'a>(
+        &self,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+        options: &CodecOptions,
+        plan_inner: impl FnOnce(&[NonZeroU64], DecodeRequest<'a>) -> Result<Task<'a>, CodecError>,
+    ) -> Result<Task<'a>, CodecError> {
+        // Map the request through each array-to-array codec, outermost first
+        let array_representations = self.get_array_representations(shape)?;
+        let mut request = request;
+        let mut finishes = Vec::new();
+        for (codec, (decoded_shape, _, _)) in
+            std::iter::zip(&self.array_to_array, &array_representations)
+        {
+            match codec.plan_decode_request(decoded_shape, request)? {
+                ArrayToArrayDecodePlan::Forward(inner) => request = inner,
+                ArrayToArrayDecodePlan::Decode {
+                    indexer,
+                    shape,
+                    target,
+                } => {
+                    finishes.push((codec.clone(), shape, target));
+                    request = DecodeRequest {
+                        indexer,
+                        target: TaskTarget::Value,
+                    };
+                }
+            }
+        }
+        let (encoded_shape, _, _) = array_representations.last().expect("nonempty");
+        let inner = plan_inner(encoded_shape, request)?;
+        if finishes.is_empty() {
+            return Ok(inner);
+        }
+
+        // Decode the decoded value with each codec that decodes, innermost first
+        let options = *options;
+        Ok(Task::compute(move |_| {
+            Ok(Outcome::Fork {
+                children: vec![inner],
+                join: Join::new(move |mut values, ctx| {
+                    let Some(TaskValue::Array(mut bytes)) = values.pop() else {
+                        return Err(CodecError::Other(
+                            "expected decoded array bytes".to_string(),
+                        ));
+                    };
+                    let mut finishes = finishes.into_iter().rev().peekable();
+                    while let Some((codec, shape, target)) = finishes.next() {
+                        bytes = codec.decode(bytes, &shape, &options, ctx.resources())?;
+                        // Only the outermost codec that decodes has the target of the request
+                        if finishes.peek().is_none() {
+                            return place_decoded(bytes, target);
+                        }
+                    }
+                    unreachable!("at least one codec decodes")
+                }),
+            })
+        }))
+    }
+
+    /// Strip the windows of the outermost bytes-to-bytes codecs whose decoded bytes are a window of their encoded bytes
+    /// from `source`.
+    ///
+    /// Returns the source of the encoded bytes of the remaining codecs, and the number of remaining codecs.
+    fn strip_windows<'a>(
+        &self,
+        mut source: ByteSource<'a>,
+    ) -> Result<(ByteSource<'a>, usize), CodecError> {
+        let mut num_materialized = self.bytes_to_bytes.len();
+        for codec in self.bytes_to_bytes.iter().rev() {
+            let SourceStep::Window { prefix, suffix } = codec.source_step() else {
+                break;
+            };
+            source = source.strip(prefix, suffix)?;
+            num_materialized -= 1;
+        }
+        Ok((source, num_materialized))
+    }
+
+    /// The source of the encoded bytes of the array-to-bytes codec, given the `encoded` bytes of the innermost
+    /// `num_materialized` bytes-to-bytes codecs of a chain without array-to-array codecs.
+    ///
+    /// The innermost codec may decode only the requested ranges of its decoded bytes, otherwise the codecs are decoded.
+    fn decoded_source<'a>(
+        &self,
+        encoded: CowBytes<'a>,
+        shape: &[NonZeroU64],
+        num_materialized: usize,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<ByteSource<'a>, CodecError> {
+        if let SourceStep::RangeDecode(decoder) = self.bytes_to_bytes[0].source_step() {
+            let bytes = self.decode_bytes_to_bytes(
+                encoded,
+                shape,
+                1..num_materialized,
+                options,
+                resources,
+            )?;
+            let decoded_representation = self.array_to_bytes.encoded_representation(shape)?;
+            Ok(ByteSource::range_decoded(
+                bytes,
+                decoder,
+                decoded_representation,
+            )?)
+        } else {
+            Ok(ByteSource::memory(self.decode_bytes_to_bytes(
+                encoded,
+                shape,
+                0..num_materialized,
+                options,
+                resources,
+            )?))
+        }
+    }
+
+    /// Decode `bytes` through the bytes-to-bytes `codecs` (indices, innermost first) of a chain without array-to-array codecs.
+    fn decode_bytes_to_bytes<'a>(
+        &self,
+        mut bytes: CowBytes<'a>,
+        shape: &[NonZeroU64],
+        codecs: std::ops::Range<usize>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<CowBytes<'a>, CodecError> {
+        let bytes_representations = self.get_bytes_representations(shape)?;
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes[codecs.clone()].iter().rev(),
+            bytes_representations[codecs].iter().rev(),
+        ) {
+            bytes = codec.decode(bytes, bytes_representation, options, resources)?;
+        }
+        Ok(bytes)
+    }
+
     fn get_array_representations(
         &self,
         shape: &[NonZeroU64],
@@ -432,11 +620,6 @@ impl CodecTraits for CodecChain {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl UnboundArrayToBytesCodecTraits for CodecChain {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
@@ -517,11 +700,6 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for CodecChainBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -532,6 +710,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
 
@@ -539,16 +718,18 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         // array->array
         for codec in &self.array_to_array {
-            bytes = codec.encode(bytes, &shape, options)?;
+            bytes = codec.encode(bytes, &shape, options, resources)?;
             shape = codec.encoded_shape(&shape)?;
         }
 
         // array->bytes
-        let mut bytes = self.array_to_bytes.encode(bytes, &shape, options)?;
+        let mut bytes = self
+            .array_to_bytes
+            .encode(bytes, &shape, options, resources)?;
 
         // bytes->bytes
         for codec in &self.bytes_to_bytes {
-            bytes = codec.encode(bytes, options)?;
+            bytes = codec.encode(bytes, options, resources)?;
         }
 
         Ok(bytes)
@@ -559,6 +740,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
@@ -567,20 +749,23 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
         ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
+            bytes = codec.decode(bytes, bytes_representation, options, resources)?;
         }
 
         // bytes->array
-        let mut bytes =
-            self.array_to_bytes
-                .decode(bytes, &array_representations.last().unwrap().0, options)?;
+        let mut bytes = self.array_to_bytes.decode(
+            bytes,
+            &array_representations.last().unwrap().0,
+            options,
+            resources,
+        )?;
 
         // array->array
         for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
-            bytes = codec.decode(bytes, shape, options)?;
+            bytes = codec.decode(bytes, shape, options, resources)?;
         }
 
         let (shape, data_type, _) = array_representations.first().unwrap();
@@ -591,52 +776,68 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        mut bytes: CowBytes<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
-        if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
-            // Fast path if no bytes to bytes or array to array codecs
+        if self.array_to_array.is_empty() {
+            let input = if let Some((last, rest)) = self.bytes_to_bytes.split_first() {
+                let mut bytes = input.into_bytes(options, resources)?;
+                for (codec, representation) in std::iter::zip(
+                    rest.iter().rev(),
+                    bytes_representations[1..self.bytes_to_bytes.len()]
+                        .iter()
+                        .rev(),
+                ) {
+                    bytes = codec.decode(bytes, representation, options, resources)?;
+                }
+                // Leave placement of the final decode to the array-to-bytes receiver.
+                ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    last.as_ref(),
+                    bytes,
+                    bytes_representations[0],
+                ))
+            } else {
+                // Transparent nested chains must not materialise a deferred input.
+                input
+            };
             return self.array_to_bytes.decode_into(
-                bytes,
+                input,
                 &array_representations.last().unwrap().0,
                 output_target,
                 options,
+                resources,
             );
         }
+
+        let mut bytes = input.into_bytes(options, resources)?;
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
         ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
-        }
-
-        // Fast path if no array to array codecs
-        if self.array_to_array.is_empty() {
-            return self.array_to_bytes.decode_into(
-                bytes,
-                &array_representations.last().unwrap().0,
-                output_target,
-                options,
-            );
+            bytes = codec.decode(bytes, bytes_representation, options, resources)?;
         }
 
         // bytes->array
-        let mut bytes =
-            self.array_to_bytes
-                .decode(bytes, &array_representations.last().unwrap().0, options)?;
+        let mut bytes = self.array_to_bytes.decode(
+            bytes,
+            &array_representations.last().unwrap().0,
+            options,
+            resources,
+        )?;
 
         // array->array
         for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
-            bytes = codec.decode(bytes, shape, options)?;
+            bytes = codec.decode(bytes, shape, options, resources)?;
         }
 
         let (shape, data_type, _) = array_representations.first().unwrap();
@@ -645,11 +846,394 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
+    fn plan_decode<'a>(
+        self: Arc<Self>,
+        source: ByteSource<'a>,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        if let Some(bytes_chain) = self.bytes_chain.clone() {
+            if is_whole_chunk(request.indexer.as_indexer(), shape) {
+                return plan_decode_whole(self, source, shape, request, options);
+            }
+            return self.plan_decode_array_to_array(
+                shape,
+                request,
+                options,
+                |encoded_shape, request| {
+                    bytes_chain.plan_decode(source, encoded_shape, request, options)
+                },
+            );
+        }
+        if self.bytes_to_bytes.is_empty() {
+            return self
+                .array_to_bytes
+                .clone()
+                .plan_decode(source, shape, request, options);
+        }
+
+        request
+            .indexer
+            .as_indexer()
+            .validate(bytemuck::must_cast_slice(shape))?;
+        let hint = whole_chunk_hint(&*self, &source, shape);
+        let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+
+        // Whole chunks are read and decoded directly into the target (or the fill value)
+        if is_whole_chunk(request.indexer.as_indexer(), &shape) {
+            return Ok(Task::read(
+                source,
+                [ByteRange::FromStart(0, None)],
+                move |mut reads, ctx| {
+                    decode_whole(
+                        &*self,
+                        reads.pop().flatten().map(ArrayBytesDecodeIntoInput::Bytes),
+                        &shape,
+                        request,
+                        &options,
+                        ctx.resources(),
+                    )
+                },
+            )
+            .with_hint(hint));
+        }
+
+        // Partial reads pass through codecs whose decoded bytes are a window of their encoded bytes
+        let (source, num_materialized) = self.strip_windows(source)?;
+        if num_materialized == 0 {
+            return self
+                .array_to_bytes
+                .clone()
+                .plan_decode(source, &shape, request, &options);
+        }
+
+        // Read the entire input, decode the remaining bytes-to-bytes codecs, and plan the array-to-bytes codec on the decoded bytes
+        Ok(Task::read(
+            source,
+            [ByteRange::FromStart(0, None)],
+            move |mut reads, ctx| {
+                let Some(encoded) = reads.pop().flatten() else {
+                    return decode_whole(&*self, None, &shape, request, &options, ctx.resources());
+                };
+                let decoded_source = self.decoded_source(
+                    encoded,
+                    &shape,
+                    num_materialized,
+                    &options,
+                    ctx.resources(),
+                )?;
+                // A task with an in-memory source runs immediately, without a separate task.
+                self.array_to_bytes
+                    .clone()
+                    .plan_decode(decoded_source, &shape, request, &options)?
+                    .run_without_io(ctx)
+            },
+        )
+        .with_hint(hint))
+    }
+
+    fn plans_subtasks(&self) -> bool {
+        self.array_to_bytes.plans_subtasks()
+    }
+
+    fn plan_local_subchunk_grids<'a>(
+        self: Arc<Self>,
+        source: ByteSource<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        if let Some(bytes_chain) = self.bytes_chain.clone() {
+            // Map the grids of the encoded chunk through each array-to-array codec, innermost first
+            let decoded_shapes: Vec<ChunkShape> = self
+                .get_array_representations(shape)?
+                .into_iter()
+                .map(|(shape, _, _)| shape)
+                .collect();
+            let encoded_shape = decoded_shapes.last().expect("nonempty");
+            let inner = bytes_chain.plan_local_subchunk_grids(source, encoded_shape, options)?;
+            return Ok(Task::compute(move |_| {
+                Ok(Outcome::Fork {
+                    children: vec![inner],
+                    join: Join::new(move |mut values, _ctx| {
+                        let mut grids = local_subchunk_grids(values.pop().unwrap_or_default())?;
+                        for (codec, shape) in
+                            std::iter::zip(&self.array_to_array, &decoded_shapes).rev()
+                        {
+                            grids = grids
+                                .into_iter()
+                                .map(|grid| {
+                                    grid.map_or(Ok(None), |grid| {
+                                        codec.decoded_local_subchunk_grid(shape, &grid)
+                                    })
+                                })
+                                .collect::<Result<_, _>>()?;
+                        }
+                        Ok(Outcome::Value(local_subchunk_grids_value(grids)))
+                    }),
+                })
+            }));
+        }
+
+        // Grids are resolved through codecs whose decoded bytes are a window of their encoded bytes
+        let (source, num_materialized) = self.strip_windows(source)?;
+        if num_materialized == 0 {
+            return self
+                .array_to_bytes
+                .clone()
+                .plan_local_subchunk_grids(source, shape, options);
+        }
+
+        // Otherwise, read the entire input and decode the remaining bytes-to-bytes codecs
+        let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+        Ok(Task::read(
+            source.clone(),
+            [ByteRange::FromStart(0, None)],
+            move |mut reads, ctx| {
+                let Some(encoded) = reads.pop().flatten() else {
+                    // The chunk does not exist, so the array-to-bytes codec resolves the grids of a missing chunk
+                    let task = self
+                        .array_to_bytes
+                        .clone()
+                        .plan_local_subchunk_grids(source, &shape, &options)?;
+                    return Ok(Outcome::Fork {
+                        children: vec![task],
+                        join: Join::new(|mut values, _ctx| {
+                            Ok(Outcome::Value(values.pop().unwrap_or_default()))
+                        }),
+                    });
+                };
+                let decoded_source = self.decoded_source(
+                    encoded,
+                    &shape,
+                    num_materialized,
+                    &options,
+                    ctx.resources(),
+                )?;
+                // The source is in memory, so the task runs immediately
+                self.array_to_bytes
+                    .clone()
+                    .plan_local_subchunk_grids(decoded_source, &shape, &options)?
+                    .run_without_io(ctx)
+            },
+        ))
+    }
+
+    fn plan_encode<'a>(
+        self: Arc<Self>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        if !self.array_to_bytes.plans_encode_subtasks() {
+            return plan_encode_whole(self, bytes, shape, options);
+        }
+        bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
+        if self.array_to_array.is_empty() && self.bytes_to_bytes.is_empty() {
+            return self
+                .array_to_bytes
+                .clone()
+                .plan_encode(bytes, shape, options);
+        }
+
+        // Encode the array-to-array codecs, then plan the array-to-bytes codec, and encode its value with the
+        // bytes-to-bytes codecs
+        let hint = encode_hint(&bytes);
+        let shape = ChunkShape::from(shape.to_vec());
+        let options = *options;
+        Ok(Task::compute(move |ctx| {
+            let (mut bytes, mut shape) = (bytes, shape);
+            for codec in &self.array_to_array {
+                bytes = codec.encode(bytes, &shape, &options, ctx.resources())?;
+                shape = codec.encoded_shape(&shape)?;
+            }
+            let task = self
+                .array_to_bytes
+                .clone()
+                .plan_encode(bytes, &shape, &options)?;
+            Ok(Outcome::Fork {
+                children: vec![task],
+                join: Join::new(move |mut values, ctx| {
+                    let mut bytes = encoded_value(values.pop().unwrap_or_default())?;
+                    for codec in &self.bytes_to_bytes {
+                        bytes = codec.encode(bytes, &options, ctx.resources())?;
+                    }
+                    Ok(Outcome::Value(TaskValue::Bytes(Some(bytes))))
+                }),
+            })
+        })
+        .with_hint(hint))
+    }
+
+    fn plans_encode_subtasks(&self) -> bool {
+        self.array_to_bytes.plans_encode_subtasks()
+    }
+
+    fn plan_partial_encode<'a>(
+        self: Arc<Self>,
+        key: SourceKey,
+        shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        state: Option<PartialEncodeState>,
+        options: &CodecOptions,
+    ) -> Result<Option<Task<'a>>, CodecError> {
+        if !self.plans_partial_encode() {
+            return Ok(None);
+        }
+        bytes.validate(indexer.as_indexer().len(), self.data_type())?;
+        if self.array_to_array.is_empty() {
+            return self
+                .array_to_bytes
+                .clone()
+                .plan_partial_encode(key, shape, indexer, bytes, state, options);
+        }
+
+        // Map the partial encode through the array-to-array codecs, then plan it with the array-to-bytes codec
+        let hint = encode_hint(&bytes);
+        let shape = ChunkShape::from(shape.to_vec());
+        let options = *options;
+        Ok(Some(
+            Task::compute(move |ctx| {
+                let (mut indexer, mut bytes, mut shape) = (indexer, bytes, shape);
+                for codec in &self.array_to_array {
+                    (indexer, bytes) = codec
+                        .partial_encode_request(&shape, indexer, bytes, &options, ctx.resources())?
+                        .ok_or_else(not_partially_encoded)?;
+                    shape = codec.encoded_shape(&shape)?;
+                }
+                let task = self
+                    .array_to_bytes
+                    .clone()
+                    .plan_partial_encode(key, &shape, indexer, bytes, state, &options)?
+                    .ok_or_else(not_partially_encoded)?;
+                Ok(Outcome::Fork {
+                    children: vec![task],
+                    join: Join::new(|mut values, _ctx| {
+                        Ok(Outcome::Value(values.pop().unwrap_or_default()))
+                    }),
+                })
+            })
+            .with_hint(hint),
+        ))
+    }
+
+    fn plans_partial_encode(&self) -> bool {
+        // The array-to-array codecs map a partial encode to the array-to-bytes codec, but a partial encode cannot be
+        // mapped through bytes-to-bytes codecs
+        self.bytes_to_bytes.is_empty()
+            && self
+                .array_to_array
+                .iter()
+                .all(|codec| codec.plans_partial_encode())
+            && self.array_to_bytes.plans_partial_encode()
+    }
+
+    fn prepare_decode(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<PrepareDecode, CodecError> {
+        if self
+            .cache_index
+            .is_some_and(|index| index > self.bytes_to_bytes.len())
+        {
+            // An array codec cannot decode part of a chunk, so decode the whole chunk once
+            let hint = whole_chunk_hint(&*self, &source, shape);
+            let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+            let options = *options;
+            return Ok(PrepareDecode::Plan(
+                Task::read(
+                    source,
+                    [ByteRange::FromStart(0, None)],
+                    move |mut reads, ctx| {
+                        let decoder: Arc<dyn PreparedDecoder> = if let Some(encoded) =
+                            reads.pop().flatten()
+                        {
+                            let bytes = self
+                                .decode(encoded, &shape, &options, ctx.resources())?
+                                .into_owned();
+                            Arc::new(DecodedDecoder::new(bytes, &shape, self.data_type().clone()))
+                        } else {
+                            Arc::new(MissingDecoder::new(self.into_dyn(), &shape))
+                        };
+                        Ok(Outcome::Value(TaskValue::Prepared(decoder)))
+                    },
+                )
+                .with_hint(hint),
+            ));
+        }
+        if let Some(bytes_chain) = self.bytes_chain.clone() {
+            // Requests are mapped through the array-to-array codecs as they are planned
+            let array_representations = self.get_array_representations(shape)?;
+            let (encoded_shape, _, _) = array_representations.last().expect("nonempty");
+            let shape = shape.into();
+            return Ok(bytes_chain
+                .prepare_decode(source, encoded_shape, options)?
+                .map(move |inner| {
+                    Arc::new(ArrayToArrayDecoder {
+                        chain: self,
+                        shape,
+                        inner,
+                    })
+                }));
+        }
+
+        let hint = whole_chunk_hint(&*self, &source, shape);
+        let (source, num_materialized) = self.strip_windows(source)?;
+        if num_materialized == 0 {
+            return self
+                .array_to_bytes
+                .clone()
+                .prepare_decode(source, shape, options);
+        }
+
+        // Read the entire input and decode the remaining bytes-to-bytes codecs once, then prepare the array-to-bytes
+        // codec on the decoded bytes
+        let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+        Ok(PrepareDecode::Plan(
+            Task::read(
+                source,
+                [ByteRange::FromStart(0, None)],
+                move |mut reads, ctx| {
+                    let Some(encoded) = reads.pop().flatten() else {
+                        let decoder = MissingDecoder::new(self.into_dyn(), &shape);
+                        return Ok(Outcome::Value(TaskValue::Prepared(Arc::new(decoder))));
+                    };
+                    let decoded_source = self.decoded_source(
+                        encoded,
+                        &shape,
+                        num_materialized,
+                        &options,
+                        ctx.resources(),
+                    )?;
+                    match self.array_to_bytes.clone().prepare_decode(
+                        decoded_source,
+                        &shape,
+                        &options,
+                    )? {
+                        PrepareDecode::Ready(decoder) => {
+                            Ok(Outcome::Value(TaskValue::Prepared(decoder)))
+                        }
+                        // The source is in memory, so the task runs immediately
+                        PrepareDecode::Plan(task) => task.run_without_io(ctx),
+                    }
+                },
+            )
+            .with_hint(hint),
+        ))
+    }
+
     fn compact<'a>(
         &self,
         mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
@@ -658,7 +1242,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
         ) {
-            bytes = codec.decode(bytes, bytes_representation, options)?;
+            bytes = codec.decode(bytes, bytes_representation, options, resources)?;
         }
 
         // Compact at the array_to_bytes level (e.g., ShardingCodec compact)
@@ -666,13 +1250,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             bytes,
             &array_representations.last().unwrap().0,
             options,
+            resources,
         )?;
 
         // If compaction occurred, re-encode through bytes_to_bytes codecs
         if let Some(mut compacted_bytes) = compacted {
             let mut bytes_representation = *bytes_representations.first().unwrap();
             for codec in &self.bytes_to_bytes {
-                compacted_bytes = codec.encode(compacted_bytes, options)?;
+                compacted_bytes = codec.encode(compacted_bytes, options, resources)?;
                 bytes_representation = codec.encoded_representation(&bytes_representation);
             }
             Ok(Some(compacted_bytes))
@@ -681,232 +1266,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-        let mut codec_index = 0;
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-            }
-            codec_index += 1;
-            input_handle =
-                Arc::clone(codec).partial_decoder(input_handle, bytes_representation, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-        }
-
-        let mut input_handle = {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
-            codec_index += 1;
-            self.array_to_bytes
-                .clone()
-                .partial_decoder(input_handle, shape, options)?
-        };
-
-        for (codec, representations) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.windows(2).rev(),
-        ) {
-            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
-                unreachable!()
-            };
-            if Some(codec_index) == self.cache_index {
-                // The cache wraps the input handle, which decodes to this codec's encoded representation
-                input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                    &*input_handle,
-                    encoded_shape.clone(),
-                    encoded_data_type.clone(),
-                    options,
-                )?);
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .partial_decoder(input_handle, shape, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            let (shape, data_type, _fill_value) = array_representations.first().unwrap();
-            input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                &*input_handle,
-                shape.clone(),
-                data_type.clone(),
-                options,
-            )?);
-        }
-
-        Ok(input_handle)
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle = Arc::clone(codec).partial_encoder(
-                input_output_handle,
-                bytes_representation,
-                options,
-            )?;
-        }
-
-        let mut input_output_handle = self.array_to_bytes.clone().partial_encoder(
-            input_output_handle,
-            &array_representations.last().unwrap().0,
-            options,
-        )?;
-
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle =
-                codec
-                    .clone()
-                    .partial_encoder(input_output_handle, shape, options)?;
-        }
-
-        Ok(input_output_handle)
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        mut input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-        let mut codec_index = 0;
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle =
-                    Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .async_partial_decoder(input_handle, bytes_representation, options)
-                .await?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            input_handle =
-                Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
-        }
-
-        let mut input_handle = {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
-            codec_index += 1;
-            self.array_to_bytes
-                .clone()
-                .async_partial_decoder(input_handle, shape, options)
-                .await?
-        };
-
-        for (codec, representations) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.windows(2).rev(),
-        ) {
-            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
-                unreachable!()
-            };
-            if Some(codec_index) == self.cache_index {
-                // The cache wraps the input handle, which decodes to this codec's encoded representation
-                input_handle = Arc::new(
-                    ArrayPartialDecoderCache::async_new(
-                        &*input_handle,
-                        encoded_shape.clone(),
-                        encoded_data_type.clone(),
-                        options,
-                    )
-                    .await?,
-                );
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .async_partial_decoder(input_handle, shape, options)
-                .await?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            let (shape, data_type, _fill_value) = array_representations.first().unwrap();
-            input_handle = Arc::new(
-                ArrayPartialDecoderCache::async_new(
-                    &*input_handle,
-                    shape.clone(),
-                    data_type.clone(),
-                    options,
-                )
-                .await?,
-            );
-        }
-
-        Ok(input_handle)
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        mut input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle = codec
-                .clone()
-                .async_partial_encoder(input_output_handle, bytes_representation, options)
-                .await?;
-        }
-
-        let mut input_output_handle = self
-            .array_to_bytes
-            .clone()
-            .async_partial_encoder(
-                input_output_handle,
-                &array_representations.last().unwrap().0,
-                options,
-            )
-            .await?;
-
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            input_output_handle = codec
-                .clone()
-                .async_partial_encoder(input_output_handle, shape, options)
-                .await?;
-        }
-
-        Ok(input_output_handle)
-    }
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
@@ -939,54 +1298,6 @@ impl ArrayCodecTraits for CodecChainBound {
             || self.array_to_bytes.fill_value(),
             |codec| codec.fill_value(),
         )
-    }
-
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        let mut concurrency_min = usize::MAX;
-        let mut concurrency_max = 0;
-
-        let array_representations = self.get_array_representations(shape)?;
-        let bytes_representations = self.get_bytes_representations(
-            &array_representations
-                .last()
-                .expect("array representations is non-empty")
-                .0,
-        )?;
-
-        // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            let recommended_concurrency = &codec.recommended_concurrency(bytes_representation)?;
-            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
-        }
-
-        let recommended_concurrency = self
-            .array_to_bytes
-            .recommended_concurrency(&array_representations.last().unwrap().0)?;
-        concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-        concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
-
-        // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            let recommended_concurrency = codec.recommended_concurrency(shape)?;
-            concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
-            concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
-        }
-
-        let recommended_concurrency = RecommendedConcurrency::new(
-            std::cmp::min(concurrency_min, concurrency_max)..concurrency_max,
-        );
-
-        Ok(recommended_concurrency)
     }
 }
 
@@ -1100,13 +1411,6 @@ mod tests {
             self
         }
 
-        fn recommended_concurrency(
-            &self,
-            _decoded_representation: &BytesRepresentation,
-        ) -> Result<RecommendedConcurrency, CodecError> {
-            Ok(RecommendedConcurrency::new_maximum(1))
-        }
-
         fn encoded_representation(
             &self,
             decoded_representation: &BytesRepresentation,
@@ -1124,6 +1428,7 @@ mod tests {
             &self,
             decoded_value: CowBytes<'a>,
             _options: &CodecOptions,
+            _resources: &Resources,
         ) -> Result<CowBytes<'a>, CodecError> {
             let mut encoded = decoded_value.into_vec();
             encoded.push(0);
@@ -1133,27 +1438,17 @@ mod tests {
         fn decode<'a>(
             &self,
             encoded_value: CowBytes<'a>,
-            _decoded_representation: &BytesRepresentation,
+            decoded_representation: &BytesRepresentation,
             _options: &CodecOptions,
+            _resources: &Resources,
         ) -> Result<CowBytes<'a>, CodecError> {
+            assert_eq!(
+                decoded_representation,
+                &self.expected_decoded_representation
+            );
             Ok(CowBytes::from(
                 encoded_value[..encoded_value.len() - 1].to_vec(),
             ))
-        }
-
-        fn partial_decoder(
-            self: Arc<Self>,
-            input_handle: Arc<dyn BytesPartialDecoderTraits>,
-            decoded_representation: &BytesRepresentation,
-            _options: &CodecOptions,
-        ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-            if decoded_representation != &self.expected_decoded_representation {
-                return Err(CodecError::Other(format!(
-                    "wrong decoded representation: expected {:?}, got {:?}",
-                    self.expected_decoded_representation, decoded_representation
-                )));
-            }
-            Ok(input_handle)
         }
     }
 
@@ -1217,10 +1512,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded.clone(), shape, &CodecOptions::default())
+            .decode(
+                encoded.clone(),
+                shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         if not_just_bytes {
             assert_ne!(encoded, decoded.clone().into_fixed().unwrap());
@@ -1238,15 +1543,15 @@ mod tests {
         // }
         // assert_eq!(bytes, decoded);
 
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .clone()
-            .partial_decoder(input_handle.clone(), shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), decoded.size()); // codec chain caches with most decompression codecs
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(decoded_region, &CodecOptions::default())
-            .unwrap();
+        let decoded_partial_chunk = zarrs_codec::plan::partial_decode_memory(
+            codec.clone(),
+            Some(encoded),
+            shape,
+            decoded_region,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .unwrap();
 
         let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
             .into_fixed()
@@ -1287,7 +1592,7 @@ mod tests {
     }
 
     #[test]
-    fn codec_chain_partial_decoder_uses_decoded_byte_representation_at_cache_boundary() {
+    fn codec_chain_partial_decode_uses_decoded_byte_representation() {
         let shape = ChunkShape::from(vec![NonZeroU64::new(4).unwrap()]);
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
@@ -1302,11 +1607,15 @@ mod tests {
         .with_context(data_type, fill_value, &CodecSpecificOptions::default())
         .unwrap();
 
-        let encoded_input: Arc<dyn BytesPartialDecoderTraits> =
-            Arc::new(CowBytes::from(vec![0; 9]));
-        codec
-            .partial_decoder(encoded_input, &shape, &CodecOptions::default())
-            .unwrap();
+        zarrs_codec::plan::partial_decode_memory(
+            codec,
+            Some(CowBytes::from(vec![0; 9])),
+            &shape,
+            &ArraySubset::new_with_ranges(&[1..3]),
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .unwrap();
     }
 
     #[cfg(feature = "pcodec")]

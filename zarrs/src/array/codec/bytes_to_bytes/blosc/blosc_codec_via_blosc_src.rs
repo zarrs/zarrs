@@ -4,20 +4,17 @@ use std::sync::Arc;
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
 use zarrs_plugin::ZarrVersion;
 
-use super::super::blosc_impl::compressor_as_cstr;
+use super::super::blosc_impl::{blosc_decompress_bytes_into, compressor_as_cstr};
 use super::super::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscError, BloscShuffleMode,
-    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder,
+    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_range_decoder,
     blosc_validate,
 };
 use crate::array::{BytesRepresentation, CowBytes};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
@@ -137,6 +134,20 @@ impl BloscCodec {
             },
         )
     }
+
+    fn do_decode_into(
+        encoded_value: &[u8],
+        output: &mut [u8],
+        n_threads: usize,
+    ) -> Result<(), CodecError> {
+        let decoded_len = blosc_validate(encoded_value)
+            .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        blosc_decompress_bytes_into(encoded_value, output, n_threads)
+            .map_err(|e| CodecError::from(e.to_string()))
+    }
 }
 
 impl CodecTraits for BloscCodec {
@@ -195,28 +206,16 @@ impl CodecTraits for BloscCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for BloscCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: Dependent on the block size, recommended concurrency could be > 1
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -232,6 +231,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -242,27 +242,24 @@ impl BytesToBytesCodecTraits for BloscCodec {
         Ok(CowBytes::from(Self::do_decode(&encoded_value, n_threads)?))
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _parallel: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(blosc_partial_decoder::BloscPartialDecoder::new(
-            input_handle,
-        )))
+    fn is_decode_into_efficient(&self) -> bool {
+        true
     }
 
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
         _decoded_representation: &BytesRepresentation,
-        _parallel: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),
-        ))
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
+        let n_threads = 1;
+        Self::do_decode_into(&encoded_value, output, n_threads)
+    }
+
+    fn source_step(&self) -> zarrs_codec::plan::SourceStep {
+        zarrs_codec::plan::SourceStep::RangeDecode(Arc::new(blosc_range_decoder::BloscRangeDecoder))
     }
 
     fn encoded_representation(

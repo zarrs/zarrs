@@ -5,16 +5,11 @@ use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1};
 use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{BytesRepresentation, CowBytes};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -97,27 +92,16 @@ pub(super) fn h5_checksum_fletcher32(data: &[u8]) -> u32 {
     (sum2 << 16) | sum1
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for Fletcher32Codec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
         let mut encoded_value = into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
@@ -130,6 +114,7 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             if options.validate_checksums() {
@@ -159,29 +144,11 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         }
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(StripSuffixPartialDecoder::new(
-            input_handle,
-            CHECKSUM_SIZE,
-        )))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncStripSuffixPartialDecoder::new(
-            input_handle,
-            CHECKSUM_SIZE,
-        )))
+    fn source_step(&self) -> SourceStep {
+        SourceStep::Window {
+            prefix: 0,
+            suffix: CHECKSUM_SIZE as u64,
+        }
     }
 
     fn encoded_representation(

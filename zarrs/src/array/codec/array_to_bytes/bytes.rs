@@ -30,12 +30,10 @@
 //! ```
 
 mod bytes_codec;
-mod bytes_codec_partial;
 
 use std::sync::Arc;
 
 pub use bytes_codec::BytesCodec;
-pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
@@ -44,8 +42,8 @@ pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecCo
 
 // Re-export extension trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bytes::{
-    BytesCodecEndiannessMissingError, BytesDataTypeExt, BytesDataTypePlugin, BytesDataTypeTraits,
-    impl_bytes_data_type_traits,
+    BytesCodecDecodeInPlaceError, BytesCodecEndiannessMissingError, BytesDataTypeExt,
+    BytesDataTypePlugin, BytesDataTypeTraits, impl_bytes_data_type_traits,
 };
 // Re-export Endianness for convenience
 pub use zarrs_metadata::Endianness;
@@ -108,8 +106,20 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
     }
 }
 
+/// Return the endianness that is not the native endianness.
+#[cfg(test)]
+pub(crate) fn non_native_endianness() -> Endianness {
+    if Endianness::native() == Endianness::Little {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::MemoryPartialDecoder;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -118,9 +128,66 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
     };
     use zarrs_codec::{
-        BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-        CodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
+        UnboundArrayToBytesCodecTraits,
     };
+
+    #[test]
+    fn bytes_data_type_decode_in_place() {
+        let non_native = Some(non_native_endianness());
+        for data_type in [
+            data_type::uint8(),
+            data_type::uint16(),
+            data_type::float32(),
+            data_type::float64(),
+            data_type::complex64(),
+        ] {
+            let codec = data_type.codec_bytes().unwrap();
+            let encoded: Vec<u8> = (0..32).collect();
+            for endianness in [non_native, Some(Endianness::native())] {
+                let decoded = codec
+                    .decode(CowBytes::from(encoded.clone()), endianness)
+                    .unwrap();
+                let mut in_place = encoded.clone();
+                codec.decode_in_place(&mut in_place, endianness).unwrap();
+                assert_eq!(in_place, decoded.into_vec());
+            }
+        }
+
+        // Components are reversed, not elements: a complex64 element has two 4 byte components
+        let mut bytes = [0, 1, 2, 3, 4, 5, 6, 7];
+        data_type::complex64()
+            .codec_bytes()
+            .unwrap()
+            .decode_in_place(&mut bytes, non_native)
+            .unwrap();
+        assert_eq!(bytes, [3, 2, 1, 0, 7, 6, 5, 4]);
+
+        // Endianness is required for multi-byte data types
+        let uint16 = data_type::uint16();
+        assert!(
+            uint16
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .is_err()
+        );
+        // This is the case for empty bytes, which the `bytes` codec uses to validate endianness
+        assert!(
+            uint16
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [], None)
+                .is_err()
+        );
+        assert!(
+            data_type::uint8()
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .is_ok()
+        );
+    }
 
     #[test]
     fn codec_bytes_configuration_big() {
@@ -179,9 +246,19 @@ mod tests {
             &CodecSpecificOptions::default(),
         )?;
 
-        let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            bytes.clone(),
+            &chunk_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -270,59 +347,22 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bytes partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
-            .unwrap();
-
-        let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_fixed()
-            .unwrap()
-            .as_chunks::<1>()
-            .0
-            .iter()
-            .map(|b| u8::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u8> = vec![4, 8];
-        assert_eq!(answer, decoded_partial_chunk);
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_bytes_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_type::uint8();
-        let fill_value = FillValue::from(0u8);
-        let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
-        let bytes: ArrayBytes = elements.into();
-
-        let codec = Arc::new(BytesCodec::new(None))
-            .with_context(
-                data_type.clone(),
-                fill_value.clone(),
-                &CodecSpecificOptions::default(),
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
-
-        let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
-            .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
-            .await
-            .unwrap();
+        let partial_decoder =
+            MemoryPartialDecoder::new(codec.clone(), Some(encoded.into_vec()), &chunk_shape);
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
-            .await
+            .partial_decode(
+                &decoded_region,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk

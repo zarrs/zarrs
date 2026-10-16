@@ -23,10 +23,6 @@ pub mod zstd;
 #[cfg(test)]
 pub mod test_unbounded;
 
-mod strip_prefix_partial_decoder;
-
-mod strip_suffix_partial_decoder;
-
 /// Convert `bytes` into an owned [`Vec`] with at least `spare` bytes of spare capacity.
 ///
 /// This lets a codec that appends or prepends a fixed-size prefix/suffix write those bytes

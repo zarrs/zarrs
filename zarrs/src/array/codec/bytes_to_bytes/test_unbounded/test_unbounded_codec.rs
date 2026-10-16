@@ -2,14 +2,10 @@ use std::sync::Arc;
 
 use zarrs_plugin::ZarrVersion;
 
-use super::test_unbounded_partial_decoder;
 use crate::array::{BytesRepresentation, CowBytes};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -59,28 +55,16 @@ impl CodecTraits for TestUnboundedCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for TestUnboundedCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    /// Return the maximum internal concurrency supported for the requested decoded representation.
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
@@ -90,31 +74,9 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        r: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            test_unbounded_partial_decoder::TestUnboundedPartialDecoder::new(r),
-        ))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        r: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            test_unbounded_partial_decoder::AsyncTestUnboundedPartialDecoder::new(r),
-        ))
     }
 
     fn encoded_representation(

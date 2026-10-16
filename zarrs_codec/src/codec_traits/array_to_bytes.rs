@@ -4,12 +4,12 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
 
-use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
+use crate::plan::{ByteSource, DecodeRequest, PartialEncodeState, PlanIndexer, SourceKey, Task};
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, decode_into_array_bytes_target,
+    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
+    decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -61,18 +61,8 @@ where
         Ok(Vec::new())
     }
 }
-#[cfg(feature = "async")]
-use crate::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
-};
 
 /// Traits for array to bytes codecs.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits>;
@@ -92,11 +82,6 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
 }
 
 /// Runtime traits for an array-to-bytes codec bound to a data type and fill value.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
@@ -119,6 +104,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode a chunk.
@@ -130,6 +116,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Compact a chunk to remove any extraneous data.
@@ -146,6 +133,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         Ok(None)
     }
@@ -155,116 +143,163 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// This method is intended for internal use by Array.
     /// It works for fixed length data types and optional data types.
     ///
+    /// The input can contain encoded bytes or a deferred bytes-to-bytes decode.
+    /// The default implementation resolves the input normally, preserving ownership, then decodes and copies into the target.
+    /// An override may instead let an efficient producer write directly into a suitable target and transform those bytes there.
+    ///
     /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
     /// Chunk elements are written to the subset of the output in C order.
     ///
-    /// For optional data types, provide an `ArrayBytesDecodeIntoTarget` with a `mask` set to `Some`.
-    /// For non-optional data types, convert a fixed view to target using `.into()` or create with `mask: None`.
+    /// For optional data types, provide [`ArrayBytesDecodeIntoTarget::Optional`] with data and mask views.
+    /// For non-optional data types, convert a fixed view to a target using `.into()`.
+    ///
+    /// On error, the output target may have been partially written.
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(
         &self,
-        bytes: CowBytes<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        let bytes = self.decode(bytes, shape, options)?;
+        let bytes = input.into_bytes(options, resources)?;
+        let bytes = self.decode(bytes, shape, options, resources)?;
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
-    /// Returns whether decoding valid encoded bytes produces identical fixed bytes in native
-    /// in-memory order.
+    /// Plan the decoding of `request` from the encoded chunk `source`.
     ///
-    /// The result may depend on the decoded representation. The default implementation is
-    /// conservative and returns `false`.
+    /// Returns a task that decodes the requested elements of the chunk into the target of the request.
+    /// If the target is [`TaskTarget::Value`](crate::plan::TaskTarget::Value), the value of the task is the decoded [`ArrayBytes`].
+    /// If the source does not exist, the requested elements are the fill value.
+    ///
+    /// The default implementation reads and decodes the entire chunk ([`plan_decode_whole`](crate::plan::plan_decode_whole)).
+    /// Codecs that can decode part of a chunk from part of its encoded bytes (e.g. `sharding_indexed`) override this.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
-    #[expect(unused_variables)]
-    fn is_decode_passthrough(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        Ok(false)
+    /// Returns a [`CodecError`] if the request is invalid.
+    fn plan_decode<'a>(
+        self: Arc<Self>,
+        source: ByteSource<'a>,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+        options: &CodecOptions,
+    ) -> Result<Task<'a>, CodecError> {
+        crate::plan::plan_decode_whole(self.into_dyn(), source, shape, request, options)
     }
 
-    /// Initialise a partial decoder.
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
-            input_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
-    }
-
-    /// Initialise a partial encoder.
+    /// Plan the encoding of `bytes`, a chunk of `shape`.
+    ///
+    /// Returns a task whose value is the encoded chunk ([`TaskValue::Bytes`](crate::plan::TaskValue::Bytes)).
+    ///
+    /// The default implementation encodes in one compute step with [`encode`](Self::encode) ([`plan_encode_whole`](crate::plan::plan_encode_whole)).
+    /// Codecs that can encode parts of a chunk independently (e.g. `sharding_indexed`) may override this.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    fn partial_encoder(
+    /// Returns a [`CodecError`] if the shape is invalid for the codec.
+    fn plan_encode<'a>(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
-            input_output_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
+    ) -> Result<Task<'a>, CodecError> {
+        crate::plan::plan_encode_whole(self.into_dyn(), bytes, shape, options)
     }
 
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial decoder.
+    /// Plan a partial encode: update the elements of `indexer` of the encoded chunk `key` of `shape` to `bytes`, reading
+    /// and writing only the parts of the encoded chunk that change (e.g. the updated subchunks and the index of a shard).
+    ///
+    /// `state` is the state of the chunk after a previous partial encode (e.g. its decoded shard index), which saves
+    /// reading it again. The value of the task is the state of the chunk after the update
+    /// ([`partial_encode_value`](crate::plan::partial_encode_value)).
+    ///
+    /// Returns [`None`] if the codec does not partially encode chunks ([`plans_partial_encode`](Self::plans_partial_encode)
+    /// is false), so a chunk is decoded, updated and encoded in full instead. This is the default.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    async fn async_partial_decoder(
+    /// Returns a [`CodecError`] if `indexer` or `bytes` are invalid for the chunk.
+    #[allow(clippy::too_many_arguments)]
+    fn plan_partial_encode<'a>(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        key: SourceKey,
         shape: &[NonZeroU64],
+        indexer: PlanIndexer<'a>,
+        bytes: ArrayBytes<'a>,
+        state: Option<PartialEncodeState>,
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        _ = options;
-        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
-            input_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
-        )))
+    ) -> Result<Option<Task<'a>>, CodecError> {
+        let _ = (key, shape, indexer, bytes, state, options);
+        Ok(None)
     }
 
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial encoder.
+    /// Returns true if [`plan_partial_encode`](Self::plan_partial_encode) plans partial encodes (rather than returning
+    /// [`None`]).
+    fn plans_partial_encode(&self) -> bool {
+        false
+    }
+
+    /// Returns true if [`plan_encode`](Self::plan_encode) plans tasks of its own (e.g. a task per subchunk of a shard).
+    ///
+    /// Otherwise, planning the encoding of a chunk and running it is equivalent to [`encode`](Self::encode), which
+    /// planners may call directly.
+    fn plans_encode_subtasks(&self) -> bool {
+        false
+    }
+
+    /// Returns true if [`plan_decode`](Self::plan_decode) of a whole chunk plans tasks of its own (e.g. a task per
+    /// subchunk of a shard).
+    ///
+    /// Otherwise, planning the decoding of a whole chunk in memory into a target and running it is equivalent to
+    /// [`decode_into`](Self::decode_into), which planners may call directly.
+    fn plans_subtasks(&self) -> bool {
+        false
+    }
+
+    /// Plan resolving the chunk-local subchunk grids of the encoded chunk `source` of `shape`, outermost first.
+    ///
+    /// The value of the task is the grids ([`local_subchunk_grids_value`](crate::plan::local_subchunk_grids_value)).
+    /// A [`None`] entry is a level whose grid cannot be resolved for the chunk.
+    ///
+    /// Codecs whose [`decoded_subchunk_grids`](ArrayToBytesCodecSubchunkingTraits::decoded_subchunk_grids) include a
+    /// [`ChunkGridDecoded::ChunkLocal`] level override this, reading the encoded chunk if their subchunk grid depends
+    /// on it. The default implementation resolves no subchunk grids.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    async fn async_partial_encoder(
+    /// Returns a [`CodecError`] if the chunk shape is invalid for the codec.
+    fn plan_local_subchunk_grids<'a>(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        source: ByteSource<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Task<'a>, CodecError> {
+        let _ = (source, shape, options);
+        Ok(Task::compute(|_| {
+            Ok(crate::plan::Outcome::Value(
+                crate::plan::local_subchunk_grids_value(Vec::new()),
+            ))
+        }))
+    }
+
+    /// Prepare a decoder of the encoded chunk `source` that plans many requests.
+    ///
+    /// Preparation reads and decodes what every request needs once (e.g. a shard index).
+    ///
+    /// The default implementation prepares nothing, and plans each request with [`plan_decode`](Self::plan_decode).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the chunk shape is invalid for the codec.
+    fn prepare_decode(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<crate::plan::PrepareDecode, CodecError> {
         _ = options;
-        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
-            input_output_handle,
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-            self.into_dyn(),
+        Ok(crate::plan::PrepareDecode::Ready(Arc::new(
+            crate::plan::SourceDecoder::new(self.into_dyn(), source, shape),
         )))
     }
 }

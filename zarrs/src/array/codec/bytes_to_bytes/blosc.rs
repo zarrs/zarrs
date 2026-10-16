@@ -35,7 +35,7 @@
 // NOTE: Zarr implementations MAY provide users an option to choose a shuffle mode automatically based on the typesize or other information, but MUST record in the metadata the mode that is chosen.
 // TODO: Need to validate blosc typesize matches element size and also that endianness is specified if typesize > 1
 mod blosc_codec;
-mod blosc_partial_decoder;
+mod blosc_range_decoder;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "blosc/blosc_via_blosc_src.rs"]
@@ -68,15 +68,15 @@ inventory::submit! {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
-    };
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecError, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
@@ -123,12 +123,107 @@ mod tests {
         let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_decode_into() {
+        let options = CodecOptions::default();
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
+        let decoded = crate::array::transmute_to_bytes_vec((0..4096u16).collect::<Vec<_>>());
+        let len = decoded.len();
+        let encoded = codec
+            .encode(
+                CowBytes::Borrowed(&decoded),
+                &options,
+                &Resources::default(),
+            )
+            .unwrap();
+        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+            codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(len as u64),
+                output,
+                &options,
+                &Resources::default(),
+            )
+        };
+
+        let mut output = vec![0; len];
+        decode_into(encoded.clone(), &mut output).unwrap();
+        assert_eq!(output, decoded);
+
+        // An output of the wrong length is reported as an invalid length
+        assert!(matches!(
+            decode_into(encoded.clone(), &mut vec![0; len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert!(matches!(
+            decode_into(encoded, &mut output[..len - 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+
+        // Bytes that are not a blosc buffer
+        assert!(decode_into(CowBytes::from(vec![0u8; 64]), &mut output).is_err());
+    }
+
+    /// Retrieving whole chunks decodes blosc directly into the output where the output is
+    /// contiguous (chunks spanning full rows) and falls back otherwise (square chunks).
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_array_round_trip() {
+        use crate::array::ArrayBuilder;
+
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let data: Vec<u16> = (0..64).collect();
+        let subsets = [
+            ArraySubset::new_with_ranges(&[0..8, 0..8]),
+            ArraySubset::new_with_ranges(&[2..6, 0..8]),
+            ArraySubset::new_with_ranges(&[1..7, 2..6]),
+        ];
+        for chunk_shape in [vec![2, 8], vec![4, 4]] {
+            let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
+            let array = ArrayBuilder::new(vec![8, 8], chunk_shape, data_type::uint16(), 0u16)
+                .bytes_to_bytes_codecs(vec![codec])
+                .build_arc(Arc::new(zarrs_storage::store::MemoryStore::new()), "/")
+                .unwrap();
+            array
+                .store_array_subset(&array.subset_all(), &data, &Resources::default())
+                .unwrap();
+            for subset in &subsets {
+                // `data` is the linear index of each element
+                let expected: Vec<u16> = subset
+                    .linearised_indices(&[8, 8])
+                    .unwrap()
+                    .into_iter()
+                    .map(|i| u16::try_from(i).unwrap())
+                    .collect();
+                assert_eq!(
+                    array
+                        .retrieve_array_subset::<Vec<u16>>(subset, &Resources::default())
+                        .unwrap(),
+                    expected
+                );
+            }
+        }
     }
 
     #[test]
@@ -186,26 +281,24 @@ mod tests {
         let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // blosc partial decoder does not hold bytes
-        let decoded = partial_decoder
-            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
-            .unwrap()
-            .unwrap()
-            .concat();
+        let decoded_regions: Vec<ByteRange> = decoded_regions.collect();
+        let decoded = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        )
+        .concat();
 
         let decoded: Vec<u16> = decoded
             .as_chunks::<2>()
@@ -232,13 +325,10 @@ mod tests {
         .unwrap();
         let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
         let encoded = codec
-            .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
-            .unwrap();
-        let partial_decoder = codec
-            .partial_decoder(
-                Arc::new(encoded),
-                &bytes_representation,
+            .encode(
+                CowBytes::from(bytes.clone()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         let decoded_regions = [
@@ -250,13 +340,12 @@ mod tests {
             ByteRange::FromStart(0, Some(0)),
             ByteRange::FromStart(8, Some(0)),
         ];
-        let decoded = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap();
+        let decoded = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        );
         assert_eq!(decoded[0].as_slice(), &bytes);
         assert_eq!(decoded[1].as_slice(), &bytes[4..12]);
         assert_eq!(decoded[2].as_slice(), &bytes[1..7]);
@@ -273,62 +362,13 @@ mod tests {
             ByteRange::FromStart(1, Some(u64::MAX)),
         ] {
             assert!(matches!(
-                partial_decoder.partial_decode(byte_range, &CodecOptions::default()),
+                zarrs_codec::plan::RangeDecoder::decode_ranges(
+                    &super::blosc_range_decoder::BloscRangeDecoder,
+                    &encoded,
+                    &[byte_range],
+                ),
                 Err(CodecError::InvalidByteRangeError(_))
             ));
         }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn codec_blosc_async_partial_decode() {
-        use crate::array::Indexer;
-
-        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = data_type::uint16();
-        let data_type_size = data_type.fixed_size().unwrap();
-        let array_size = shape.num_elements_usize() * data_type_size;
-        let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
-
-        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-
-        let codec_configuration: BloscCodecConfiguration =
-            serde_json::from_str(JSON_VALID2).unwrap();
-        let codec = Arc::new(BloscCodec::new_with_configuration(&codec_configuration).unwrap());
-
-        let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
-            .unwrap()
-            .map(ByteRange::new);
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap();
-        let decoded = partial_decoder
-            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
-            .await
-            .unwrap()
-            .unwrap()
-            .concat();
-
-        let decoded: Vec<u16> = decoded
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-
-        let answer: Vec<u16> = vec![2, 6];
-        assert_eq!(answer, decoded);
     }
 }

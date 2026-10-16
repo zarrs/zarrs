@@ -25,8 +25,10 @@ where
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().store_chunk(chunk_indices, chunk_data)?;
+        self.array()
+            .store_chunk(chunk_indices, chunk_data, resources)?;
         self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
@@ -35,8 +37,9 @@ where
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().store_chunks(chunks, chunks_data)?;
+        self.array().store_chunks(chunks, chunks_data, resources)?;
         self.cache().invalidate_chunks(chunks);
         Ok(())
     }
@@ -47,8 +50,12 @@ where
         Ok(())
     }
 
-    pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
-        self.array().erase_chunks(chunks)?;
+    pub fn erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.array().erase_chunks(chunks, resources)?;
         let _ = self.cache().invalidate_chunks(chunks);
         Ok(())
     }

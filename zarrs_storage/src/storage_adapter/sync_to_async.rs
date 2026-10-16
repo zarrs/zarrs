@@ -117,6 +117,10 @@ impl<
     fn supports_get_partial(&self) -> bool {
         self.storage.supports_get_partial()
     }
+
+    fn read_coalescing(&self) -> Option<crate::ReadCoalescing> {
+        self.storage.read_coalescing()
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

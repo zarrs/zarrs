@@ -1,19 +1,13 @@
 use std::sync::Arc;
 
-#[cfg(feature = "async")]
-use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
+use crate::plan::SourceStep;
+
 use crate::{
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, RecommendedConcurrency,
+    BytesRepresentation, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
+    CodecTraits, CowBytes, InvalidBytesLengthError, Resources,
 };
 
 /// Traits for bytes to bytes codecs.
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits>;
@@ -31,15 +25,6 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         Ok(self.into_dyn())
     }
 
-    /// Return the maximum internal concurrency supported for the requested decoded representation.
-    ///
-    /// # Errors
-    /// Returns [`CodecError`] if the decoded representation is not valid for the codec.
-    fn recommended_concurrency(
-        &self,
-        decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError>;
-
     /// Returns the size of the encoded representation given a size of the decoded representation.
     fn encoded_representation(
         &self,
@@ -54,6 +39,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         &self,
         decoded_value: CowBytes<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode chunk bytes.
@@ -65,87 +51,169 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         encoded_value: CowBytes<'a>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
-    /// Initialises a partial decoder.
+    /// Decode chunk bytes into a preallocated output buffer.
     ///
-    /// The default implementation decodes the entire chunk.
+    /// The decoded bytes must fill `output` exactly.
+    /// On error, `output` may have been partially written.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    /// Returns [`CodecError`] if a codec fails or the decoded length is not the length of `output`.
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
         decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        let decoded_value =
+            self.decode(encoded_value, decoded_representation, options, resources)?;
+        Ok(copy_decoded_bytes_into(&decoded_value, output)?)
     }
 
-    /// Initialise a partial encoder.
+    /// Whether decoding into a target avoids a full-size decoded intermediate
+    /// allocation and its separate copy.
     ///
-    /// The default implementation reencodes the entire chunk.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_output_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
+    /// This cost hint does not promise to avoid decoder state or workspace
+    /// allocations. Both decoding routes remain usable when it is `false`.
+    fn is_decode_into_efficient(&self) -> bool {
+        false
     }
 
-    #[cfg(feature = "async")]
-    /// Initialises an asynchronous partial decoder.
+    /// How planned partial decoding reads through this codec.
     ///
-    /// The default implementation decodes the entire chunk.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
+    /// The default is [`SourceStep::Materialize`]: the entire input is read and decoded.
+    /// Codecs whose decoded bytes are a window of their encoded bytes (e.g. checksums, without validation)
+    /// return [`SourceStep::Window`], so partial reads pass through to the encoded bytes.
+    fn source_step(&self) -> SourceStep {
+        SourceStep::Materialize
+    }
+}
+
+/// Copy `decoded_value` into `output`, which must be the same length.
+///
+/// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode into an allocation.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the length of `decoded_value` is not the length of `output`.
+pub fn copy_decoded_bytes_into(
+    decoded_value: &[u8],
+    output: &mut [u8],
+) -> Result<(), InvalidBytesLengthError> {
+    if decoded_value.len() != output.len() {
+        return Err(InvalidBytesLengthError::new(
+            decoded_value.len(),
+            output.len(),
+        ));
+    }
+    output.copy_from_slice(decoded_value);
+    Ok(())
+}
+
+/// Read the decoded bytes of `decoded` into `output`, which must be exactly the length of the decoded bytes.
+///
+/// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode through a [`Read`](std::io::Read) decoder.
+/// It stops at the first decoded byte past the end of `output` rather than decoding the remainder, so a stream that is much larger than `output` is not expanded.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the length of the decoded bytes is not the length of `output`, or an IO error if `decoded` fails to read.
+/// If the decoded bytes are too long, the reported length is one more than the length of `output`.
+pub fn read_decoded_bytes_into(
+    mut decoded: impl std::io::Read,
+    output: &mut [u8],
+) -> Result<(), CodecError> {
+    let mut filled = 0;
+    while filled < output.len() {
+        match decoded.read(&mut output[filled..]) {
+            Ok(0) => return Err(InvalidBytesLengthError::new(filled, output.len()).into()),
+            Ok(len) => filled += len,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
+    let mut extra = [0u8; 1];
+    loop {
+        match decoded.read(&mut extra) {
+            Ok(0) => return Ok(()),
+            Ok(_) => {
+                return Err(InvalidBytesLengthError::new(
+                    output.len().saturating_add(1),
+                    output.len(),
+                )
+                .into());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_decoded_bytes_into_length() {
+        let mut output = [0; 3];
+        copy_decoded_bytes_into(&[1, 2, 3], &mut output).unwrap();
+        assert_eq!(output, [1, 2, 3]);
+        assert!(copy_decoded_bytes_into(&[1, 2], &mut output).is_err());
+        assert!(copy_decoded_bytes_into(&[1, 2, 3, 4], &mut output).is_err());
+        assert_eq!(output, [1, 2, 3]);
     }
 
-    #[cfg(feature = "async")]
-    /// Initialise an asynchronous partial encoder.
-    ///
-    /// The default implementation reencodes the entire chunk.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if initialisation fails.
-    #[allow(unused_variables)]
-    async fn async_partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
-            input_output_handle,
-            *decoded_representation,
-            self.into_dyn(),
-        )))
+    #[test]
+    fn read_decoded_bytes_into_length() {
+        let mut output = [0; 3];
+        read_decoded_bytes_into(&[1, 2, 3][..], &mut output).unwrap();
+        assert_eq!(output, [1, 2, 3]);
+
+        // The length of the decoded bytes is reported on a mismatch
+        let invalid_len =
+            |decoded: &[u8], output: &mut [u8]| match read_decoded_bytes_into(decoded, output) {
+                Err(CodecError::UnexpectedChunkDecodedSize(err)) => err.to_string(),
+                result => panic!("unexpected result {result:?}"),
+            };
+        assert_eq!(
+            invalid_len(&[1, 2], &mut output),
+            InvalidBytesLengthError::new(2, 3).to_string()
+        );
+        assert_eq!(
+            invalid_len(&[1, 2, 3, 4, 5], &mut output),
+            InvalidBytesLengthError::new(4, 3).to_string()
+        );
+        assert_eq!(
+            invalid_len(&[], &mut output),
+            InvalidBytesLengthError::new(0, 3).to_string()
+        );
+        read_decoded_bytes_into(&[][..], &mut []).unwrap();
+    }
+
+    #[test]
+    fn read_decoded_bytes_into_does_not_read_past_the_first_extra_byte() {
+        // An endless stream is an error rather than being read to the end
+        let mut output = [0; 3];
+        assert!(matches!(
+            read_decoded_bytes_into(std::io::repeat(7), &mut output),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+        assert_eq!(output, [7; 3]);
+    }
+
+    #[test]
+    fn read_decoded_bytes_into_read_error() {
+        struct Failing;
+        impl std::io::Read for Failing {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("failed"))
+            }
+        }
+        assert!(matches!(
+            read_decoded_bytes_into(Failing, &mut [0; 3]),
+            Err(CodecError::IOError(_))
+        ));
     }
 }

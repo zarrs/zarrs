@@ -63,7 +63,6 @@
 //! permutation when each concrete chunk grid is resolved.
 
 mod transpose_codec;
-mod transpose_codec_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -192,7 +191,7 @@ fn get_transposed_indexer(
     order: &[usize],
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
-) -> Result<impl Indexer, CodecError> {
+) -> Result<Vec<crate::array::ArrayIndices>, CodecError> {
     // Permuting an out-of-bounds index yields an index that is out-of-bounds of the permuted
     // shape, but it is reported in encoded coordinates. Validate here for a useful error.
     indexer.validate(bytemuck::must_cast_slice(shape))?;
@@ -273,16 +272,15 @@ pub(crate) fn apply_permutation<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
-    use zarrs_codec::{
-        CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
-        UnboundArrayToBytesCodecTraits,
-    };
+    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
 
     fn codec_transpose_round_trip_impl(
         json: &str,
@@ -305,10 +303,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -348,10 +356,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
 
         assert_eq!(bytes, decoded);
@@ -403,10 +421,20 @@ mod tests {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -456,28 +484,17 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
-        let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-            .unwrap();
-        let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let bytes_codec = bytes_codec
-            .with_context(
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .unwrap();
-        let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
+        let partial_decoder = MemoryPartialDecoder::encode(
+            chain(
+                vec![codec],
+                Arc::new(BytesCodec::default()),
+                vec![],
+                data_type,
+                fill_value,
+            ),
+            bytes,
+            &shape,
+        );
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..4, 0..4]),
             ArraySubset::new_with_ranges(&[1..3, 1..4]),
@@ -493,74 +510,16 @@ mod tests {
         ];
         for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),
             );
             assert_eq!(expected, &decoded_partial_chunk);
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_transpose_async_partial_decode() {
-        let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = data_type::float32();
-        let fill_value = FillValue::from(0.0f32);
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes: ArrayBytes = bytes.into();
-        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(
-                data_type.clone(),
-                fill_value.clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-
-        let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
-            .unwrap();
-        let input_handle = Arc::new(encoded.into_fixed().unwrap());
-        let bytes_codec = Arc::new(BytesCodec::default());
-        let bytes_codec = bytes_codec
-            .with_context(
-                codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
-                &CodecSpecificOptions::default(),
-            )
-            .unwrap();
-        let input_handle = bytes_codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .await
-            .unwrap();
-        let partial_decoder = codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
-            .await
-            .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[0..4, 0..4]),
-            ArraySubset::new_with_ranges(&[1..3, 1..4]),
-            ArraySubset::new_with_ranges(&[2..4, 0..2]),
-        ];
-        let answer: &[Vec<f32>] = &[
-            vec![
-                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
-                15.0,
-            ],
-            vec![5.0, 6.0, 7.0, 9.0, 10.0, 11.0],
-            vec![8.0, 9.0, 12.0, 13.0],
-        ];
-        for (decoded_region, answer) in decoded_regions.into_iter().zip(answer.iter()) {
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
-                .await
-                .unwrap();
-            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
-                &decoded_partial_chunk.into_fixed().unwrap(),
-            );
-            assert_eq!(answer, &decoded_partial_chunk);
         }
     }
 }

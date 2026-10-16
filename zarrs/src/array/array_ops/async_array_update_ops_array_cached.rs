@@ -25,8 +25,9 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.encoder.local_subchunk_grids(options).await
+        self.encoder.local_subchunk_grids(options, resources).await
     }
 }
 
@@ -52,8 +53,11 @@ where
         &'a self,
         indexer: &dyn Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.encoder.partial_decode(indexer, options).await
+        self.encoder
+            .partial_decode(indexer, options, resources)
+            .await
     }
 
     async fn partial_decode_into(
@@ -61,9 +65,10 @@ where
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         self.encoder
-            .partial_decode_into(indexer, output_target, options)
+            .partial_decode_into(indexer, output_target, options, resources)
             .await
     }
 
@@ -89,8 +94,12 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        let result = self.encoder.partial_encode(indexer, bytes, options).await;
+        let result = self
+            .encoder
+            .partial_encode(indexer, bytes, options, resources)
+            .await;
         self.cache.invalidate_chunk(&self.chunk_indices).await;
         result
     }
@@ -112,9 +121,10 @@ where
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_partial_chunk(chunk_indices, indexer, indexer_data)
+            .async_store_partial_chunk(chunk_indices, indexer, indexer_data, resources)
             .await?;
         self.cache().invalidate_chunk(chunk_indices).await;
         Ok(())
@@ -125,9 +135,10 @@ where
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.array()
-            .async_store_array_subset(array_subset, subset_data)
+            .async_store_array_subset(array_subset, subset_data, resources)
             .await?;
         if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
             self.cache().invalidate_chunks(&chunks).await;
@@ -138,8 +149,15 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
-        let compacted = self.array().async_compact_chunk(chunk_indices).await?;
+    pub async fn async_compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError> {
+        let compacted = self
+            .array()
+            .async_compact_chunk(chunk_indices, resources)
+            .await?;
         if compacted {
             self.cache().invalidate_chunk(chunk_indices).await;
         }
@@ -154,8 +172,12 @@ where
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        let encoder = self.array().async_partial_encoder(chunk_indices).await?;
+        let encoder = self
+            .array()
+            .async_partial_encoder(chunk_indices, resources)
+            .await?;
         Ok(Arc::new(CachedAsyncArrayPartialEncoder {
             encoder,
             cache: self.cache_arc(),
@@ -183,35 +205,51 @@ mod tests {
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
-        array.async_store_chunk(&[0], &[1u8, 2]).await.unwrap();
+        array
+            .async_store_chunk(&[0], &[1u8, 2], &Resources::default())
+            .await
+            .unwrap();
 
         let cached = ArrayCached::new(array, cache);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![1, 2]
         );
         assert_eq!(cached.cache().len().await, 1);
 
         let options = CodecOptions::default();
-        let encoder = cached.async_partial_encoder(&[0]).await.unwrap();
+        let encoder = cached
+            .async_partial_encoder(&[0], &Resources::default())
+            .await
+            .unwrap();
         encoder
             .partial_encode(
                 &ArraySubset::new_with_ranges(&[1..2]),
                 &vec![3u8].into(),
                 &options,
+                &Resources::default(),
             )
             .await
             .unwrap();
         assert!(cached.cache().is_empty().await);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![1, 3]
         );
 
         encoder.erase().await.unwrap();
         assert!(cached.cache().is_empty().await);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![0, 0]
         );
 
@@ -219,7 +257,10 @@ mod tests {
 
         // Failed partial encodes also invalidate
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap(),
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                .await
+                .unwrap(),
             vec![0, 0]
         );
         assert_eq!(cached.cache().len().await, 1);
@@ -229,6 +270,7 @@ mod tests {
                     &ArraySubset::new_with_ranges(&[2..3]),
                     &vec![3u8].into(),
                     &options,
+                    &Resources::default(),
                 )
                 .await
                 .is_err()

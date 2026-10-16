@@ -5,19 +5,11 @@ use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
 use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder;
-use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{BytesRepresentation, CowBytes};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -68,27 +60,16 @@ impl CodecTraits for Crc32cCodec {
     }
 }
 
-#[cfg_attr(
-    all(feature = "async", not(target_arch = "wasm32")),
-    async_trait::async_trait
-)]
-#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for Crc32cCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
         self as Arc<dyn BytesToBytesCodecTraits>
-    }
-
-    fn recommended_concurrency(
-        &self,
-        _decoded_representation: &BytesRepresentation,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
     }
 
     fn encode<'a>(
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let encoded_value = match self.0 {
@@ -116,6 +97,7 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let data_len = encoded_value.len() - CHECKSUM_SIZE;
@@ -151,37 +133,17 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         }
     }
 
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+    fn source_step(&self) -> SourceStep {
+        let size = CHECKSUM_SIZE as u64;
         match self.0 {
-            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(StripSuffixPartialDecoder::new(
-                input_handle,
-                CHECKSUM_SIZE,
-            ))),
-            Crc32cCodecConfigurationLocation::Start => Ok(Arc::new(
-                StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
-        }
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        _decoded_representation: &BytesRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        match self.0 {
-            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(
-                AsyncStripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
-            Crc32cCodecConfigurationLocation::Start => Ok(Arc::new(
-                AsyncStripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
+            Crc32cCodecConfigurationLocation::End => SourceStep::Window {
+                prefix: 0,
+                suffix: size,
+            },
+            Crc32cCodecConfigurationLocation::Start => SourceStep::Window {
+                prefix: size,
+                suffix: 0,
+            },
         }
     }
 

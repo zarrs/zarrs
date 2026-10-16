@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use itertools::Itertools;
 use zarrs::array::chunk_key_encoding::api::{
@@ -88,8 +89,16 @@ fn chunk_key_surfaces_an_encoding_error() -> TestResult {
 #[test]
 fn array_ops_surface_an_encoding_error_rather_than_panicking() -> TestResult {
     let array = array_2d()?;
-    assert_encoding_error(array.store_chunk(&[0, 0], vec![0u8; 4]).unwrap_err());
-    assert_encoding_error(array.retrieve_chunk::<Vec<u8>>(&[0, 0]).unwrap_err());
+    assert_encoding_error(
+        array
+            .store_chunk(&[0, 0], vec![0u8; 4], &Resources::default())
+            .unwrap_err(),
+    );
+    assert_encoding_error(
+        array
+            .retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .unwrap_err(),
+    );
     assert_encoding_error(array.retrieve_encoded_chunk(&[0, 0]).unwrap_err());
     assert_encoding_error(array.erase_chunk(&[0, 0]).unwrap_err());
     Ok(())
@@ -99,8 +108,11 @@ fn array_ops_surface_an_encoding_error_rather_than_panicking() -> TestResult {
 fn a_supported_dimensionality_still_round_trips() -> TestResult {
     let array = array_3d()?;
     let chunk = vec![4u8, 5, 6, 7, 8, 9, 10, 11];
-    array.store_chunk(&[1, 1, 1], chunk.clone())?;
-    assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[1, 1, 1])?, chunk);
+    array.store_chunk(&[1, 1, 1], chunk.clone(), &Resources::default())?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u8>>(&[1, 1, 1], &Resources::default())?,
+        chunk
+    );
     assert!(array.retrieve_encoded_chunk(&[1, 1, 1])?.is_some());
     array.erase_chunk(&[1, 1, 1])?;
     assert!(array.retrieve_encoded_chunk(&[1, 1, 1])?.is_none());

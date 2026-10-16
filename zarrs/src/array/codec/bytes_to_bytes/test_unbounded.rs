@@ -3,18 +3,19 @@
 //! This is used in tests to validate behaviour for codecs with an unbounded encoded size.
 
 mod test_unbounded_codec;
-mod test_unbounded_partial_decoder;
 
 pub use test_unbounded_codec::TestUnboundedCodec;
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     #[test]
@@ -26,10 +27,19 @@ mod tests {
         let codec: TestUnboundedCodec = TestUnboundedCodec::new();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -43,30 +53,24 @@ mod tests {
         let codec = Arc::new(TestUnboundedCodec::new());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // test unbounded partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .unwrap()
-            .unwrap()
-            .concat();
+        let decoded_partial_chunk = partial_decode_bytes(
+            codec.clone(),
+            &encoded,
+            bytes_representation.size().unwrap(),
+            &decoded_regions,
+        )
+        .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .as_chunks::<2>()
@@ -78,51 +82,25 @@ mod tests {
         assert_eq!(answer, decoded_partial_chunk);
     }
 
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_test_unbounded_async_partial_decode() {
-        use zarrs_codec::CodecOptions;
-
-        let elements: Vec<u16> = (0..8).collect();
-        let bytes = crate::array::transmute_to_bytes_vec(elements);
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        let codec = Arc::new(TestUnboundedCodec::new());
-
-        let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded_regions = [
-            ByteRange::FromStart(4, Some(4)),
-            ByteRange::FromStart(10, Some(2)),
-        ];
-
-        let input_handle = Arc::new(encoded);
-        let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &bytes_representation,
-                &CodecOptions::default(),
+    #[test]
+    fn default_decode_into() {
+        let codec = TestUnboundedCodec::new();
+        let options = CodecOptions::default();
+        let encoded = CowBytes::from(&b"decoded"[..]);
+        let decode_into = |output: &mut [u8]| {
+            codec.decode_into(
+                encoded.clone(),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+                &Resources::default(),
             )
-            .await
-            .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode_many(
-                Box::new(decoded_regions.into_iter()),
-                &CodecOptions::default(),
-            )
-            .await
-            .unwrap()
-            .unwrap()
-            .concat();
+        };
 
-        let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| u16::from_ne_bytes(*b))
-            .collect();
-        let answer: Vec<u16> = vec![2, 3, 5];
-        assert_eq!(answer, decoded_partial_chunk);
+        let mut output = [0; 7];
+        decode_into(&mut output).unwrap();
+        assert_eq!(&output, b"decoded");
+        assert!(decode_into(&mut [0; 8]).is_err());
+        assert!(decode_into(&mut [0; 6]).is_err());
     }
 }

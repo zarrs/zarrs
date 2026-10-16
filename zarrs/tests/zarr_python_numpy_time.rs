@@ -3,6 +3,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::data_type;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
@@ -85,7 +86,8 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
         if !matches!(unit, NumpyTimeUnit::Year | NumpyTimeUnit::Month) {
             use chrono::{DateTime, Utc};
 
-            let elements = array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&subset_all)?;
+            let elements = array
+                .retrieve_array_subset::<Vec<DateTime<Utc>>>(&subset_all, &Resources::default())?;
             println!("{elements:?}");
 
             // Only subminute are not rounded
@@ -116,7 +118,10 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "jiff")]
         {
             use jiff::{Timestamp, TimestampRound, Unit};
-            let elements = array.retrieve_array_subset::<Vec<jiff::Timestamp>>(&subset_all)?;
+            let elements = array.retrieve_array_subset::<Vec<jiff::Timestamp>>(
+                &subset_all,
+                &Resources::default(),
+            )?;
             println!("{path:?}");
             println!("{elements:?}");
 
@@ -209,13 +214,16 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
                 DateTime::<Utc>::MIN_UTC,
             ];
 
-            array.store_array_subset(&array.subset_all(), &elements)?;
+            array.store_array_subset(&array.subset_all(), &elements, &Resources::default())?;
             if !matches!(unit, |NumpyTimeUnit::Week| NumpyTimeUnit::Day
                 | NumpyTimeUnit::Hour
                 | NumpyTimeUnit::Minute)
             {
                 assert_eq!(
-                    array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<DateTime<Utc>>>(
+                        &array.subset_all(),
+                        &Resources::default()
+                    )?,
                     elements
                 );
             }
@@ -251,11 +259,14 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
                 Timestamp::MIN,
             ];
 
-            array.store_array_subset(&array.subset_all(), &elements)?;
+            array.store_array_subset(&array.subset_all(), &elements, &Resources::default())?;
 
             if !matches!(unit, NumpyTimeUnit::Hour | NumpyTimeUnit::Minute) {
                 assert_eq!(
-                    array.retrieve_array_subset::<Vec<jiff::Timestamp>>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<jiff::Timestamp>>(
+                        &array.subset_all(),
+                        &Resources::default()
+                    )?,
                     elements
                 );
             }
@@ -301,7 +312,8 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "chrono")]
         {
             use chrono::TimeDelta;
-            let elements = array.retrieve_array_subset::<Vec<TimeDelta>>(&subset_all)?;
+            let elements = array
+                .retrieve_array_subset::<Vec<TimeDelta>>(&subset_all, &Resources::default())?;
 
             let start_elem = if matches!(unit, NumpyTimeUnit::Picosecond) {
                 // first element overflows in numpy
@@ -333,7 +345,8 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "jiff")]
         if !matches!(unit, NumpyTimeUnit::Picosecond) {
             use jiff::{SignedDuration, Timestamp, TimestampRound, Unit};
-            let elements = array.retrieve_array_subset::<Vec<SignedDuration>>(&subset_all)?;
+            let elements = array
+                .retrieve_array_subset::<Vec<SignedDuration>>(&subset_all, &Resources::default())?;
 
             println!("{path:?}");
             println!("{elements:?}");
@@ -402,9 +415,12 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
                     TimeDelta::MIN,
                 ];
 
-                array.store_array_subset(&array.subset_all(), &elements)?;
+                array.store_array_subset(&array.subset_all(), &elements, &Resources::default())?;
                 assert_eq!(
-                    array.retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<TimeDelta>>(
+                        &array.subset_all(),
+                        &Resources::default()
+                    )?,
                     elements
                 );
             }
@@ -426,9 +442,12 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
                     SignedDuration::MIN,
                 ];
 
-                array.store_array_subset(&array.subset_all(), &elements)?;
+                array.store_array_subset(&array.subset_all(), &elements, &Resources::default())?;
                 assert_eq!(
-                    array.retrieve_array_subset::<Vec<SignedDuration>>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<SignedDuration>>(
+                        &array.subset_all(),
+                        &Resources::default()
+                    )?,
                     elements
                 );
             }
@@ -460,16 +479,19 @@ fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
         946782245, // 2000-01-02T03:04:05Z
     ];
 
-    array.store_array_subset(&array.subset_all(), &i64_values)?;
-    let retrieved = array.retrieve_array_subset::<Vec<i64>>(&array.subset_all())?;
+    array.store_array_subset(&array.subset_all(), &i64_values, &Resources::default())?;
+    let retrieved =
+        array.retrieve_array_subset::<Vec<i64>>(&array.subset_all(), &Resources::default())?;
     assert_eq!(retrieved, i64_values);
 
     // Also verify we can retrieve as chrono/jiff types
     #[cfg(feature = "chrono")]
     {
         use chrono::{DateTime, Utc};
-        let chrono_values =
-            array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&array.subset_all())?;
+        let chrono_values = array.retrieve_array_subset::<Vec<DateTime<Utc>>>(
+            &array.subset_all(),
+            &Resources::default(),
+        )?;
         assert_eq!(chrono_values[0], DateTime::UNIX_EPOCH);
         assert_eq!(chrono_values[1], DateTime::<Utc>::MIN_UTC);
         assert_eq!(
@@ -481,7 +503,8 @@ fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "jiff")]
     {
         use jiff::Timestamp;
-        let jiff_values = array.retrieve_array_subset::<Vec<Timestamp>>(&array.subset_all())?;
+        let jiff_values = array
+            .retrieve_array_subset::<Vec<Timestamp>>(&array.subset_all(), &Resources::default())?;
         assert_eq!(jiff_values[0], Timestamp::UNIX_EPOCH);
         assert_eq!(jiff_values[1], Timestamp::MIN);
         assert_eq!(jiff_values[2], "2000-01-02T03:04:05Z".parse::<Timestamp>()?);
@@ -512,15 +535,17 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
         86400000, // 1 day in milliseconds
     ];
 
-    array.store_array_subset(&array.subset_all(), &i64_values)?;
-    let retrieved = array.retrieve_array_subset::<Vec<i64>>(&array.subset_all())?;
+    array.store_array_subset(&array.subset_all(), &i64_values, &Resources::default())?;
+    let retrieved =
+        array.retrieve_array_subset::<Vec<i64>>(&array.subset_all(), &Resources::default())?;
     assert_eq!(retrieved, i64_values);
 
     // Also verify we can retrieve as chrono/jiff types
     #[cfg(feature = "chrono")]
     {
         use chrono::TimeDelta;
-        let chrono_values = array.retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all())?;
+        let chrono_values = array
+            .retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all(), &Resources::default())?;
         assert_eq!(chrono_values[0], TimeDelta::default());
         assert_eq!(chrono_values[1], TimeDelta::MIN);
         assert_eq!(chrono_values[2], TimeDelta::milliseconds(86400000));
@@ -529,8 +554,10 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "jiff")]
     {
         use jiff::SignedDuration;
-        let jiff_values =
-            array.retrieve_array_subset::<Vec<SignedDuration>>(&array.subset_all())?;
+        let jiff_values = array.retrieve_array_subset::<Vec<SignedDuration>>(
+            &array.subset_all(),
+            &Resources::default(),
+        )?;
         assert_eq!(jiff_values[0], SignedDuration::ZERO);
         assert_eq!(jiff_values[1], SignedDuration::MIN);
         assert_eq!(jiff_values[2], SignedDuration::from_millis(86400000));

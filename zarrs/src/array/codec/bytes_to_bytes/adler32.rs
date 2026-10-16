@@ -76,15 +76,14 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
+    use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
-        CodecTraits,
-    };
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions, CodecTraits};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
@@ -113,13 +112,18 @@ mod tests {
             let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
 
             let encoded = codec
-                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+                .encode(
+                    CowBytes::Borrowed(&bytes),
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded = codec
                 .decode(
                     encoded.clone(),
                     &bytes_representation,
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
@@ -150,70 +154,19 @@ mod tests {
                 Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
 
             let encoded = codec
-                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
+                .encode(
+                    CowBytes::from(bytes.clone()),
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-            let input_handle = Arc::new(encoded);
-            let partial_decoder = codec
-                .partial_decoder(
-                    input_handle.clone(),
-                    &bytes_representation,
-                    &CodecOptions::default(),
-                )
-                .unwrap();
-            assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // adler32 partial decoder does not hold bytes
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode_many(
-                    Box::new(decoded_regions.into_iter()),
-                    &CodecOptions::default(),
-                )
-                .unwrap()
-                .unwrap();
-            let answer: &[Vec<u8>] = &[vec![3, 4]];
-            assert_eq!(
-                answer,
-                decoded_partial_chunk
-                    .into_iter()
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<_>>()
+            let decoded_partial_chunk = partial_decode_bytes(
+                codec.clone(),
+                &encoded,
+                bytes_representation.size().unwrap(),
+                &decoded_regions,
             );
-        }
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_adler32_async_partial_decode() {
-        let elements: Vec<u8> = (0..32).collect();
-        let bytes = elements;
-        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
-
-        for json in [JSON1, JSON2, JSON3] {
-            let codec_configuration: Adler32CodecConfiguration =
-                serde_json::from_str(json).unwrap();
-            let codec =
-                Arc::new(Adler32Codec::new_with_configuration(&codec_configuration).unwrap());
-
-            let encoded = codec
-                .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
-                .unwrap();
-            let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-            let input_handle = Arc::new(encoded);
-            let partial_decoder = codec
-                .async_partial_decoder(
-                    input_handle,
-                    &bytes_representation,
-                    &CodecOptions::default(),
-                )
-                .await
-                .unwrap();
-            let decoded_partial_chunk = partial_decoder
-                .partial_decode_many(
-                    Box::new(decoded_regions.into_iter()),
-                    &CodecOptions::default(),
-                )
-                .await
-                .unwrap()
-                .unwrap();
             let answer: &[Vec<u8>] = &[vec![3, 4]];
             assert_eq!(
                 answer,

@@ -7,14 +7,15 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::chunk_grid::{RectilinearChunkGrid, RegularChunkGrid};
 use zarrs::array::codec::array_to_array::transpose::{TransposeCodec, TransposeOrder};
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesCodec, OptionalCodec, VlenCodec};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayIndices, ArrayMetadata, CodecChain, CodecOptions, DataType,
-    Endianness, FillValue, FromArrayBytes, IntoArrayBytes, data_type,
+    Array, ArrayBuilder, ArrayIndices, ArrayMetadata, CodecChain, DataType, Endianness, FillValue,
+    FromArrayBytes, IntoArrayBytes, data_type,
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
@@ -143,10 +144,8 @@ fn array_builder(layout: Option<Layout>) -> ArrayBuilder {
 fn sharded_array<TStorage: ?Sized>(
     store: Arc<TStorage>,
     layout: Layout,
-    partial_encoding: bool,
 ) -> Result<Array<TStorage>, Box<dyn std::error::Error>> {
-    let options = CodecOptions::default().with_experimental_partial_encoding(partial_encoding);
-    Ok(build_from_metadata(&array_builder(Some(layout)), store)?.with_codec_options(options))
+    build_from_metadata(&array_builder(Some(layout)), store)
 }
 
 /// An unsharded reference array.
@@ -211,8 +210,8 @@ fn assert_arrays_eq(
 ) -> Result<(), Box<dyn std::error::Error>> {
     for subset in read_subsets() {
         assert_eq!(
-            array.retrieve_array_subset::<Vec<u16>>(&subset)?,
-            reference.retrieve_array_subset::<Vec<u16>>(&subset)?,
+            array.retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())?,
+            reference.retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())?,
             "{subset:?}"
         );
     }
@@ -220,8 +219,16 @@ fn assert_arrays_eq(
     let (chunks, indices) = partial_chunk_reads();
     for chunk_indices in chunks {
         assert_eq!(
-            array.retrieve_partial_chunk::<Vec<u16>>(&chunk_indices, &indices)?,
-            reference.retrieve_partial_chunk::<Vec<u16>>(&chunk_indices, &indices)?,
+            array.retrieve_partial_chunk::<Vec<u16>>(
+                &chunk_indices,
+                &indices,
+                &Resources::default()
+            )?,
+            reference.retrieve_partial_chunk::<Vec<u16>>(
+                &chunk_indices,
+                &indices,
+                &Resources::default()
+            )?,
         );
     }
 
@@ -231,33 +238,30 @@ fn assert_arrays_eq(
         let subset = subchunk_grid.subset(&subchunk_indices)?.unwrap();
         if std::iter::zip(subset.end_exc(), SHAPE).all(|(end, shape)| end <= shape) {
             assert_eq!(
-                array.retrieve_subchunk::<Vec<u16>>(&subchunk_indices)?,
-                reference.retrieve_array_subset::<Vec<u16>>(&subset)?,
+                array.retrieve_subchunk::<Vec<u16>>(&subchunk_indices, &Resources::default())?,
+                reference.retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())?,
             );
         }
     }
     Ok(())
 }
 
-fn sharding_nondivisible_array_impl(
-    layout: Layout,
-    partial_encoding: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let array = sharded_array(Arc::new(MemoryStore::default()), layout, partial_encoding)?;
+fn sharding_nondivisible_array_impl(layout: Layout) -> Result<(), Box<dyn std::error::Error>> {
+    let array = sharded_array(Arc::new(MemoryStore::default()), layout)?;
     let reference = reference_array()?;
     for (subset, data) in subset_writes() {
-        array.store_array_subset(&subset, data.as_slice())?;
-        reference.store_array_subset(&subset, data.as_slice())?;
+        array.store_array_subset(&subset, data.as_slice(), &Resources::default())?;
+        reference.store_array_subset(&subset, data.as_slice(), &Resources::default())?;
         assert_arrays_eq(&array, &reference)?;
     }
 
     let (indices, data) = scattered_write();
-    array.store_partial_chunk(&[2, 2], &indices, data.as_slice())?;
-    reference.store_partial_chunk(&[2, 2], &indices, data.as_slice())?;
+    array.store_partial_chunk(&[2, 2], &indices, data.as_slice(), &Resources::default())?;
+    reference.store_partial_chunk(&[2, 2], &indices, data.as_slice(), &Resources::default())?;
     assert_arrays_eq(&array, &reference)?;
 
     for chunk_indices in array.chunk_grid().iter_chunk_indices() {
-        array.compact_chunk(&chunk_indices)?;
+        array.compact_chunk(&chunk_indices, &Resources::default())?;
     }
     assert_arrays_eq(&array, &reference)?;
     Ok(())
@@ -266,9 +270,7 @@ fn sharding_nondivisible_array_impl(
 #[test]
 fn sharding_nondivisible_array() -> Result<(), Box<dyn std::error::Error>> {
     for layout in [Layout::Sharded, Layout::Nested, Layout::Transposed] {
-        for partial_encoding in [false, true] {
-            sharding_nondivisible_array_impl(layout, partial_encoding)?;
-        }
+        sharding_nondivisible_array_impl(layout)?;
     }
     Ok(())
 }
@@ -276,7 +278,7 @@ fn sharding_nondivisible_array() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn sharding_nondivisible_subchunk_grid_nested_and_transposed()
 -> Result<(), Box<dyn std::error::Error>> {
-    let array = sharded_array(Arc::new(MemoryStore::default()), Layout::Nested, false)?;
+    let array = sharded_array(Arc::new(MemoryStore::default()), Layout::Nested)?;
     let inner_grid = array
         .subchunk_grid_at_level(1)
         .as_chunk_grid()
@@ -294,7 +296,7 @@ fn sharding_nondivisible_subchunk_grid_nested_and_transposed()
         [3, 1, 2, 3, 1, 2, 3, 1, 2].map(nz).to_vec()
     );
 
-    let array = sharded_array(Arc::new(MemoryStore::default()), Layout::Transposed, false)?;
+    let array = sharded_array(Arc::new(MemoryStore::default()), Layout::Transposed)?;
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap().clone();
     assert_eq!(
         subchunk_grid.chunk_edge_lengths(0)?,
@@ -313,55 +315,63 @@ async fn sharding_nondivisible_array_async() -> Result<(), Box<dyn std::error::E
     use zarrs_storage::store::AsyncMemoryStore;
 
     for layout in [Layout::Sharded, Layout::Nested, Layout::Transposed] {
-        for partial_encoding in [false, true] {
-            let array = sharded_array(Arc::new(AsyncMemoryStore::new()), layout, partial_encoding)?;
-            let reference = reference_array()?;
-            let assert_eq_reference = async |array: &Array<AsyncMemoryStore>| {
-                for subset in read_subsets() {
-                    assert_eq!(
-                        array
-                            .async_retrieve_array_subset::<Vec<u16>>(&subset)
-                            .await
-                            .unwrap(),
-                        reference
-                            .retrieve_array_subset::<Vec<u16>>(&subset)
-                            .unwrap(),
-                    );
-                }
-                let (chunks, indices) = partial_chunk_reads();
-                for chunk_indices in chunks {
-                    assert_eq!(
-                        array
-                            .async_retrieve_partial_chunk::<Vec<u16>>(&chunk_indices, &indices)
-                            .await
-                            .unwrap(),
-                        reference
-                            .retrieve_partial_chunk::<Vec<u16>>(&chunk_indices, &indices)
-                            .unwrap(),
-                    );
-                }
-            };
-
-            for (subset, data) in subset_writes() {
-                array
-                    .async_store_array_subset(&subset, data.as_slice())
-                    .await?;
-                reference.store_array_subset(&subset, data.as_slice())?;
-                assert_eq_reference(&array).await;
+        let array = sharded_array(Arc::new(AsyncMemoryStore::new()), layout)?;
+        let reference = reference_array()?;
+        let assert_eq_reference = async |array: &Array<AsyncMemoryStore>| {
+            for subset in read_subsets() {
+                assert_eq!(
+                    array
+                        .async_retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())
+                        .await
+                        .unwrap(),
+                    reference
+                        .retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())
+                        .unwrap(),
+                );
             }
+            let (chunks, indices) = partial_chunk_reads();
+            for chunk_indices in chunks {
+                assert_eq!(
+                    array
+                        .async_retrieve_partial_chunk::<Vec<u16>>(
+                            &chunk_indices,
+                            &indices,
+                            &Resources::default()
+                        )
+                        .await
+                        .unwrap(),
+                    reference
+                        .retrieve_partial_chunk::<Vec<u16>>(
+                            &chunk_indices,
+                            &indices,
+                            &Resources::default()
+                        )
+                        .unwrap(),
+                );
+            }
+        };
 
-            let (indices, data) = scattered_write();
+        for (subset, data) in subset_writes() {
             array
-                .async_store_partial_chunk(&[2, 2], &indices, data.as_slice())
+                .async_store_array_subset(&subset, data.as_slice(), &Resources::default())
                 .await?;
-            reference.store_partial_chunk(&[2, 2], &indices, data.as_slice())?;
-            assert_eq_reference(&array).await;
-
-            for chunk_indices in array.chunk_grid().iter_chunk_indices() {
-                array.async_compact_chunk(&chunk_indices).await?;
-            }
+            reference.store_array_subset(&subset, data.as_slice(), &Resources::default())?;
             assert_eq_reference(&array).await;
         }
+
+        let (indices, data) = scattered_write();
+        array
+            .async_store_partial_chunk(&[2, 2], &indices, data.as_slice(), &Resources::default())
+            .await?;
+        reference.store_partial_chunk(&[2, 2], &indices, data.as_slice(), &Resources::default())?;
+        assert_eq_reference(&array).await;
+
+        for chunk_indices in array.chunk_grid().iter_chunk_indices() {
+            array
+                .async_compact_chunk(&chunk_indices, &Resources::default())
+                .await?;
+        }
+        assert_eq_reference(&array).await;
     }
     Ok(())
 }
@@ -392,8 +402,11 @@ where
     T: IntoArrayBytes<'static> + FromArrayBytes + Clone + PartialEq + std::fmt::Debug,
 {
     let subset = ArraySubset::new_with_shape(array.shape().to_vec());
-    array.store_array_subset(&subset, data.clone())?;
-    assert_eq!(array.retrieve_array_subset::<T>(&subset)?, data);
+    array.store_array_subset(&subset, data.clone(), &Resources::default())?;
+    assert_eq!(
+        array.retrieve_array_subset::<T>(&subset, &Resources::default())?,
+        data
+    );
     Ok(())
 }
 
@@ -448,7 +461,7 @@ fn sharding_nondivisible_zarr_python_compat() -> Result<(), Box<dyn std::error::
                 .map(u16::try_from)
                 .collect::<Result<_, _>>()?;
             assert_eq!(
-                array.retrieve_array_subset::<Vec<u16>>(&subset)?,
+                array.retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())?,
                 expected,
                 "{name}"
             );
