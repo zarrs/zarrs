@@ -22,6 +22,21 @@ pub use serial::{drive_serial, drive_serial_one};
 #[cfg(not(target_family = "wasm"))]
 pub use sync::{drive_sync, drive_sync_one};
 
+/// Drive `task` with the backend `io`, blocking until it completes: on Rayon with [`drive_sync_one`], or serially on wasm.
+///
+/// # Errors
+/// Returns a [`CodecError`](crate::CodecError) if a task fails.
+pub fn drive_blocking_one<'a>(
+    task: super::Task<'a>,
+    io: &dyn super::SyncIo,
+    resources: &crate::Resources,
+) -> Result<super::TaskValue<'a>, crate::CodecError> {
+    #[cfg(not(target_family = "wasm"))]
+    return drive_sync_one(task, io, resources);
+    #[cfg(target_family = "wasm")]
+    return drive_serial_one(task, io, resources);
+}
+
 /// Drive `task`, whose byte sources are all in memory: on Rayon, or serially on wasm.
 ///
 /// Codecs use this to decode or encode in memory with their planners (e.g. the subchunks of a shard).
@@ -32,10 +47,7 @@ pub fn drive_memory_one<'a>(
     task: super::Task<'a>,
     resources: &crate::Resources,
 ) -> Result<super::TaskValue<'a>, crate::CodecError> {
-    #[cfg(not(target_family = "wasm"))]
-    return drive_sync_one(task, &NoIo, resources);
-    #[cfg(target_family = "wasm")]
-    return drive_serial_one(task, &NoIo, resources);
+    drive_blocking_one(task, &NoIo, resources)
 }
 
 /// The I/O backend of drives of tasks whose byte sources are all in memory.

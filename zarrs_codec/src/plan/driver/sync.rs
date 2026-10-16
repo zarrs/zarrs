@@ -14,9 +14,10 @@ use smallvec::SmallVec;
 use zarrs_storage::ReadCoalescing;
 
 use super::core::{
-    ByteBudget, Completed, InlineIo, IoRequest, IoSlot, IoWork, Joined, NodeId, Scheduler,
-    SingleTask, Work, WriteWork, generation_window, read_coalescing, single_outcome,
+    ByteBudget, Completed, InlineIo, IoRequest, IoSlot, IoWork, Joined, NodeId, Scheduler, Work,
+    WriteWork, generation_window, read_coalescing,
 };
+use super::serial::drive_single;
 use super::{IoPool, IoScope};
 use crate::{CodecError, ReadDispatch, Resources};
 
@@ -83,25 +84,6 @@ pub fn drive_sync_one<'a>(
     }
 }
 
-/// Run a single root task on the calling thread, returning its value, or a scheduler to continue it if it fans out.
-// The scheduler is moved once per drive, which is cheaper than boxing it
-#[allow(clippy::result_large_err)]
-fn drive_single<'a>(
-    task: Task<'a>,
-    io: &dyn SyncIo,
-    resources: &Resources,
-    ctx: &ComputeCtx,
-) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
-    let outcome = match SingleTask::new(task)? {
-        SingleTask::Compute(task) => task.run_without_io(ctx)?,
-        SingleTask::Read(read, request) => {
-            let result = read_with_permit(io, resources, &request);
-            read.run(&request, result, ctx)?
-        }
-    };
-    Ok(single_outcome(outcome))
-}
-
 fn drive_scheduler<'a>(
     mut scheduler: Scheduler<'a>,
     io: &dyn SyncIo,
@@ -109,9 +91,9 @@ fn drive_scheduler<'a>(
     ctx: &ComputeCtx,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
     let reads = DriveIo::new(io, resources);
-    let parallelism = limit(resources.compute_target()).min(rayon::current_num_threads());
+    let parallelism = resources.compute_limit().min(rayon::current_num_threads());
     scheduler.set_parallelism(parallelism);
-    scheduler.set_max_deferred(limit(resources.io_target()).min(1024));
+    scheduler.set_max_deferred(resources.io_limit().min(1024));
 
     // Run on the calling thread while there is at most one thing to do.
     // Inline reads occupy a compute thread, so with one compute thread everything runs one at a time on the calling thread.
@@ -119,8 +101,12 @@ fn drive_scheduler<'a>(
         scheduler.refill(2);
         match scheduler.queued() {
             0 => return scheduler.finish(),
-            1 => run_one(&mut scheduler, &reads, ctx),
-            _ if parallelism == 1 && reads.enabled() => run_one(&mut scheduler, &reads, ctx),
+            1 => {
+                scheduler.run_one(&reads, ctx);
+            }
+            _ if parallelism == 1 && reads.enabled() => {
+                scheduler.run_one(&reads, ctx);
+            }
             _ => break,
         }
     }
@@ -130,7 +116,7 @@ fn drive_scheduler<'a>(
         reads: &reads,
         scheduler,
         resources,
-        compute_limit: limit(resources.compute_target()),
+        compute_limit: resources.compute_limit(),
         coalescing: read_coalescing(resources, io.read_coalescing()),
         planning_in_flight: 0,
         compute_in_flight: 0,
@@ -178,7 +164,7 @@ impl<'d> DriveIo<'d> {
             resources,
             forced: resources.read_dispatch(),
             mean_ns: AtomicU64::new(0),
-            io_limit: limit(resources.io_target()),
+            io_limit: resources.io_limit(),
             io_in_flight: AtomicUsize::new(0),
         }
     }
@@ -240,10 +226,7 @@ impl InlineIo for DriveIo<'_> {
     }
 
     fn read(&self, request: &IoRequest) -> Result<Option<super::super::ReadBytes>, StorageError> {
-        let _permit = self
-            .resources
-            .io_limiter()
-            .map(crate::IoLimiter::acquire_blocking);
+        let _permit = self.resources.io_permit_blocking();
         let start = Instant::now();
         let result = self.io.read(request.key, &request.ranges);
         self.record(start.elapsed());
@@ -251,49 +234,12 @@ impl InlineIo for DriveIo<'_> {
     }
 
     fn write(&self, op: super::super::WriteOp<'_>) -> Result<(), StorageError> {
-        let _permit = self
-            .resources
-            .io_limiter()
-            .map(crate::IoLimiter::acquire_blocking);
+        let _permit = self.resources.io_permit_blocking();
         let start = Instant::now();
         let result = self.io.write(op);
         self.record(start.elapsed());
         result
     }
-}
-
-/// A target of zero is unconstrained.
-fn limit(target: usize) -> usize {
-    if target == 0 { usize::MAX } else { target }
-}
-
-/// Run one queued item on the calling thread.
-fn run_one<'a>(scheduler: &mut Scheduler<'a>, reads: &DriveIo<'_>, ctx: &ComputeCtx) {
-    if let Some(work) = scheduler.pop_compute() {
-        scheduler.complete_work(work.run(ctx, Some(reads), None));
-    } else if let Some(write) = scheduler.pop_write() {
-        let result = reads.write(write.op);
-        scheduler.complete_write(write.node, result);
-    } else if let Some(mut read) = scheduler.pop_io() {
-        match read.request() {
-            Ok(request) => {
-                let result = reads.read(&request);
-                scheduler.complete_io(read, &request, result);
-            }
-            Err(err) => scheduler.fail(err),
-        }
-    }
-}
-
-fn read_with_permit(
-    io: &dyn SyncIo,
-    resources: &Resources,
-    request: &IoRequest,
-) -> Result<Option<super::super::ReadBytes>, StorageError> {
-    let _permit = resources
-        .io_limiter()
-        .map(crate::IoLimiter::acquire_blocking);
-    io.read(request.key, &request.ranges)
 }
 
 /// The maximum number of compute steps run by one Rayon job.
@@ -383,16 +329,8 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
 
     /// The resources of a compute step: a share of the compute target.
     fn compute_ctx(&self) -> ComputeCtx {
-        let target = self.resources.compute_target();
-        if target == 0 {
-            return ComputeCtx::new(self.resources.clone());
-        }
         let busy = self.compute_in_flight + self.scheduler.compute_queued() + 1;
-        ComputeCtx::new(
-            self.resources
-                .clone()
-                .with_compute_target((target / busy).max(1)),
-        )
+        ComputeCtx::new(self.resources.with_compute_share(busy))
     }
 
     fn dispatch<'scope>(
@@ -523,7 +461,11 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
                     );
                     let mut batch: SmallVec<[(IoWork<'a>, IoRequest, u64); 1]> = SmallVec::new();
                     while batch.len() < size {
-                        let Some(reserved) = self.admit_read() else {
+                        let Some(reserved) = self
+                            .scheduler
+                            .peek_io_hint()
+                            .and_then(|hint| self.budget.try_reserve(hint))
+                        else {
                             break;
                         };
                         let mut read = self.scheduler.pop_io().expect("a read was admitted");
@@ -580,15 +522,6 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
         }
     }
 
-    /// Reserve the budget for the next read, if there is one and the budget admits it.
-    fn admit_read(&mut self) -> Option<u64> {
-        let estimate = self.budget.estimate(self.scheduler.peek_io_hint()?);
-        self.budget.admits(estimate).then(|| {
-            self.budget.reserve(estimate);
-            estimate
-        })
-    }
-
     fn handle(&mut self, event: Event<'a>) {
         match event {
             Event::Computed {
@@ -620,17 +553,8 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
             Event::Read { reserved, results } => {
                 self.io_in_flight -= 1;
                 self.reads.release();
-                let fetched = results
-                    .iter()
-                    .map(|result| result.as_ref().map_or(0, Work::fetched))
-                    .sum();
-                self.budget.arrived(reserved, fetched);
-                for result in results {
-                    match result {
-                        Ok(work) => self.scheduler.ready(work),
-                        Err(err) => self.scheduler.fail(err),
-                    }
-                }
+                self.scheduler
+                    .complete_read_group(&mut self.budget, reserved, results);
             }
             Event::Joined(joined) => self.scheduler.joined(joined),
             Event::Written(node, result) => {

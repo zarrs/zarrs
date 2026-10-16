@@ -138,6 +138,48 @@ impl Resources {
         self
     }
 
+    /// Acquire a permit of the I/O limiter, if set, blocking the current thread until one is available.
+    ///
+    /// On wasm, which cannot block on a permit held by another operation, no permit is acquired.
+    pub fn io_permit_blocking(&self) -> Option<IoPermit> {
+        #[cfg(not(target_family = "wasm"))]
+        return self.io_limiter.as_ref().map(IoLimiter::acquire_blocking);
+        #[cfg(target_family = "wasm")]
+        None
+    }
+
+    /// Acquire a permit of the I/O limiter, if set, waiting asynchronously until one is available.
+    pub async fn io_permit(&self) -> Option<IoPermit> {
+        match &self.io_limiter {
+            Some(limiter) => Some(limiter.acquire().await),
+            None => None,
+        }
+    }
+
+    /// The compute target, or [`usize::MAX`] if it is unconstrained (zero).
+    #[must_use]
+    pub fn compute_limit(&self) -> usize {
+        unconstrained_if_zero(self.compute_target)
+    }
+
+    /// The I/O target, or [`usize::MAX`] if it is unconstrained (zero).
+    #[must_use]
+    pub fn io_limit(&self) -> usize {
+        unconstrained_if_zero(self.io_target)
+    }
+
+    /// These resources with an equal share (at least one) of the compute target between `shares` concurrent operations.
+    ///
+    /// An unconstrained compute target remains unconstrained.
+    #[must_use]
+    pub fn with_compute_share(&self, shares: usize) -> Self {
+        let mut resources = self.clone();
+        if self.compute_target != 0 {
+            resources.compute_target = (self.compute_target / shares.max(1)).max(1);
+        }
+        resources
+    }
+
     /// Return the fetched bytes limit.
     ///
     /// This is a soft limit on the bytes that an operation has retrieved from storage but not yet decoded.
@@ -235,6 +277,10 @@ impl Resources {
         self.io_pool = io_pool;
         self
     }
+}
+
+fn unconstrained_if_zero(target: usize) -> usize {
+    if target == 0 { usize::MAX } else { target }
 }
 
 /// A limit on concurrent storage requests that is shared between operations.

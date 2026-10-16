@@ -160,24 +160,6 @@ fn offload(
     .boxed())
 }
 
-/// A target of zero is unconstrained.
-fn limit(target: usize) -> usize {
-    if target == 0 { usize::MAX } else { target }
-}
-
-fn compute_ctx(resources: &Resources, busy: usize) -> ComputeCtx {
-    let target = resources.compute_target();
-    if target == 0 {
-        ComputeCtx::new(resources.clone())
-    } else {
-        ComputeCtx::new(
-            resources
-                .clone()
-                .with_compute_target((target / busy.max(1)).max(1)),
-        )
-    }
-}
-
 /// Drive `tasks`, running work on the polling task unless `offload` takes it.
 ///
 /// A single root task runs on the polling task without a scheduler if `runs_inline` admits it.
@@ -241,10 +223,7 @@ async fn drive_single<'a>(
         SingleTask::Compute(task) => task.run_without_io(&ctx)?,
         SingleTask::Read(read, request) => {
             let result = {
-                let _permit = match resources.io_limiter() {
-                    Some(limiter) => Some(limiter.acquire().await),
-                    None => None,
-                };
+                let _permit = resources.io_permit().await;
                 io.read(request.key, &request.ranges).await
             };
             read.run(&request, result, &ctx)?
@@ -263,8 +242,8 @@ async fn drive_scheduler<'a, 'f>(
 where
     'a: 'f,
 {
-    let compute_limit = limit(resources.compute_target());
-    let io_limit = limit(resources.io_target());
+    let compute_limit = resources.compute_limit();
+    let io_limit = resources.io_limit();
     scheduler.set_parallelism(compute_limit.min(1024));
     scheduler.set_max_deferred(io_limit.min(1024));
     // Storage requests are not boxed: their futures are a concrete type
@@ -304,7 +283,7 @@ where
                     break;
                 };
                 let busy = compute_futures.len() + scheduler.compute_queued() + 1;
-                match offload(work, compute_ctx(resources, busy)) {
+                match offload(work, ComputeCtx::new(resources.with_compute_share(busy))) {
                     Ok(future) => compute_futures.push(future),
                     Err(work) => {
                         inline = Some(work);
@@ -387,17 +366,7 @@ fn handle<'a>(
             scheduler.complete_work(completed);
         }
         Event::Read(reserved, results) => {
-            let fetched = results
-                .iter()
-                .map(|result| result.as_ref().map_or(0, Work::fetched))
-                .sum();
-            budget.arrived(reserved, fetched);
-            for result in results {
-                match result {
-                    Ok(work) => scheduler.ready(work),
-                    Err(err) => scheduler.fail(err),
-                }
-            }
+            scheduler.complete_read_group(budget, reserved, results);
         }
         Event::Written(node, result) => scheduler.complete_write(node, result),
         Event::Panicked(payload) => {
@@ -414,10 +383,7 @@ async fn read_future<'f, 'a: 'f>(
     reserved: u64,
 ) -> Event<'a> {
     let result = {
-        let _permit = match resources.io_limiter() {
-            Some(limiter) => Some(limiter.acquire().await),
-            None => None,
-        };
+        let _permit = resources.io_permit().await;
         let request = group.request();
         io.read(request.key, &request.ranges).await
     };
@@ -430,10 +396,7 @@ async fn write_future<'f, 'a: 'f>(
     write: WriteWork<'a>,
 ) -> Event<'a> {
     let WriteWork { node, op } = write;
-    let _permit = match resources.io_limiter() {
-        Some(limiter) => Some(limiter.acquire().await),
-        None => None,
-    };
+    let _permit = resources.io_permit().await;
     Event::Written(node, io.write(op).await)
 }
 

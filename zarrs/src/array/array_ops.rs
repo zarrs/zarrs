@@ -134,16 +134,10 @@ pub use async_array_write_ops::AsyncArrayWriteOps;
 ///
 /// Returns the number of chunks to retrieve concurrently, and the resources of each.
 fn split_chunk_resources(num_chunks: usize, resources: &Resources) -> (usize, Resources) {
-    let target = resources.compute_target();
-    if target == 0 {
-        return (num_chunks, resources.clone());
-    }
-    let concurrent_chunks = num_chunks.clamp(1, target);
+    let concurrent_chunks = num_chunks.clamp(1, resources.compute_limit());
     (
         concurrent_chunks,
-        resources
-            .clone()
-            .with_compute_target((target / concurrent_chunks).max(1)),
+        resources.with_compute_share(concurrent_chunks),
     )
 }
 

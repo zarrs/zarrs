@@ -8,25 +8,12 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError};
 use zarrs_storage::{Bytes, StorageError};
 
 use super::{
-    ByteSource, DecodeRequest, PlanIndexer, ReadBytes, SourceKey, SyncIo, Task, TaskTarget,
-    TaskValue, WriteOp,
+    ByteSource, DecodeRequest, PlanIndexer, ReadBytes, SourceKey, SyncIo, TaskTarget, WriteOp,
 };
 use crate::{
     ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes, Resources,
     update_array_bytes,
 };
-
-/// Drive `task` to completion with the backend `io`.
-fn drive_one<'a>(
-    task: Task<'a>,
-    io: &dyn SyncIo,
-    resources: &Resources,
-) -> Result<TaskValue<'a>, CodecError> {
-    #[cfg(not(target_family = "wasm"))]
-    return super::drive_sync_one(task, io, resources);
-    #[cfg(target_family = "wasm")]
-    return super::drive_serial_one(task, io, resources);
-}
 
 /// Decode the elements `indexer` of the encoded chunk `encoded` of `shape` with `codec`.
 ///
@@ -56,7 +43,7 @@ pub fn partial_decode_memory(
         },
         options,
     )?;
-    let bytes = drive_one(task, &MemoryValueIo::default(), resources)?
+    let bytes = super::drive_blocking_one(task, &MemoryValueIo::default(), resources)?
         .into_array()
         .ok_or_else(|| CodecError::Other("a decode task did not produce array bytes".to_string()))?
         .into_owned();
@@ -98,7 +85,7 @@ pub fn partial_encode_memory(
             .ok_or_else(|| {
                 CodecError::Other("a codec did not plan a partial encode".to_string())
             })?;
-        let result = drive_one(task, &io, resources);
+        let result = super::drive_blocking_one(task, &io, resources);
         *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
         result?;
         return Ok(());

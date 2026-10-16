@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Resources`, which sets the resources available to an operation
   - A compute target, an I/O target, an optional `IoLimiter` shared between operations, a fetched bytes limit, a read dispatch override, and an `IoPool`
 - Add `IoLimiter` and `IoPermit`, a limit on concurrent storage requests that synchronous and asynchronous operations can share
+  - Add `Resources::{io_permit,io_permit_blocking}`, which acquire a permit of the I/O limiter if set
+- Add `Resources::{compute_limit,io_limit,with_compute_share}`
 - Add the `plan` module for planned (sans-I/O) operations, whose I/O and compute run with separate concurrency limits
   - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
   - `TargetViews`, `SharedOutput`, `TaskTarget`, `DecodeRequest` and `PlanIndexer`
@@ -52,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `plan::{local_subchunk_grids_value,local_subchunk_grids}`
 - Add `plan::AnyValue`, the value of `plan::TaskValue::Any`
 - Add `plan::TaskValue::{into_array,into_bytes,into_prepared,downcast}`
-- Add `plan::drive_memory_one` for drives whose byte sources are all in memory
+- Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`
 - Coalesce queued reads of nearby byte ranges of the same key into one request in the `drive_sync` (reads on the I/O pool) and `drive_async` drivers

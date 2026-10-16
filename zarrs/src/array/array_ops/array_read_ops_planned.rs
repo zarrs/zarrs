@@ -44,17 +44,7 @@ pub(super) use partial_decoder::{array_to_codec_error, static_local_subchunk_gri
 #[cfg(feature = "async")]
 pub(super) use async_planned::async_read_ranges;
 
-/// Drive `task` synchronously: on Rayon with the I/O pool, or serially on wasm.
-pub(super) fn drive_sync<'a>(
-    task: Task<'a>,
-    io: &dyn SyncIo,
-    resources: &Resources,
-) -> Result<TaskValue<'a>, CodecError> {
-    #[cfg(not(target_family = "wasm"))]
-    return zarrs_codec::plan::drive_sync_one(task, io, resources);
-    #[cfg(target_family = "wasm")]
-    return zarrs_codec::plan::drive_serial_one(task, io, resources);
-}
+pub(super) use zarrs_codec::plan::drive_blocking_one;
 
 /// The chunks of an operation, which resolve the source keys of tasks to store keys.
 pub(super) enum ChunkKeys {
@@ -655,13 +645,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
         let key = self.chunk_key(chunk_indices)?;
-        // A single-threaded target cannot wait on a permit held by another drive (see `drive_serial`)
-        #[cfg(not(target_family = "wasm"))]
-        let _permit = resources
-            .io_limiter()
-            .map(zarrs_codec::IoLimiter::acquire_blocking);
-        #[cfg(target_family = "wasm")]
-        let _ = resources;
+        let _permit = resources.io_permit_blocking();
         Ok(storage.get(&key)?)
     }
 
@@ -676,7 +660,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             return Ok(vec![]);
         }
         let io = self.chunk_io(self.indexer_keys(chunks))?;
-        encoded_chunks(drive_sync(plan_encoded_chunks(num_chunks), &io, resources)?)
+        encoded_chunks(drive_blocking_one(
+            plan_encoded_chunks(num_chunks),
+            &io,
+            resources,
+        )?)
     }
 
     /// Retrieve the encoded subchunk at `subchunk_indices` of the shard at `chunk_indices` with a planned read.
@@ -687,7 +675,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         resources: &Resources,
     ) -> Result<Option<Bytes>, ArrayError> {
         let (task, keys) = self.plan_encoded_subchunk(chunk_indices, subchunk_indices)?;
-        encoded_subchunk(drive_sync(task, &self.chunk_io(keys)?, resources)?)
+        encoded_subchunk(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?)
     }
 
     /// Retrieve the chunk at `chunk_indices` with a planned read, or [`None`] if it does not exist.
@@ -796,7 +784,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         }
         let (SubsetPlan { task, finish }, keys) = self.plan_array_subset(array_subset, options)?;
         let value = match task {
-            Some(task) => Some(drive_sync(task, &self.chunk_io(keys)?, resources)?),
+            Some(task) => Some(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?),
             None => None,
         };
         let bytes = finish.finish(value)?;
@@ -821,7 +809,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             );
         }
         let (task, keys) = self.plan_array_subset_into(array_subset, &output_target, options)?;
-        drive_sync(task, &self.chunk_io(keys)?, resources)?;
+        drive_blocking_one(task, &self.chunk_io(keys)?, resources)?;
         Ok(())
     }
 
@@ -841,7 +829,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             TaskTarget::Value,
             options,
         )?;
-        let bytes = array_value(drive_sync(task, &self.chunk_io(keys)?, resources)?)?.into_owned();
+        let bytes =
+            array_value(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?)?.into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
         Ok(bytes)
     }
@@ -865,7 +854,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             TaskTarget::Views(views),
             options,
         )?;
-        drive_sync(task, &self.chunk_io(keys)?, resources)?;
+        drive_blocking_one(task, &self.chunk_io(keys)?, resources)?;
         Ok(())
     }
 }

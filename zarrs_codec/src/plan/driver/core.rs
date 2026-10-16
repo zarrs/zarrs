@@ -6,6 +6,8 @@
 //! produces a further outcome for the node.
 //!
 //! The scheduler only tracks state. Drivers decide when and where work runs.
+// Parts of the scheduler are used only by the sync, async, or offloading drivers
+#![cfg_attr(any(target_family = "wasm", not(feature = "async")), allow(dead_code))]
 
 use std::collections::VecDeque;
 
@@ -75,10 +77,8 @@ pub(crate) enum Work<'a> {
         /// The bytes read, or [`None`] if the reads are from memory (and resolved when the work runs).
         reads: Option<Reads<'a>>,
         /// The number of bytes read from storage.
-        #[cfg_attr(all(target_family = "wasm", not(feature = "async")), allow(dead_code))]
         fetched: u64,
         step: ComputeStep<'a>,
-        #[cfg_attr(any(not(feature = "async"), target_arch = "wasm32"), allow(dead_code))]
         hint: TaskHint,
     },
     /// The join step of a fork.
@@ -180,7 +180,6 @@ pub(crate) type Registry<'a> = Mutex<Vec<Arc<IndexedState<'a>>>>;
 /// An indexed generator that a job created (as the outcome of a task) and continues to run.
 ///
 /// The job reports it to the scheduler while it runs, so the scheduler can add jobs to it straight away.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub(crate) struct Joined<'a> {
     /// The generator of the task.
     parent: Arc<IndexedState<'a>>,
@@ -257,7 +256,6 @@ pub(crate) type RangeResults<'a> = SmallVec<[(Arc<IndexedState<'a>>, RangeOutput
 
 /// The tasks run by a [`RangeWork`].
 pub(crate) struct RangeOutput<'a> {
-    collect: bool,
     /// The values of tasks that completed, if collected.
     values: Vec<(usize, TaskValue<'a>)>,
     /// Tasks whose compute step produced more work (e.g. children or writes).
@@ -274,11 +272,9 @@ struct Current<'a> {
 
 impl<'a> Current<'a> {
     fn new(state: Arc<IndexedState<'a>>) -> Self {
-        let collect = state.collect;
         Self {
             state,
             output: RangeOutput {
-                collect,
                 values: Vec::new(),
                 outcomes: Vec::new(),
                 tasks: Vec::new(),
@@ -446,7 +442,6 @@ fn run_indexed<'a>(
 
 impl<'a> Work<'a> {
     /// The number of bytes read from storage for the work, released once it completes.
-    #[cfg_attr(all(target_family = "wasm", not(feature = "async")), allow(dead_code))]
     pub(crate) fn fetched(&self) -> u64 {
         match self {
             Self::Compute { fetched, .. } => *fetched,
@@ -456,7 +451,6 @@ impl<'a> Work<'a> {
 
     /// Returns true if the work is a job of an indexed generator whose jobs have run tasks
     /// (rather than only returning them for reads), so the job is likely to compute.
-    #[cfg_attr(any(not(feature = "async"), target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn is_computing_range(&self) -> bool {
         match self {
             Self::Range(range) => range.state.runs_tasks.load(Ordering::Relaxed),
@@ -466,7 +460,6 @@ impl<'a> Work<'a> {
 
     /// Returns true if the work is a job of an indexed generator whose jobs have not run tasks (so far only returning
     /// them for reads), so the job is likely to only plan reads.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn is_planning_range(&self) -> bool {
         match self {
             Self::Range(range) => !range.state.runs_tasks.load(Ordering::Relaxed),
@@ -476,7 +469,6 @@ impl<'a> Work<'a> {
 
     /// Make a job of an indexed generator stop after the block of indices in which it runs a task,
     /// so that a driver running it on a thread that should not compute for long can run later jobs elsewhere.
-    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     pub(crate) fn run_briefly(&mut self) {
         if let Self::Range(range) = self {
             range.brief = true;
@@ -517,7 +509,6 @@ impl<'a> Work<'a> {
     }
 
     /// The scheduling hints of the work.
-    #[cfg_attr(any(not(feature = "async"), target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn hint(&self) -> TaskHint {
         match self {
             Self::Compute { hint, .. } => *hint,
@@ -573,20 +564,17 @@ impl<'a> IoWork<'a> {
     /// # Errors
     /// Returns a [`CodecError`] if a byte range is invalid for the source.
     pub(crate) fn peek_request(&self) -> Result<IoRequest, CodecError> {
-        let SourceRoot::External(key) = self.source.root() else {
-            unreachable!("I/O work has an external source")
-        };
         let mut ranges = self.ranges.clone();
         self.source.resolve_in_place(&mut ranges)?;
-        Ok(IoRequest { key: *key, ranges })
+        Ok(IoRequest {
+            key: self.key(),
+            ranges,
+        })
     }
 
     /// The key of the source of the read.
     fn key(&self) -> SourceKey {
-        let SourceRoot::External(key) = self.source.root() else {
-            unreachable!("I/O work has an external source")
-        };
-        *key
+        external_key(&self.source)
     }
 
     /// The key and byte ranges to read, taken from the work.
@@ -594,13 +582,21 @@ impl<'a> IoWork<'a> {
     /// # Errors
     /// Returns a [`CodecError`] if a byte range is invalid for the source.
     pub(crate) fn request(&mut self) -> Result<IoRequest, CodecError> {
-        let SourceRoot::External(key) = self.source.root() else {
-            unreachable!("I/O work has an external source")
-        };
         let mut ranges = std::mem::take(&mut self.ranges);
         self.source.resolve_in_place(&mut ranges)?;
-        Ok(IoRequest { key: *key, ranges })
+        Ok(IoRequest {
+            key: self.key(),
+            ranges,
+        })
     }
+}
+
+/// The key of the external source of a read.
+fn external_key(source: &ByteSource<'_>) -> SourceKey {
+    let SourceRoot::External(key) = source.root() else {
+        unreachable!("a read has an external source")
+    };
+    *key
 }
 
 /// The bytes of the `result` of a read of `ranges` (resolved) of `source`.
@@ -656,10 +652,7 @@ impl<'a> SingleTask<'a> {
         }
         let (source, mut ranges, step) = task.into_parts();
         let source = source.expect("a task with I/O has a source");
-        let SourceRoot::External(key) = source.root() else {
-            unreachable!("a task with I/O has an external source")
-        };
-        let key = *key;
+        let key = external_key(&source);
         source.resolve_in_place(&mut ranges)?;
         Ok(Self::Read(
             SingleRead { source, step },
@@ -707,7 +700,6 @@ pub(crate) struct IoRequest {
 /// the actual size when the read completes, which is released when its compute step completes.
 /// A read is always admitted if no bytes are held or reserved, so a read larger than the limit
 /// does not stall a drive.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub(crate) struct ByteBudget {
     limit: u64,
     held: u64,
@@ -716,7 +708,6 @@ pub(crate) struct ByteBudget {
     observed_reads: u64,
 }
 
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 impl ByteBudget {
     pub(crate) fn new(limit: usize) -> Self {
         Self {
@@ -750,6 +741,15 @@ impl ByteBudget {
                 .saturating_add(self.reserved)
                 .saturating_add(estimate)
                 <= self.limit
+    }
+
+    /// Reserve the estimated bytes of a read with `hint` if they are admitted, returning the bytes reserved.
+    pub(crate) fn try_reserve(&mut self, hint: TaskHint) -> Option<u64> {
+        let estimate = self.estimate(hint);
+        self.admits(estimate).then(|| {
+            self.reserve(estimate);
+            estimate
+        })
     }
 
     /// Reserve `estimate` bytes for a dispatched read.
@@ -807,7 +807,6 @@ enum Generating<'a> {
 }
 
 /// How a drive with `resources` coalesces reads of a backend with the `hint`, if at all.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub(crate) fn read_coalescing(
     resources: &crate::Resources,
     hint: Option<ReadCoalescing>,
@@ -819,7 +818,6 @@ pub(crate) fn read_coalescing(
 }
 
 /// The number of queued items that generators keep available to drivers with `resources`.
-#[cfg_attr(all(target_family = "wasm", not(feature = "async")), allow(dead_code))]
 pub(crate) fn generation_window(resources: &crate::Resources) -> usize {
     let target = |target: usize| if target == 0 { 64 } else { target.min(1024) };
     (2 * (target(resources.compute_target()) + target(resources.io_target()))).max(4)
@@ -949,13 +947,11 @@ impl<'a> Scheduler<'a> {
     }
 
     /// Set the number of compute steps that run in parallel (default 1), the maximum number of jobs of an indexed generator.
-    #[cfg_attr(all(target_family = "wasm", not(feature = "async")), allow(dead_code))]
     pub(crate) fn set_parallelism(&mut self, parallelism: usize) {
         self.parallelism = parallelism.max(1);
     }
 
     /// Set the maximum number of tasks a job of an indexed generator returns for reads (default 64).
-    #[cfg_attr(all(target_family = "wasm", not(feature = "async")), allow(dead_code))]
     pub(crate) fn set_max_deferred(&mut self, max_deferred: usize) {
         self.max_deferred = max_deferred.max(1);
     }
@@ -1017,27 +1013,46 @@ impl<'a> Scheduler<'a> {
     }
 
     /// Returns true if the drive has failed.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn failed(&self) -> bool {
         self.error.is_some()
     }
 
     /// The number of queued compute steps, reads, and writes.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn queued(&self) -> usize {
         self.compute.len() + self.io.len() + self.writes.len()
     }
 
     /// The number of queued compute steps.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn compute_queued(&self) -> usize {
         self.compute.len()
     }
 
     /// The number of queued reads.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn io_queued(&self) -> usize {
         self.io.len()
+    }
+
+    /// Run one queued compute step, write, or read on the calling thread, performing I/O with `io`.
+    ///
+    /// Returns false if nothing is queued.
+    pub(crate) fn run_one(&mut self, io: &dyn InlineIo, ctx: &ComputeCtx) -> bool {
+        if let Some(work) = self.pop_compute() {
+            self.complete_work(work.run(ctx, Some(io), None));
+        } else if let Some(write) = self.pop_write() {
+            let result = io.write(write.op);
+            self.complete_write(write.node, result);
+        } else if let Some(mut read) = self.pop_io() {
+            match read.request() {
+                Ok(request) => {
+                    let result = io.read(&request);
+                    self.complete_io(read, &request, result);
+                }
+                Err(err) => self.fail(err),
+            }
+        } else {
+            return false;
+        }
+        true
     }
 
     /// Take the next compute step to run.
@@ -1055,21 +1070,13 @@ impl<'a> Scheduler<'a> {
     ///
     /// Returns [`None`] if there is no read or `budget` does not admit the next read.
     /// Returns the bytes reserved for the group, also on error.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn pop_read_group(
         &mut self,
         coalescing: Option<ReadCoalescing>,
         budget: &mut ByteBudget,
     ) -> Option<(Result<ReadGroup<'a>, CodecError>, u64)> {
-        let mut admit = |hint: TaskHint| {
-            let estimate = budget.estimate(hint);
-            budget.admits(estimate).then(|| {
-                budget.reserve(estimate);
-                estimate
-            })
-        };
         let hint = self.io.peek()?.hint;
-        let mut reserved = admit(hint)?;
+        let mut reserved = budget.try_reserve(hint)?;
         let mut read = self.io.pop().expect("peeked");
         let request = match read.request() {
             Ok(request) => request,
@@ -1084,13 +1091,6 @@ impl<'a> Scheduler<'a> {
             reserved = coalesce::known_len(&request);
             budget.reserve(reserved);
         }
-        let mut admit = |hint: TaskHint| {
-            let estimate = budget.estimate(hint);
-            budget.admits(estimate).then(|| {
-                budget.reserve(estimate);
-                estimate
-            })
-        };
 
         // Queued reads of the same key, and their requests
         let key = request.key;
@@ -1120,7 +1120,7 @@ impl<'a> Scheduler<'a> {
             let mut i = 0;
             while i < candidates.len() {
                 if coalesce::coalesces_with(&group, &candidates[i].1.ranges, coalescing) {
-                    let Some(bytes) = admit(candidates[i].2) else {
+                    let Some(bytes) = budget.try_reserve(candidates[i].2) else {
                         grew = false;
                         candidates.clear();
                         break;
@@ -1163,13 +1163,11 @@ impl<'a> Scheduler<'a> {
     }
 
     /// The scheduling hints of the next read, if any.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn peek_io_hint(&self) -> Option<TaskHint> {
         self.io.peek().map(|read| read.hint)
     }
 
     /// The number of queued writes.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn writes_queued(&self) -> usize {
         self.writes.len()
     }
@@ -1189,6 +1187,26 @@ impl<'a> Scheduler<'a> {
         match work.into_work(request, result) {
             Ok(work) => self.ready(work),
             Err(err) => self.fail(err),
+        }
+    }
+
+    /// Complete a read group whose reads reserved `reserved` bytes of `budget`, queuing the compute work of each read.
+    pub(crate) fn complete_read_group(
+        &mut self,
+        budget: &mut ByteBudget,
+        reserved: u64,
+        results: SmallVec<[Result<Work<'a>, CodecError>; 1]>,
+    ) {
+        let fetched = results
+            .iter()
+            .map(|result| result.as_ref().map_or(0, Work::fetched))
+            .sum();
+        budget.arrived(reserved, fetched);
+        for result in results {
+            match result {
+                Ok(work) => self.ready(work),
+                Err(err) => self.fail(err),
+            }
         }
     }
 
@@ -1240,16 +1258,15 @@ impl<'a> Scheduler<'a> {
         };
         for (state, output) in results {
             let id = state.node();
-            self.complete_range_output(id, output);
+            self.complete_range_output(id, state.collect, output);
             // Once recorded, the generator can complete (see `refill`)
             state.unreported.fetch_sub(1, Ordering::SeqCst);
         }
     }
 
     /// Record the tasks a job ran of the indexed generator of the node `id`.
-    fn complete_range_output(&mut self, id: NodeId, output: RangeOutput<'a>) {
+    fn complete_range_output(&mut self, id: NodeId, collect: bool, output: RangeOutput<'a>) {
         let RangeOutput {
-            collect,
             values,
             outcomes,
             tasks,
@@ -1278,7 +1295,6 @@ impl<'a> Scheduler<'a> {
     }
 
     /// Record an indexed generator created and joined by a running job.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn joined(&mut self, joined: Joined<'a>) {
         if self.error.is_some() {
             return;
@@ -1294,7 +1310,7 @@ impl<'a> Scheduler<'a> {
         // The task of the generator remains pending until the generator completes
         parent_node.pending += 1;
         let depth = parent_node.depth + 1;
-        let has_join = join.as_ref().is_some_and(Join::collects);
+        let has_join = state.collect;
         let mut values = Vec::new();
         if has_join {
             values.resize_with(state.len, || TaskValue::None);
@@ -1313,7 +1329,7 @@ impl<'a> Scheduler<'a> {
             values,
             value: TaskValue::None,
         });
-        self.add_indexed(id, depth + 1, has_join, state, false);
+        self.add_indexed(id, depth + 1, state, false);
     }
 
     /// Add the indexed generator `state` of the node `id`, whose tasks have `depth`.
@@ -1323,7 +1339,6 @@ impl<'a> Scheduler<'a> {
         &mut self,
         id: NodeId,
         depth: usize,
-        collect: bool,
         state: Arc<IndexedState<'a>>,
         register: bool,
     ) {
@@ -1336,8 +1351,8 @@ impl<'a> Scheduler<'a> {
         }
         self.generators.push(ActiveGenerator {
             node: id,
+            join: state.collect,
             generator: Generating::Indexed(state),
-            join: collect,
             next_slot: 0,
             depth,
         });
@@ -1394,7 +1409,7 @@ impl<'a> Scheduler<'a> {
                         }
                         let block = block_size(len, self.parallelism);
                         let state = Arc::new(IndexedState::new(len, plan, has_join, block, 0));
-                        self.add_indexed(id, depth + 1, has_join, state, true);
+                        self.add_indexed(id, depth + 1, state, true);
                     }
                     GeneratorKind::Iter(iter) => self.generators.push(ActiveGenerator {
                         node: id,

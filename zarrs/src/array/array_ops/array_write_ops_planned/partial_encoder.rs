@@ -19,8 +19,8 @@ use zarrs_data_type::DataType;
 use zarrs_storage::{ReadableWritableStorageTraits, StorageError};
 
 use super::super::array_read_ops_planned::{
-    array_to_codec_error, array_value, check_target_len, drive_sync, static_local_subchunk_grids,
-    whole_views,
+    array_to_codec_error, array_value, check_target_len, drive_blocking_one,
+    static_local_subchunk_grids, whole_views,
 };
 use super::{ChunkReadWriteIo, plan_update};
 use crate::array::{
@@ -124,7 +124,7 @@ impl ArrayPartialDecoderSubchunkingTraits for PlannedArrayPartialEncoder {
             return Ok(grids);
         }
         let task = self.chunk.plan_local_subchunk_grids(options)?;
-        local_subchunk_grids(drive_sync(task, &self.io, resources)?)
+        local_subchunk_grids(drive_blocking_one(task, &self.io, resources)?)
     }
 }
 
@@ -154,7 +154,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialEncoder {
         let task = self
             .chunk
             .plan_decode(indexer, TaskTarget::Value, options)?;
-        let bytes = array_value(drive_sync(task, &self.io, resources)?)?.into_owned();
+        let bytes = array_value(drive_blocking_one(task, &self.io, resources)?)?.into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
         Ok(bytes)
     }
@@ -171,7 +171,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialEncoder {
         let task = self
             .chunk
             .plan_decode(indexer, TaskTarget::Views(views), options)?;
-        drive_sync(task, &self.io, resources)?;
+        drive_blocking_one(task, &self.io, resources)?;
         Ok(())
     }
 
@@ -199,7 +199,7 @@ impl ArrayPartialEncoderTraits for PlannedArrayPartialEncoder {
         let task = self
             .chunk
             .plan_partial_encode(indexer, bytes, state.take(), options)?;
-        *state = partial_encode_state(drive_sync(task, &self.io, resources)?);
+        *state = partial_encode_state(drive_blocking_one(task, &self.io, resources)?);
         Ok(())
     }
 

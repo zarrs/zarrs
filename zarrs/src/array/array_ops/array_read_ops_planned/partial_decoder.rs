@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use zarrs_codec::plan::{
     ByteSource, DecodeRequest, MissingDecoder, PlanIndexer, PrepareDecode, PreparedDecoder,
-    ReadBytes, SourceKey, SyncIo, Task, TaskTarget, local_subchunk_grids, prepared,
+    ReadBytes, SourceKey, SyncIo, Task, TaskTarget, drive_memory_one, local_subchunk_grids,
+    prepared,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
@@ -17,7 +18,7 @@ use zarrs_storage::{Bytes, ReadableStorageTraits, StorageError};
 
 use super::{
     Array, ArrayBytes, ArrayError, ChunkIo, ChunkKeys, CodecChainBound, Indexer, array_value,
-    check_target_len, drive_sync, whole_views,
+    check_target_len, drive_blocking_one, whole_views,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{ChunkGrid, ChunkShape};
@@ -86,7 +87,7 @@ impl ArrayPartialDecoderSubchunkingTraits for PlannedArrayPartialDecoder {
         let task = self
             .chunk
             .plan_local_subchunk_grids(ByteSource::external(SourceKey(0)), options)?;
-        local_subchunk_grids(drive_sync(task, &self.io, resources)?)
+        local_subchunk_grids(drive_blocking_one(task, &self.io, resources)?)
     }
 }
 
@@ -121,7 +122,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialDecoder {
             .decoder
             .clone()
             .plan_decode(PlannedChunk::value_request(indexer), options)?;
-        let bytes = array_value(drive_sync(task, &self.io, resources)?)?.into_owned();
+        let bytes = array_value(drive_blocking_one(task, &self.io, resources)?)?.into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
         Ok(bytes)
     }
@@ -142,7 +143,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialDecoder {
             },
             options,
         )?;
-        drive_sync(task, &self.io, resources)?;
+        drive_blocking_one(task, &self.io, resources)?;
         Ok(())
     }
 
@@ -214,7 +215,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let io = self.chunk_io(keys)?;
         let decoder = match prepare {
             PrepareDecode::Ready(decoder) => decoder,
-            PrepareDecode::Plan(task) => prepared(drive_sync(task, &io, resources)?)?,
+            PrepareDecode::Plan(task) => prepared(drive_blocking_one(task, &io, resources)?)?,
         };
         Ok(Arc::new(PlannedArrayPartialDecoder {
             chunk: PlannedChunk {
@@ -224,21 +225,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             },
             io,
         }))
-    }
-}
-
-/// The I/O backend of drives of tasks with in-memory sources, which never read.
-struct NoIo;
-
-impl SyncIo for NoIo {
-    fn read(
-        &self,
-        _key: SourceKey,
-        _ranges: &[ByteRange],
-    ) -> Result<Option<ReadBytes>, StorageError> {
-        Err(StorageError::Other(
-            "a task with an in-memory source requested I/O".to_string(),
-        ))
     }
 }
 
@@ -274,15 +260,14 @@ impl ArrayPartialDecoderSubchunkingTraits for PlannedMemoryPartialDecoder {
         let value = match &self.encoded {
             Some(encoded) => {
                 let source = ByteSource::memory(CowBytes::Shared(encoded.clone()));
-                drive_sync(
+                drive_memory_one(
                     self.chunk.plan_local_subchunk_grids(source, options)?,
-                    &NoIo,
                     resources,
                 )?
             }
             None => {
                 let source = ByteSource::external(SourceKey(0));
-                drive_sync(
+                drive_blocking_one(
                     self.chunk.plan_local_subchunk_grids(source, options)?,
                     &MissingIo,
                     resources,
@@ -317,7 +302,7 @@ impl ArrayPartialDecoderTraits for PlannedMemoryPartialDecoder {
             .decoder
             .clone()
             .plan_decode(PlannedChunk::value_request(indexer), options)?;
-        let bytes = array_value(drive_sync(task, &NoIo, resources)?)?.into_owned();
+        let bytes = array_value(drive_memory_one(task, resources)?)?.into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
         Ok(bytes)
     }
@@ -338,7 +323,7 @@ impl ArrayPartialDecoderTraits for PlannedMemoryPartialDecoder {
             },
             options,
         )?;
-        drive_sync(task, &NoIo, resources)?;
+        drive_memory_one(task, resources)?;
         Ok(())
     }
 
@@ -363,7 +348,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             let source = ByteSource::memory(CowBytes::Shared(encoded.clone()));
             match codecs.clone().prepare_decode(source, &shape, options)? {
                 PrepareDecode::Ready(decoder) => decoder,
-                PrepareDecode::Plan(task) => prepared(drive_sync(task, &NoIo, resources)?)?,
+                PrepareDecode::Plan(task) => prepared(drive_memory_one(task, resources)?)?,
             }
         } else {
             Arc::new(MissingDecoder::new(codecs.clone().into_dyn(), &shape))

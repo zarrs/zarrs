@@ -51,25 +51,22 @@ pub fn drive_serial_one<'a>(
     }
 }
 
-/// Run a single root task, returning its value, or a scheduler to continue it if it fans out.
+/// Run a single root task on the calling thread, returning its value, or a scheduler to continue it if it fans out.
 // The scheduler is moved once per drive, which is cheaper than boxing it
 #[allow(clippy::result_large_err)]
-fn drive_single<'a>(
+pub(super) fn drive_single<'a>(
     task: Task<'a>,
     io: &dyn SyncIo,
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))] resources: &Resources,
+    resources: &Resources,
     ctx: &ComputeCtx,
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
     let outcome = match SingleTask::new(task)? {
         SingleTask::Compute(task) => task.run_without_io(ctx)?,
         SingleTask::Read(read, request) => {
-            #[cfg(not(target_family = "wasm"))]
-            let permit = resources
-                .io_limiter()
-                .map(crate::IoLimiter::acquire_blocking);
-            let result = io.read(request.key, &request.ranges);
-            #[cfg(not(target_family = "wasm"))]
-            drop(permit);
+            let result = {
+                let _permit = resources.io_permit_blocking();
+                io.read(request.key, &request.ranges)
+            };
             read.run(&request, result, ctx)?
         }
     };
@@ -79,42 +76,22 @@ fn drive_single<'a>(
 fn drive_scheduler<'a>(
     mut scheduler: Scheduler<'a>,
     io: &dyn SyncIo,
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))] resources: &Resources,
+    resources: &Resources,
     ctx: &ComputeCtx,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
-    #[cfg(not(target_family = "wasm"))]
-    let io_limiter = resources.io_limiter();
+    let io = SerialIo { io, resources };
     loop {
         scheduler.refill(1);
-        if let Some(work) = scheduler.pop_compute() {
-            let reads = SerialIo { io, resources };
-            scheduler.complete_work(work.run(ctx, Some(&reads), None));
-        } else if let Some(write) = scheduler.pop_write() {
-            #[cfg(not(target_family = "wasm"))]
-            let _permit = io_limiter.map(crate::IoLimiter::acquire_blocking);
-            let result = io.write(write.op);
-            scheduler.complete_write(write.node, result);
-        } else if let Some(mut read) = scheduler.pop_io() {
-            match read.request() {
-                Ok(request) => {
-                    #[cfg(not(target_family = "wasm"))]
-                    let _permit = io_limiter.map(crate::IoLimiter::acquire_blocking);
-                    let result = io.read(request.key, &request.ranges);
-                    scheduler.complete_io(read, &request, result);
-                }
-                Err(err) => scheduler.fail(err),
-            }
-        } else {
+        if !scheduler.run_one(&io, ctx) {
             break;
         }
     }
     scheduler.finish()
 }
 
-/// The reads of a serial drive, which are all inline.
+/// The I/O of a serial drive, which is all inline.
 struct SerialIo<'d> {
     io: &'d dyn SyncIo,
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     resources: &'d Resources,
 }
 
@@ -125,20 +102,12 @@ impl InlineIo for SerialIo<'_> {
     }
 
     fn read(&self, request: &IoRequest) -> Result<Option<ReadBytes>, StorageError> {
-        #[cfg(not(target_family = "wasm"))]
-        let _permit = self
-            .resources
-            .io_limiter()
-            .map(crate::IoLimiter::acquire_blocking);
+        let _permit = self.resources.io_permit_blocking();
         self.io.read(request.key, &request.ranges)
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-        #[cfg(not(target_family = "wasm"))]
-        let _permit = self
-            .resources
-            .io_limiter()
-            .map(crate::IoLimiter::acquire_blocking);
+        let _permit = self.resources.io_permit_blocking();
         self.io.write(op)
     }
 }

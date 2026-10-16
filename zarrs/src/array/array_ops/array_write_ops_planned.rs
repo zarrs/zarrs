@@ -25,7 +25,7 @@ use zarrs_storage::{
 
 use super::super::codec::CodecChainBound;
 use super::array_read_ops_planned::{
-    ChunkKeys, ChunkPlanner, drive_sync, plan_error, read_ranges, subset_chunk_shape,
+    ChunkKeys, ChunkPlanner, drive_blocking_one, plan_error, read_ranges, subset_chunk_shape,
 };
 mod partial_encoder;
 
@@ -321,7 +321,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let num_chunks = usize::try_from(chunks.len()).unwrap();
         if num_chunks > 0 {
             let io = self.chunk_write_io(self.indexer_keys(chunks))?;
-            drive_sync(plan_erase_chunks(num_chunks), &io, resources)?;
+            drive_blocking_one(plan_erase_chunks(num_chunks), &io, resources)?;
         }
         Ok(())
     }
@@ -355,7 +355,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 .chunk_planner(options)
                 .plan_store(SourceKey(0), &shape, chunk_bytes);
             let io = self.chunk_write_io(self.one_key(chunk_indices)?)?;
-            drive_sync(task, &io, resources)?;
+            drive_blocking_one(task, &io, resources)?;
             return Ok(());
         }
         let encoded =
@@ -369,11 +369,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
         let key = self.chunk_key(chunk_indices)?;
-        // A single-threaded target cannot wait on a permit held by another drive (see `drive_serial`)
-        #[cfg(not(target_family = "wasm"))]
-        let _permit = resources
-            .io_limiter()
-            .map(zarrs_codec::IoLimiter::acquire_blocking);
+        let _permit = resources.io_permit_blocking();
         match encoded {
             Some(encoded) => storage.set(&key, encoded)?,
             None => storage.erase(&key)?,
@@ -400,7 +396,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
             chunks_bytes,
             false,
         );
-        drive_sync(task, &self.chunk_write_io(keys)?, resources)?;
+        drive_blocking_one(task, &self.chunk_write_io(keys)?, resources)?;
         Ok(())
     }
 }
@@ -438,7 +434,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             subset_bytes,
             self.partial_encodes(),
         );
-        drive_sync(task, &self.chunk_read_write_io(keys)?, resources)?;
+        drive_blocking_one(task, &self.chunk_read_write_io(keys)?, resources)?;
         Ok(())
     }
 
@@ -472,7 +468,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             )?
             .expect("the codecs plan partial encodes");
         let io = self.chunk_read_write_io(self.one_key(chunk_indices)?)?;
-        drive_sync(task, &io, resources)?;
+        drive_blocking_one(task, &io, resources)?;
         Ok(())
     }
 }
@@ -654,10 +650,7 @@ pub(super) mod async_planned {
                 .create_async_writable_transformer(storage_handle)
                 .await?;
             let key = self.chunk_key(chunk_indices)?;
-            let _permit = match resources.io_limiter() {
-                Some(limiter) => Some(limiter.acquire().await),
-                None => None,
-            };
+            let _permit = resources.io_permit().await;
             match encoded {
                 Some(encoded) => storage.set(&key, encoded).await?,
                 None => storage.erase(&key).await?,
