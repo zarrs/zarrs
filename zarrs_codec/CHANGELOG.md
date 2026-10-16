@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToArrayCodecTraits::plan_decode_request`, which maps a request through an array-to-array codec (`plan::ArrayToArrayDecodePlan`)
   - `BytesToBytesCodecTraits::source_step`, which describes how partial reads pass through a bytes-to-bytes codec (`plan::SourceStep` and `plan::RangeDecoder`)
 - Add `plan::Generator`, `plan::Outcome::Generate` and `plan::Join::after` for generating the tasks of an operation as they are needed
-- Add `plan::{decode_whole,place_decoded,is_whole_chunk,whole_chunk_hint,plan_decode_request_elementwise}` for codec planners
+- Add `plan::{decode_whole,place_decoded,place_fill_value,is_whole_chunk,whole_chunk_hint,plan_decode_request_elementwise}` for codec planners
 - Add `plan::{PrepareDecode,SourceDecoder,MissingDecoder,DecodedDecoder,prepared}` and `plan::TaskValue::Prepared`
 - Add `plan::ByteSource::{memory_slice,size_held}` and `plan::TargetViews::{with_subdivided,with_local_keepalive}`
 - Add `ReadDispatch` and `Resources::{read_dispatch,set_read_dispatch,with_read_dispatch}`, which override how synchronous drives dispatch reads
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add planned encoding to the codec traits
   - `ArrayToBytesCodecTraits::plan_encode` (by default, `plan::plan_encode_whole`) and `ArrayToBytesCodecTraits::plans_encode_subtasks`
   - `ArrayToBytesCodecTraits::plan_partial_encode` and `ArrayToBytesCodecTraits::plans_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
-- Add `plan::{encode_hint,encoded_value}`
+- Add `plan::{encode_hint,encoded_value,decode_and_update}`
 - Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec, and `plan::partial_encode_request_elementwise`
 - Add planned resolution of chunk-local subchunk grids
   - `ArrayToBytesCodecTraits::plan_local_subchunk_grids`, which plans the resolution of the subchunk grids of a chunk from its encoded bytes

@@ -17,8 +17,8 @@ use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, sign_extend_co
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::plan::{
-    ByteSource, DecodeRequest, Outcome, Task, TaskHint, TaskTarget, TaskValue, decode_whole,
-    is_whole_chunk, plan_decode_whole,
+    ByteSource, DecodeRequest, Task, TaskHint, decode_whole, is_whole_chunk, place_decoded,
+    plan_decode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -507,13 +507,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 self.last_bit,
                 indexer.len(),
             )?;
-            match request.target {
-                TaskTarget::Views(views) => {
-                    views.with_target(|target| decode_into_array_bytes_target(&bytes, target))?;
-                    Ok(Outcome::Done)
-                }
-                TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(bytes))),
-            }
+            place_decoded(bytes, request.target)
         })
         .with_hint(TaskHint {
             read_bytes: Some(read_bytes),

@@ -17,8 +17,8 @@ mod task;
 
 pub use decode::{
     ArrayToArrayDecodePlan, decode_whole, is_whole_chunk, local_subchunk_grids,
-    local_subchunk_grids_value, place_decoded, plan_decode_request_elementwise, plan_decode_whole,
-    whole_chunk_hint,
+    local_subchunk_grids_value, place_decoded, place_fill_value, plan_decode_request_elementwise,
+    plan_decode_whole, whole_chunk_hint,
 };
 #[cfg(not(target_family = "wasm"))]
 pub use driver::{IoPool, IoScope, drive_sync, drive_sync_one};
@@ -28,8 +28,9 @@ pub use driver::{OFFLOAD_THRESHOLD, drive_async_offload, drive_async_offload_one
 pub use driver::{drive_async, drive_async_one};
 pub use driver::{drive_blocking_one, drive_memory_one, drive_serial, drive_serial_one};
 pub use encode::{
-    PartialEncodeState, encode_hint, encoded_value, partial_encode_request_elementwise,
-    partial_encode_state, partial_encode_value, plan_encode_whole,
+    PartialEncodeState, decode_and_update, encode_hint, encoded_value,
+    partial_encode_request_elementwise, partial_encode_state, partial_encode_value,
+    plan_encode_whole,
 };
 #[cfg(feature = "async")]
 pub use io::AsyncIo;

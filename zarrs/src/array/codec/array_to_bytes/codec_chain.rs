@@ -748,9 +748,8 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
         if self.array_to_array.is_empty() {
+            let (array_representations, bytes_representations) = self.get_representations(shape)?;
             let input = if let Some((last, rest)) = self.bytes_to_bytes.split_first() {
                 let mut bytes = input.into_bytes(options, resources)?;
                 for (codec, representation) in std::iter::zip(
@@ -780,35 +779,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             );
         }
 
-        let mut bytes = input.into_bytes(options, resources)?;
-
-        // bytes->bytes
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, bytes_representation, options, resources)?;
-        }
-
-        // bytes->array
-        let mut bytes = self.array_to_bytes.decode(
-            bytes,
-            &array_representations.last().unwrap().0,
+        let bytes = self.decode(
+            input.into_bytes(options, resources)?,
+            shape,
             options,
             resources,
         )?;
-
-        // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, shape, options, resources)?;
-        }
-
-        let (shape, data_type, _) = array_representations.first().unwrap();
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
-
         decode_into_array_bytes_target(&bytes, output_target)
     }
 
@@ -839,6 +815,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 .plan_decode(source, shape, request, options);
         }
 
+        // Whole chunks are read and decoded directly into the target (or the fill value)
+        if is_whole_chunk(request.indexer.as_indexer(), shape) {
+            return plan_decode_whole(self, source, shape, request, options);
+        }
+
         request
             .indexer
             .as_indexer()
@@ -846,25 +827,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         let hint = whole_chunk_hint(&*self, &source, shape);
         let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
         let options = *options;
-
-        // Whole chunks are read and decoded directly into the target (or the fill value)
-        if is_whole_chunk(request.indexer.as_indexer(), &shape) {
-            return Ok(Task::read(
-                source,
-                [ByteRange::FromStart(0, None)],
-                move |mut reads, ctx| {
-                    decode_whole(
-                        &*self,
-                        reads.pop().flatten().map(ArrayBytesDecodeIntoInput::Bytes),
-                        &shape,
-                        request,
-                        &options,
-                        ctx.resources(),
-                    )
-                },
-            )
-            .with_hint(hint));
-        }
 
         // Partial reads pass through codecs whose decoded bytes are a window of their encoded bytes
         let (source, num_materialized) = self.strip_windows(source)?;

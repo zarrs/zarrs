@@ -11,7 +11,8 @@ use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Generator, Join, MissingDecoder, Outcome, PlanIndexer,
     PrepareDecode, PreparedDecoder, SharedOutput, TargetViews, Task, TaskHint, TaskTarget,
-    TaskValue, decode_whole, drive_memory_one, is_whole_chunk, place_decoded, whole_chunk_hint,
+    TaskValue, decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
+    whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
@@ -64,7 +65,11 @@ impl ShardingCodecBound {
                 [ByteRange::FromStart(0, None)],
                 move |mut reads, ctx| {
                     let Some(shard) = reads.pop().flatten() else {
-                        return fill(&self, request);
+                        return place_fill_value(
+                            self.inner_codecs.data_type(),
+                            self.inner_codecs.fill_value(),
+                            request,
+                        );
                     };
                     let source = ByteSource::memory(shard);
                     let encoded_index = source
@@ -83,7 +88,11 @@ impl ShardingCodecBound {
         Ok(
             Task::read(index_source, [index_byte_range], move |mut reads, ctx| {
                 let Some(encoded_index) = reads.pop().flatten() else {
-                    return fill(&self, request);
+                    return place_fill_value(
+                        self.inner_codecs.data_type(),
+                        self.inner_codecs.fill_value(),
+                        request,
+                    );
                 };
                 let shard_index = decode_index(&self, &encoded_index, &index_shape, &options, ctx)?;
                 drop(encoded_index);
@@ -204,13 +213,10 @@ impl ShardingCodecBound {
     ) -> Result<Outcome<'a>, CodecError> {
         let indexer = request.indexer.as_indexer();
         if indexer.is_empty() {
-            return place_decoded(
-                ArrayBytes::new_fill_value(
-                    self.inner_codecs.data_type(),
-                    0,
-                    self.inner_codecs.fill_value(),
-                )?,
-                request.target,
+            return place_fill_value(
+                self.inner_codecs.data_type(),
+                self.inner_codecs.fill_value(),
+                request,
             );
         }
         let Some(subset) = indexer
@@ -515,27 +521,13 @@ impl ShardingCodecBound {
                 options,
             )?))
         } else {
-            match request.target {
-                TaskTarget::Views(views) => {
-                    views.with_target(|target| {
-                        copy_fill_value_into(
-                            self.inner_codecs.data_type(),
-                            self.inner_codecs.fill_value(),
-                            target,
-                        )
-                    })?;
-                    Ok(None)
-                }
-                TaskTarget::Value => {
-                    let fill_value = ArrayBytes::new_fill_value(
-                        self.inner_codecs.data_type(),
-                        request.indexer.as_indexer().len(),
-                        self.inner_codecs.fill_value(),
-                    )?;
-                    Ok(Some(Task::compute(move |_| {
-                        Ok(Outcome::Value(TaskValue::Array(fill_value)))
-                    })))
-                }
+            match place_fill_value(
+                self.inner_codecs.data_type(),
+                self.inner_codecs.fill_value(),
+                request,
+            )? {
+                Outcome::Done => Ok(None),
+                outcome => Ok(Some(Task::compute(move |_| Ok(outcome)))),
             }
         }
     }
@@ -891,7 +883,11 @@ impl PreparedDecoder for ShardDecoder {
                 [ByteRange::FromStart(0, None)],
                 move |mut reads, ctx| {
                     let Some(shard) = reads.pop().flatten() else {
-                        return fill(&self.codec, request);
+                        return place_fill_value(
+                            self.codec.inner_codecs.data_type(),
+                            self.codec.inner_codecs.fill_value(),
+                            request,
+                        );
                     };
                     self.codec.clone().plan_subchunks(
                         ByteSource::memory(shard),
@@ -923,32 +919,6 @@ impl PreparedDecoder for ShardDecoder {
 
     fn size_held(&self) -> usize {
         self.source.size_held() + self.shard_index.len() * size_of::<u64>()
-    }
-}
-
-/// The fill value for `request` of an empty shard.
-fn fill<'a>(
-    codec: &ShardingCodecBound,
-    request: DecodeRequest<'a>,
-) -> Result<Outcome<'a>, CodecError> {
-    match request.target {
-        TaskTarget::Views(views) => {
-            views.with_target(|target| {
-                copy_fill_value_into(
-                    codec.inner_codecs.data_type(),
-                    codec.inner_codecs.fill_value(),
-                    target,
-                )
-            })?;
-            Ok(Outcome::Done)
-        }
-        TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(
-            ArrayBytes::new_fill_value(
-                codec.inner_codecs.data_type(),
-                request.indexer.as_indexer().len(),
-                codec.inner_codecs.fill_value(),
-            )?,
-        ))),
     }
 }
 

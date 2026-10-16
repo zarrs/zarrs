@@ -4,11 +4,45 @@ use std::any::Any;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::Indexer;
+
 use super::{Outcome, PlanIndexer, Task, TaskHint, TaskValue};
 use crate::{
     ArrayBytes, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
-    CowBytes, Resources,
+    CowBytes, Resources, update_array_bytes,
 };
+
+/// Decode the `encoded` chunk of `shape` with `codec` (or the fill value if [`None`]), and update its elements `indexer` to `bytes`.
+///
+/// This is the read-modify-write of a partial encode of a codec that cannot partially encode.
+///
+/// # Errors
+/// Returns a [`CodecError`] if decoding fails or `indexer` or `bytes` are invalid for the chunk.
+pub fn decode_and_update<'a>(
+    codec: &dyn ArrayToBytesCodecTraits,
+    encoded: Option<CowBytes<'_>>,
+    shape: &[NonZeroU64],
+    indexer: &dyn Indexer,
+    bytes: &ArrayBytes<'_>,
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    let chunk = match encoded {
+        Some(encoded) => codec.decode(encoded, shape, options, resources)?,
+        None => ArrayBytes::new_fill_value(
+            codec.data_type(),
+            shape.iter().map(|s| s.get()).product(),
+            codec.fill_value(),
+        )?,
+    };
+    update_array_bytes(
+        chunk,
+        bytemuck::must_cast_slice(shape),
+        indexer,
+        bytes,
+        codec.data_type().size(),
+    )
+}
 
 /// The scheduling hints of a task that encodes `bytes`.
 #[must_use]
@@ -52,20 +86,24 @@ pub fn plan_encode_whole<'a>(
     .with_hint(hint))
 }
 
-/// Map a partial encode of the elements `indexer` to `bytes` through an elementwise array-to-array `codec`.
+/// Map a partial encode of the elements `indexer` of a chunk of `shape` to `bytes` through an elementwise array-to-array `codec`.
 ///
 /// The elements are encoded as a 1-D array, and update the same elements of the encoded chunk.
-/// See [`ArrayToArrayCodecTraits::partial_encode_request`].
+/// This implements [`ArrayToArrayCodecTraits::partial_encode_request`] for elementwise codecs.
 ///
 /// # Errors
-/// Returns a [`CodecError`] if `bytes` are invalid for the indexer or the codec fails.
+/// Returns a [`CodecError`] if the indexer is invalid for `shape`, `bytes` are invalid for the indexer, or the codec fails.
 pub fn partial_encode_request_elementwise<'a>(
     codec: &dyn ArrayToArrayCodecTraits,
+    shape: &[NonZeroU64],
     indexer: PlanIndexer<'a>,
     bytes: ArrayBytes<'a>,
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<(PlanIndexer<'a>, ArrayBytes<'a>), CodecError> {
+) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    indexer
+        .as_indexer()
+        .validate(bytemuck::must_cast_slice(shape))?;
     let bytes = match NonZeroU64::new(indexer.as_indexer().len()) {
         Some(len) => codec.encode(bytes, &[len], options, resources)?,
         None => {
@@ -73,7 +111,7 @@ pub fn partial_encode_request_elementwise<'a>(
             ArrayBytes::new_fill_value(codec.encoded_data_type(), 0, codec.encoded_fill_value())?
         }
     };
-    Ok((indexer, bytes))
+    Ok(Some((indexer, bytes)))
 }
 
 /// The state of an encoded chunk kept between partial encodes (e.g. a decoded shard index).

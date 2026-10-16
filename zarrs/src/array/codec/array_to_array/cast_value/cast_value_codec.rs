@@ -215,10 +215,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
-        indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
-        partial_encode_request_elementwise(self, indexer, bytes, options, resources).map(Some)
+        partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
     }
 
     fn plans_partial_encode(&self) -> bool {

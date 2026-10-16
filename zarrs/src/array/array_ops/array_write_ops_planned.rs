@@ -10,12 +10,9 @@ use std::sync::Arc;
 use smallvec::{SmallVec, smallvec};
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, Generator, Join, Outcome, PlanIndexer, ReadBytes, SourceKey, SyncIo,
-    Task, TaskValue, WriteOp, encode_hint, encoded_value, whole_chunk_hint,
+    Task, TaskValue, WriteOp, decode_and_update, encode_hint, encoded_value, whole_chunk_hint,
 };
-use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
-    update_array_bytes,
-};
+use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{
@@ -30,8 +27,7 @@ use super::array_read_ops_planned::{
 mod partial_encoder;
 
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShapeTraits, Indexer,
-    subset_indices_at,
+    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, Indexer, subset_indices_at,
 };
 
 /// Perform the write `op` to the chunks of `keys` in `storage`.
@@ -204,20 +200,14 @@ fn plan_update<'a>(
         source,
         [ByteRange::FromStart(0, None)],
         move |mut reads, ctx| {
-            let chunk = match reads.pop().flatten() {
-                Some(encoded) => codecs.decode(encoded, &shape, &options, ctx.resources())?,
-                None => ArrayBytes::new_fill_value(
-                    codecs.data_type(),
-                    shape.num_elements_u64(),
-                    codecs.fill_value(),
-                )?,
-            };
-            let chunk = update_array_bytes(
-                chunk,
-                bytemuck::must_cast_slice(&shape),
+            let chunk = decode_and_update(
+                &*codecs,
+                reads.pop().flatten(),
+                &shape,
                 indexer.as_indexer(),
                 &bytes,
-                codecs.data_type().size(),
+                &options,
+                ctx.resources(),
             )?;
             encode_and_write(&codecs, key, &shape, chunk, &options, encode_subtasks, ctx)
         },

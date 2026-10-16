@@ -10,10 +10,7 @@ use zarrs_storage::{Bytes, StorageError};
 use super::{
     ByteSource, DecodeRequest, PlanIndexer, ReadBytes, SourceKey, SyncIo, TaskTarget, WriteOp,
 };
-use crate::{
-    ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes, Resources,
-    update_array_bytes,
-};
+use crate::{ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes, Resources};
 
 /// Decode the elements `indexer` of the encoded chunk `encoded` of `shape` with `codec`.
 ///
@@ -91,20 +88,14 @@ pub fn partial_encode_memory(
         return Ok(());
     }
 
-    let chunk = match encoded.take() {
-        Some(value) => codec.decode(CowBytes::from(value), shape, options, resources)?,
-        None => ArrayBytes::new_fill_value(
-            codec.data_type(),
-            shape.iter().map(|s| s.get()).product(),
-            codec.fill_value(),
-        )?,
-    };
-    let chunk = update_array_bytes(
-        chunk,
-        bytemuck::must_cast_slice(shape),
+    let chunk = super::decode_and_update(
+        &*codec,
+        encoded.take().map(CowBytes::from),
+        shape,
         indexer,
         bytes,
-        codec.data_type().size(),
+        options,
+        resources,
     )?;
     if !options.store_empty_chunks() && chunk.is_fill_value(codec.fill_value()) {
         return Ok(());

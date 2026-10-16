@@ -13,6 +13,7 @@ use crate::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayToBytesCodecTraits, CodecError, CodecOptions,
     Resources, copy_fill_value_into, decode_into_array_bytes_target,
 };
+use zarrs_data_type::{DataType, FillValue};
 
 /// Returns true if `indexer` selects every element of a chunk of `shape` in C order.
 #[must_use]
@@ -94,22 +95,12 @@ pub fn decode_whole<'a>(
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<Outcome<'a>, CodecError> {
-    let DecodeRequest { indexer, target } = request;
-    let indexer = indexer.as_indexer();
     let data_type = codec.data_type();
     let Some(encoded) = encoded else {
-        return match target {
-            TaskTarget::Views(views) => {
-                views.with_target(|target| {
-                    copy_fill_value_into(data_type, codec.fill_value(), target)
-                })?;
-                Ok(Outcome::Done)
-            }
-            TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(
-                ArrayBytes::new_fill_value(data_type, indexer.len(), codec.fill_value())?,
-            ))),
-        };
+        return place_fill_value(data_type, codec.fill_value(), request);
     };
+    let DecodeRequest { indexer, target } = request;
+    let indexer = indexer.as_indexer();
     let whole = is_whole_chunk(indexer, shape);
     match target {
         TaskTarget::Views(views) if whole => {
@@ -215,6 +206,26 @@ pub fn place_decoded<'a>(
             Ok(Outcome::Done)
         }
         TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(bytes))),
+    }
+}
+
+/// Place the fill value in the elements of `request`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the fill value is incompatible with the data type or the target.
+pub fn place_fill_value<'a>(
+    data_type: &DataType,
+    fill_value: &FillValue,
+    request: DecodeRequest<'a>,
+) -> Result<Outcome<'a>, CodecError> {
+    match request.target {
+        TaskTarget::Views(views) => {
+            views.with_target(|target| copy_fill_value_into(data_type, fill_value, target))?;
+            Ok(Outcome::Done)
+        }
+        TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(
+            ArrayBytes::new_fill_value(data_type, request.indexer.as_indexer().len(), fill_value)?,
+        ))),
     }
 }
 

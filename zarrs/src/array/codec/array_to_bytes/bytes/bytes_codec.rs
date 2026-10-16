@@ -11,15 +11,15 @@ use std::num::NonZeroU64;
 use zarrs_chunk_grid::IndexerError;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, SourceKey,
-    Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_whole, encode_hint, is_whole_chunk,
-    partial_encode_value, plan_decode_whole,
+    Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_and_update, decode_whole, encode_hint,
+    is_whole_chunk, partial_encode_value, plan_decode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
     PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target, update_array_bytes,
+    decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_storage::byte_range::ByteRange;
@@ -406,17 +406,14 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                     .collect();
                 WriteOp::SetPartial(key, offset_values)
             } else {
-                let chunk = ArrayBytes::new_fill_value(
-                    &self.data_type,
-                    shape.iter().map(|d| d.get()).product(),
-                    &self.fill_value,
-                )?;
-                let chunk = update_array_bytes(
-                    chunk,
-                    bytemuck::must_cast_slice(&shape),
+                let chunk = decode_and_update(
+                    &*self,
+                    None,
+                    &shape,
                     indexer.as_indexer(),
                     &bytes,
-                    self.data_type.size(),
+                    &options,
+                    ctx.resources(),
                 )?;
                 if !options.store_empty_chunks() && chunk.is_fill_value(&self.fill_value) {
                     // The chunk remains missing

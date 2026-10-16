@@ -10,12 +10,9 @@ use std::sync::Arc;
 use smallvec::smallvec;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, Join, Outcome, PartialEncodeState, PlanIndexer, SourceKey, Task,
-    TaskHint, TaskValue, WriteOp, partial_encode_value,
+    TaskHint, TaskValue, WriteOp, decode_and_update, partial_encode_value,
 };
-use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
-    update_array_bytes,
-};
+use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes};
 use zarrs_storage::byte_range::ByteRange;
 
 use super::{
@@ -24,7 +21,7 @@ use super::{
     sharding_index_shape, subchunk_grid, subchunk_offset_size, subchunk_updates,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
-use crate::array::{ArrayBytes, ChunkShape, ChunkShapeTraits, transmute_to_bytes};
+use crate::array::{ArrayBytes, ChunkShape, transmute_to_bytes};
 
 /// The marker of an empty subchunk in a shard index.
 const EMPTY: u64 = u64::MAX;
@@ -166,26 +163,16 @@ impl ShardUpdate {
         };
         let update = move |encoded: Option<CowBytes<'_>>, ctx: &ComputeCtx| {
             let inner_codecs = &codec.inner_codecs;
-            let data_type = inner_codecs.data_type();
-            let fill_value = inner_codecs.fill_value();
-            let decoded = match encoded {
-                Some(encoded) => inner_codecs
-                    .decode(encoded, &subchunk_shape, &options, ctx.resources())?
-                    .into_owned(),
-                None => ArrayBytes::new_fill_value(
-                    data_type,
-                    subchunk_shape.num_elements_u64(),
-                    fill_value,
-                )?,
-            };
-            let updated = update_array_bytes(
-                decoded,
-                bytemuck::must_cast_slice(&subchunk_shape),
+            let updated = decode_and_update(
+                &**inner_codecs,
+                encoded,
+                &subchunk_shape,
                 indexer.as_ref(),
                 &bytes,
-                data_type.size(),
+                &options,
+                ctx.resources(),
             )?;
-            let encoded = if updated.is_fill_value(fill_value) {
+            let encoded = if updated.is_fill_value(inner_codecs.fill_value()) {
                 None
             } else {
                 Some(
