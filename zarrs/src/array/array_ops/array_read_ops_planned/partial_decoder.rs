@@ -66,6 +66,60 @@ impl PlannedChunk {
     fn supports_partial_decode(&self) -> bool {
         true
     }
+
+    /// The chunk-local subchunk grids of the chunk with encoded bytes `source`, driven synchronously with `io`.
+    fn local_subchunk_grids(
+        &self,
+        source: ByteSource<'_>,
+        io: &dyn SyncIo,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        if let Some(grids) = self.static_local_subchunk_grids()? {
+            return Ok(grids);
+        }
+        let task = self.plan_local_subchunk_grids(source, options)?;
+        local_subchunk_grids(drive_blocking_one(task, io, resources)?)
+    }
+
+    /// Decode the elements `indexer`, driven synchronously with `io`.
+    fn partial_decode(
+        &self,
+        indexer: &dyn Indexer,
+        io: &dyn SyncIo,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<ArrayBytes<'static>, CodecError> {
+        let task = self
+            .decoder
+            .clone()
+            .plan_decode(Self::value_request(indexer), options)?;
+        let bytes = array_value(drive_blocking_one(task, io, resources)?)?.into_owned();
+        bytes.validate(indexer.len(), self.data_type())?;
+        Ok(bytes)
+    }
+
+    /// Decode the elements `indexer` into `output_target`, driven synchronously with `io`.
+    fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        io: &dyn SyncIo,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        check_target_len(indexer, &output_target).map_err(array_to_codec_error)?;
+        let views = whole_views(&output_target).map_err(array_to_codec_error)?;
+        let task = self.decoder.clone().plan_decode(
+            DecodeRequest {
+                indexer: PlanIndexer::Borrowed(indexer),
+                target: TaskTarget::Views(views),
+            },
+            options,
+        )?;
+        drive_blocking_one(task, io, resources)?;
+        Ok(())
+    }
 }
 
 /// A partial decoder of a chunk that plans each request with a decoder prepared once (e.g. reading a shard index), and
@@ -81,13 +135,12 @@ impl ArrayPartialDecoderSubchunkingTraits for PlannedArrayPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        if let Some(grids) = self.chunk.static_local_subchunk_grids()? {
-            return Ok(grids);
-        }
-        let task = self
-            .chunk
-            .plan_local_subchunk_grids(ByteSource::external(SourceKey(0)), options)?;
-        local_subchunk_grids(drive_blocking_one(task, &self.io, resources)?)
+        self.chunk.local_subchunk_grids(
+            ByteSource::external(SourceKey(0)),
+            &self.io,
+            options,
+            resources,
+        )
     }
 }
 
@@ -117,14 +170,8 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let task = self
-            .chunk
-            .decoder
-            .clone()
-            .plan_decode(PlannedChunk::value_request(indexer), options)?;
-        let bytes = array_value(drive_blocking_one(task, &self.io, resources)?)?.into_owned();
-        bytes.validate(indexer.len(), self.data_type())?;
-        Ok(bytes)
+        self.chunk
+            .partial_decode(indexer, &self.io, options, resources)
     }
 
     fn partial_decode_into(
@@ -134,17 +181,8 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        check_target_len(indexer, &output_target).map_err(array_to_codec_error)?;
-        let views = whole_views(&output_target).map_err(array_to_codec_error)?;
-        let task = self.chunk.decoder.clone().plan_decode(
-            DecodeRequest {
-                indexer: PlanIndexer::Borrowed(indexer),
-                target: TaskTarget::Views(views),
-            },
-            options,
-        )?;
-        drive_blocking_one(task, &self.io, resources)?;
-        Ok(())
+        self.chunk
+            .partial_decode_into(indexer, output_target, &self.io, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -228,16 +266,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     }
 }
 
-/// The I/O backend of drives of tasks of a chunk that does not exist.
-struct MissingIo;
+/// The I/O backend of a partial decoder of a chunk in memory, which only reads a chunk that does not exist.
+struct MemoryChunkIo {
+    exists: bool,
+}
 
-impl SyncIo for MissingIo {
+impl SyncIo for MemoryChunkIo {
     fn read(
         &self,
         _key: SourceKey,
         _ranges: &[ByteRange],
     ) -> Result<Option<ReadBytes>, StorageError> {
-        Ok(None)
+        if self.exists {
+            Err(StorageError::Other(
+                "a task with an in-memory source requested I/O".to_string(),
+            ))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -246,6 +292,7 @@ impl SyncIo for MissingIo {
 pub(crate) struct PlannedMemoryPartialDecoder {
     chunk: PlannedChunk,
     encoded: Option<Bytes>,
+    io: MemoryChunkIo,
 }
 
 impl ArrayPartialDecoderSubchunkingTraits for PlannedMemoryPartialDecoder {
@@ -254,27 +301,12 @@ impl ArrayPartialDecoderSubchunkingTraits for PlannedMemoryPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        if let Some(grids) = self.chunk.static_local_subchunk_grids()? {
-            return Ok(grids);
-        }
-        let value = match &self.encoded {
-            Some(encoded) => {
-                let source = ByteSource::memory(CowBytes::Shared(encoded.clone()));
-                drive_memory_one(
-                    self.chunk.plan_local_subchunk_grids(source, options)?,
-                    resources,
-                )?
-            }
-            None => {
-                let source = ByteSource::external(SourceKey(0));
-                drive_blocking_one(
-                    self.chunk.plan_local_subchunk_grids(source, options)?,
-                    &MissingIo,
-                    resources,
-                )?
-            }
+        let source = match &self.encoded {
+            Some(encoded) => ByteSource::memory(CowBytes::Shared(encoded.clone())),
+            None => ByteSource::external(SourceKey(0)),
         };
-        local_subchunk_grids(value)
+        self.chunk
+            .local_subchunk_grids(source, &self.io, options, resources)
     }
 }
 
@@ -297,14 +329,8 @@ impl ArrayPartialDecoderTraits for PlannedMemoryPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let task = self
-            .chunk
-            .decoder
-            .clone()
-            .plan_decode(PlannedChunk::value_request(indexer), options)?;
-        let bytes = array_value(drive_memory_one(task, resources)?)?.into_owned();
-        bytes.validate(indexer.len(), self.data_type())?;
-        Ok(bytes)
+        self.chunk
+            .partial_decode(indexer, &self.io, options, resources)
     }
 
     fn partial_decode_into(
@@ -314,17 +340,8 @@ impl ArrayPartialDecoderTraits for PlannedMemoryPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        check_target_len(indexer, &output_target).map_err(array_to_codec_error)?;
-        let views = whole_views(&output_target).map_err(array_to_codec_error)?;
-        let task = self.chunk.decoder.clone().plan_decode(
-            DecodeRequest {
-                indexer: PlanIndexer::Borrowed(indexer),
-                target: TaskTarget::Views(views),
-            },
-            options,
-        )?;
-        drive_memory_one(task, resources)?;
-        Ok(())
+        self.chunk
+            .partial_decode_into(indexer, output_target, &self.io, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -358,6 +375,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 decoder,
                 codecs,
                 shape,
+            },
+            io: MemoryChunkIo {
+                exists: encoded.is_some(),
             },
             encoded,
         }))

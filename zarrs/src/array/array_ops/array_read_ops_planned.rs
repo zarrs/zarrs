@@ -172,10 +172,7 @@ pub(super) struct ChunkPlanner {
 
 impl ChunkPlanner {
     pub(super) fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
-        self.chunk_grid
-            .subset(chunk_indices)
-            .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
+        super::chunk_grid_subset(&self.chunk_grid, chunk_indices)
     }
 
     /// Plan the decoding of `indexer` of the chunk with source `key` and `chunk_shape` into `target`.

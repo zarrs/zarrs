@@ -130,6 +130,17 @@ pub use async_array_update_ops::AsyncArrayUpdateOps;
 #[cfg(feature = "async")]
 pub use async_array_write_ops::AsyncArrayWriteOps;
 
+/// The subset of the array of the chunk at `chunk_indices` of `chunk_grid`.
+fn chunk_grid_subset(
+    chunk_grid: &ChunkGrid,
+    chunk_indices: &[u64],
+) -> Result<ArraySubset, ArrayError> {
+    chunk_grid
+        .subset(chunk_indices)
+        .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
+}
+
 /// Split `resources` between `num_chunks` chunks retrieved concurrently.
 ///
 /// Returns the number of chunks to retrieve concurrently, and the resources of each.
