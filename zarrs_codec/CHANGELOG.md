@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Resources::{compute_limit,io_limit,with_compute_share}`
 - Add the `plan` module for planned (sans-I/O) operations, whose I/O and compute run with separate concurrency limits
   - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
-  - `TargetViews`, `SharedOutput`, `TaskTarget`, `DecodeRequest` and `PlanIndexer`
+  - `TargetViews`, `SharedOutput` (and `SharedOutput::for_data_type`), `TaskTarget`, `DecodeRequest` and `PlanIndexer`
   - The `SyncIo` and `AsyncIo` backends, and the `drive_serial`, `drive_sync`, `drive_async` and `drive_async_offload` drivers
   - `IoPool`, a scoped thread pool for blocking I/O
 - Add `build_nested_optional_target` and `extract_target_views`

@@ -14,7 +14,6 @@ use zarrs_codec::{
 use zarrs_storage::byte_range::{ByteRange, extract_byte_ranges};
 use zarrs_storage::{Bytes, StorageError};
 
-use crate::array::array_bytes_internal::optional_nesting_depth;
 use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, CodecChainBound, CowBytes, FillValue, Indexer,
 };
@@ -106,14 +105,9 @@ fn planned_decodes(
         results.push((format!("{name}/value"), bytes.into_owned()));
 
         // Decode into an output
-        if let Some(size) =
-            crate::array::array_bytes_internal::optional_innermost(data_type).fixed_size()
+        if let Some((output, views)) =
+            SharedOutput::for_data_type(data_type, &indexer.output_shape())
         {
-            let (output, views) = SharedOutput::new(
-                size,
-                &indexer.output_shape(),
-                optional_nesting_depth(data_type),
-            );
             let task = codecs
                 .clone()
                 .plan_decode(

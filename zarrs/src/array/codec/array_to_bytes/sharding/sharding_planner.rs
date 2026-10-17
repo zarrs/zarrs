@@ -26,9 +26,7 @@ use super::{
     group_indices_by_subchunk, index_read, merge_indexer_subchunks, subchunk_grid,
     subchunk_offset_size,
 };
-use crate::array::array_bytes_internal::{
-    merge_chunks, optional_innermost, optional_nesting_depth,
-};
+use crate::array::array_bytes_internal::{merge_chunks, optional_innermost};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, CodecChainBound, Indexer,
@@ -279,14 +277,9 @@ impl ShardingCodecBound {
             }
             TaskTarget::Value if fixed => {
                 // Decode directly into an output allocated once, returned as the value
-                let data_type = self.inner_codecs.data_type();
-                let (output, views) = SharedOutput::new(
-                    optional_innermost(data_type)
-                        .fixed_size()
-                        .expect("fixed-length data"),
-                    subset.shape(),
-                    optional_nesting_depth(data_type),
-                );
+                let (output, views) =
+                    SharedOutput::for_data_type(self.inner_codecs.data_type(), subset.shape())
+                        .expect("fixed-length data");
                 let children = self.clone().plan_subchunks_into(
                     source,
                     shard_index,

@@ -28,9 +28,7 @@ use zarrs_storage::{
     Bytes, ReadableStorage, ReadableStorageTraits, StorageError, StorageHandle, StoreKey,
 };
 
-use super::super::array_bytes_internal::{
-    merge_chunks, optional_innermost, optional_nesting_depth,
-};
+use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape,
@@ -452,7 +450,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
         }
         let planner = self.chunk_planner(options);
         let keys = self.grid_keys(chunks.clone());
-        let Some(data_type_size) = optional_innermost(data_type).fixed_size() else {
+        // Fixed-length data decodes directly into an output allocated once
+        let Some((output, views)) = SharedOutput::for_data_type(data_type, array_subset.shape())
+        else {
             // Variable-length data is decoded as values, then merged
             let plan = SubsetPlan {
                 task: Some(planner.plan_values(array_subset, chunks)?),
@@ -460,12 +460,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
             };
             return Ok((plan, keys));
         };
-        // Fixed-length data decodes directly into an output allocated once
-        let (output, views) = SharedOutput::new(
-            data_type_size,
-            array_subset.shape(),
-            optional_nesting_depth(data_type),
-        );
         let plan = SubsetPlan {
             task: Some(planner.plan_into(array_subset, chunks, views)?),
             finish: SubsetFinish::Into(output),

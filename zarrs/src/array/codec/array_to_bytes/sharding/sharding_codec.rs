@@ -9,7 +9,6 @@ use super::{
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
     nested_local_subchunk_grids, sharding_index_shape, subchunk_grid,
 };
-use crate::array::array_bytes_internal::{FixedDecodeBuffers, build_nested_optional_target};
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::chunk_grid::{
     ChunkEdgeLengths, RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid,
@@ -19,8 +18,8 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::plan::{
-    ByteSource, DecodeRequest, PlanIndexer, TargetViews, TaskTarget, drive_memory_one,
-    encoded_value,
+    ByteSource, DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget,
+    drive_memory_one, encoded_value,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
@@ -359,23 +358,18 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let data_type = self.data_type();
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
 
-        // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
         if !data_type.is_optional() && data_type.fixed_size() == Some(0) {
             return Ok(ArrayBytes::new_flen(vec![]));
         }
-        if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {
-            {
-                let (mut data_view, mut mask_views) = buffers.views()?;
-                self.decode_into(
-                    encoded_shard.into(),
-                    shape,
-                    build_nested_optional_target(&mut data_view, &mut mask_views),
-                    options,
-                    resources,
-                )?;
-            }
+        // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
+        if let Some((output, views)) = SharedOutput::for_data_type(data_type, shard_shape_u64) {
+            views.with_target(|target| {
+                self.decode_into(encoded_shard.into(), shape, target, options, resources)
+            })?;
             // SAFETY: every element of the output (and masks) is written by `decode_into`
-            return Ok(unsafe { buffers.into_array_bytes() });
+            return unsafe { output.into_array_bytes() }.map_err(|_| {
+                CodecError::Other("a shard output view outlived its decode".to_string())
+            });
         }
 
         // Variable length data (including optional data with variable length inner data): decode each subchunk and merge

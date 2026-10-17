@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubset, Indexer};
+use zarrs_data_type::DataType;
 
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecError,
@@ -242,6 +243,31 @@ impl SharedOutput {
             keepalive: Some(output.clone() as Arc<dyn std::any::Any + Send + Sync>),
         };
         (output, views)
+    }
+
+    /// Allocate an output of `shape` elements of `data_type`, and return views of the entire output.
+    ///
+    /// Optional data types have a validity mask per level of nesting. Returns [`None`] if the innermost data type is
+    /// variable-length. See [`new`](Self::new).
+    ///
+    /// # Panics
+    /// Panics if the size of the output exceeds [`usize::MAX`].
+    #[must_use]
+    pub fn for_data_type(
+        data_type: &DataType,
+        shape: &[u64],
+    ) -> Option<(Arc<Self>, TargetViews<'static>)> {
+        let mut innermost = data_type;
+        let mut optional_nesting_depth = 0;
+        while let Some(inner) = innermost.optional_inner() {
+            innermost = inner;
+            optional_nesting_depth += 1;
+        }
+        Some(Self::new(
+            innermost.fixed_size()?,
+            shape,
+            optional_nesting_depth,
+        ))
     }
 
     /// Return the output as array bytes.

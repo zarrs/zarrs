@@ -1,21 +1,20 @@
 use inherent::inherent;
 use std::sync::Arc;
-use unsafe_cell_slice::UnsafeCellSlice;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
 use super::{ArrayReadOps, *};
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
-};
+use crate::array::array_bytes_internal::merge_cached_chunks;
 use crate::array::chunk_cache::{
     SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
-use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
+use zarrs_codec::plan::SharedOutput;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError,
+    decode_into_array_bytes_target,
 };
 use zarrs_storage::Bytes;
 
@@ -140,75 +139,39 @@ where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
 {
-    let data_type_size = array.data_type().fixed_size().expect("fixed data type");
-    let num_elements = array_subset.num_elements_usize();
-    let size_output = num_elements * data_type_size;
-    let nesting_depth = optional_nesting_depth(array.data_type());
-    if size_output == 0 {
-        return Ok(
-            wrap_optional_masks(ArrayBytes::new_flen(vec![]), vec![vec![]; nesting_depth]).into(),
-        );
-    }
-    let mut data_output = Vec::with_capacity(size_output);
-    let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
-        .map(|_| Vec::with_capacity(num_elements))
-        .collect();
-
-    {
-        let data_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
-        let mask_slices: Vec<_> = mask_outputs
-            .iter_mut()
-            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
-            .collect();
-        let mask_slices = mask_slices.as_slice();
-        let array_subset_start = array_subset.start();
-        let array_subset_shape = array_subset.shape();
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            let overlap = chunk_subset.overlap(array_subset)?;
-            let output_subset = overlap.relative_to(&array_subset_start)?;
-            let bytes = retrieve_chunk_overlap_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset,
-                &overlap,
-                options,
-                resources,
-            )?;
-            let mut data_view = unsafe {
-                ArrayBytesFixedDisjointView::new(
-                    data_slice,
-                    data_type_size,
-                    &array_subset_shape,
-                    output_subset.clone(),
-                )?
-            };
-            let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_slices
-                .iter()
-                .map(|mask_slice| unsafe {
-                    ArrayBytesFixedDisjointView::new(
-                        *mask_slice,
-                        1,
-                        &array_subset_shape,
-                        output_subset.clone(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
-            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
-        };
-        chunks
-            .indices()
-            .concurrent_limit(chunk_concurrent_limit)
-            .try_for_each(retrieve_chunk)?;
-    }
-
-    unsafe { data_output.set_len(size_output) };
-    for mask in &mut mask_outputs {
-        unsafe { mask.set_len(num_elements) };
-    }
-    Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
+    let (output, views) = SharedOutput::for_data_type(array.data_type(), &array_subset.shape())
+        .expect("fixed data type");
+    let array_subset_start = array_subset.start();
+    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let chunk_subset = array.chunk_subset(&chunk_indices)?;
+        let overlap = chunk_subset.overlap(array_subset)?;
+        let output_subset = overlap.relative_to(&array_subset_start)?;
+        let bytes = retrieve_chunk_overlap_bytes(
+            cache,
+            array,
+            &chunk_indices,
+            &chunk_subset,
+            &overlap,
+            options,
+            resources,
+        )?;
+        // SAFETY: the chunks are disjoint
+        unsafe {
+            views.with_subdivided(output_subset, |views| {
+                views.with_target(|target| decode_into_array_bytes_target(&bytes, target))
+            })
+        }??;
+        Ok::<_, ArrayError>(())
+    };
+    chunks
+        .indices()
+        .concurrent_limit(chunk_concurrent_limit)
+        .try_for_each(retrieve_chunk)?;
+    drop(views);
+    // SAFETY: the chunks cover the array subset
+    let bytes = unsafe { output.into_array_bytes() }
+        .map_err(|_| CodecError::Other("an output view outlived its chunk".to_string()))?;
+    Ok(bytes.into())
 }
 
 impl<TStorage, C> ArrayCached<TStorage, C>

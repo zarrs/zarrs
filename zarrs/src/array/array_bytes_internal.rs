@@ -36,16 +36,6 @@ pub(crate) fn offsets_from_usize(
     }
 }
 
-/// Count the nesting depth of optional types.
-/// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
-pub(crate) fn optional_nesting_depth(data_type: &DataType) -> usize {
-    if let Some(inner) = data_type.optional_inner() {
-        1 + optional_nesting_depth(inner)
-    } else {
-        0
-    }
-}
-
 /// The innermost data type of (possibly nested) optional types.
 /// Returns `data_type` for non-optional types.
 pub(crate) fn optional_innermost(data_type: &DataType) -> &DataType {
@@ -54,103 +44,6 @@ pub(crate) fn optional_innermost(data_type: &DataType) -> &DataType {
         data_type = inner;
     }
     data_type
-}
-
-/// Output buffers for decoding fixed length data (including optional data with fixed length inner data) into views.
-pub(crate) struct FixedDecodeBuffers {
-    data: Vec<u8>,
-    masks: Vec<Vec<u8>>,
-    data_type_size: usize,
-    shape: Vec<u64>,
-}
-
-impl FixedDecodeBuffers {
-    /// Allocate uninitialised buffers for an array of `shape` and `data_type`.
-    ///
-    /// Returns [`None`] if the innermost data type is not fixed length.
-    ///
-    /// # Panics
-    /// Panics if the number of elements in `shape` exceeds [`usize::MAX`].
-    pub(crate) fn new(data_type: &DataType, shape: &[u64]) -> Option<Self> {
-        let data_type_size = optional_innermost(data_type).fixed_size()?;
-        let num_elements = usize::try_from(shape.iter().product::<u64>()).unwrap();
-        Some(Self {
-            data: Vec::with_capacity(num_elements * data_type_size),
-            masks: (0..optional_nesting_depth(data_type))
-                .map(|_| Vec::with_capacity(num_elements))
-                .collect(),
-            data_type_size,
-            shape: shape.to_vec(),
-        })
-    }
-
-    /// Return views of the data and each validity mask covering the entire array.
-    ///
-    /// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the views cannot be created.
-    pub(crate) fn views(
-        &mut self,
-    ) -> Result<
-        (
-            ArrayBytesFixedDisjointView<'_>,
-            Vec<ArrayBytesFixedDisjointView<'_>>,
-        ),
-        CodecError,
-    > {
-        let subset = ArraySubset::new_with_shape(self.shape.clone());
-        let data_view = unsafe {
-            // SAFETY: the view is the only view of the data
-            ArrayBytesFixedDisjointView::new(
-                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut self.data),
-                self.data_type_size,
-                &self.shape,
-                subset.clone(),
-            )?
-        };
-        let mask_views = self
-            .masks
-            .iter_mut()
-            .map(|mask| unsafe {
-                // SAFETY: the view is the only view of the mask
-                ArrayBytesFixedDisjointView::new(
-                    UnsafeCellSlice::new_from_vec_with_spare_capacity(mask),
-                    1,
-                    &self.shape,
-                    subset.clone(),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok((data_view, mask_views))
-    }
-
-    /// Convert the buffers into array bytes.
-    ///
-    /// # Safety
-    /// Every element of the views returned by [`views`](Self::views) must have been written.
-    pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
-        let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
-        unsafe { self.data.set_len(num_elements * self.data_type_size) };
-        for mask in &mut self.masks {
-            unsafe { mask.set_len(num_elements) };
-        }
-        wrap_optional_masks(ArrayBytes::new_flen(self.data), self.masks)
-    }
-}
-
-/// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
-///
-/// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
-/// [`build_nested_optional_target`].
-pub(crate) fn wrap_optional_masks<'a>(
-    bytes: ArrayBytes<'a>,
-    masks: Vec<Vec<u8>>,
-) -> ArrayBytes<'a> {
-    masks
-        .into_iter()
-        .rev()
-        .fold(bytes, ArrayBytes::with_optional_mask)
 }
 
 /// Split keyed optional array bytes into keyed inner data and keyed validity masks.
