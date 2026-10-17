@@ -196,17 +196,16 @@ impl ChunkPlanner {
         chunks: ArraySubset,
         views: TargetViews<'a>,
     ) -> Result<Task<'a>, CodecError> {
-        let output_start = views.subset().start().to_vec();
+        let output_start = ArrayIndicesTinyVec::from(views.subset().start());
         let chunks_len = chunks.num_elements_usize();
         let planner = self.clone();
         let tasks = Generator::indexed(chunks_len, move |i| {
             let chunk_indices = subset_indices_at(&chunks, i as u64);
             let chunk_subset = planner.chunk_subset(&chunk_indices).map_err(plan_error)?;
             // The overlap of the chunk with the subset, relative to the chunk and positioned in the output
-            let dimensionality = chunk_subset.dimensionality();
-            let mut overlap_start = Vec::with_capacity(dimensionality);
-            let mut overlap_shape = Vec::with_capacity(dimensionality);
-            let mut output_subset_start = Vec::with_capacity(dimensionality);
+            let mut overlap_start = ArrayIndicesTinyVec::new();
+            let mut overlap_shape = ArrayIndicesTinyVec::new();
+            let mut output_subset_start = ArrayIndicesTinyVec::new();
             for (dim, ((&chunk_start, &chunk_len), (&subset_start, &subset_len))) in
                 std::iter::zip(chunk_subset.start(), chunk_subset.shape())
                     .zip(std::iter::zip(array_subset.start(), array_subset.shape()))
@@ -219,7 +218,7 @@ impl ChunkPlanner {
                 output_subset_start.push(start - subset_start + output_start[dim]);
             }
             let output_subset =
-                ArraySubset::new_with_start_shape(output_subset_start, overlap_shape.clone())?;
+                ArraySubset::new_with_start_shape(&output_subset_start, &overlap_shape)?;
             // SAFETY: the overlaps of chunks with the subset are disjoint, and the views are only subdivided
             let chunk_views = unsafe { views.subdivide(output_subset) }?;
             planner
