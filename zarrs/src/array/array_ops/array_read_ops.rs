@@ -147,20 +147,38 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Returns an [`ArrayError`] if the chunk key cannot be encoded or there is an underlying store error.
     fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError>;
 
-    /// Retrieve the encoded bytes of the subchunk at `subchunk_indices` of the shard at `chunk_indices`.
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the level zero [`subchunk_grid`](ArrayOps::subchunk_grid).
     ///
-    /// `subchunk_indices` index the subchunk grid of the shard, which is encoded by any array-to-array codecs.
-    /// Returns [`None`] if the shard or the subchunk is empty.
+    /// See [`retrieve_encoded_subchunk_at_level`](ArrayReadOps::retrieve_encoded_subchunk_at_level).
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the array does not have a `sharding_indexed` array-to-bytes codec without
-    /// bytes-to-bytes codecs, the indices are out of bounds, or there is an underlying store error.
+    /// See [`retrieve_encoded_subchunk_at_level`](ArrayReadOps::retrieve_encoded_subchunk_at_level).
     fn retrieve_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
+        self.retrieve_encoded_subchunk_at_level(0, subchunk_indices, resources)
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the [`subchunk_grid_at_level`](ArrayOps::subchunk_grid_at_level) `level`.
+    ///
+    /// The subchunk is addressed in the decoded domain of the array, like [`retrieve_subchunk_at_level`](ArrayReadOps::retrieve_subchunk_at_level).
+    /// Its bytes are encoded by the subchunk codec at `level` ([`ArrayOps::subchunk_codecs_at_level`]), see [`EncodedSubchunk`].
+    /// Only the indexes leading to the subchunk and the bytes of the subchunk are read, unless a bytes-to-bytes codec
+    /// that encodes the entire chunk (e.g. a compressor) precedes the subchunks.
+    ///
+    /// Returns [`None`] if the subchunk or its chunk is not stored.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid, the subchunk indices
+    /// are invalid, the codecs do not expose encoded subchunks at `level`, or there is an underlying store error.
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<EncodedSubchunk>, ArrayError>;
 
     /// Retrieve the encoded bytes of the chunks selected by `chunks`.
     ///

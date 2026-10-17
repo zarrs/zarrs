@@ -445,12 +445,19 @@ where
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError> {
+    ) -> Result<Option<EncodedSubchunk>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
         self.array()
-            .async_retrieve_encoded_subchunk(chunk_indices, subchunk_indices, resources)
+            .async_retrieve_encoded_subchunk_at_level(level, subchunk_indices, resources)
             .await
     }
 

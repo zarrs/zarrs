@@ -15,11 +15,12 @@ use zarrs_chunk_grid::ChunkGrid;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::plan::{
     ByteSource, DecodeRequest, Generator, Join, Outcome, PlanIndexer, ReadBytes, SharedOutput,
-    SourceKey, SyncIo, TargetViews, Task, TaskTarget, TaskValue,
+    SourceKey, SyncIo, TargetViews, Task, TaskTarget, TaskValue, encoded_subchunk,
+    plan_retrieve_encoded_subchunk,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
-    InvalidNumberOfElementsError, Resources, copy_fill_value_into,
+    EncodedSubchunk, InvalidNumberOfElementsError, Resources, copy_fill_value_into,
 };
 use zarrs_data_type::DataType;
 use zarrs_storage::byte_range::ByteRange;
@@ -367,43 +368,43 @@ impl<TStorage: ?Sized> Array<TStorage> {
         }
     }
 
-    /// The key of the chunk at `chunk_indices`.
-    /// Plan reading the encoded subchunk at `subchunk_indices` of the shard at `chunk_indices`, and the keys of the
-    /// shard.
-    ///
-    /// The array must have a `sharding_indexed` array-to-bytes codec and no bytes-to-bytes codecs.
+    /// Plan retrieving the encoded subchunk at `subchunk_indices` of the subchunk grid at `level`, and the keys of its
+    /// chunk.
     pub(super) fn plan_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
+        level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(Task<'static>, ChunkKeys), ArrayError> {
-        let codecs = self.codecs_bound();
-        let not_addressable = || {
-            ArrayError::CodecError(CodecError::Other(
-                "encoded subchunks are only addressable in arrays with a sharding_indexed array-to-bytes codec and no bytes-to-bytes codecs"
-                    .to_string(),
-            ))
-        };
-        if !codecs.bytes_to_bytes_codecs().is_empty() {
-            return Err(not_addressable());
-        }
-        let sharding = codecs
-            .array_to_bytes_codec()
-            .as_any()
-            .downcast_ref::<crate::array::codec::ShardingCodecBound>()
-            .ok_or_else(not_addressable)?
-            .arc();
-        let mut shape = self.chunk_shape(chunk_indices)?;
-        for codec in codecs.array_to_array_codecs() {
-            shape = codec.encoded_shape(&shape)?;
-        }
-        let task = sharding.plan_retrieve_subchunk_encoded(
+        let subchunk_grid = self
+            .subchunk_grid_at_level(level)
+            .as_chunk_grid()
+            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let invalid = || ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec());
+        let subchunk_start = subchunk_grid
+            .chunk_origin(subchunk_indices)?
+            .filter(|start| {
+                subchunk_grid.chunk_indices_inbounds(subchunk_indices)
+                    && self.chunk_grid().array_indices_inbounds(start)
+            })
+            .ok_or_else(invalid)?;
+        // The subchunk is located by its first element in its chunk
+        let chunk_indices = self
+            .chunk_grid()
+            .chunk_indices(&subchunk_start)?
+            .ok_or_else(invalid)?;
+        let coordinates = self
+            .chunk_grid()
+            .chunk_element_indices(&subchunk_start)?
+            .ok_or_else(invalid)?;
+        let task = plan_retrieve_encoded_subchunk(
+            self.codecs_bound().into_dyn(),
             ByteSource::external(SourceKey(0)),
-            &shape,
-            subchunk_indices,
+            &self.chunk_shape(&chunk_indices)?,
+            level,
+            &coordinates,
             self.codec_options(),
         )?;
-        Ok((task, self.one_key(chunk_indices)?))
+        Ok((task, self.one_key(&chunk_indices)?))
     }
 
     pub(super) fn one_key(&self, chunk_indices: &[u64]) -> Result<ChunkKeys, ArrayError> {
@@ -664,15 +665,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         )?)
     }
 
-    /// Retrieve the encoded subchunk at `subchunk_indices` of the shard at `chunk_indices` with a planned read.
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the subchunk grid at `level` with a planned read.
     pub(crate) fn retrieve_encoded_subchunk_planned(
         &self,
-        chunk_indices: &[u64],
+        level: usize,
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError> {
-        let (task, keys) = self.plan_encoded_subchunk(chunk_indices, subchunk_indices)?;
-        encoded_subchunk(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?)
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
+        let (task, keys) = self.plan_encoded_subchunk(level, subchunk_indices)?;
+        Ok(encoded_subchunk(drive_blocking_one(
+            task,
+            &self.chunk_io(keys)?,
+            resources,
+        )?)?)
     }
 
     /// Retrieve the chunk at `chunk_indices` with a planned read, or [`None`] if it does not exist.
@@ -889,14 +894,6 @@ pub(super) fn encoded_chunks(value: TaskValue<'_>) -> Result<Vec<Option<Bytes>>,
         .ok_or_else(|| CodecError::Other("expected encoded chunks".to_string()).into())
 }
 
-/// The encoded subchunk that is the value of a task planned by [`Array::plan_encoded_subchunk`].
-pub(super) fn encoded_subchunk(value: TaskValue<'_>) -> Result<Option<Bytes>, ArrayError> {
-    let bytes = value
-        .into_bytes()
-        .ok_or_else(|| CodecError::Other("expected an encoded subchunk".to_string()))?;
-    Ok(bytes.map(CowBytes::into_bytes))
-}
-
 pub(super) fn whole_views<'a>(
     output_target: &'a ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<TargetViews<'a>, ArrayError> {
@@ -951,10 +948,11 @@ mod async_planned {
 
     use super::{
         Array, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayError, ArraySubset, ArraySubsetTraits,
-        ByteRange, Bytes, ChunkKeys, CodecOptions, Indexer, NonZeroU64, PlanIndexer, ReadBytes,
-        Resources, SmallVec, SourceKey, StorageError, StorageHandle, StoreKey, SubsetPlan, Task,
-        TaskTarget, TaskValue, array_value, check_target_len, chunk_if_exists, encoded_chunks,
-        encoded_subchunk, plan_encoded_chunks, smallvec, whole_views,
+        ByteRange, Bytes, ChunkKeys, CodecOptions, EncodedSubchunk, Indexer, NonZeroU64,
+        PlanIndexer, ReadBytes, Resources, SmallVec, SourceKey, StorageError, StorageHandle,
+        StoreKey, SubsetPlan, Task, TaskTarget, TaskValue, array_value, check_target_len,
+        chunk_if_exists, encoded_chunks, encoded_subchunk, plan_encoded_chunks, smallvec,
+        whole_views,
     };
 
     /// The asynchronous I/O backend of the chunks of an array.
@@ -1052,16 +1050,18 @@ mod async_planned {
             encoded_chunks(drive_async_one(plan_encoded_chunks(num_chunks), &io, resources).await?)
         }
 
-        /// Retrieve the encoded subchunk at `subchunk_indices` of the shard at `chunk_indices` with a planned read.
+        /// Retrieve the encoded subchunk at `subchunk_indices` of the subchunk grid at `level` with a planned read.
         pub(crate) async fn async_retrieve_encoded_subchunk_planned(
             &self,
-            chunk_indices: &[u64],
+            level: usize,
             subchunk_indices: &[u64],
             resources: &Resources,
-        ) -> Result<Option<Bytes>, ArrayError> {
-            let (task, keys) = self.plan_encoded_subchunk(chunk_indices, subchunk_indices)?;
+        ) -> Result<Option<EncodedSubchunk>, ArrayError> {
+            let (task, keys) = self.plan_encoded_subchunk(level, subchunk_indices)?;
             let io = self.async_chunk_io(keys).await?;
-            encoded_subchunk(drive_async_one(task, &io, resources).await?)
+            Ok(encoded_subchunk(
+                drive_async_one(task, &io, resources).await?,
+            )?)
         }
 
         /// Retrieve the chunk at `chunk_indices` with a planned read, or [`None`] if it does not exist.

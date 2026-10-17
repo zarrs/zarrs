@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -37,6 +37,19 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+
+    /// Map the coordinates of an element of a decoded chunk of `decoded_shape` to its coordinates in the encoded chunk.
+    ///
+    /// This addresses encoded subchunks through the codec: a subchunk of the decoded chunk is located by an element it
+    /// contains.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_coordinates` are out of bounds of the decoded chunk.
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError>;
 }
 
 /// Marker trait for array-to-array codecs with identity subchunking mappings.
@@ -61,6 +74,15 @@ where
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        let _ = decoded_shape;
+        Ok(decoded_coordinates.to_vec())
     }
 }
 

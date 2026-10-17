@@ -91,10 +91,23 @@ pub trait AsyncArrayReadOps: ArrayOps {
     /// See [`ArrayReadOps::retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk).
     async fn async_retrieve_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError>;
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
+        self.async_retrieve_encoded_subchunk_at_level(0, subchunk_indices, resources)
+            .await
+    }
+
+    /// Async variant of [`ArrayReadOps::retrieve_encoded_subchunk_at_level`](crate::array::ArrayReadOps::retrieve_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`ArrayReadOps::retrieve_encoded_subchunk_at_level`](crate::array::ArrayReadOps::retrieve_encoded_subchunk_at_level).
+    async fn async_retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<EncodedSubchunk>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks`].
     ///

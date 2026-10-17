@@ -9,7 +9,7 @@ use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayBytes, ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
@@ -206,6 +206,19 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
         Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        let _ = decoded_shape;
+        permute(decoded_coordinates, &self.order.0).ok_or_else(|| {
+            CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            )
+        })
     }
 }
 

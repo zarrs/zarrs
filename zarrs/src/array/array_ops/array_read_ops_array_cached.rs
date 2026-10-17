@@ -393,12 +393,19 @@ where
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError> {
+    ) -> Result<Option<EncodedSubchunk>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
         self.array()
-            .retrieve_encoded_subchunk(chunk_indices, subchunk_indices, resources)
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, resources)
     }
 
     #[allow(clippy::missing_errors_doc)]

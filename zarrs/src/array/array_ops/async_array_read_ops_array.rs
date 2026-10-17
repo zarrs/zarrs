@@ -105,11 +105,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_subchunk(
         &self,
-        chunk_indices: &[u64],
         subchunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError> {
-        self.async_retrieve_encoded_subchunk_planned(chunk_indices, subchunk_indices, resources)
+    ) -> Result<Option<EncodedSubchunk>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<Option<EncodedSubchunk>, ArrayError> {
+        self.async_retrieve_encoded_subchunk_planned(level, subchunk_indices, resources)
             .await
     }
 

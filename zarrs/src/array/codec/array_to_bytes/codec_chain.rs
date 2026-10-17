@@ -14,7 +14,7 @@ use zarrs_codec::plan::{
     PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey, SourceStep, Task,
     TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, is_whole_chunk,
     local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
-    plan_encode_whole, whole_chunk_hint,
+    plan_encode_whole, subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -606,6 +606,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
 
         Ok(decoded_subchunk_grids)
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.array_to_bytes.subchunk_codecs()
+    }
 }
 
 impl ArrayToBytesCodecTraits for CodecChainBound {
@@ -889,6 +893,73 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                     .run_without_io(ctx)
             },
         ))
+    }
+
+    fn plan_locate_subchunk(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        coordinates: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Task<'static>, CodecError> {
+        if coordinates.len() != shape.len()
+            || std::iter::zip(coordinates, shape)
+                .any(|(coordinate, length)| *coordinate >= length.get())
+        {
+            return Err(CodecError::Other(format!(
+                "coordinates {coordinates:?} are out of bounds of a chunk with shape {shape:?}"
+            )));
+        }
+        if let Some(bytes_chain) = self.bytes_chain.clone() {
+            // Map the element through the array-to-array codecs, outermost first
+            let mut shape = ChunkShape::from(shape.to_vec());
+            let mut coordinates = coordinates.to_vec();
+            for codec in &self.array_to_array {
+                coordinates = codec.encoded_coordinates(&shape, &coordinates)?;
+                shape = codec.encoded_shape(&shape)?;
+            }
+            return bytes_chain.plan_locate_subchunk(source, &shape, &coordinates, options);
+        }
+
+        // Subchunks are located through codecs whose decoded bytes are a window of their encoded bytes
+        let hint = whole_chunk_hint(&*self, &source, shape);
+        let (source, num_materialized) = self.strip_windows(source)?;
+        if num_materialized == 0 {
+            return self.array_to_bytes.clone().plan_locate_subchunk(
+                source,
+                shape,
+                coordinates,
+                options,
+            );
+        }
+
+        // Otherwise, read the entire input and decode the remaining bytes-to-bytes codecs, so the subchunk is located
+        // in memory
+        let shape = ChunkShape::from(shape.to_vec());
+        let coordinates = coordinates.to_vec();
+        let options = *options;
+        Ok(Task::read(
+            source,
+            [ByteRange::FromStart(0, None)],
+            move |mut reads, ctx| {
+                let Some(encoded) = reads.pop().flatten() else {
+                    return Ok(Outcome::Value(subchunk_location_value(None)));
+                };
+                let decoded_source = self.decoded_source(
+                    encoded,
+                    &shape,
+                    num_materialized,
+                    &options,
+                    ctx.resources(),
+                )?;
+                // The source is in memory, so the task runs immediately
+                self.array_to_bytes
+                    .clone()
+                    .plan_locate_subchunk(decoded_source, &shape, &coordinates, &options)?
+                    .run_without_io(ctx)
+            },
+        )
+        .with_hint(hint))
     }
 
     fn plan_encode<'a>(

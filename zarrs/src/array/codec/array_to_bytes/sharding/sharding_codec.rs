@@ -325,6 +325,12 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
         );
         Ok(subchunk_grids)
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        let mut codecs = vec![self.inner_codecs.clone().into_dyn()];
+        codecs.extend(self.inner_codecs.subchunk_codecs());
+        codecs
+    }
 }
 
 impl ArrayToBytesCodecTraits for ShardingCodecBound {
@@ -577,6 +583,16 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn plans_partial_encode(&self) -> bool {
         true
+    }
+
+    fn plan_locate_subchunk(
+        self: Arc<Self>,
+        source: zarrs_codec::plan::ByteSource<'static>,
+        shape: &[NonZeroU64],
+        coordinates: &[u64],
+        options: &CodecOptions,
+    ) -> Result<zarrs_codec::plan::Task<'static>, CodecError> {
+        self.plan_locate_subchunk_in_shard(source, shape, coordinates, options)
     }
 
     fn prepare_decode(

@@ -28,6 +28,24 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
 
+    /// Return the codecs that encode the subchunks created by this codec, outermost first.
+    ///
+    /// The codecs at each level match the grids returned by [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
+    /// The level zero codec decodes an encoded subchunk of this codec, the level one codec decodes an encoded
+    /// subchunk of a subchunk, and so on. An empty vector indicates that the codec does not expose subchunks.
+    ///
+    /// The codecs operate in the encoded domain of this codec. If this codec is preceded by array-to-array codecs
+    /// (e.g. in a codec chain), then decoding an encoded subchunk yields array bytes that those codecs have yet to
+    /// decode.
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
+
+    /// Return the codec that encodes the subchunks at `level`, if any.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().into_iter().nth(level)
+    }
+
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
     /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
@@ -59,6 +77,10 @@ where
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         Ok(Vec::new())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 
@@ -281,6 +303,31 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
                 crate::plan::local_subchunk_grids_value(Vec::new()),
             ))
         }))
+    }
+
+    /// Plan locating the level zero subchunk that contains the element at `coordinates` of the encoded chunk `source`
+    /// of `shape`.
+    ///
+    /// The value of the task is the location of the subchunk in `source`
+    /// ([`subchunk_location_value`](crate::plan::subchunk_location_value)), or [`None`] if the subchunk or the chunk
+    /// is not stored. Locating a subchunk should read only what is needed to find it (e.g. a shard index).
+    ///
+    /// Codecs with [`subchunk_codecs`](ArrayToBytesCodecSubchunkingTraits::subchunk_codecs) implement this.
+    /// [`plan_retrieve_encoded_subchunk`](crate::plan::plan_retrieve_encoded_subchunk) uses it to retrieve encoded
+    /// subchunks at any level.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if the codec does not have subchunks (the default), or a
+    /// [`CodecError`] if `coordinates` are out of bounds of the chunk.
+    fn plan_locate_subchunk(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        coordinates: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Task<'static>, CodecError> {
+        let _ = (source, shape, coordinates, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
     }
 
     /// Prepare a decoder of the encoded chunk `source` that plans many requests.

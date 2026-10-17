@@ -5,7 +5,9 @@ use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{
+    ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue, ravel_indices, unravel_index,
+};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
@@ -120,6 +122,22 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        // Reshaping preserves the C order of elements
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        ravel_indices(decoded_coordinates, bytemuck::must_cast_slice(decoded_shape))
+            .and_then(|index| unravel_index(index, bytemuck::must_cast_slice(&encoded_shape)))
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "coordinates {decoded_coordinates:?} are out of bounds of a chunk with shape {decoded_shape:?}"
+                ))
+            })
     }
 }
 

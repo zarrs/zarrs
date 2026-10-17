@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToArrayCodecTraits::decoded_local_subchunk_grid`, which maps a subchunk grid through an array-to-array codec
   - `plan::{local_subchunk_grids_value,local_subchunk_grids}`
 - Add `plan::AnyValue`, the value of `plan::TaskValue::Any`
+- Add encoded subchunk retrieval to the codec traits
+  - `ArrayToBytesCodecSubchunkingTraits::subchunk_codecs[_at_level]`, the codecs of the subchunks of a codec, outermost first
+  - `ArrayToBytesCodecTraits::plan_locate_subchunk`, which plans locating the subchunk containing an element of a chunk (`plan::SubchunkLocation`)
+  - `ArrayToArrayCodecSubchunkingTraits::encoded_coordinates`, which maps an element through an array-to-array codec
+  - `plan::plan_retrieve_encoded_subchunk`, which retrieves an encoded subchunk at any level, and `plan::{subchunk_location_value,subchunk_location,encoded_subchunk}`
+  - `EncodedSubchunk` and `CodecError::UnsupportedEncodedSubchunk`
 - Add `plan::TaskValue::{into_array,into_bytes,into_prepared,downcast}`
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory

@@ -72,7 +72,7 @@ pub use zarrs_codec::{
     ArrayToBytesCodecTraits, BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2,
-    CodecTraitsV3, CowBytes, Resources, UnboundArrayToArrayCodecTraits,
+    CodecTraitsV3, CowBytes, EncodedSubchunk, Resources, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]

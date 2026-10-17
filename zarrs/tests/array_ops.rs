@@ -296,14 +296,19 @@ fn retrieve_encoded_subchunk() -> TestResult {
     let (array, _) = fixture();
     populate(array.as_ref())?;
 
+    let subchunk = array
+        .retrieve_encoded_subchunk(&[1, 1], &Resources::default())?
+        .expect("stored");
+    assert_eq!(subchunk.bytes().as_ref(), &[7]);
+    assert_eq!(subchunk.shape(), [NonZeroU64::MIN; 2]);
+    // Subchunks are addressed by the subchunk grid of the array
+    let subchunk = array
+        .retrieve_encoded_subchunk(&[3, 4], &Resources::default())?
+        .expect("stored");
+    assert_eq!(subchunk.bytes().as_ref(), &[20]);
     assert!(
         array
-            .retrieve_encoded_subchunk(&[0, 0], &[1, 1], &Resources::default())?
-            .is_some()
-    );
-    assert!(
-        array
-            .retrieve_encoded_subchunk(&[0, 0], &[3, 3], &Resources::default())
+            .retrieve_encoded_subchunk(&[5, 5], &Resources::default())
             .is_err()
     );
     Ok(())
@@ -314,7 +319,7 @@ fn retrieve_encoded_subchunk_missing() -> TestResult {
     let (array, _) = fixture();
 
     assert_eq!(
-        array.retrieve_encoded_subchunk(&[0, 0], &[0, 0], &Resources::default())?,
+        array.retrieve_encoded_subchunk(&[0, 0], &Resources::default())?,
         None
     );
 
@@ -324,7 +329,7 @@ fn retrieve_encoded_subchunk_missing() -> TestResult {
         &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_encoded_subchunk(&[0, 0], &[0, 1], &Resources::default())?,
+        array.retrieve_encoded_subchunk(&[0, 1], &Resources::default())?,
         None
     );
     Ok(())

@@ -289,6 +289,13 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         &self.subchunk_grids
     }
 
+    pub fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
+
+    pub fn subchunk_codecs_at_level(
+        &self,
+        level: usize,
+    ) -> Option<Arc<dyn ArrayToBytesCodecTraits>>;
+
     pub fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_> {
         self.subchunk_grids
             .get(level)

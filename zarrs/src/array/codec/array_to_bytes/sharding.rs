@@ -65,10 +65,10 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved with [`ArrayReadOps::retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk)
-//! or [`AsyncArrayReadOps::async_retrieve_encoded_subchunk`](crate::array::AsyncArrayReadOps::async_retrieve_encoded_subchunk),
-//! with subchunk indices local to the shard.
-//! A shard in another source can be read with a task planned by [`ShardingCodecBound::plan_retrieve_subchunk_encoded`].
+//! Encoded subchunk bytes can be retrieved with [`ArrayReadOps::retrieve_encoded_subchunk[_at_level]`](crate::array::ArrayReadOps::retrieve_encoded_subchunk_at_level)
+//! or [`AsyncArrayReadOps::async_retrieve_encoded_subchunk[_at_level]`](crate::array::AsyncArrayReadOps::async_retrieve_encoded_subchunk_at_level),
+//! with indices of the subchunk grids of the array.
+//! A shard in another source can be read with a task planned by [`plan_retrieve_encoded_subchunk`](zarrs_codec::plan::plan_retrieve_encoded_subchunk).
 
 #[cfg(test)]
 mod indexer_tests;

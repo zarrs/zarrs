@@ -36,8 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Re-export `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` from `zarrs::array`
-- Add `[Async]ArrayReadOps::[async_]retrieve_encoded_subchunk` for low-level encoded subchunk access of sharded chunks
-  - Expose `ShardingCodecBound`, whose `plan_retrieve_subchunk_encoded` plans the same read of a shard in another source (see `sharding` module docs)
+- Add `[Async]ArrayReadOps::[async_]retrieve_encoded_subchunk[_at_level]` for low-level encoded subchunk access at any level of the subchunk hierarchy
+  - Subchunks are addressed by the subchunk grids of the array, and are returned as an `EncodedSubchunk` with the shape to decode them with
+  - Retrieval is codec generic: any array-to-bytes codec with subchunks supports it (`zarrs_codec::ArrayToBytesCodecTraits::plan_locate_subchunk`), through array-to-array codecs and bytes-to-bytes codecs
+  - Add `ArrayOps::subchunk_codecs[_at_level]`, the codecs that decode encoded subchunks
+  - Expose `ShardingCodecBound`
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec
 - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
 - Add `ArrayMutOps::set_metadata_erase_version()`

@@ -61,6 +61,7 @@ pub use array_bytes::{
 
 use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
+pub use plan::EncodedSubchunk;
 pub use resources::{IoLimiter, IoPermit, ReadDispatch, Resources};
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, Configuration};
@@ -608,6 +609,9 @@ pub enum CodecError {
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"
     )]
     InvalidOffsets,
+    /// The codec does not expose encoded subchunks (at the requested level).
+    #[error("the codec does not expose encoded subchunks at the requested level")]
+    UnsupportedEncodedSubchunk,
     /// Other
     #[error("{_0}")]
     Other(String),

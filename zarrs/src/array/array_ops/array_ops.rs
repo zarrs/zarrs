@@ -142,6 +142,23 @@ pub trait ArrayOps {
     #[must_use]
     fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
 
+    /// Return the codecs that encode the subchunks of the array, outermost first.
+    ///
+    /// The codec at each level decodes the encoded subchunks at that level (see
+    /// [`retrieve_encoded_subchunk_at_level`](crate::array::ArrayReadOps::retrieve_encoded_subchunk_at_level)).
+    #[must_use]
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.codecs_bound().subchunk_codecs()
+    }
+
+    /// Return the codec that encodes the subchunks of the array at `level`, if any.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    #[must_use]
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.codecs_bound().subchunk_codecs_at_level(level)
+    }
+
     /// Return the store key of the chunk at `chunk_indices`.
     ///
     /// # Errors

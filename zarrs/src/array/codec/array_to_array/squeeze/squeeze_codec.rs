@@ -6,7 +6,7 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
@@ -250,6 +250,23 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
         Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        // Squeezed dimensions have a length of one, so their coordinates are zero
+        let encoded_coordinates: ArrayIndices = std::iter::zip(decoded_coordinates, decoded_shape)
+            .filter(|(_, length)| length.get() > 1)
+            .map(|(&coordinate, _)| coordinate)
+            .collect();
+        if encoded_coordinates.is_empty() {
+            Ok(vec![0])
+        } else {
+            Ok(encoded_coordinates)
+        }
     }
 }
 

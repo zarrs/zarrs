@@ -12,6 +12,7 @@ mod io;
 mod memory;
 mod prepare;
 mod source;
+mod subchunk;
 mod target;
 mod task;
 
@@ -42,6 +43,10 @@ pub use prepare::{
 };
 pub(crate) use source::SourceRoot;
 pub use source::{ByteSource, RangeDecoder, SourceKey, SourceStep};
+pub use subchunk::{
+    EncodedSubchunk, SubchunkLocation, encoded_subchunk, plan_retrieve_encoded_subchunk,
+    subchunk_location, subchunk_location_value,
+};
 pub use target::{DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget};
 pub use task::{
     AnyValue, ComputeCtx, Generator, Join, Outcome, Reads, Task, TaskHint, TaskValue, WriteOp,

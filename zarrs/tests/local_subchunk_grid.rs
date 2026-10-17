@@ -156,6 +156,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCod
     ) -> Result<Vec<ChunkGridDecoded>, zarrs::array::ChunkGridCreateError> {
         Ok(vec![ChunkGridDecoded::ChunkLocal])
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
+    }
 }
 
 impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
@@ -389,6 +393,17 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
     }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<Vec<u64>, CodecError> {
+        let shape: &[u64] = bytemuck::must_cast_slice(decoded_shape);
+        Ok(vec![
+            zarrs::array::ravel_indices(decoded_coordinates, shape).unwrap(),
+        ])
+    }
 }
 
 impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
@@ -511,6 +526,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBou
             }
         };
         Ok(vec![subchunk_grid])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 

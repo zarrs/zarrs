@@ -10,9 +10,9 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Generator, Join, MissingDecoder, Outcome, PlanIndexer,
-    PrepareDecode, PreparedDecoder, SharedOutput, TargetViews, Task, TaskTarget, TaskValue,
-    decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
-    whole_chunk_hint,
+    PrepareDecode, PreparedDecoder, SharedOutput, SubchunkLocation, TargetViews, Task, TaskTarget,
+    TaskValue, decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
+    subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
@@ -31,8 +31,8 @@ use crate::array::array_bytes_internal::{
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
-    ArrayBytes, ArraySubset, ArraySubsetTraits, CodecChainBound, Indexer, ravel_indices,
-    subset_indices_at,
+    ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, CodecChainBound, Indexer,
+    ravel_indices, subset_indices_at,
 };
 use smallvec::SmallVec;
 
@@ -103,28 +103,39 @@ impl ShardingCodecBound {
         )
     }
 
-    /// Plan reading the encoded subchunk at `subchunk_indices` of the shard `source` of `shape`.
+    /// Plan locating the subchunk containing the element at `coordinates` of the shard `source` of `shape`.
     ///
-    /// The task reads the shard index, then the subchunk. Its value is the encoded subchunk ([`TaskValue::Bytes`]),
-    /// which is [`None`] if the shard or the subchunk is empty.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if `subchunk_indices` are out of bounds of the subchunk grid of the shard.
-    pub fn plan_retrieve_subchunk_encoded<'a>(
+    /// The task reads the shard index. Its value is the location of the subchunk
+    /// ([`subchunk_location_value`]), which is [`None`] if the shard or the subchunk is empty.
+    pub(super) fn plan_locate_subchunk_in_shard(
         self: Arc<Self>,
-        source: ByteSource<'a>,
+        source: ByteSource<'static>,
         shape: &[NonZeroU64],
-        subchunk_indices: &[u64],
+        coordinates: &[u64],
         options: &CodecOptions,
-    ) -> Result<Task<'a>, CodecError> {
+    ) -> Result<Task<'static>, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let subchunk_index = ravel_indices(subchunk_indices, bytemuck::must_cast_slice(&chunks_per_shard))
-            .ok_or_else(|| {
-                CodecError::Other(format!(
-                    "subchunk indices {subchunk_indices:?} are out of bounds for chunks per shard {chunks_per_shard:?}"
-                ))
-            })?;
+        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let out_of_bounds = || {
+            CodecError::Other(format!(
+                "coordinates {coordinates:?} are out of bounds of a shard with shape {shape:?}"
+            ))
+        };
+        let subchunk_indices = subchunk_grid
+            .chunk_indices(coordinates)?
+            .ok_or_else(out_of_bounds)?;
+        let subchunk_subset = subchunk_grid
+            .subset(&subchunk_indices)?
+            .ok_or_else(out_of_bounds)?;
+        let subchunk_index = ravel_indices(
+            &subchunk_indices,
+            bytemuck::must_cast_slice(&chunks_per_shard),
+        )
+        .ok_or_else(out_of_bounds)?;
         let subchunk_index = usize::try_from(subchunk_index).unwrap();
+        let coordinates: ArrayIndices = std::iter::zip(coordinates, subchunk_subset.start())
+            .map(|(coordinate, start)| coordinate - start)
+            .collect();
         let IndexRead {
             shape: index_shape,
             range: index_byte_range,
@@ -133,25 +144,22 @@ impl ShardingCodecBound {
         let options = *options;
         Ok(
             Task::read(source.clone(), [index_byte_range], move |mut reads, ctx| {
-                let Some(encoded_index) = reads.pop().flatten() else {
-                    return Ok(Outcome::Value(TaskValue::Bytes(None)));
+                let location = if let Some(encoded_index) = reads.pop().flatten() {
+                    let shard_index =
+                        decode_index(&self, &encoded_index, &index_shape, &options, ctx)?;
+                    subchunk_offset_size(&shard_index, subchunk_index)
+                        .map(|(offset, size)| {
+                            Ok::<_, CodecError>(SubchunkLocation {
+                                source: source.interval(offset, size)?,
+                                shape: subset_shape(&subchunk_subset).to_vec(),
+                                coordinates: coordinates.clone(),
+                            })
+                        })
+                        .transpose()?
+                } else {
+                    None
                 };
-                let shard_index = decode_index(&self, &encoded_index, &index_shape, &options, ctx)?;
-                let Some((offset, size)) = subchunk_offset_size(&shard_index, subchunk_index)
-                else {
-                    return Ok(Outcome::Value(TaskValue::Bytes(None)));
-                };
-                let subchunk = Task::read(
-                    source.interval(offset, size)?,
-                    [ByteRange::FromStart(0, None)],
-                    |mut reads, _ctx| Ok(Outcome::Value(TaskValue::Bytes(reads.pop().flatten()))),
-                );
-                Ok(Outcome::Fork {
-                    children: vec![subchunk],
-                    join: Join::new(|mut values, _ctx| {
-                        Ok(Outcome::Value(values.pop().unwrap_or_default()))
-                    }),
-                })
+                Ok(Outcome::Value(subchunk_location_value(location)))
             })
             .with_hint(index_hint),
         )

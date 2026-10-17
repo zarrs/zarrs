@@ -262,15 +262,14 @@ async fn retrieve_encoded_subchunk() -> TestResult {
     let array = fixed_fixture();
     populate(&array).await?;
 
+    let subchunk = array
+        .async_retrieve_encoded_subchunk(&[1, 1], &Resources::default())
+        .await?
+        .expect("stored");
+    assert_eq!(subchunk.bytes().as_ref(), &[7]);
     assert!(
         array
-            .async_retrieve_encoded_subchunk(&[0, 0], &[1, 1], &Resources::default())
-            .await?
-            .is_some()
-    );
-    assert!(
-        array
-            .async_retrieve_encoded_subchunk(&[0, 0], &[3, 3], &Resources::default())
+            .async_retrieve_encoded_subchunk(&[5, 5], &Resources::default())
             .await
             .is_err()
     );
@@ -284,7 +283,7 @@ async fn retrieve_encoded_subchunk_missing() -> TestResult {
 
     assert_eq!(
         array
-            .async_retrieve_encoded_subchunk(&[0, 0], &[0, 0], &Resources::default())
+            .async_retrieve_encoded_subchunk(&[0, 0], &Resources::default())
             .await?,
         None
     );
@@ -298,7 +297,7 @@ async fn retrieve_encoded_subchunk_missing() -> TestResult {
         .await?;
     assert_eq!(
         array
-            .async_retrieve_encoded_subchunk(&[0, 0], &[0, 1], &Resources::default())
+            .async_retrieve_encoded_subchunk(&[0, 1], &Resources::default())
             .await?,
         None
     );
