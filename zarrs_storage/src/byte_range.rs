@@ -220,16 +220,15 @@ pub fn extract_byte_ranges_concat<R: Into<ByteRange>>(
     byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<u8>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
-    let lengths_and_starts = byte_ranges
-        .map(|byte_range| {
-            let byte_range: ByteRange = byte_range.into();
-            let valid = is_valid(byte_range, bytes_len);
-            if !valid {
-                return Err(InvalidByteRangeError(byte_range, bytes_len));
-            }
-            Ok((byte_range.length(bytes_len), byte_range.start(bytes_len)))
-        })
-        .collect::<Result<Vec<(u64, u64)>, InvalidByteRangeError>>()?;
+    // Collecting into a `Result` would not reserve from the size hint
+    let mut lengths_and_starts = Vec::with_capacity(byte_ranges.size_hint().0);
+    for byte_range in byte_ranges {
+        let byte_range: ByteRange = byte_range.into();
+        if !is_valid(byte_range, bytes_len) {
+            return Err(InvalidByteRangeError(byte_range, bytes_len));
+        }
+        lengths_and_starts.push((byte_range.length(bytes_len), byte_range.start(bytes_len)));
+    }
     let out_size = usize::try_from(
         lengths_and_starts
             .iter()
