@@ -101,6 +101,10 @@ impl InlineIo for SerialIo<'_> {
         Some(IoSlot(None))
     }
 
+    fn enabled(&self) -> bool {
+        true
+    }
+
     fn read(&self, request: &IoRequest) -> Result<Option<ReadBytes>, StorageError> {
         let _permit = self.resources.io_permit_blocking();
         self.io.read(request.key, &request.ranges)

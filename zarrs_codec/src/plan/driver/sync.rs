@@ -144,17 +144,30 @@ fn drive_scheduler<'a>(
 /// and where more reads than compute threads can be in flight.
 const INLINE_READ_THRESHOLD: Duration = Duration::from_micros(100);
 
+/// A value on its own cache line (of up to 128 bytes), so that threads updating it do not contend with threads using
+/// neighbouring values.
+#[repr(align(128))]
+struct CacheAligned<T>(T);
+
+impl<T> std::ops::Deref for CacheAligned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
 /// The reads of a sync drive, which are inline while storage requests are fast (or as set by [`Resources::read_dispatch`]).
 struct DriveIo<'d> {
     io: &'d dyn SyncIo,
     resources: &'d Resources,
     forced: Option<ReadDispatch>,
-    /// An exponentially weighted mean of the duration of storage requests, in nanoseconds (0 until a request completes).
-    mean_ns: AtomicU64,
     /// The maximum number of storage requests in flight.
     io_limit: usize,
+    /// An exponentially weighted mean of the duration of storage requests, in nanoseconds (0 until a request completes).
+    mean_ns: CacheAligned<AtomicU64>,
     /// The number of storage requests in flight, dispatched by the driver or performed inline by compute work.
-    io_in_flight: AtomicUsize,
+    io_in_flight: CacheAligned<AtomicUsize>,
 }
 
 impl<'d> DriveIo<'d> {
@@ -163,9 +176,9 @@ impl<'d> DriveIo<'d> {
             io,
             resources,
             forced: resources.read_dispatch(),
-            mean_ns: AtomicU64::new(0),
             io_limit: resources.io_limit(),
-            io_in_flight: AtomicUsize::new(0),
+            mean_ns: CacheAligned(AtomicU64::new(0)),
+            io_in_flight: CacheAligned(AtomicUsize::new(0)),
         }
     }
 
@@ -211,18 +224,26 @@ impl<'d> DriveIo<'d> {
         let elapsed = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
         let mean = self.mean_ns.load(Ordering::Relaxed);
         // Concurrent updates may be lost, which only delays the mean
-        let mean = if mean == 0 {
+        let updated = if mean == 0 {
             elapsed.max(1)
         } else {
             mean - mean / 8 + elapsed / 8
         };
-        self.mean_ns.store(mean, Ordering::Relaxed);
+        // Small changes are not stored, so that threads reading at a steady rate do not contend on the mean. The mean then
+        // lags durations within a quarter of it, which is precise enough to compare with the threshold.
+        if updated.abs_diff(mean) > mean / 32 {
+            self.mean_ns.store(updated, Ordering::Relaxed);
+        }
     }
 }
 
 impl InlineIo for DriveIo<'_> {
     fn admit(&self) -> Option<IoSlot<'_>> {
-        (self.enabled() && self.try_acquire()).then(|| IoSlot(Some(&self.io_in_flight)))
+        (self.enabled() && self.try_acquire()).then(|| IoSlot(Some(&*self.io_in_flight)))
+    }
+
+    fn enabled(&self) -> bool {
+        DriveIo::enabled(self)
     }
 
     fn read(&self, request: &IoRequest) -> Result<Option<super::super::ReadBytes>, StorageError> {

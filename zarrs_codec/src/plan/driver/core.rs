@@ -209,6 +209,11 @@ pub(crate) trait InlineIo: zarrs_plugin::MaybeSync {
     /// The request is counted towards the I/O target until the slot is dropped.
     fn admit(&self) -> Option<IoSlot<'_>>;
 
+    /// Returns true if storage requests should currently be performed inline.
+    ///
+    /// A slot of [`admit`](Self::admit) can be reused for consecutive storage requests while this is true.
+    fn enabled(&self) -> bool;
+
     /// Read the byte ranges of `request`.
     fn read(&self, request: &IoRequest) -> Result<Option<ReadBytes>, StorageError>;
 
@@ -314,6 +319,8 @@ impl<'a> RangeWork<'a> {
         let mut next: Option<Current<'a>> = None;
         let mut indices = 0..0;
         let mut ran = false;
+        // The slot of the inline reads of the job, which perform one storage request at a time
+        let mut slot = None;
         loop {
             let index = if let Some(index) = indices.next() {
                 index
@@ -341,7 +348,7 @@ impl<'a> RangeWork<'a> {
                 indices = start..(start + state.block).min(state.len);
                 indices.next().expect("a nonempty block")
             };
-            let outcome = match run_indexed(&current.state.plan, index, ctx, inline) {
+            let outcome = match run_indexed(&current.state.plan, index, ctx, inline, &mut slot) {
                 Ok(Some(IndexedRun::Outcome(outcome))) => {
                     if !ran {
                         ran = true;
@@ -418,22 +425,33 @@ enum IndexedRun<'a> {
 }
 
 /// Plan the task at `index` with `plan`, and run it if possible.
-fn run_indexed<'a>(
+///
+/// A read is performed inline in the I/O `slot` of the job, which is admitted for the first read of the job.
+fn run_indexed<'a, 's>(
     plan: &PlanFn<'a>,
     index: usize,
     ctx: &ComputeCtx,
-    inline: Option<&dyn InlineIo>,
+    inline: Option<&'s dyn InlineIo>,
+    slot: &mut Option<IoSlot<'s>>,
 ) -> Result<Option<IndexedRun<'a>>, CodecError> {
     let Some(task) = plan(index)? else {
         return Ok(None);
     };
+    let admitted = |inline: &&'s dyn InlineIo| {
+        if slot.is_some() && !inline.enabled() {
+            *slot = None;
+        }
+        if slot.is_none() {
+            *slot = inline.admit();
+        }
+        slot.is_some()
+    };
     let outcome = if !task.needs_io() {
         task.run_without_io(ctx)?
-    } else if let Some((inline, slot)) = inline.and_then(|inline| Some((inline, inline.admit()?))) {
+    } else if let Some(inline) = inline.filter(admitted) {
         match SingleTask::new(task)? {
             SingleTask::Read(task, request) => {
                 let result = inline.read(&request);
-                drop(slot);
                 task.run(&request, result, ctx)?
             }
             SingleTask::Compute(task) => task.run_without_io(ctx)?,
