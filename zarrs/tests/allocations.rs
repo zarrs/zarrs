@@ -149,42 +149,44 @@ fn array(
 
 /// Allocation counts of each operation: `(name, allocations, allocated bytes, peak bytes)`.
 ///
-/// Measured on 2026-10-17. Against the legacy reads and writes (before the I/O and compute scheduling rework), sharded
-/// reads allocate 73-81% less often and many-chunk reads and writes 30-70% less, with the same peak memory.
+/// Measured on 2026-10-18. Against the legacy reads and writes (before the I/O and compute scheduling rework), sharded
+/// reads allocate 86-98% less often, many-chunk reads and writes 40-74% less and sharded writes 39% less, with about
+/// the same peak memory. A read or write of a single chunk allocates about half as often, but plans a task, which
+/// allocates a few hundred bytes more.
 const BASELINE: &[(&str, usize, usize, usize)] = &[
-    // Zero-copy from the store: only metadata-sized allocations
-    ("retrieve_chunk_uncompressed", 5, 78, 69),
+    // Zero-copy from the store: only planning and metadata-sized allocations
+    ("retrieve_chunk_uncompressed", 6, 558, 549),
     // One decompressed output
-    ("retrieve_chunk_zstd", 5, 131_126, 131_088),
+    ("retrieve_chunk_zstd", 6, 131_606, 131_597),
     // The output plus one decoded intermediate per 64 x 64 chunk
     (
         "retrieve_array_subset_many_chunks_zstd",
-        172,
-        275_017,
-        142_889,
+        151,
+        274_529,
+        142_857,
     ),
-    ("retrieve_sharded_all_zstd", 326, 274_974, 138_157),
-    ("retrieve_sharded_partial_zstd", 161, 74_678, 26_101),
-    ("partial_decoder_sharded_zstd", 132, 52_430, 16_389),
+    ("retrieve_sharded_all_zstd", 112, 271_462, 138_133),
+    ("retrieve_sharded_partial_zstd", 130, 74_166, 26_229),
+    ("partial_decoder_sharded_zstd", 115, 52_246, 16_517),
     // The output only: the borrowed shard is not copied
-    ("sharding_decode_borrowed_shard", 247, 142_720, 136_040),
+    ("sharding_decode_borrowed_shard", 38, 139_304, 136_000),
     // The memory store copies the value once
-    ("store_chunk_uncompressed_borrowed", 8, 131_174, 131_133),
-    ("store_chunk_zstd", 9, 131_710, 131_678),
-    ("store_array_subset_sharded", 947, 489_542, 143_272),
-    ("async_retrieve_chunk_zstd", 11, 131_942, 131_637),
-    ("store_array_subset_many_chunks_zstd", 275, 304_873, 19_341),
+    ("store_chunk_uncompressed_borrowed", 9, 131_326, 131_133),
+    ("store_chunk_zstd", 10, 131_862, 131_837),
+    ("store_array_subset_sharded", 882, 491_574, 143_272),
+    ("async_retrieve_chunk_zstd", 10, 131_902, 131_629),
+    ("store_array_subset_many_chunks_zstd", 258, 305_369, 19_341),
     (
         "store_array_subset_partial_chunks_zstd",
-        314,
-        339_137,
+        286,
+        339_457,
         23_533,
     ),
-    ("store_chunks_sharded", 942, 489_446, 143_272),
+    ("store_chunks_sharded", 878, 491_494, 143_272),
     (
         "async_store_array_subset_many_chunks_zstd",
-        392,
-        337_009,
+        375,
+        336_737,
         20_645,
     ),
 ];
@@ -214,7 +216,7 @@ fn check(name: &str, stats: Stats) {
         measured <= baseline + baseline * percent / 100 + slack
     };
     assert!(
-        within(stats.allocations, allocations, 10, 4),
+        within(stats.allocations, allocations, 5, 2),
         "{name}: {} allocations exceeds the baseline of {allocations}",
         stats.allocations
     );
