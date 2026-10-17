@@ -245,7 +245,8 @@ impl ShardingCodecBound {
             TaskTarget::Views(views) if fixed && views.subset().shape() == subset.shape() => {
                 if subchunk_indices.num_elements() == 1 {
                     // A single subchunk may run without a separate task
-                    let children = self.plan_subchunks_into(
+                    let children = SubchunksIntoViews::generator(
+                        self,
                         source,
                         shard_index,
                         subchunk_grid,
@@ -262,7 +263,8 @@ impl ShardingCodecBound {
                     };
                 }
                 Ok(Outcome::Generate {
-                    children: self.plan_subchunks_into(
+                    children: SubchunksIntoViews::generator(
+                        self,
                         source,
                         shard_index,
                         subchunk_grid,
@@ -280,7 +282,8 @@ impl ShardingCodecBound {
                 let (output, views) =
                     SharedOutput::for_data_type(self.inner_codecs.data_type(), subset.shape())
                         .expect("fixed-length data");
-                let children = self.clone().plan_subchunks_into(
+                let children = SubchunksIntoViews::generator(
+                    self.clone(),
                     source,
                     shard_index,
                     subchunk_grid,
@@ -343,92 +346,6 @@ impl ShardingCodecBound {
                 })
             }
         }
-    }
-
-    /// Plan the decoding of `subset` of the shard into `views` (with the shape of the subset), one task per nonempty subchunk
-    /// in `subchunk_indices`, planned by index.
-    ///
-    /// Empty subchunks are filled with the fill value.
-    #[allow(clippy::too_many_arguments)]
-    fn plan_subchunks_into<'a>(
-        self: Arc<Self>,
-        source: ByteSource<'a>,
-        shard_index: impl ShardIndex + 'a,
-        subchunk_grid: RegularBoundedChunkGrid,
-        subset: ArraySubset,
-        subchunk_indices: ArraySubset,
-        views: TargetViews<'a>,
-        options: CodecOptions,
-        parallelism: usize,
-    ) -> Generator<'a> {
-        if !self.inner_codecs.plans_subtasks() && matches!(source.memory_slice(), Some(Ok(_))) {
-            return SubchunkBlocks::generator(
-                self,
-                source,
-                shard_index,
-                subchunk_grid,
-                subset,
-                subchunk_indices,
-                views,
-                options,
-                parallelism,
-            );
-        }
-        let output_start = views.subset().start().to_vec();
-        // The output is positioned as the subset, so subsets of the shard are subsets of the output
-        let aligned = output_start == subset.start();
-        // The indexer of a whole subchunk of the regular shape, shared by such subchunks
-        let regular_shape: &[u64] = bytemuck::must_cast_slice(&self.subchunk_shape);
-        let whole_subchunk: Arc<dyn Indexer> =
-            Arc::new(ArraySubset::new_with_shape(regular_shape.to_vec()));
-        let views = views.with_local_keepalive();
-        Generator::indexed(subchunk_indices.num_elements_usize(), move |i| {
-            let subchunk = subset_indices_at(&subchunk_indices, i as u64);
-            let subchunk_subset = subchunk_grid
-                .subset(&subchunk)?
-                .expect("subchunk is within the shard");
-            let subchunk_shape: SmallVec<[NonZeroU64; 4]> = subset_shape(&subchunk_subset).into();
-            let (output_subset, indexer) = if subchunk_subset.inbounds(&subset) {
-                // The whole subchunk is requested
-                let indexer = if subchunk_subset.shape()
-                    == bytemuck::must_cast_slice::<_, u64>(&self.subchunk_shape)
-                {
-                    PlanIndexer::Shared(whole_subchunk.clone())
-                } else {
-                    PlanIndexer::Subset(ArraySubset::new_with_shape(
-                        subchunk_subset.shape().to_vec(),
-                    ))
-                };
-                let output_subset = if aligned {
-                    subchunk_subset
-                } else {
-                    subchunk_subset
-                        .relative_to(subset.start())?
-                        .offset(&output_start)?
-                };
-                (output_subset, indexer)
-            } else {
-                let overlap = subset.overlap(&subchunk_subset)?;
-                let output_subset = overlap.relative_to(subset.start())?.offset(&output_start)?;
-                let indexer = PlanIndexer::Subset(overlap.relative_to(subchunk_subset.start())?);
-                (output_subset, indexer)
-            };
-            // SAFETY: the overlaps of subchunks with the request are disjoint, and `views` is only subdivided
-            let subchunk_views = unsafe { views.subdivide(output_subset) }?;
-            let subchunk_request = DecodeRequest {
-                indexer,
-                target: TaskTarget::Views(subchunk_views),
-            };
-            self.plan_subchunk(
-                &source,
-                &shard_index,
-                &subchunk_grid,
-                &subchunk,
-                &subchunk_shape,
-                subchunk_request,
-                &options,
-            )
-        })
     }
 
     /// Plan the decoding of the elements of a non-subset indexer by grouping them by subchunk.
@@ -500,12 +417,9 @@ impl ShardingCodecBound {
             ravel_indices(subchunk, subchunk_grid.grid_shape()).expect("inbounds subchunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         if let Some((offset, size)) = subchunk_offset_size(shard_index, shard_index_idx) {
-            let subchunk_source = source.interval(offset, size).map_err(|_| {
-                CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                )
-            })?;
+            let subchunk_source = source
+                .interval(offset, size)
+                .map_err(|_| out_of_bounds_subchunk())?;
             Ok(Some(self.inner_codecs.clone().plan_decode(
                 subchunk_source,
                 subchunk_shape,
@@ -529,15 +443,18 @@ impl ShardingCodecBound {
     }
 }
 
-/// The decoding of `subset` of a shard in memory into views (with the shape of the subset), with a task per block of
+/// The decoding of `subset` of a shard into views (with the shape of the subset), planned per subchunk or per block of
 /// subchunks adjacent in the last dimension.
 ///
-/// The subchunks of a block are decoded with the inner codecs, bytes, and views borrowed by the task, so that
-/// decoding a subchunk does not touch shared reference counts. Atomic operations are full barriers on common
-/// architectures, which wait for the writes of a decoded subchunk to the output, so they are costly per subchunk.
+/// Where the shard is in memory and the inner codecs do not plan tasks of their own
+/// ([`ArrayToBytesCodecTraits::plans_subtasks`]), a task decodes a block of subchunks with the inner codecs, bytes,
+/// and views borrowed by the task, so that decoding a subchunk does not touch shared reference counts. Atomic
+/// operations are full barriers on common architectures, which wait for the writes of a decoded subchunk to the
+/// output, so they are costly per subchunk.
+/// Otherwise, each subchunk is planned as a task with the inner codecs, which may read it or plan tasks of its own.
 ///
-/// The inner codecs must not plan tasks of their own ([`ArrayToBytesCodecTraits::plans_subtasks`]).
-struct SubchunkBlocks<'a, I> {
+/// Empty subchunks are filled with the fill value.
+struct SubchunksIntoViews<'a, I> {
     inner_codecs: Arc<CodecChainBound>,
     source: ByteSource<'a>,
     shard_index: I,
@@ -551,7 +468,7 @@ struct SubchunkBlocks<'a, I> {
     /// The array subset of a whole subchunk of the regular shape.
     whole_subchunk: ArraySubset,
     options: CodecOptions,
-    /// The number of subchunks in a block.
+    /// The number of subchunks in a block, which is one if subchunks are planned as tasks.
     block_len: usize,
     /// The number of blocks in a row of subchunks in the last dimension.
     blocks_per_row: usize,
@@ -559,7 +476,7 @@ struct SubchunkBlocks<'a, I> {
     row_len: usize,
 }
 
-impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
+impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
     #[allow(clippy::too_many_arguments)]
     fn generator(
         codec: Arc<ShardingCodecBound>,
@@ -572,15 +489,22 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
         options: CodecOptions,
         parallelism: usize,
     ) -> Generator<'a> {
+        let blocks =
+            !codec.inner_codecs.plans_subtasks() && matches!(source.memory_slice(), Some(Ok(_)));
         let num_subchunks = subchunk_indices.num_elements_usize();
         let row_len = usize::try_from(*subchunk_indices.shape().last().expect("nonempty")).unwrap();
-        let block_len = (num_subchunks / (2 * parallelism.max(1)))
-            .clamp(1, MAX_BLOCK_LEN)
-            .min(row_len);
+        let block_len = if blocks {
+            (num_subchunks / (2 * parallelism.max(1)))
+                .clamp(1, MAX_BLOCK_LEN)
+                .min(row_len)
+        } else {
+            1
+        };
         let blocks_per_row = row_len.div_ceil(block_len);
         let num_blocks = num_subchunks / row_len * blocks_per_row;
         let regular_shape: &[u64] = bytemuck::must_cast_slice(&codec.subchunk_shape);
         let state = Arc::new(Self {
+            // A reference count of the inner codecs local to the generator
             inner_codecs: Arc::new(CodecChainBound::clone(&codec.inner_codecs)),
             whole_subchunk: ArraySubset::new_with_shape(regular_shape.to_vec()),
             subchunk_shape: codec.subchunk_shape.as_slice().into(),
@@ -598,17 +522,24 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
         let views = views.with_local_keepalive();
         Generator::indexed(num_blocks, move |block| {
             let (first, len) = state.block(block);
+            if !blocks {
+                return state.plan_subchunk(first, &views);
+            }
             let first_geometry = state.subchunk(first);
             let last_geometry = state.subchunk(first + len - 1);
-            let mut block_shape = first_geometry.overlap_shape.to_vec();
-            let last = block_shape.len() - 1;
-            block_shape[last] = last_geometry.output_start[last]
-                + last_geometry.overlap_shape[last]
-                - first_geometry.output_start[last];
-            let block_subset = ArraySubset::new_with_start_shape(
-                first_geometry.output_start.to_vec(),
-                block_shape,
-            )?;
+            let last = first_geometry.shape.len() - 1;
+            let block_subset = ArraySubset::from(
+                std::iter::zip(&first_geometry.output_start, &first_geometry.overlap_shape)
+                    .enumerate()
+                    .map(|(dim, (&start, &extent))| {
+                        let end = if dim == last {
+                            last_geometry.output_start[last] + last_geometry.overlap_shape[last]
+                        } else {
+                            start + extent
+                        };
+                        start..end
+                    }),
+            );
             // SAFETY: the blocks are disjoint, and `views` is only subdivided
             let block_views = unsafe { views.subdivide(block_subset) }?;
             let state = state.clone();
@@ -667,6 +598,47 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
         geometry
     }
 
+    /// The bytes of the subchunk at `offset` with `size` in the shard.
+    fn subchunk_source(&self, offset: u64, size: u64) -> Result<ByteSource<'a>, CodecError> {
+        self.source
+            .interval(offset, size)
+            .map_err(|_| out_of_bounds_subchunk())
+    }
+
+    /// Plan the decoding of the subchunk at `index` in `subchunk_indices` into its region of `views`.
+    ///
+    /// Returns [`None`] if the subchunk is empty and its region has been filled with the fill value.
+    fn plan_subchunk(
+        &self,
+        index: usize,
+        views: &TargetViews<'a>,
+    ) -> Result<Option<Task<'a>>, CodecError> {
+        let geometry = self.subchunk(index);
+        // SAFETY: the overlaps of subchunks with the subset are disjoint, and `views` is only subdivided
+        let views = unsafe { views.subdivide(geometry.output_subset()) }?;
+        let Some((offset, size)) =
+            subchunk_offset_size(&self.shard_index, geometry.shard_index_idx)
+        else {
+            views.with_target(|target| {
+                copy_fill_value_into(
+                    self.inner_codecs.data_type(),
+                    self.inner_codecs.fill_value(),
+                    target,
+                )
+            })?;
+            return Ok(None);
+        };
+        Ok(Some(self.inner_codecs.clone().plan_decode(
+            self.subchunk_source(offset, size)?,
+            &geometry.shape,
+            DecodeRequest {
+                indexer: PlanIndexer::Subset(geometry.overlap()),
+                target: TaskTarget::Views(views),
+            },
+            &self.options,
+        )?))
+    }
+
     /// Decode the subchunk at `index` in `subchunk_indices` into its region of the `block_views`.
     fn decode_subchunk(
         &self,
@@ -676,13 +648,9 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
     ) -> Result<(), CodecError> {
         let geometry = self.subchunk(index);
         let inner_codecs = &self.inner_codecs;
-        let output_subset = ArraySubset::new_with_start_shape(
-            geometry.output_start.to_vec(),
-            geometry.overlap_shape.to_vec(),
-        )?;
         // SAFETY: the subchunks of a block are disjoint, and `block_views` is only subdivided
         unsafe {
-            block_views.with_subdivided(output_subset, |views| {
+            block_views.with_subdivided(geometry.output_subset(), |views| {
                 let Some((offset, size)) =
                     subchunk_offset_size(&self.shard_index, geometry.shard_index_idx)
                 else {
@@ -694,13 +662,8 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                         )
                     });
                 };
-                let out_of_bounds = || {
-                    CodecError::Other(
-                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                            .to_string(),
-                    )
-                };
                 let outcome = if geometry.whole {
+                    // The bytes are borrowed from the shard, without a reference count of a window of it
                     let shard = self
                         .source
                         .memory_slice()
@@ -709,13 +672,11 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                         .ok()
                         .zip(usize::try_from(size).ok())
                         .and_then(|(offset, size)| shard.get(offset..offset.checked_add(size)?))
-                        .ok_or_else(out_of_bounds)?;
+                        .ok_or_else(out_of_bounds_subchunk)?;
                     let indexer = if geometry.shape.as_slice() == self.subchunk_shape.as_slice() {
                         PlanIndexer::Borrowed(&self.whole_subchunk)
                     } else {
-                        PlanIndexer::Subset(ArraySubset::new_with_shape(
-                            bytemuck::must_cast_slice(&geometry.shape).to_vec(),
-                        ))
+                        PlanIndexer::Subset(geometry.overlap())
                     };
                     decode_whole(
                         &**inner_codecs,
@@ -730,21 +691,13 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                     )?
                 } else {
                     // Part of the subchunk is requested, which its codecs may decode without decoding all of it
-                    let source = self
-                        .source
-                        .interval(offset, size)
-                        .map_err(|_| out_of_bounds())?;
-                    let indexer = ArraySubset::new_with_start_shape(
-                        geometry.overlap_start.to_vec(),
-                        geometry.overlap_shape.to_vec(),
-                    )?;
                     inner_codecs
                         .clone()
                         .plan_decode(
-                            source,
+                            self.subchunk_source(offset, size)?,
                             &geometry.shape,
                             DecodeRequest {
-                                indexer: PlanIndexer::Subset(indexer),
+                                indexer: PlanIndexer::Subset(geometry.overlap()),
                                 target: TaskTarget::Views(views),
                             },
                             &self.options,
@@ -764,7 +717,10 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                     | Outcome::Generate { .. }
                     | Outcome::Write { .. }) => {
                         // A partial decode planned tasks (e.g. a transpose of the decoded region), which only read memory
-                        match drive_memory_one(Task::compute(move |_| Ok(outcome)), ctx.resources())? {
+                        match drive_memory_one(
+                            Task::compute(move |_| Ok(outcome)),
+                            ctx.resources(),
+                        )? {
                             TaskValue::None => Ok(()),
                             TaskValue::Array(_)
                             | TaskValue::Bytes(_)
@@ -778,7 +734,7 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
     }
 }
 
-/// The geometry of a subchunk of [`SubchunkBlocks`].
+/// The geometry of a subchunk of [`SubchunksIntoViews`].
 struct SubchunkGeometry {
     /// The index of the subchunk in the shard index.
     shard_index_idx: usize,
@@ -794,7 +750,31 @@ struct SubchunkGeometry {
     whole: bool,
 }
 
-/// The maximum number of subchunks in a block of [`SubchunkBlocks`].
+impl SubchunkGeometry {
+    /// The overlap of the subchunk with the requested subset, relative to the subchunk.
+    fn overlap(&self) -> ArraySubset {
+        start_shape_subset(&self.overlap_start, &self.overlap_shape)
+    }
+
+    /// The region of the output the overlap is decoded into.
+    fn output_subset(&self) -> ArraySubset {
+        start_shape_subset(&self.output_start, &self.overlap_shape)
+    }
+}
+
+/// The error of a shard index that references bytes out of bounds of the shard.
+fn out_of_bounds_subchunk() -> CodecError {
+    CodecError::Other(
+        "The shard index references out-of-bounds bytes. The chunk may be corrupted.".to_string(),
+    )
+}
+
+/// The array subset with `start` and `shape`, which have the same length.
+fn start_shape_subset(start: &[u64], shape: &[u64]) -> ArraySubset {
+    ArraySubset::from(std::iter::zip(start, shape).map(|(&start, &len)| start..start + len))
+}
+
+/// The maximum number of subchunks in a block of [`SubchunksIntoViews`].
 const MAX_BLOCK_LEN: usize = 8;
 
 /// The decoded offsets and sizes of the subchunks of a shard.
