@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
 - Decode the elements of each chunk of a multi-chunk array subset read through an encoded or partial decoder chunk cache directly into the output, rather than decoding then copying them
+  - Also for asynchronous chunk caches, and for the `retrieve_chunk_into` and `retrieve_partial_chunk_into` methods (and their async variants) of `ArrayCached`, which copy from a decoded chunk cache rather than extracting then copying
 - Decode `zstd`, `blosc`, `gzip`, `zlib`, `bz2`, `shuffle`, and `gdeflate` directly into preallocated byte buffers
 - Let the `bytes` codec choose final-output placement for efficient deferred producers, while retaining fused copy-and-endianness conversion for ordinary input
   - *Behavioural Change*: if decoding into an output fails, the output may have been partially written, including with undecoded bytes

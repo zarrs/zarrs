@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `plan::{decode_whole,place_decoded,place_fill_value,is_whole_chunk,whole_chunk_hint,plan_decode_request_elementwise}` for codec planners
 - Add `plan::{PrepareDecode,SourceDecoder,MissingDecoder,DecodedDecoder,prepare_decode_whole,prepared}` and `plan::TaskValue::Prepared`
 - Add `plan::ByteSource::{memory_slice,size_held}` and `plan::TargetViews::{with_subdivided,with_local_keepalive}`
+- Add `plan::TargetViews::async_partial_decode_into`, which decodes with an asynchronous partial decoder into the views
 - Add `ReadDispatch` and `Resources::{read_dispatch,set_read_dispatch,with_read_dispatch}`, which override how synchronous drives dispatch reads
   - By default, a synchronous drive reads on compute threads while storage requests are fast (under 100 µs on average), and otherwise on the I/O pool, and performs writes the same way
 - Add planned encoding to the codec traits

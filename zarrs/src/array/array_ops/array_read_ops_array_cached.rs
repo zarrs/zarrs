@@ -14,7 +14,7 @@ use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
 use zarrs_codec::plan::SharedOutput;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError,
-    copy_array_subset_into_target, copy_fill_value_into, decode_into_array_bytes_target,
+    InvalidNumberOfElementsError, copy_array_subset_into_target, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
 
@@ -126,42 +126,83 @@ where
     .into())
 }
 
-/// The source of the elements of the overlap of a chunk with an array subset in a cached read.
-pub(super) enum OverlapSource {
-    /// The elements of the overlap.
-    #[cfg(feature = "async")]
-    Overlap(Arc<ArrayBytes<'static>>),
-    /// The decoded chunk (or [`None`] if it does not exist), and the overlap relative to the chunk.
-    Chunk(Option<Arc<ArrayBytes<'static>>>, ArraySubset),
-    /// A partial decoder of the chunk, and the overlap relative to the chunk.
-    Decoder(Arc<dyn ArrayPartialDecoderTraits>, ArraySubset),
+/// Copy the elements of `indexer` of a decoded chunk of `chunk_shape` (or the fill value if it does not exist) into
+/// `target`.
+pub(super) fn copy_cached_chunk_into<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    chunk: Option<&ArrayBytes<'_>>,
+    chunk_shape: &[u64],
+    indexer: &dyn Indexer,
+    target: ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<(), CodecError> {
+    if indexer.len() != target.num_elements() {
+        return Err(InvalidNumberOfElementsError::new(indexer.len(), target.num_elements()).into());
+    }
+    if let Some(chunk) = chunk {
+        copy_array_subset_into_target(chunk, chunk_shape, indexer, array.data_type(), target)
+    } else {
+        indexer.validate(chunk_shape)?;
+        copy_fill_value_into(array.data_type(), array.fill_value(), target)
+    }
 }
 
-impl OverlapSource {
-    /// Copy the elements of the overlap into `target`, given the shape of the chunk.
-    pub(super) fn copy_into<TStorage: ?Sized>(
+/// The source of the elements of a chunk in a cached read.
+enum ChunkSource {
+    /// The decoded chunk, or [`None`] if it does not exist.
+    Chunk(Option<Arc<ArrayBytes<'static>>>),
+    /// A partial decoder of the chunk.
+    Decoder(Arc<dyn ArrayPartialDecoderTraits>),
+}
+
+impl ChunkSource {
+    fn retrieve<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Self, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache + ?Sized,
+    {
+        Ok(if C::Value::HOLDS_DECODED {
+            // The elements are copied from the decoded chunk, rather than extracted then copied
+            Self::Chunk(C::Value::retrieve_chunk_bytes_if_exists(
+                cache,
+                array,
+                chunk_indices,
+                options,
+                resources,
+            )?)
+        } else {
+            // The elements are decoded into the output, rather than decoded then copied
+            Self::Decoder(C::Value::partial_decoder(
+                cache,
+                array,
+                chunk_indices,
+                options,
+                resources,
+            )?)
+        })
+    }
+
+    /// Decode the elements of `indexer` of the chunk of `chunk_shape` into `target`.
+    fn decode_into<TStorage: ?Sized>(
         &self,
         array: &Array<TStorage>,
         chunk_shape: &[u64],
+        indexer: &dyn Indexer,
         target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
         match self {
-            #[cfg(feature = "async")]
-            Self::Overlap(bytes) => decode_into_array_bytes_target(bytes, target),
-            Self::Chunk(Some(chunk), overlap) => copy_array_subset_into_target(
-                chunk,
-                chunk_shape,
-                overlap,
-                array.data_type(),
-                target,
-            ),
-            Self::Chunk(None, _) => {
-                copy_fill_value_into(array.data_type(), array.fill_value(), target)
+            Self::Chunk(chunk) => {
+                copy_cached_chunk_into(array, chunk.as_deref(), chunk_shape, indexer, target)
             }
-            Self::Decoder(decoder, overlap) => {
-                decoder.partial_decode_into(overlap, target, options, resources)
+            Self::Decoder(decoder) => {
+                decoder.partial_decode_into(indexer, target, options, resources)
             }
         }
     }
@@ -187,27 +228,20 @@ where
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let overlap = chunk_subset.overlap(array_subset)?;
         let output_subset = overlap.relative_to(&array_subset_start)?;
-        let source = if C::Value::HOLDS_DECODED {
-            // The elements are copied from the decoded chunk, rather than extracted then copied
-            let chunk = C::Value::retrieve_chunk_bytes_if_exists(
-                cache,
-                array,
-                &chunk_indices,
-                options,
-                resources,
-            )?;
-            OverlapSource::Chunk(chunk, overlap.relative_to(chunk_subset.start())?)
-        } else {
-            // The elements are decoded into the output, rather than decoded then copied
-            let decoder =
-                C::Value::partial_decoder(cache, array, &chunk_indices, options, resources)?;
-            OverlapSource::Decoder(decoder, overlap.relative_to(chunk_subset.start())?)
-        };
+        let chunk_overlap = overlap.relative_to(chunk_subset.start())?;
+        let source = ChunkSource::retrieve(cache, array, &chunk_indices, options, resources)?;
         // SAFETY: the chunks are disjoint
         unsafe {
             views.with_subdivided(output_subset, |views| {
                 views.with_target(|target| {
-                    source.copy_into(array, chunk_subset.shape(), target, options, resources)
+                    source.decode_into(
+                        array,
+                        chunk_subset.shape(),
+                        &chunk_overlap,
+                        target,
+                        options,
+                        resources,
+                    )
                 })
             })
         }??;
@@ -236,14 +270,14 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = retrieve_chunk_bytes(
-            self.cache(),
-            self.array(),
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        self.retrieve_partial_chunk_into_with_options(
             chunk_indices,
+            &ArraySubset::new_with_shape(bytemuck::must_cast_slice::<_, u64>(&chunk_shape)),
+            output_target,
             options,
             resources,
-        )?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        )
     }
 
     pub(in crate::array) fn retrieve_partial_chunk_into_with_options(
@@ -254,15 +288,24 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::retrieve_partial_chunk_bytes(
+        let source = ChunkSource::retrieve(
             self.cache(),
             self.array(),
             chunk_indices,
-            indexer,
             options,
             resources,
         )?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        source
+            .decode_into(
+                self.array(),
+                bytemuck::must_cast_slice(&chunk_shape),
+                indexer,
+                output_target,
+                options,
+                resources,
+            )
+            .map_err(ArrayError::CodecError)
     }
 }
 

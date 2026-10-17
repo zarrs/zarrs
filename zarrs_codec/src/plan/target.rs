@@ -160,6 +160,40 @@ impl<'a> TargetViews<'a> {
         let mut masks: Vec<ArrayBytesFixedDisjointView<'_>> = masks;
         f(build_nested_optional_target(&mut data, &mut masks))
     }
+
+    /// Partially decode the elements of `indexer` with `decoder` into the views.
+    ///
+    /// This is the asynchronous counterpart of decoding into [`with_target`](Self::with_target), as the target is
+    /// held across the decode.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decode fails.
+    #[cfg(feature = "async")]
+    pub async fn async_partial_decode_into(
+        self,
+        decoder: &dyn crate::AsyncArrayPartialDecoderTraits,
+        indexer: &dyn Indexer,
+        options: &crate::CodecOptions,
+        resources: &crate::Resources,
+    ) -> Result<(), CodecError> {
+        let Self {
+            data,
+            masks,
+            keepalive,
+        } = self;
+        // As in `with_target`, the views are dropped before `keepalive`.
+        let _keepalive = keepalive;
+        let mut data: ArrayBytesFixedDisjointView<'_> = data;
+        let mut masks: Vec<ArrayBytesFixedDisjointView<'_>> = masks;
+        decoder
+            .partial_decode_into(
+                indexer,
+                build_nested_optional_target(&mut data, &mut masks),
+                options,
+                resources,
+            )
+            .await
+    }
 }
 
 /// An output buffer shared by the tasks of a drive that decode into it.
@@ -207,7 +241,7 @@ impl SharedOutput {
             len,
             _shape: shape.into(),
         };
-        let subset = ArraySubset::new_with_shape(shape.to_vec());
+        let subset = ArraySubset::new_with_shape(shape);
         // SAFETY: the slices and shape reference heap allocations owned by the output, which do not
         // move when the output is moved into the `Arc`. Every view holds a clone of the `Arc` that is
         // dropped after the view, so the allocations outlive the views. Each allocation has exactly one
