@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Resources` (re-exported from `zarrs_codec`), which sets the resources (e.g. concurrency) available to an operation
 
 ### Changed
+- Encode chunk keys in one allocation, rather than allocating per index and growing the key
 - Array reads are planned as tasks and executed by the drivers of `zarrs_codec::plan`, with separate I/O and compute concurrency limits (`Resources::{compute_target,io_target}`)
   - Applies to the `retrieve_*` methods and their async and `_into` variants, `retrieve_chunk_if_exists`, `partial_decoder`, and the filling of chunk caches
   - I/O and compute are interleaved, so a chunk or subchunk decodes as soon as its bytes are read
