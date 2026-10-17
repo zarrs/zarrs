@@ -1,7 +1,7 @@
 //! A synchronous in-memory store.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use bytes::BytesMut;
 
@@ -15,7 +15,7 @@ use crate::{
 /// A synchronous in-memory store.
 #[derive(Debug)]
 pub struct MemoryStore {
-    data_map: Mutex<BTreeMap<StoreKey, Bytes>>,
+    data_map: RwLock<BTreeMap<StoreKey, Bytes>>,
 }
 
 impl Default for MemoryStore {
@@ -29,14 +29,14 @@ impl MemoryStore {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data_map: Mutex::default(),
+            data_map: RwLock::default(),
         }
     }
 }
 
 impl ReadableStorageTraits for MemoryStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map.get(key).cloned())
     }
 
@@ -45,7 +45,7 @@ impl ReadableStorageTraits for MemoryStore {
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         let data = data_map.get(key);
         if let Some(data) = data {
             let data = data.clone();
@@ -65,7 +65,7 @@ impl ReadableStorageTraits for MemoryStore {
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         data_map
             .get(key)
             .map_or_else(|| Ok(None), |entry| Ok(Some(entry.len() as u64)))
@@ -82,7 +82,7 @@ impl WritableStorageTraits for MemoryStore {
         // The value is converted, and a replaced value dropped, outside of the lock.
         let value: Bytes = value.into();
         let replaced = {
-            let mut data_map = self.data_map.lock().unwrap();
+            let mut data_map = self.data_map.write().unwrap();
             if let Some(entry) = data_map.get_mut(key) {
                 Some(std::mem::replace(entry, value))
             } else {
@@ -99,7 +99,7 @@ impl WritableStorageTraits for MemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().unwrap();
+        let mut data_map = self.data_map.write().unwrap();
         let entry = data_map.entry(key.clone()).or_default();
 
         // Take ownership so try_into_mut can succeed when there are no other clones.
@@ -120,13 +120,13 @@ impl WritableStorageTraits for MemoryStore {
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
         // The erased value is dropped outside of the lock
-        let erased = self.data_map.lock().unwrap().remove(key);
+        let erased = self.data_map.write().unwrap().remove(key);
         drop(erased);
         Ok(())
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().unwrap();
+        let mut data_map = self.data_map.write().unwrap();
         let keys: Vec<StoreKey> = data_map.keys().cloned().collect();
         for key in keys {
             if key.has_prefix(prefix) {
@@ -143,12 +143,12 @@ impl WritableStorageTraits for MemoryStore {
 
 impl ListableStorageTraits for MemoryStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map.keys().cloned().collect())
     }
 
     fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map
             .keys()
             .filter(|&key| key.has_prefix(prefix))
@@ -159,7 +159,7 @@ impl ListableStorageTraits for MemoryStore {
     fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
         let mut keys: StoreKeys = vec![];
         let mut prefixes: BTreeSet<StorePrefix> = BTreeSet::default();
-        let data_map = self.data_map.lock().unwrap();
+        let data_map = self.data_map.read().unwrap();
         for key in data_map.keys() {
             if key.has_prefix(prefix) {
                 let key_strip = key.as_str().strip_prefix(prefix.as_str()).unwrap();
