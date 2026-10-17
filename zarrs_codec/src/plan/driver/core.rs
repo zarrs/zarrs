@@ -696,6 +696,20 @@ impl<'a> SingleRead<'a> {
     }
 }
 
+impl<'a> Outcome<'a> {
+    /// The write operation and value of an [`Outcome::Write`] of one operation, which a single root task performs
+    /// without a scheduler, or the outcome otherwise.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn into_single_write(self) -> Result<(WriteOp<'a>, TaskValue<'a>), Self> {
+        match self {
+            Outcome::Write { mut ops, then } if ops.len() == 1 => {
+                Ok((ops.pop().expect("one write"), then))
+            }
+            outcome => Err(outcome),
+        }
+    }
+}
+
 /// The value of a single root task that completed with `outcome`, or a scheduler to continue it.
 // The scheduler is moved once per drive, which is cheaper than boxing it
 #[allow(clippy::result_large_err)]

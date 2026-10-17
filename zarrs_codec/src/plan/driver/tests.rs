@@ -250,6 +250,26 @@ pub(super) fn writes_complete_before_value(drive: Driver) {
     assert_eq!(io.get(1), Some(vec![9, 7, 9, 9]));
 }
 
+/// A single root task that writes once, which a drive performs without a scheduler, then completes with its value.
+pub(super) fn single_root_write(drive: Driver) {
+    let write = |key: usize| {
+        Task::compute(move |_| {
+            Ok(Outcome::Write {
+                ops: smallvec![WriteOp::Set(SourceKey(key), CowBytes::from(vec![4u8, 5]))],
+                then: TaskValue::Bytes(Some(CowBytes::from(vec![6u8]))),
+            })
+        })
+    };
+    let io = MemoryIo::default();
+    let values = drive(vec![write(3)], &io, &Resources::default()).unwrap();
+    assert_eq!(io.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(io.get(3), Some(vec![4, 5]));
+    assert_eq!(bytes_value(&values[0]), Some(vec![6]));
+
+    // A failed write is an error of the drive
+    assert!(drive(vec![write(3)], &ReadOnlyIo, &Resources::default()).is_err());
+}
+
 pub(super) fn memory_sources_need_no_io(drive: Driver) {
     let io = MemoryIo::default();
     let bytes: Vec<u8> = (0..32).collect();
@@ -677,6 +697,10 @@ macro_rules! driver_tests {
         #[test]
         fn writes_complete_before_value() {
             crate::plan::driver::tests::writes_complete_before_value($drive);
+        }
+        #[test]
+        fn single_root_write() {
+            crate::plan::driver::tests::single_root_write($drive);
         }
         #[test]
         fn memory_sources_need_no_io() {

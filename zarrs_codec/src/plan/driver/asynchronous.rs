@@ -236,6 +236,14 @@ async fn drive_single<'a>(
             read.run(&request, result, &ctx)?
         }
     };
+    let outcome = match outcome.into_single_write() {
+        Ok((op, then)) => {
+            let _permit = resources.io_permit().await;
+            io.write(op).await?;
+            return Ok(Ok(then));
+        }
+        Err(outcome) => outcome,
+    };
     Ok(single_outcome(outcome))
 }
 

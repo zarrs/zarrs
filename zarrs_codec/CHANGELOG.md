@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Coalesce queued reads of nearby byte ranges of the same key into one request in the `drive_sync` (reads on the I/O pool) and `drive_async` drivers
   - Add `plan::{SyncIo,AsyncIo}::read_coalescing`, the hint of the backend (e.g. of a store), and `Resources::{read_coalescing,set_read_coalescing,with_read_coalescing}` to override it
   - The bytes of each read are slices of the bytes of the request
+- A drive of a single root task that completes with one write performs the write itself, without starting a scheduler
 
 ### Changed
 - Make `async-trait` optional and enable it only with the `async` feature.
