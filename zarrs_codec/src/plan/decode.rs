@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayToBytesCodecTraits, CodecError, CodecOptions,
-    Resources, copy_fill_value_into, decode_into_array_bytes_target,
+    Resources, copy_array_subset_into_target, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_data_type::{DataType, FillValue};
 
@@ -116,12 +116,15 @@ pub fn decode_whole<'a>(
                 options,
                 resources,
             )?;
-            let extracted = decoded.extract_array_subset(
-                indexer,
-                bytemuck::must_cast_slice(shape),
-                data_type,
-            )?;
-            views.with_target(|target| decode_into_array_bytes_target(&extracted, target))?;
+            views.with_target(|target| {
+                copy_array_subset_into_target(
+                    &decoded,
+                    bytemuck::must_cast_slice(shape),
+                    indexer,
+                    data_type,
+                    target,
+                )
+            })?;
             Ok(Outcome::Done)
         }
         TaskTarget::Value => {

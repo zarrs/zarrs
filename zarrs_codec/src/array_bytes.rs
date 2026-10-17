@@ -846,6 +846,52 @@ pub fn decode_into_array_bytes_target(
     }
 }
 
+/// Copy the elements `indexer` of `bytes`, an array of `shape` elements of `data_type`, into `target`.
+///
+/// This is equivalent to [`ArrayBytes::extract_array_subset`] then [`decode_into_array_bytes_target`], but copies an
+/// array subset of fixed-length data directly into the target, without an intermediate copy.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `indexer` is invalid for `shape`, or `bytes` are incompatible with `data_type` or the
+/// target.
+pub fn copy_array_subset_into_target(
+    bytes: &ArrayBytes<'_>,
+    shape: &[u64],
+    indexer: &dyn Indexer,
+    data_type: &DataType,
+    target: ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<(), CodecError> {
+    let Some(subset) = indexer.as_array_subset() else {
+        let extracted = bytes.extract_array_subset(indexer, shape, data_type)?;
+        return decode_into_array_bytes_target(&extracted, target);
+    };
+    match (bytes, target) {
+        (ArrayBytes::Fixed(data), ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+            view.copy_from_subset(data, shape, subset)
+        }
+        (
+            ArrayBytes::Optional(optional_bytes),
+            ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
+        ) => {
+            let inner_data_type = data_type
+                .optional_inner()
+                .ok_or(ExpectedFixedLengthBytesError)?;
+            copy_array_subset_into_target(
+                optional_bytes.data(),
+                shape,
+                indexer,
+                inner_data_type,
+                *data_target,
+            )?;
+            mask_target.copy_from_subset(optional_bytes.mask(), shape, subset)
+        }
+        (bytes, target) => {
+            let extracted = bytes.extract_array_subset(indexer, shape, data_type)?;
+            decode_into_array_bytes_target(&extracted, target)
+        }
+    }
+}
+
 // impl<'a, 'b> From<&ArrayBytes<'a>> for ArrayBytes<'b> {
 //     fn from(bytes: &ArrayBytes<'a>) -> Self {
 //         match bytes {

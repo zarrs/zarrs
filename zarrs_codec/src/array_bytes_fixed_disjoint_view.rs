@@ -4,7 +4,7 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use zarrs_chunk_grid::iterators::ContiguousLinearisedIndices;
-use zarrs_chunk_grid::{ArraySubset, IndexerError};
+use zarrs_chunk_grid::{ArraySubset, ArraySubsetTraits, IndexerError};
 
 use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 
@@ -264,6 +264,56 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         }
         debug_assert_eq!(subset_offset, subset_bytes.len());
 
+        Ok(())
+    }
+
+    /// Copy the elements of `subset` of `source`, the bytes of an array of `source_shape`, into the view.
+    ///
+    /// The subset must have as many elements as the view. This is equivalent to extracting the subset and copying it
+    /// with [`copy_from_slice`](Self::copy_from_slice), without the intermediate copy.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the length of `source` is not that of an array of `source_shape`, `subset` is
+    /// out-of-bounds of `source_shape`, or `subset` does not have as many elements as the view.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn copy_from_subset(
+        &mut self,
+        source: &[u8],
+        source_shape: &[u64],
+        subset: &dyn ArraySubsetTraits,
+    ) -> Result<(), CodecError> {
+        let size = self.data_type_size;
+        let source_len = usize::try_from(source_shape.iter().product::<u64>()).unwrap() * size;
+        if source.len() != source_len {
+            return Err(InvalidBytesLengthError::new(source.len(), source_len).into());
+        }
+        let subset_len = subset.num_elements_usize() * size;
+        if subset_len != self.bytes_in_subset_len {
+            return Err(InvalidBytesLengthError::new(subset_len, self.bytes_in_subset_len).into());
+        }
+        let to_bytes = |elements: u64| usize::try_from(elements * size as u64).unwrap();
+        // Copy the contiguous runs of the subset into the contiguous runs of the view, which have the same elements in
+        // C order but may be split differently
+        let mut destinations = self.contiguous_linearised_indices().iter();
+        let (mut destination, mut destination_len) = (0, 0);
+        for (index, elements) in &subset.contiguous_linearised_indices(source_shape)? {
+            let (mut offset, mut len) = (to_bytes(index), to_bytes(elements));
+            while len > 0 {
+                if destination_len == 0 {
+                    let (index, elements) = destinations
+                        .next()
+                        .expect("the view has as many elements as the subset");
+                    (destination, destination_len) = (to_bytes(index), to_bytes(elements));
+                }
+                let n = len.min(destination_len);
+                unsafe { self.bytes.index_mut(destination..destination + n) }
+                    .copy_from_slice(&source[offset..offset + n]);
+                (offset, len) = (offset + n, len - n);
+                (destination, destination_len) = (destination + n, destination_len - n);
+            }
+        }
         Ok(())
     }
 
@@ -543,5 +593,94 @@ mod tests {
             assert!(view.fill_elements(&[0], &[1, 2]).is_err()); // invalid fill value
         }
         assert_eq!(&bytes, &[0, 11, 255, 0, 255, 14, 0, 0, 0]);
+    }
+
+    #[test]
+    fn copy_from_subset_matches_extract_and_copy() {
+        let size = 2;
+        let source_shape = [4u64, 5, 6];
+        let source: Vec<u8> = (0..source_shape.iter().product::<u64>() * size as u64)
+            .map(|i| (i % 251) as u8)
+            .collect();
+        // Subsets whose contiguous runs split differently from the runs of the views
+        for (subset, output_shape, output_subset) in [
+            (
+                ArraySubset::new_with_ranges(&[1..3, 0..5, 0..6]),
+                vec![2u64, 5, 6],
+                ArraySubset::new_with_shape(vec![2, 5, 6]),
+            ),
+            (
+                ArraySubset::new_with_ranges(&[1..3, 2..4, 1..5]),
+                vec![3, 4, 6],
+                ArraySubset::new_with_ranges(&[1..3, 1..3, 2..6]),
+            ),
+            (
+                ArraySubset::new_with_ranges(&[0..4, 0..5, 0..6]),
+                vec![5, 5, 7],
+                ArraySubset::new_with_ranges(&[1..5, 0..5, 1..7]),
+            ),
+            (
+                ArraySubset::new_with_ranges(&[2..2, 0..5, 0..6]),
+                vec![1, 5, 6],
+                ArraySubset::new_with_ranges(&[0..0, 0..5, 0..6]),
+            ),
+        ] {
+            let len = usize::try_from(output_shape.iter().product::<u64>()).unwrap() * size;
+            let mut expected = vec![0u8; len];
+            let mut fused = vec![0u8; len];
+            let extracted: Vec<u8> = subset
+                .contiguous_linearised_indices(&source_shape)
+                .unwrap()
+                .iter()
+                .flat_map(|(index, elements)| {
+                    let start = usize::try_from(index).unwrap() * size;
+                    source[start..start + usize::try_from(elements).unwrap() * size].to_vec()
+                })
+                .collect();
+            unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut expected),
+                    size,
+                    &output_shape,
+                    output_subset.clone(),
+                )
+            }
+            .unwrap()
+            .copy_from_slice(&extracted)
+            .unwrap();
+            unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut fused),
+                    size,
+                    &output_shape,
+                    output_subset,
+                )
+            }
+            .unwrap()
+            .copy_from_subset(&source, &source_shape, &subset)
+            .unwrap();
+            assert_eq!(fused, expected);
+        }
+
+        // The subset must have as many elements as the view
+        let mut output = vec![0u8; 8];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                size,
+                &[4],
+                ArraySubset::new_with_shape(vec![4]),
+            )
+        }
+        .unwrap();
+        let subset = ArraySubset::new_with_ranges(&[0..1, 0..1, 0..3]);
+        assert!(
+            view.copy_from_subset(&source, &source_shape, &subset)
+                .is_err()
+        );
+        assert!(
+            view.copy_from_subset(&source[1..], &source_shape, &subset)
+                .is_err()
+        );
     }
 }

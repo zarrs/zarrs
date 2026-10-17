@@ -14,7 +14,7 @@ use super::{
     whole_chunk_hint,
 };
 use crate::{
-    ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, decode_into_array_bytes_target,
+    ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, copy_array_subset_into_target,
 };
 
 /// A decoder of a chunk that plans requests from state prepared once (e.g. a shard index, or bytes decoded by
@@ -250,16 +250,24 @@ impl PreparedDecoder for DecodedDecoder {
         Ok(Task::compute(move |_| {
             let DecodeRequest { indexer, target } = request;
             let shape: &[u64] = bytemuck::must_cast_slice(&self.shape);
-            let extracted =
-                self.bytes
-                    .extract_array_subset(indexer.as_indexer(), shape, &self.data_type)?;
             match target {
                 TaskTarget::Views(views) => {
-                    views
-                        .with_target(|target| decode_into_array_bytes_target(&extracted, target))?;
+                    views.with_target(|target| {
+                        copy_array_subset_into_target(
+                            &self.bytes,
+                            shape,
+                            indexer.as_indexer(),
+                            &self.data_type,
+                            target,
+                        )
+                    })?;
                     Ok(Outcome::Done)
                 }
-                TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(extracted.into_owned()))),
+                TaskTarget::Value => Ok(Outcome::Value(TaskValue::Array(
+                    self.bytes
+                        .extract_array_subset(indexer.as_indexer(), shape, &self.data_type)?
+                        .into_owned(),
+                ))),
             }
         }))
     }

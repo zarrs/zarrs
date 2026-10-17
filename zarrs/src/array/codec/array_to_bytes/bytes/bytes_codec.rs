@@ -306,6 +306,39 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             .into());
         }
 
+        // A subset of a chunk in memory whose bytes decode to themselves is copied directly into the target views
+        if indexer.as_array_subset().is_some()
+            && matches!(request.target, TaskTarget::Views(_))
+            && matches!(source.memory_slice(), Some(Ok(_)))
+            && self
+                .data_type
+                .codec_bytes()?
+                .is_decode_passthrough(self.endian)
+        {
+            indexer.validate(bytemuck::must_cast_slice(shape))?;
+            let shape = shape.to_vec();
+            return Ok(Task::compute(move |_| {
+                let DecodeRequest { indexer, target } = request;
+                let TaskTarget::Views(views) = target else {
+                    unreachable!("the target is views")
+                };
+                let bytes = source.memory_slice().expect("the source is in memory")?;
+                let subset = indexer
+                    .as_indexer()
+                    .as_array_subset()
+                    .expect("an array subset");
+                views.with_target(|target| match target {
+                    ArrayBytesDecodeIntoTarget::Fixed(view) => {
+                        view.copy_from_subset(bytes, bytemuck::must_cast_slice(&shape), subset)
+                    }
+                    ArrayBytesDecodeIntoTarget::Optional(..) => {
+                        Err(zarrs_codec::ExpectedFixedLengthBytesError.into())
+                    }
+                })?;
+                Ok(Outcome::Done)
+            }));
+        }
+
         // Read only the bytes of the requested elements
         let ranges: SmallVec<[ByteRange; 1]> = indexer
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(shape), data_type_size)?

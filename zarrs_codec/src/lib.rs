@@ -55,8 +55,8 @@ pub use array_bytes::{
     ArrayBytesOffsetsElement, ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError,
     ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
     ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError, build_nested_optional_target, copy_fill_value_into,
-    decode_into_array_bytes_target, extract_target_views, update_array_bytes,
+    ExpectedVariableLengthBytesError, build_nested_optional_target, copy_array_subset_into_target,
+    copy_fill_value_into, decode_into_array_bytes_target, extract_target_views, update_array_bytes,
 };
 
 use derive_more::derive::Display;
