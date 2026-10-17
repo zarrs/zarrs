@@ -171,10 +171,12 @@ harness = false
 [[bench]]
 name = "array_blosc"
 harness = false
+required-features = ["blosc"]
 
 [[bench]]
 name = "codecs"
 harness = false
+required-features = ["blosc", "zstd"]
 
 [[bench]]
 name = "fill_value"
@@ -183,6 +185,7 @@ harness = false
 [[bench]]
 name = "sharded_partial_read"
 harness = false
+bench = false
 required-features = ["filesystem"]
 
 [[bench]]
@@ -205,4 +208,8 @@ required-features = ["zstd", "crc32c"]
 
 [[bench]]
 name = "driver_overhead"
+harness = false
+
+[[bench]]
+name = "sharded_partial_read_memory"
 harness = false

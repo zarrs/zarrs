@@ -6,6 +6,7 @@
 //! - `offload`: asynchronous tasks that compute on the polling task or on Rayon.
 #![allow(missing_docs)]
 
+use std::cell::LazyCell;
 use std::collections::BTreeMap;
 use std::hint::black_box;
 
@@ -101,8 +102,8 @@ fn drivers() -> [(&'static str, Driver); 2] {
 }
 
 fn bench_drivers(c: &mut Criterion) {
-    let io = MemoryIo::new();
-    let resources = Resources::default();
+    let io = LazyCell::new(MemoryIo::new);
+    let resources = LazyCell::new(Resources::default);
     let mut group = c.benchmark_group("driver_overhead");
     group.throughput(Throughput::Elements(NUM_TASKS as u64));
     group.bench_function("baseline/closures", |b| {
@@ -117,13 +118,19 @@ fn bench_drivers(c: &mut Criterion) {
     });
     for (name, drive) in drivers() {
         group.bench_function(BenchmarkId::new("compute", name), |b| {
-            b.iter(|| drive(compute_tasks(), &io, &resources).unwrap());
+            let io = &*io;
+            let resources = &*resources;
+            b.iter(|| drive(compute_tasks(), io, resources).unwrap());
         });
         group.bench_function(BenchmarkId::new("read", name), |b| {
-            b.iter(|| drive(read_tasks(), &io, &resources).unwrap());
+            let io = &*io;
+            let resources = &*resources;
+            b.iter(|| drive(read_tasks(), io, resources).unwrap());
         });
         group.bench_function(BenchmarkId::new("fork", name), |b| {
-            b.iter(|| drive(vec![fork_task()], &io, &resources).unwrap());
+            let io = &*io;
+            let resources = &*resources;
+            b.iter(|| drive(vec![fork_task()], io, resources).unwrap());
         });
     }
     group.finish();
@@ -146,11 +153,11 @@ fn bench_offload(c: &mut Criterion) {
         }
     }
 
-    let io = AsyncMemoryIo(MemoryIo::new());
-    let resources = Resources::default();
-    let runtime = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+    let io = LazyCell::new(|| AsyncMemoryIo(MemoryIo::new()));
+    let resources = LazyCell::new(Resources::default);
+    let runtime = LazyCell::new(|| tokio::runtime::Builder::new_multi_thread().build().unwrap());
     let mut group = c.benchmark_group("driver_overhead_async");
-    for size in [1024usize, 16 * 1024, 64 * 1024, 256 * 1024] {
+    for size in [1024usize, 64 * 1024] {
         group.throughput(Throughput::Bytes((size * 64) as u64));
         let tasks = |compute_bytes: u64| -> Vec<Task<'static>> {
             (0..64)
@@ -176,12 +183,18 @@ fn bench_offload(c: &mut Criterion) {
                 .collect()
         };
         group.bench_function(BenchmarkId::new("inline", size), |b| {
-            b.to_async(&runtime)
-                .iter(|| async { drive_async(tasks(0), &io, &resources).await.unwrap() });
+            let runtime = &*runtime;
+            let io = &*io;
+            let resources = &*resources;
+            b.to_async(runtime)
+                .iter(|| async { drive_async(tasks(0), io, resources).await.unwrap() });
         });
         group.bench_function(BenchmarkId::new("offload", size), |b| {
-            b.to_async(&runtime).iter(|| async {
-                drive_async_offload(tasks(u64::MAX), &io, &resources)
+            let runtime = &*runtime;
+            let io = &*io;
+            let resources = &*resources;
+            b.to_async(runtime).iter(|| async {
+                drive_async_offload(tasks(u64::MAX), io, resources)
                     .await
                     .unwrap()
             });

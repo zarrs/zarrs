@@ -3,10 +3,11 @@
 //! Array data is written to `benches/data/sharded_partial_read/` on the first run and reused
 //! on subsequent runs. Delete that directory to regenerate the data.
 //!
-//! Set [`USE_MEMORY_STORE`] to `true` to benchmark with an in-memory store instead of the
-//! filesystem store.
+//! This is an opt-in large filesystem experiment. For everyday exploration, run
+//! `sharded_partial_read_memory` (32 MiB) instead.
 #![allow(missing_docs)]
 
+use std::cell::LazyCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 use zarrs::array::Resources;
@@ -14,11 +15,7 @@ use zarrs::array::Resources;
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
-use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
-
-/// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
-const USE_MEMORY_STORE: bool = false;
 
 // Array dimensions matching the Python snippet
 const SHAPE: [u64; 4] = [8192, 4, 128, 128];
@@ -50,13 +47,9 @@ fn random_data(n: usize) -> Vec<f64> {
 }
 
 fn make_store() -> ReadableWritableListableStorage {
-    if USE_MEMORY_STORE {
-        Arc::new(MemoryStore::new())
-    } else {
-        let path = data_path();
-        std::fs::create_dir_all(&path).unwrap();
-        Arc::new(FilesystemStore::new(&path).unwrap())
-    }
+    let path = data_path();
+    std::fs::create_dir_all(&path).unwrap();
+    Arc::new(FilesystemStore::new(&path).unwrap())
 }
 
 fn populate_array(store: ReadableWritableListableStorage) {
@@ -84,30 +77,23 @@ fn populate_array(store: ReadableWritableListableStorage) {
 
 /// Returns a store loaded with array data, writing it first if needed.
 fn open_store() -> ReadableStorage {
-    if USE_MEMORY_STORE {
-        let store: ReadableWritableListableStorage = Arc::new(MemoryStore::new());
-        populate_array(Arc::clone(&store));
-        store
-    } else {
-        let path = data_path();
-        let zarr_json = path.join("zarr.json");
-        if !zarr_json.exists() {
-            populate_array(make_store());
-        }
-        Arc::new(FilesystemStore::new(path).unwrap())
+    let path = data_path();
+    if !path.join("zarr.json").exists() {
+        populate_array(make_store());
     }
+    Arc::new(FilesystemStore::new(path).unwrap())
 }
 
 /// Full array read: both shards, shard-boundary-aligned.
 fn bench_read_full(c: &mut Criterion) {
-    let store = open_store();
-    let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
     let full_bytes = SHARD_BYTES * 2; // 2 shards
     let subset = ArraySubset::new_with_shape(SHAPE.to_vec());
 
     group.throughput(Throughput::Bytes(full_bytes));
+    let array = LazyCell::new(|| zarrs::array::Array::open(open_store(), "/").unwrap());
     group.bench_function("full_array", |b| {
+        let array = &*array;
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
                 .retrieve_array_subset(&subset, &Resources::default())
@@ -120,13 +106,13 @@ fn bench_read_full(c: &mut Criterion) {
 
 /// Shard-aligned partial read: exactly the first shard.
 fn bench_read_partial_aligned(c: &mut Criterion) {
-    let store = open_store();
-    let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
     let byte_count = SHARD_BYTES;
 
     group.throughput(Throughput::Bytes(byte_count));
+    let array = LazyCell::new(|| zarrs::array::Array::open(open_store(), "/").unwrap());
     group.bench_function("partial_shard_aligned", |b| {
+        let array = &*array;
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
                 .retrieve_array_subset(
@@ -142,13 +128,13 @@ fn bench_read_partial_aligned(c: &mut Criterion) {
 
 /// Unaligned partial read: one element short of the first shard boundary.
 fn bench_read_partial_unaligned(c: &mut Criterion) {
-    let store = open_store();
-    let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
     let byte_count = (SHARD_SHAPE[0] - 1) * SHAPE[1] * SHAPE[2] * SHAPE[3] * 8;
 
     group.throughput(Throughput::Bytes(byte_count));
+    let array = LazyCell::new(|| zarrs::array::Array::open(open_store(), "/").unwrap());
     group.bench_function("partial_shard_unaligned", |b| {
+        let array = &*array;
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
                 .retrieve_array_subset(

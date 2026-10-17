@@ -7,6 +7,7 @@
 //! 4. `retrieve_chunk` as `Vec<T>` — the bytemuck path that cannot avoid a copy.
 #![allow(missing_docs)]
 
+use std::cell::LazyCell;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
@@ -31,13 +32,17 @@ fn retrieve_chunk_bytes(c: &mut Criterion) {
     let mut group = c.benchmark_group("retrieve_chunk_bytes");
     let num_elements = CHUNK * CHUNK * CHUNK;
     group.throughput(Throughput::Bytes(num_elements * 2));
-    let array = uncompressed_array(CHUNK);
-    let data = vec![1u16; num_elements as usize];
-    array
-        .store_chunk(&[0, 0, 0], &data, &Resources::default())
-        .unwrap();
+    let array = LazyCell::new(|| {
+        let array = uncompressed_array(CHUNK);
+        let data = vec![1u16; num_elements as usize];
+        array
+            .store_chunk(&[0, 0, 0], &data, &Resources::default())
+            .unwrap();
 
+        array
+    });
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
+        let array = &*array;
         b.iter(|| {
             let bytes: ArrayBytes = array
                 .retrieve_chunk(&[0, 0, 0], &Resources::default())
@@ -57,13 +62,17 @@ fn retrieve_chunk_vec(c: &mut Criterion) {
     let mut group = c.benchmark_group("retrieve_chunk_vec");
     let num_elements = CHUNK * CHUNK * CHUNK;
     group.throughput(Throughput::Bytes(num_elements * 2));
-    let array = uncompressed_array(CHUNK);
-    let data = vec![1u16; num_elements as usize];
-    array
-        .store_chunk(&[0, 0, 0], &data, &Resources::default())
-        .unwrap();
+    let array = LazyCell::new(|| {
+        let array = uncompressed_array(CHUNK);
+        let data = vec![1u16; num_elements as usize];
+        array
+            .store_chunk(&[0, 0, 0], &data, &Resources::default())
+            .unwrap();
 
+        array
+    });
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
+        let array = &*array;
         b.iter(|| {
             let elements: Vec<u16> = array
                 .retrieve_chunk(&[0, 0, 0], &Resources::default())
@@ -83,9 +92,10 @@ fn store_chunk_borrowed(c: &mut Criterion) {
     let mut group = c.benchmark_group("store_chunk_borrowed");
     let num_elements = CHUNK * CHUNK * CHUNK;
     group.throughput(Throughput::Bytes(num_elements * 2));
-    let data = vec![1u16; num_elements as usize];
-
+    let data = LazyCell::new(|| vec![1u16; num_elements as usize]);
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
+        let data = &*data;
+
         b.iter(|| {
             let array = uncompressed_array(CHUNK);
             array
@@ -104,13 +114,14 @@ fn store_chunk_shared(c: &mut Criterion) {
     let mut group = c.benchmark_group("store_chunk_shared");
     let num_elements = CHUNK * CHUNK * CHUNK;
     group.throughput(Throughput::Bytes(num_elements * 2));
-    let bytes = bytes::Bytes::from(vec![1u8; (num_elements * 2) as usize]);
-
+    let bytes = LazyCell::new(|| bytes::Bytes::from(vec![1u8; (num_elements * 2) as usize]));
     group.bench_function(BenchmarkId::from_parameter(CHUNK), |b| {
+        let bytes = &*bytes;
+
         b.iter(|| {
             let array = uncompressed_array(CHUNK);
             array
-                .store_chunk(&[0, 0, 0], &bytes, &Resources::default())
+                .store_chunk(&[0, 0, 0], bytes, &Resources::default())
                 .unwrap();
         });
     });
@@ -125,25 +136,28 @@ fn sharded_subchunk_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("sharded_subchunk_read");
     let size = 256u64;
     let num_elements = size * size * size;
-    group.throughput(Throughput::Bytes(num_elements * 2));
-
-    let store = Arc::new(MemoryStore::new());
-    let array = ArrayBuilder::new(vec![size; 3], vec![size; 3], data_type::uint16(), 0u16)
-        .subchunk_shape(vec![32; 3])
-        .build(store, "/")
-        .unwrap();
-    let data = vec![1u16; num_elements as usize];
-    array
-        .store_array_subset(
-            &ArraySubset::new_with_shape(vec![size; 3]),
-            &data,
-            &Resources::default(),
-        )
-        .unwrap();
-
+    group.throughput(Throughput::Bytes(32 * 32 * 32 * 2));
     // Read a single inner chunk out of the shard.
     let subset = ArraySubset::new_with_ranges(&[0..32, 0..32, 0..32]);
+    let array = LazyCell::new(|| {
+        let store = Arc::new(MemoryStore::new());
+        let array = ArrayBuilder::new(vec![size; 3], vec![size; 3], data_type::uint16(), 0u16)
+            .subchunk_shape(vec![32; 3])
+            .build(store, "/")
+            .unwrap();
+        let data = vec![1u16; num_elements as usize];
+        array
+            .store_array_subset(
+                &ArraySubset::new_with_shape(vec![size; 3]),
+                &data,
+                &Resources::default(),
+            )
+            .unwrap();
+
+        array
+    });
     group.bench_function(BenchmarkId::from_parameter(size), |b| {
+        let array = &*array;
         b.iter(|| {
             let bytes: ArrayBytes = array
                 .retrieve_array_subset(&subset, &Resources::default())

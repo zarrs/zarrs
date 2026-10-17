@@ -75,3 +75,34 @@ regression_json *args:
 regression_clean:
     rm -rf target/zarrs_regression_testing
 
+
+# Measure representative paths (target defaults to all everyday suites)
+bench target='all' filter='' *args: (_bench "normal" target filter args)
+
+# Execute each selected scenario once, without statistical sampling
+bench-smoke target='all' filter='' *args: (_bench "smoke" target filter args)
+
+# Short measurements for development; save separately from normal baselines
+bench-quick target='all' filter='' *args: (_bench "quick" target filter args)
+
+# List selected scenarios without constructing their fixtures
+bench-list target='all' filter='' *args: (_bench "list" target filter args)
+
+[private]
+_bench mode target filter *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(mode)}} in
+        normal) settings=() ;;
+        smoke) settings=(--test) ;;
+        quick) settings=(--warm-up-time 0.5 --measurement-time 1 --sample-size 10 --nresamples 1000 --noplot --save-baseline quick) ;;
+        list) settings=(--list) ;;
+    esac
+    if [[ {{quote(target)}} == all ]]; then
+        targets=(array_subset array_uncompressed array_blosc codecs fill_value zero_copy_paths deferred_decode_into array_ops driver_overhead io_latency sharded_partial_read_memory)
+    else
+        targets=({{quote(target)}})
+    fi
+    for target in "${targets[@]}"; do
+        cargo +{{TOOLCHAIN}} bench -p zarrs --features async --bench "$target" -- {{quote(filter)}} "${settings[@]}" {{args}}
+    done

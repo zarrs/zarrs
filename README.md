@@ -44,6 +44,13 @@ Developed at the [Department of Materials Physics, Australian National Universit
   - `zarrs_ome`: create an [OME-Zarr] hierarchy from a Zarr array.
   - `zarrs_filter`: transform arrays: crop, rescale, downsample, gradient magnitude, gaussian, noise filtering, etc.
 
+## Development benchmarks
+
+Run `just bench-smoke` to exercise the representative benchmark scenarios once.
+Use `just bench-list` to discover cases and `just bench-quick <target> <filter>` for
+short measurements. See the [benchmark guide](zarrs/benches/README.md) for targets,
+feature selection, normal measurements, and repeatable comparisons.
+
 ## Licence
 `zarrs` is licensed under either of
  - the Apache License, Version 2.0 [LICENSE-APACHE](./LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or

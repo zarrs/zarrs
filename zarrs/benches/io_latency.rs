@@ -6,6 +6,7 @@
 
 mod common;
 
+use std::cell::LazyCell;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,9 +16,6 @@ use zarrs::array::codec::ZstdCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::storage::ReadCoalescing;
 use zarrs::storage::store::MemoryStore;
-
-/// Request latencies: zero measures pure overhead on an in-memory store.
-const LATENCIES: [Duration; 2] = [Duration::ZERO, Duration::from_millis(2)];
 
 /// 2 x 2 shards of 256 x 256 `u16`, each with 8 x 8 subchunks of 32 x 32.
 const SHAPE: [u64; 2] = [512, 512];
@@ -43,10 +41,20 @@ fn builder(sharded: bool) -> ArrayBuilder {
     builder
 }
 
-fn latencies_sharded() -> impl Iterator<Item = (Duration, bool)> {
-    LATENCIES
-        .into_iter()
-        .flat_map(|latency| [(latency, false), (latency, true)])
+/// Each tuple adds a distinct path: overhead, subsets, latency, or coalescing.
+/// Avoid crossing every one of these with every runtime and ownership variant.
+fn read_cases() -> impl Iterator<Item = (Duration, bool, &'static str, bool)> {
+    [
+        (0, false, "all", false),
+        (0, true, "all", false),
+        (0, true, "straddle", false),
+        (2, false, "all", false),
+        (2, true, "all", false),
+        (2, true, "all", true),
+        (2, true, "straddle", true),
+    ]
+    .into_iter()
+    .map(|(ms, sharded, subset, coalesced)| (Duration::from_millis(ms), sharded, subset, coalesced))
 }
 
 fn num_elements() -> usize {
@@ -57,28 +65,30 @@ fn label(sharded: bool) -> &'static str {
     if sharded { "sharded" } else { "unsharded" }
 }
 
-/// Subsets read by the benchmarks: the whole array, and a region that straddles all four shards.
-fn read_subsets() -> [(&'static str, ArraySubset); 2] {
-    [
-        ("all", ArraySubset::new_with_shape(SHAPE.to_vec())),
-        (
-            "straddle",
-            ArraySubset::new_with_ranges(&[200..312, 200..312]),
-        ),
-    ]
+fn read_subset(name: &str) -> ArraySubset {
+    match name {
+        "all" => ArraySubset::new_with_shape(SHAPE.to_vec()),
+        "straddle" => ArraySubset::new_with_ranges(&[200..312, 200..312]),
+        _ => unreachable!(),
+    }
 }
 
-/// Resource variants of reads: the defaults, and coalescing reads as for an object store (for sharded arrays).
-fn read_resources(sharded: bool) -> Vec<(&'static str, Resources)> {
-    let mut resources = vec![("", Resources::default())];
-    if sharded {
-        resources.push((
-            "/coalesced",
-            Resources::default()
-                .with_read_coalescing(Some(ReadCoalescing::new(1024 * 1024, 16 * 1024 * 1024))),
-        ));
+fn read_resources(coalesced: bool) -> Resources {
+    let resources = Resources::default();
+    if coalesced {
+        resources.with_read_coalescing(Some(ReadCoalescing::new(1024 * 1024, 16 * 1024 * 1024)))
+    } else {
+        resources
     }
-    resources
+}
+
+fn read_id(latency: Duration, sharded: bool, name: &str, coalesced: bool) -> String {
+    format!(
+        "{}ms/{}/{name}{}",
+        latency.as_millis(),
+        label(sharded),
+        if coalesced { "/coalesced" } else { "" }
+    )
 }
 
 fn sync_array(
@@ -105,31 +115,31 @@ fn sync_array(
 fn bench_sync_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("io_latency_sync_read");
     group.sample_size(10);
-    for (latency, sharded) in latencies_sharded() {
-        let (store, array) = sync_array(sharded, latency);
-        for (name, subset) in read_subsets() {
-            for (variant, resources) in read_resources(sharded) {
-                group.throughput(Throughput::Bytes(subset.num_elements() * 2));
-                let id = format!(
-                    "{}ms/{}/{name}{variant}",
-                    latency.as_millis(),
-                    label(sharded)
-                );
-                store.reset();
-                group.bench_function(&id, |b| {
-                    b.iter(|| {
-                        let _: ArrayBytes =
-                            array.retrieve_array_subset(&subset, &resources).unwrap();
-                    });
-                });
-                let peak = store.peak_in_flight();
-                store.reset();
-                let _: ArrayBytes = array.retrieve_array_subset(&subset, &resources).unwrap();
-                eprintln!(
-                    "io_latency_sync_read/{id}: peak in-flight requests {peak}, requests per read {}",
-                    store.requests()
-                );
-            }
+    for (latency, sharded, name, coalesced) in read_cases() {
+        let subset = read_subset(name);
+        let fixture = LazyCell::new(|| {
+            let (store, array) = sync_array(sharded, latency);
+            (store, array, read_resources(coalesced))
+        });
+        group.throughput(Throughput::Bytes(subset.num_elements() * 2));
+        let id = read_id(latency, sharded, name, coalesced);
+        let mut ran = false;
+        group.bench_function(&id, |b| {
+            let (_, array, resources) = &*fixture;
+            ran = true;
+            b.iter(|| {
+                let _: ArrayBytes = array.retrieve_array_subset(&subset, resources).unwrap();
+            });
+        });
+        if ran {
+            let (store, array, resources) = &*fixture;
+            let peak = store.peak_in_flight();
+            store.reset();
+            let _: ArrayBytes = array.retrieve_array_subset(&subset, resources).unwrap();
+            eprintln!(
+                "io_latency_sync_read/{id}: peak in-flight requests {peak}, requests per read {}",
+                store.requests()
+            );
         }
     }
     group.finish();
@@ -138,23 +148,32 @@ fn bench_sync_read(c: &mut Criterion) {
 fn bench_sync_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("io_latency_sync_write");
     group.sample_size(10);
-    let data = compressible_u16(num_elements());
-    for (latency, sharded) in latencies_sharded() {
-        let store = Arc::new(LatencyStore::new(Arc::new(MemoryStore::new()), latency));
-        let array = builder(sharded).build(store.clone(), "/").unwrap();
-        group.throughput(Throughput::Bytes(data.len() as u64 * 2));
+    // Zero-latency writes are already covered by the array-operation suite.
+    for sharded in [false, true] {
+        let latency = Duration::from_millis(2);
+        let fixture = LazyCell::new(|| {
+            let store = Arc::new(LatencyStore::new(Arc::new(MemoryStore::new()), latency));
+            let array = builder(sharded).build(store.clone(), "/").unwrap();
+            (store, array, compressible_u16(num_elements()))
+        });
+        group.throughput(Throughput::Bytes(num_elements() as u64 * 2));
         let id = format!("{}ms/{}/all", latency.as_millis(), label(sharded));
+        let mut ran = false;
         group.bench_function(&id, |b| {
+            let (_, array, data) = &*fixture;
+            ran = true;
             b.iter(|| {
                 array
-                    .store_array_subset(&array.subset_all(), &data, &Resources::default())
+                    .store_array_subset(&array.subset_all(), data, &Resources::default())
                     .unwrap();
             });
         });
-        eprintln!(
-            "io_latency_sync_write/{id}: peak in-flight requests {}",
-            store.peak_in_flight()
-        );
+        if ran {
+            eprintln!(
+                "io_latency_sync_write/{id}: peak in-flight requests {}",
+                fixture.0.peak_in_flight()
+            );
+        }
     }
     group.finish();
 }
@@ -164,23 +183,13 @@ mod asynchronous {
     use super::*;
     use zarrs::storage::store::AsyncMemoryStore;
 
-    fn runtimes() -> [(&'static str, tokio::runtime::Runtime); 2] {
-        [
-            (
-                "multi_thread",
-                tokio::runtime::Builder::new_multi_thread()
-                    .enable_time()
-                    .build()
-                    .unwrap(),
-            ),
-            (
-                "current_thread",
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_time()
-                    .build()
-                    .unwrap(),
-            ),
-        ]
+    fn runtime(name: &str) -> tokio::runtime::Runtime {
+        let mut builder = match name {
+            "multi_thread" => tokio::runtime::Builder::new_multi_thread(),
+            "current_thread" => tokio::runtime::Builder::new_current_thread(),
+            _ => unreachable!(),
+        };
+        builder.enable_time().build().unwrap()
     }
 
     async fn async_array(
@@ -208,36 +217,47 @@ mod asynchronous {
     pub(super) fn bench_async_read(c: &mut Criterion) {
         let mut group = c.benchmark_group("io_latency_async_read");
         group.sample_size(10);
-        for (runtime_name, runtime) in runtimes() {
-            for (latency, sharded) in latencies_sharded() {
-                let (store, array) = runtime.block_on(async_array(sharded, latency));
-                for (name, subset) in read_subsets() {
-                    for (variant, resources) in read_resources(sharded) {
-                        group.throughput(Throughput::Bytes(subset.num_elements() * 2));
-                        let id = format!(
-                            "{runtime_name}/{}ms/{}/{name}{variant}",
-                            latency.as_millis(),
-                            label(sharded)
-                        );
-                        store.reset();
-                        group.bench_function(&id, |b| {
-                            b.to_async(&runtime).iter(|| async {
-                                let _: ArrayBytes = array
-                                    .async_retrieve_array_subset(&subset, &resources)
-                                    .await
-                                    .unwrap();
-                            });
-                        });
-                        let peak = store.peak_in_flight();
-                        store.reset();
-                        let _: ArrayBytes = runtime
-                            .block_on(array.async_retrieve_array_subset(&subset, &resources))
+        for runtime_name in ["multi_thread", "current_thread"] {
+            let runtime = LazyCell::new(|| runtime(runtime_name));
+            for (latency, sharded, name, coalesced) in read_cases() {
+                // One genuinely waiting operation explores the other executor.
+                if runtime_name == "current_thread"
+                    && (latency.is_zero() || sharded || name != "all")
+                {
+                    continue;
+                }
+                let subset = read_subset(name);
+                let fixture = LazyCell::new(|| {
+                    let (store, array) = runtime.block_on(async_array(sharded, latency));
+                    (store, array, read_resources(coalesced))
+                });
+                group.throughput(Throughput::Bytes(subset.num_elements() * 2));
+                let id = format!(
+                    "{runtime_name}/{}",
+                    read_id(latency, sharded, name, coalesced)
+                );
+                let mut ran = false;
+                group.bench_function(&id, |b| {
+                    let (_, array, resources) = &*fixture;
+                    ran = true;
+                    b.to_async(&*runtime).iter(|| async {
+                        let _: ArrayBytes = array
+                            .async_retrieve_array_subset(&subset, resources)
+                            .await
                             .unwrap();
-                        eprintln!(
-                            "io_latency_async_read/{id}: peak in-flight requests {peak}, requests per read {}",
-                            store.requests()
-                        );
-                    }
+                    });
+                });
+                if ran {
+                    let (store, array, resources) = &*fixture;
+                    let peak = store.peak_in_flight();
+                    store.reset();
+                    let _: ArrayBytes = runtime
+                        .block_on(array.async_retrieve_array_subset(&subset, resources))
+                        .unwrap();
+                    eprintln!(
+                        "io_latency_async_read/{id}: peak in-flight requests {peak}, requests per read {}",
+                        store.requests()
+                    );
                 }
             }
         }
@@ -247,53 +267,74 @@ mod asynchronous {
     pub(super) fn bench_async_write(c: &mut Criterion) {
         let mut group = c.benchmark_group("io_latency_async_write");
         group.sample_size(10);
-        let data = compressible_u16(num_elements());
-        for (runtime_name, runtime) in runtimes() {
-            for (latency, sharded) in latencies_sharded() {
-                let store = Arc::new(LatencyStore::new(
-                    Arc::new(AsyncMemoryStore::new()),
-                    latency,
-                ));
-                let array = builder(sharded).build(store.clone(), "/").unwrap();
-                group.throughput(Throughput::Bytes(data.len() as u64 * 2));
+        for runtime_name in ["multi_thread", "current_thread"] {
+            let runtime = LazyCell::new(|| runtime(runtime_name));
+            for sharded in [false, true] {
+                if runtime_name == "current_thread" && sharded {
+                    continue;
+                }
+                let latency = Duration::from_millis(2);
+                let fixture = LazyCell::new(|| {
+                    let store = Arc::new(LatencyStore::new(
+                        Arc::new(AsyncMemoryStore::new()),
+                        latency,
+                    ));
+                    let array = builder(sharded).build(store.clone(), "/").unwrap();
+                    (store, array, compressible_u16(num_elements()))
+                });
+                group.throughput(Throughput::Bytes(num_elements() as u64 * 2));
                 let id = format!(
                     "{runtime_name}/{}ms/{}/all",
                     latency.as_millis(),
                     label(sharded)
                 );
-                group.bench_function(&id, |b| {
-                    b.to_async(&runtime).iter(|| async {
-                        array
-                            .async_store_array_subset(
-                                &array.subset_all(),
-                                &data,
-                                &Resources::default(),
-                            )
-                            .await
-                            .unwrap();
+                for owned in [false, true] {
+                    if runtime_name == "current_thread" && owned {
+                        continue;
+                    }
+                    let id = format!("{id}{}", if owned { "_owned" } else { "" });
+                    let mut ran = false;
+                    group.bench_function(&id, |b| {
+                        let (store, array, data) = &*fixture;
+                        store.reset();
+                        ran = true;
+                        if owned {
+                            // A write can move owned data to other threads. Clone
+                            // outside timing, preserving the ownership comparison.
+                            b.to_async(&*runtime).iter_batched(
+                                || data.clone(),
+                                |data| async {
+                                    array
+                                        .async_store_array_subset(
+                                            &array.subset_all(),
+                                            data,
+                                            &Resources::default(),
+                                        )
+                                        .await
+                                        .unwrap();
+                                },
+                                criterion::BatchSize::LargeInput,
+                            );
+                        } else {
+                            b.to_async(&*runtime).iter(|| async {
+                                array
+                                    .async_store_array_subset(
+                                        &array.subset_all(),
+                                        data,
+                                        &Resources::default(),
+                                    )
+                                    .await
+                                    .unwrap();
+                            });
+                        }
                     });
-                });
-                eprintln!(
-                    "io_latency_async_write/{id}: peak in-flight requests {}",
-                    store.peak_in_flight()
-                );
-                // Owned data, which a write may move to other threads
-                group.bench_function(format!("{id}_owned"), |b| {
-                    b.to_async(&runtime).iter_batched(
-                        || data.clone(),
-                        |data| async {
-                            array
-                                .async_store_array_subset(
-                                    &array.subset_all(),
-                                    data,
-                                    &Resources::default(),
-                                )
-                                .await
-                                .unwrap();
-                        },
-                        criterion::BatchSize::LargeInput,
-                    );
-                });
+                    if ran {
+                        eprintln!(
+                            "io_latency_async_write/{id}: peak in-flight requests {}",
+                            fixture.0.peak_in_flight()
+                        );
+                    }
+                }
             }
         }
         group.finish();
