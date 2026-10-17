@@ -922,7 +922,10 @@ pub(super) fn check_target_len(
 fn chunk_if_exists(value: TaskValue<'static>) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
     match value {
         TaskValue::None => Ok(None),
-        value => Ok(Some(array_value(value)?)),
+        value @ (TaskValue::Array(_)
+        | TaskValue::Bytes(_)
+        | TaskValue::Prepared(_)
+        | TaskValue::Any(_)) => Ok(Some(array_value(value)?)),
     }
 }
 

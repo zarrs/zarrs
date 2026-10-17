@@ -970,14 +970,13 @@ impl<'a> Scheduler<'a> {
     }
 
     fn insert(&mut self, node: Node<'a>) -> NodeId {
-        let id = if let Some(id) = self.free.pop() {
+        if let Some(id) = self.free.pop() {
             self.nodes[id] = Some(node);
             id
         } else {
             self.nodes.push(Some(node));
             self.nodes.len() - 1
-        };
-        id
+        }
     }
 
     fn submit(&mut self, parent: Parent, depth: usize, task: Task<'a>) {

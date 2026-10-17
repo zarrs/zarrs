@@ -518,7 +518,11 @@ impl ShardingCodecBound {
                 request,
             )? {
                 Outcome::Done => Ok(None),
-                outcome => Ok(Some(Task::compute(move |_| Ok(outcome)))),
+                outcome @ (Outcome::Value(_)
+                | Outcome::Spawn(_)
+                | Outcome::Fork { .. }
+                | Outcome::Generate { .. }
+                | Outcome::Write { .. }) => Ok(Some(Task::compute(move |_| Ok(outcome)))),
             }
         }
     }
@@ -761,7 +765,10 @@ impl<'a, I: ShardIndex + 'a> SubchunkBlocks<'a, I> {
                         // A partial decode planned tasks (e.g. a transpose of the decoded region), which only read memory
                         match drive_memory_one(Task::compute(move |_| Ok(outcome)), ctx.resources())? {
                             TaskValue::None => Ok(()),
-                            _ => Err(unexpected_value()),
+                            TaskValue::Array(_)
+                            | TaskValue::Bytes(_)
+                            | TaskValue::Prepared(_)
+                            | TaskValue::Any(_) => Err(unexpected_value()),
                         }
                     }
                 }
