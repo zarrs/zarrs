@@ -53,9 +53,6 @@ pub fn partial_decode_memory(
 /// If `encoded` is [`None`], the chunk does not exist and its other elements are the fill value. After the update,
 /// `encoded` is [`None`] if the chunk was erased (it is the fill value, and empty chunks are not stored).
 ///
-/// The chunk is partially encoded if the codec plans partial encodes
-/// ([`ArrayToBytesCodecTraits::plans_partial_encode`]), and otherwise decoded, updated and encoded.
-///
 /// # Errors
 /// Returns a [`CodecError`] if `indexer` or `bytes` are invalid for the chunk or the codec fails.
 pub fn partial_encode_memory(
@@ -68,39 +65,19 @@ pub fn partial_encode_memory(
     resources: &Resources,
 ) -> Result<(), CodecError> {
     bytes.validate(indexer.len(), codec.data_type())?;
-    if codec.plans_partial_encode() {
-        let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
-        let task = codec
-            .plan_partial_encode(
-                SourceKey(0),
-                shape,
-                PlanIndexer::Borrowed(indexer),
-                bytes.clone(),
-                None,
-                options,
-            )?
-            .ok_or_else(|| {
-                CodecError::Other("a codec did not plan a partial encode".to_string())
-            })?;
-        let result = super::drive_blocking_one(task, &io, resources);
-        *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
-        result?;
-        return Ok(());
-    }
-
-    let chunk = super::decode_and_update(
-        &*codec,
-        encoded.take().map(CowBytes::from),
+    let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
+    let task = codec.plan_partial_encode(
+        SourceKey(0),
         shape,
-        indexer,
-        bytes,
+        PlanIndexer::Borrowed(indexer),
+        bytes.clone(),
+        None,
+        true,
         options,
-        resources,
     )?;
-    if !options.store_empty_chunks() && chunk.is_fill_value(codec.fill_value()) {
-        return Ok(());
-    }
-    *encoded = Some(codec.encode(chunk, shape, options, resources)?.into_vec());
+    let result = super::drive_blocking_one(task, &io, resources);
+    *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
+    result?;
     Ok(())
 }
 

@@ -231,15 +231,19 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         crate::plan::plan_encode_whole(self.into_dyn(), bytes, shape, options)
     }
 
-    /// Plan a partial encode: update the elements of `indexer` of the encoded chunk `key` of `shape` to `bytes`, reading
-    /// and writing only the parts of the encoded chunk that change (e.g. the updated subchunks and the index of a shard).
+    /// Plan a partial encode: update the elements of `indexer` of the encoded chunk `key` of `shape` to `bytes`.
     ///
     /// `state` is the state of the chunk after a previous partial encode (e.g. its decoded shard index), which saves
     /// reading it again. The value of the task is the state of the chunk after the update
-    /// ([`partial_encode_value`](crate::plan::partial_encode_value)).
+    /// ([`partial_encode_value`](crate::plan::partial_encode_value)), or [`TaskValue::None`](crate::plan::TaskValue::None)
+    /// if it has no state.
     ///
-    /// Returns [`None`] if the codec does not partially encode chunks ([`plans_partial_encode`](Self::plans_partial_encode)
-    /// is false), so a chunk is decoded, updated and encoded in full instead. This is the default.
+    /// `set_partial` is true if the storage writes part of a chunk efficiently ([`WriteOp::SetPartial`](crate::plan::WriteOp::SetPartial)).
+    ///
+    /// The default implementation reads, decodes, updates, encodes and writes the whole chunk
+    /// ([`plan_partial_encode_whole`](crate::plan::plan_partial_encode_whole)).
+    /// Codecs that can read and write only the parts of the encoded chunk that change (e.g. the updated subchunks and
+    /// the index of a shard) override this.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if `indexer` or `bytes` are invalid for the chunk.
@@ -251,16 +255,18 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         state: Option<PartialEncodeState>,
+        set_partial: bool,
         options: &CodecOptions,
-    ) -> Result<Option<Task<'a>>, CodecError> {
-        let _ = (key, shape, indexer, bytes, state, options);
-        Ok(None)
-    }
-
-    /// Returns true if [`plan_partial_encode`](Self::plan_partial_encode) plans partial encodes (rather than returning
-    /// [`None`]).
-    fn plans_partial_encode(&self) -> bool {
-        false
+    ) -> Result<Task<'a>, CodecError> {
+        let _ = (state, set_partial);
+        Ok(crate::plan::plan_partial_encode_whole(
+            self.into_dyn(),
+            key,
+            shape,
+            indexer,
+            bytes,
+            options,
+        ))
     }
 
     /// Returns true if [`plan_encode`](Self::plan_encode) plans tasks of its own (e.g. a task per subchunk of a shard).

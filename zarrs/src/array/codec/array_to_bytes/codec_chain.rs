@@ -14,7 +14,7 @@ use zarrs_codec::plan::{
     PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey, SourceStep, Task,
     TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, is_whole_chunk,
     local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
-    plan_encode_whole, subchunk_location_value, whole_chunk_hint,
+    plan_encode_whole, plan_partial_encode_whole, subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -30,10 +30,11 @@ use zarrs_storage::byte_range::ByteRange;
 type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
 
-/// The error of a codec of a chain that plans partial encodes not planning a partial encode.
+/// The error of an array-to-array codec that plans partial encodes not mapping a partial encode.
 fn not_partially_encoded() -> CodecError {
     CodecError::Other(
-        "a codec that plans partial encodes did not plan a partial encode".to_string(),
+        "an array-to-array codec that plans partial encodes did not map a partial encode"
+            .to_string(),
     )
 }
 
@@ -1019,57 +1020,63 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         state: Option<PartialEncodeState>,
+        set_partial: bool,
         options: &CodecOptions,
-    ) -> Result<Option<Task<'a>>, CodecError> {
-        if !self.plans_partial_encode() {
-            return Ok(None);
-        }
+    ) -> Result<Task<'a>, CodecError> {
         bytes.validate(indexer.as_indexer().len(), self.data_type())?;
+        // A partial encode cannot be mapped through bytes-to-bytes codecs, or through array-to-array codecs that do not
+        // map partial encodes, so the whole chunk is updated
+        if !self.bytes_to_bytes.is_empty()
+            || !self
+                .array_to_array
+                .iter()
+                .all(|codec| codec.plans_partial_encode())
+        {
+            return Ok(plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ));
+        }
         if self.array_to_array.is_empty() {
-            return self
-                .array_to_bytes
-                .clone()
-                .plan_partial_encode(key, shape, indexer, bytes, state, options);
+            return self.array_to_bytes.clone().plan_partial_encode(
+                key,
+                shape,
+                indexer,
+                bytes,
+                state,
+                set_partial,
+                options,
+            );
         }
 
         // Map the partial encode through the array-to-array codecs, then plan it with the array-to-bytes codec
         let hint = encode_hint(&bytes);
         let shape = ChunkShape::from(shape.to_vec());
         let options = *options;
-        Ok(Some(
-            Task::compute(move |ctx| {
-                let (mut indexer, mut bytes, mut shape) = (indexer, bytes, shape);
-                for codec in &self.array_to_array {
-                    (indexer, bytes) = codec
-                        .partial_encode_request(&shape, indexer, bytes, &options, ctx.resources())?
-                        .ok_or_else(not_partially_encoded)?;
-                    shape = codec.encoded_shape(&shape)?;
-                }
-                let task = self
-                    .array_to_bytes
-                    .clone()
-                    .plan_partial_encode(key, &shape, indexer, bytes, state, &options)?
+        Ok(Task::compute(move |ctx| {
+            let (mut indexer, mut bytes, mut shape) = (indexer, bytes, shape);
+            for codec in &self.array_to_array {
+                (indexer, bytes) = codec
+                    .partial_encode_request(&shape, indexer, bytes, &options, ctx.resources())?
                     .ok_or_else(not_partially_encoded)?;
-                Ok(Outcome::Fork {
-                    children: vec![task],
-                    join: Join::new(|mut values, _ctx| {
-                        Ok(Outcome::Value(values.pop().unwrap_or_default()))
-                    }),
-                })
+                shape = codec.encoded_shape(&shape)?;
+            }
+            let task = self.array_to_bytes.clone().plan_partial_encode(
+                key,
+                &shape,
+                indexer,
+                bytes,
+                state,
+                set_partial,
+                &options,
+            )?;
+            Ok(Outcome::Fork {
+                children: vec![task],
+                join: Join::new(|mut values, _ctx| {
+                    Ok(Outcome::Value(values.pop().unwrap_or_default()))
+                }),
             })
-            .with_hint(hint),
-        ))
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        // The array-to-array codecs map a partial encode to the array-to-bytes codec, but a partial encode cannot be
-        // mapped through bytes-to-bytes codecs
-        self.bytes_to_bytes.is_empty()
-            && self
-                .array_to_array
-                .iter()
-                .all(|codec| codec.plans_partial_encode())
-            && self.array_to_bytes.plans_partial_encode()
+        })
+        .with_hint(hint))
     }
 
     fn prepare_decode(

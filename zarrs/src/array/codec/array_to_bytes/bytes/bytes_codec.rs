@@ -13,6 +13,7 @@ use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, PrepareDecode,
     SourceDecoder, SourceKey, Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_and_update,
     decode_whole, encode_hint, is_whole_chunk, partial_encode_value, plan_decode_whole,
+    plan_partial_encode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -370,10 +371,15 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         state: Option<PartialEncodeState>,
+        _set_partial: bool,
         options: &CodecOptions,
-    ) -> Result<Option<Task<'a>>, CodecError> {
+    ) -> Result<Task<'a>, CodecError> {
+        // A partial write is cheaper than a whole read-modify-write even if the storage emulates it, as the bytes
+        // codec writes elements in place
         let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Ok(None);
+            return Ok(plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ));
         };
         indexer
             .as_indexer()
@@ -442,11 +448,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 move |mut reads, ctx| update(reads.pop().flatten().is_some(), ctx),
             )
         };
-        Ok(Some(task.with_hint(hint)))
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        self.data_type.is_fixed()
+        Ok(task.with_hint(hint))
     }
 
     fn encoded_representation(

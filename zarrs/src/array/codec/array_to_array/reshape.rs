@@ -996,7 +996,6 @@ mod tests {
         elements_partial_encode: Vec<u16>,
     ) -> Vec<u16> {
         let codecs = chain_u16(codec);
-        assert!(codecs.plans_partial_encode());
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
         let mut encoded = Some(
             codecs

@@ -17,13 +17,36 @@ pub type Reads<'a> = SmallVec<[Option<CowBytes<'a>>; 1]>;
 #[derive(Debug, Clone)]
 pub struct ComputeCtx {
     resources: Resources,
+    inline: bool,
 }
 
 impl ComputeCtx {
     /// Create a compute context.
     #[must_use]
     pub fn new(resources: Resources) -> Self {
-        Self { resources }
+        Self {
+            resources,
+            inline: false,
+        }
+    }
+
+    /// Create the context of a compute step that runs on the polling task of an asynchronous drive.
+    #[cfg(feature = "async")]
+    #[must_use]
+    pub(crate) fn new_inline(resources: Resources) -> Self {
+        Self {
+            resources,
+            inline: true,
+        }
+    }
+
+    /// Returns true if the compute step runs on the polling task of an asynchronous drive.
+    ///
+    /// The tasks it forks then also run serially on the polling task, so a step that can either fork tasks or compute
+    /// in one step that parallelises internally (e.g. encoding a shard) should compute in one step.
+    #[must_use]
+    pub fn runs_inline(&self) -> bool {
+        self.inline
     }
 
     /// The resources available to the compute step.

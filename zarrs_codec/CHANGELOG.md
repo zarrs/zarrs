@@ -46,7 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - By default, a synchronous drive reads on compute threads while storage requests are fast (under 100 µs on average), and otherwise on the I/O pool, and performs writes the same way
 - Add planned encoding to the codec traits
   - `ArrayToBytesCodecTraits::plan_encode` (by default, `plan::plan_encode_whole`) and `ArrayToBytesCodecTraits::plans_encode_subtasks`
-  - `ArrayToBytesCodecTraits::plan_partial_encode` and `ArrayToBytesCodecTraits::plans_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
+  - `ArrayToBytesCodecTraits::plan_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
+    - By default, the whole chunk is read, decoded, updated, encoded and written (`plan::plan_partial_encode_whole`)
+  - `plan::encode_and_write`, which encodes and writes (or erases) a chunk
+  - `plan::ComputeCtx::runs_inline`, which is true for compute steps on the polling task of an asynchronous drive
 - Add `plan::{encode_hint,encoded_value,decode_and_update}`
 - Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec, and `plan::partial_encode_request_elementwise`
 - Add planned resolution of chunk-local subchunk grids

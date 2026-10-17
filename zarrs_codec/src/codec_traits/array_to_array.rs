@@ -205,6 +205,8 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
 
     /// Returns true if [`partial_encode_request`](Self::partial_encode_request) maps partial encodes (rather than
     /// returning [`None`]).
+    ///
+    /// A codec chain checks this before mapping a partial encode, as mapping consumes the indexer and bytes.
     fn plans_partial_encode(&self) -> bool {
         false
     }

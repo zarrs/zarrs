@@ -2,7 +2,7 @@ use inherent::inherent;
 use std::sync::Arc;
 
 use super::{ArrayUpdateOps, *};
-use crate::array::{ArrayBytes, ArraySubsetTraits, update_array_bytes};
+use crate::array::ArraySubsetTraits;
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits};
 
 #[inherent]
@@ -164,29 +164,6 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         // let mutex = self.storage.mutex(&key)?;
         // let _lock = mutex.lock();
 
-        if self.partial_encodes() {
-            return self.store_partial_chunk_planned(
-                chunk_indices,
-                indexer,
-                indexer_bytes,
-                options,
-                resources,
-            );
-        }
-        {
-            let chunk_bytes_old: ArrayBytes<'static> =
-                self.retrieve_chunk_with_options(chunk_indices, options, resources)?;
-            chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
-
-            let chunk_bytes_new = update_array_bytes(
-                chunk_bytes_old,
-                &chunk_shape,
-                indexer,
-                &indexer_bytes,
-                self.data_type().size(),
-            )?;
-
-            self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
-        }
+        self.store_partial_chunk_planned(chunk_indices, indexer, indexer_bytes, options, resources)
     }
 }

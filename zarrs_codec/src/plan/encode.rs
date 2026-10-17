@@ -6,7 +6,13 @@ use std::sync::Arc;
 
 use zarrs_chunk_grid::Indexer;
 
-use super::{Outcome, PlanIndexer, Task, TaskHint, TaskValue};
+use smallvec::smallvec;
+use zarrs_storage::byte_range::ByteRange;
+
+use super::{
+    ByteSource, ComputeCtx, Join, Outcome, PlanIndexer, SourceKey, Task, TaskHint, TaskValue,
+    WriteOp, whole_chunk_hint,
+};
 use crate::{
     ArrayBytes, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
     CowBytes, Resources, update_array_bytes,
@@ -84,6 +90,83 @@ pub fn plan_encode_whole<'a>(
         Ok(Outcome::Value(TaskValue::Bytes(Some(encoded))))
     })
     .with_hint(hint))
+}
+
+/// Encode the chunk `bytes` of `shape` with `codec` and write it to `key`, or erase `key` if the chunk is the fill value
+/// and empty chunks are not stored.
+///
+/// The encode tasks planned by the codec are forked ([`ArrayToBytesCodecTraits::plans_encode_subtasks`]), unless the
+/// compute step runs inline ([`ComputeCtx::runs_inline`]), where they would run serially.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the codec fails.
+pub fn encode_and_write<'a>(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    key: SourceKey,
+    shape: &[NonZeroU64],
+    bytes: ArrayBytes<'a>,
+    options: &CodecOptions,
+    ctx: &ComputeCtx,
+) -> Result<Outcome<'a>, CodecError> {
+    let write = |op| Outcome::Write {
+        ops: smallvec![op],
+        then: TaskValue::None,
+    };
+    if !options.store_empty_chunks() && bytes.is_fill_value(codec.fill_value()) {
+        return Ok(write(WriteOp::Erase(key)));
+    }
+    if codec.plans_encode_subtasks() && !ctx.runs_inline() {
+        let task = codec.plan_encode(bytes, shape, options)?;
+        return Ok(Outcome::Fork {
+            children: vec![task],
+            join: Join::new(move |mut values, _ctx| {
+                let encoded = encoded_value(values.pop().unwrap_or_default())?;
+                Ok(Outcome::Write {
+                    ops: smallvec![WriteOp::Set(key, encoded)],
+                    then: TaskValue::None,
+                })
+            }),
+        });
+    }
+    let encoded = codec.encode(bytes, shape, options, ctx.resources())?;
+    Ok(write(WriteOp::Set(key, encoded)))
+}
+
+/// Plan a partial encode that reads, decodes, updates, encodes and writes the whole chunk `key` of `shape`.
+///
+/// This is the default of [`ArrayToBytesCodecTraits::plan_partial_encode`].
+/// The chunk is erased if it becomes the fill value and empty chunks are not stored (see [`encode_and_write`]).
+/// The value of the task is [`TaskValue::None`], as no state is kept between partial encodes.
+#[must_use]
+pub fn plan_partial_encode_whole<'a>(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    key: SourceKey,
+    shape: &[NonZeroU64],
+    indexer: PlanIndexer<'a>,
+    bytes: ArrayBytes<'a>,
+    options: &CodecOptions,
+) -> Task<'a> {
+    let source = ByteSource::external(key);
+    let hint = whole_chunk_hint(&*codec, &source, shape);
+    let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+    let options = *options;
+    Task::read(
+        source,
+        [ByteRange::FromStart(0, None)],
+        move |mut reads, ctx| {
+            let chunk = decode_and_update(
+                &*codec,
+                reads.pop().flatten(),
+                &shape,
+                indexer.as_indexer(),
+                &bytes,
+                &options,
+                ctx.resources(),
+            )?;
+            encode_and_write(codec, key, &shape, chunk, &options, ctx)
+        },
+    )
+    .with_hint(hint)
 }
 
 /// Map a partial encode of the elements `indexer` of a chunk of `shape` to `bytes` through an elementwise array-to-array `codec`.

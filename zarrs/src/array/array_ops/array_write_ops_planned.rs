@@ -7,12 +7,12 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 use zarrs_codec::plan::{
-    ByteSource, ComputeCtx, Generator, Join, Outcome, PlanIndexer, ReadBytes, SourceKey, SyncIo,
-    Task, TaskValue, WriteOp, decode_and_update, encode_hint, encoded_value, whole_chunk_hint,
+    Generator, Outcome, PlanIndexer, ReadBytes, SourceKey, SyncIo, Task, TaskValue, WriteOp,
+    encode_and_write, encode_hint,
 };
-use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{
@@ -20,7 +20,6 @@ use zarrs_storage::{
     WritableStorage, WritableStorageTraits,
 };
 
-use super::super::codec::CodecChainBound;
 use super::array_read_ops_planned::{
     ChunkKeys, ChunkPlanner, drive_blocking_one, plan_error, read_ranges, subset_chunk_shape,
 };
@@ -91,55 +90,7 @@ impl SyncIo for ChunkReadWriteIo {
     }
 }
 
-/// The outcome of a task that performs one write.
-fn write(op: WriteOp<'_>) -> Outcome<'_> {
-    Outcome::Write {
-        ops: smallvec![op],
-        then: TaskValue::None,
-    }
-}
-
-/// Encode `bytes`, the chunk of `shape` with source `key`, and write it.
-///
-/// The chunk is erased instead if it is the fill value and empty chunks are not stored.
-#[allow(clippy::too_many_arguments)]
-fn encode_and_write<'a>(
-    codecs: &Arc<CodecChainBound>,
-    key: SourceKey,
-    shape: &[NonZeroU64],
-    bytes: ArrayBytes<'a>,
-    options: &CodecOptions,
-    encode_subtasks: bool,
-    ctx: &ComputeCtx,
-) -> Result<Outcome<'a>, CodecError> {
-    if !options.store_empty_chunks() && bytes.is_fill_value(codecs.fill_value()) {
-        return Ok(write(WriteOp::Erase(key)));
-    }
-    if encode_subtasks && codecs.plans_encode_subtasks() {
-        let task = codecs.clone().plan_encode(bytes, shape, options)?;
-        return Ok(Outcome::Fork {
-            children: vec![task],
-            join: Join::new(move |mut values, _ctx| {
-                let encoded = encoded_value(values.pop().unwrap_or_default())?;
-                Ok(write(WriteOp::Set(key, encoded)))
-            }),
-        });
-    }
-    let encoded = codecs.encode(bytes, shape, options, ctx.resources())?;
-    Ok(write(WriteOp::Set(key, encoded)))
-}
-
 impl ChunkPlanner {
-    /// Encode each chunk in one compute step, rather than with encode tasks planned by the codecs.
-    ///
-    /// Used by drives that run compute on the polling task of an async operation, where the tasks of a chunk would
-    /// run serially, whereas an encode in one compute step encodes a shard on Rayon (in parallel).
-    #[cfg(feature = "async")]
-    fn without_encode_subtasks(mut self) -> Self {
-        self.encode_subtasks = false;
-        self
-    }
-
     /// Plan storing `bytes`, the chunk of `shape` with source `key`.
     fn plan_store<'a>(
         &self,
@@ -148,85 +99,26 @@ impl ChunkPlanner {
         bytes: ArrayBytes<'a>,
     ) -> Task<'a> {
         let hint = encode_hint(&bytes);
-        let codecs = self.codecs.clone();
+        let codecs: Arc<dyn ArrayToBytesCodecTraits> = self.codecs.clone();
         let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
         let options = self.options;
-        let encode_subtasks = self.encode_subtasks;
-        Task::compute(move |ctx| {
-            encode_and_write(&codecs, key, &shape, bytes, &options, encode_subtasks, ctx)
-        })
-        .with_hint(hint)
+        Task::compute(move |ctx| encode_and_write(codecs, key, &shape, bytes, &options, ctx))
+            .with_hint(hint)
     }
-
-    /// Plan updating the elements of `chunk_subset` of the chunk of `shape` with source `key` to `bytes`.
-    ///
-    /// See [`plan_update`].
-    fn plan_update<'a>(
-        &self,
-        key: SourceKey,
-        shape: &[NonZeroU64],
-        chunk_subset: ArraySubset,
-        bytes: ArrayBytes<'a>,
-    ) -> Task<'a> {
-        plan_update(
-            self.codecs.clone(),
-            key,
-            shape,
-            PlanIndexer::Subset(chunk_subset),
-            bytes,
-            &self.options,
-            self.encode_subtasks,
-        )
-    }
-}
-
-/// Plan updating the elements `indexer` of the chunk of `shape` with source `key` to `bytes`.
-///
-/// The task reads and decodes the chunk (or the fill value if it does not exist), updates it, and stores it.
-fn plan_update<'a>(
-    codecs: Arc<CodecChainBound>,
-    key: SourceKey,
-    shape: &[NonZeroU64],
-    indexer: PlanIndexer<'a>,
-    bytes: ArrayBytes<'a>,
-    options: &CodecOptions,
-    encode_subtasks: bool,
-) -> Task<'a> {
-    let source = ByteSource::external(key);
-    let hint = whole_chunk_hint(&*codecs, &source, shape);
-    let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
-    let options = *options;
-    Task::read(
-        source,
-        [ByteRange::FromStart(0, None)],
-        move |mut reads, ctx| {
-            let chunk = decode_and_update(
-                &*codecs,
-                reads.pop().flatten(),
-                &shape,
-                indexer.as_indexer(),
-                &bytes,
-                &options,
-                ctx.resources(),
-            )?;
-            encode_and_write(&codecs, key, &shape, chunk, &options, encode_subtasks, ctx)
-        },
-    )
-    .with_hint(hint)
 }
 
 /// Plan storing the elements of `array_subset` in the chunks of `chunks`, which it intersects.
 ///
 /// `bytes` holds the elements of `array_subset`. The elements of each chunk are extracted (copied) from them in its
 /// task, so the tasks borrow `bytes` only as long as `B` does.
-/// Chunks covered by `array_subset` are encoded and written. Other chunks are partially encoded if `partial_encode`
-/// (which requires that the codecs plan partial encodes), and otherwise read, decoded, updated, encoded and written.
+/// Chunks covered by `array_subset` are encoded and written, and other chunks are partially encoded (`set_partial` is
+/// true if the storage supports partial writes).
 fn plan_store_subset<'a, 'b, B>(
     planner: ChunkPlanner,
     chunks: ArraySubset,
     array_subset: ArraySubset,
     bytes: B,
-    partial_encode: bool,
+    set_partial: bool,
 ) -> Task<'a>
 where
     B: std::ops::Deref<Target = ArrayBytes<'b>> + MaybeSend + MaybeSync + 'a,
@@ -246,26 +138,16 @@ where
         let shape = subset_chunk_shape(&chunk_subset).map_err(plan_error)?;
         Ok(Some(if overlap.shape() == chunk_subset.shape() {
             planner.plan_store(SourceKey(i), shape, chunk_bytes)
-        } else if partial_encode {
-            planner
-                .codecs
-                .clone()
-                .plan_partial_encode(
-                    SourceKey(i),
-                    shape,
-                    PlanIndexer::Subset(overlap.relative_to(chunk_subset.start())?),
-                    chunk_bytes,
-                    None,
-                    &planner.options,
-                )?
-                .expect("the codecs plan partial encodes")
         } else {
-            planner.plan_update(
+            planner.codecs.clone().plan_partial_encode(
                 SourceKey(i),
                 shape,
-                overlap.relative_to(chunk_subset.start())?,
+                PlanIndexer::Subset(overlap.relative_to(chunk_subset.start())?),
                 chunk_bytes,
-            )
+                None,
+                set_partial,
+                &planner.options,
+            )?
         }))
     });
     Task::compute(move |_| {
@@ -406,8 +288,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     /// Store `subset_bytes` (validated), the elements of `array_subset`, which intersects the chunks of `chunks`, with a
     /// planned write.
     ///
-    /// Chunks covered by `array_subset` are encoded and written. Other chunks are partially encoded if
-    /// `partial_encodes`, and otherwise read, decoded, updated, encoded and written.
+    /// Chunks covered by `array_subset` are encoded and written, and other chunks are partially encoded.
     pub(crate) fn store_array_subset_planned(
         &self,
         chunks: &ArraySubset,
@@ -422,21 +303,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             chunks.clone(),
             array_subset.clone(),
             subset_bytes,
-            self.partial_encodes(),
+            self.storage.supports_set_partial(),
         );
         drive_blocking_one(task, &self.chunk_read_write_io(keys)?, resources)?;
         Ok(())
     }
 
-    /// Returns true if partial writes to chunks are planned partial encodes.
-    ///
-    /// This requires that the codecs plan partial encodes and the storage supports partial writes.
-    pub(crate) fn partial_encodes(&self) -> bool {
-        self.codecs_bound().plans_partial_encode() && self.storage.supports_set_partial()
-    }
-
     /// Partially encode `indexer_bytes` (validated), the elements of `indexer`, in the chunk at `chunk_indices` with a
-    /// planned write. Requires `partial_encodes`.
+    /// planned write.
     pub(crate) fn store_partial_chunk_planned(
         &self,
         chunk_indices: &[u64],
@@ -445,18 +319,15 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let task = self
-            .codecs_bound()
-            .clone()
-            .plan_partial_encode(
-                SourceKey(0),
-                &self.chunk_shape(chunk_indices)?,
-                PlanIndexer::Borrowed(indexer),
-                indexer_bytes,
-                None,
-                options,
-            )?
-            .expect("the codecs plan partial encodes");
+        let task = self.codecs_bound().plan_partial_encode(
+            SourceKey(0),
+            &self.chunk_shape(chunk_indices)?,
+            PlanIndexer::Borrowed(indexer),
+            indexer_bytes,
+            None,
+            self.storage.supports_set_partial(),
+            options,
+        )?;
         let io = self.chunk_read_write_io(self.one_key(chunk_indices)?)?;
         drive_blocking_one(task, &io, resources)?;
         Ok(())
@@ -671,7 +542,7 @@ pub(super) mod async_planned {
                 drive_owned(task, &io, resources).await
             } else {
                 let task = plan_store_subset(
-                    planner.without_encode_subtasks(),
+                    planner,
                     chunks.clone(),
                     array_subset.clone(),
                     &chunks_bytes,
@@ -712,7 +583,7 @@ pub(super) mod async_planned {
             resources: &Resources,
         ) -> Result<(), ArrayError> {
             let planner = self.chunk_planner(options);
-            let partial_encode = self.async_partial_encodes();
+            let set_partial = self.storage.supports_set_partial();
             let io = self
                 .async_chunk_read_write_io(self.grid_keys(chunks.clone()))
                 .await?;
@@ -723,31 +594,24 @@ pub(super) mod async_planned {
                     chunks.clone(),
                     array_subset.clone(),
                     bytes,
-                    partial_encode,
+                    set_partial,
                 );
                 drive_owned(task, &io, resources).await
             } else {
                 let task = plan_store_subset(
-                    planner.without_encode_subtasks(),
+                    planner,
                     chunks.clone(),
                     array_subset.clone(),
                     &subset_bytes,
-                    partial_encode,
+                    set_partial,
                 );
                 drive_async_one(task, &io, resources).await?;
                 Ok(())
             }
         }
 
-        /// Returns true if partial writes to chunks are planned partial encodes.
-        ///
-        /// This requires that the codecs plan partial encodes and the storage supports partial writes.
-        pub(crate) fn async_partial_encodes(&self) -> bool {
-            self.codecs_bound().plans_partial_encode() && self.storage.supports_set_partial()
-        }
-
         /// Partially encode `indexer_bytes` (validated), the elements of `indexer`, in the chunk at `chunk_indices`
-        /// with a planned write. Requires `async_partial_encodes`.
+        /// with a planned write.
         pub(crate) async fn async_store_partial_chunk_planned(
             &self,
             chunk_indices: &[u64],
@@ -756,21 +620,35 @@ pub(super) mod async_planned {
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError> {
-            let task = self
-                .codecs_bound()
-                .clone()
-                .plan_partial_encode(
-                    SourceKey(0),
-                    &self.chunk_shape(chunk_indices)?,
-                    PlanIndexer::Borrowed(indexer),
-                    indexer_bytes,
-                    None,
-                    options,
-                )?
-                .expect("the codecs plan partial encodes");
+            let shape = self.chunk_shape(chunk_indices)?;
+            let set_partial = self.storage.supports_set_partial();
             let io = self
                 .async_chunk_read_write_io(self.one_key(chunk_indices)?)
                 .await?;
+            if let Some(subset) = indexer.as_array_subset()
+                && is_shared(&indexer_bytes)
+            {
+                // The task does not borrow, so its compute is offloaded to Rayon
+                let task = self.codecs_bound().plan_partial_encode(
+                    SourceKey(0),
+                    &shape,
+                    PlanIndexer::Subset(subset.to_array_subset()),
+                    indexer_bytes.into_owned(),
+                    None,
+                    set_partial,
+                    options,
+                )?;
+                return drive_owned(task, &io, resources).await;
+            }
+            let task = self.codecs_bound().plan_partial_encode(
+                SourceKey(0),
+                &shape,
+                PlanIndexer::Borrowed(indexer),
+                indexer_bytes,
+                None,
+                set_partial,
+                options,
+            )?;
             drive_async_one(task, &io, resources).await?;
             Ok(())
         }

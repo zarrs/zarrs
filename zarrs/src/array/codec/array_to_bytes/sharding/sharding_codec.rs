@@ -575,14 +575,17 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         indexer: zarrs_codec::plan::PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         state: Option<zarrs_codec::plan::PartialEncodeState>,
+        set_partial: bool,
         options: &CodecOptions,
-    ) -> Result<Option<zarrs_codec::plan::Task<'a>>, CodecError> {
-        self.plan_partial_encode_shard(key, shape, indexer, bytes, state, options)
-            .map(Some)
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
+    ) -> Result<zarrs_codec::plan::Task<'a>, CodecError> {
+        if set_partial {
+            self.plan_partial_encode_shard(key, shape, indexer, bytes, state, options)
+        } else {
+            // Updated subchunks are appended to a shard, so the shard is rewritten compactly if it is written in full
+            Ok(zarrs_codec::plan::plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ))
+        }
     }
 
     fn plan_locate_subchunk(

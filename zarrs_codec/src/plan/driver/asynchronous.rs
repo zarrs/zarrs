@@ -219,7 +219,7 @@ async fn drive_single<'a>(
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
-    let ctx = ComputeCtx::new(resources.clone());
+    let ctx = ComputeCtx::new_inline(resources.clone());
     let outcome = match SingleTask::new(task)? {
         SingleTask::Compute(task) => task.run_without_io(&ctx)?,
         SingleTask::Read(read, request) => {
@@ -291,8 +291,10 @@ where
                     Ok(future) => compute_futures.push(future),
                     Err(work) => {
                         // Queued work does not run alongside work on the polling task
-                        inline =
-                            Some((work, ComputeCtx::new(resources.with_compute_share(running))));
+                        inline = Some((
+                            work,
+                            ComputeCtx::new_inline(resources.with_compute_share(running)),
+                        ));
                         break;
                     }
                 }

@@ -2,7 +2,6 @@ use inherent::inherent;
 use std::sync::Arc;
 
 use super::{AsyncArrayUpdateOps, *};
-use crate::array::update_array_bytes;
 use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits};
 
 #[cfg(feature = "async")]
@@ -158,32 +157,13 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
         indexer_bytes.validate(indexer.len(), self.data_type())?;
 
-        if self.async_partial_encodes() {
-            return self
-                .async_store_partial_chunk_planned(
-                    chunk_indices,
-                    indexer,
-                    indexer_bytes,
-                    options,
-                    resources,
-                )
-                .await;
-        }
-        {
-            let chunk_bytes_old = self
-                .async_retrieve_chunk_with_options(chunk_indices, options, resources)
-                .await?;
-
-            let chunk_bytes_new = update_array_bytes(
-                chunk_bytes_old,
-                &chunk_shape,
-                indexer,
-                &indexer_bytes,
-                self.data_type().size(),
-            )?;
-
-            self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
-                .await
-        }
+        self.async_store_partial_chunk_planned(
+            chunk_indices,
+            indexer,
+            indexer_bytes,
+            options,
+            resources,
+        )
+        .await
     }
 }

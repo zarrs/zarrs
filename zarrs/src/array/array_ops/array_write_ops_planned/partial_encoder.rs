@@ -1,8 +1,8 @@
 //! Planned partial encoders of a chunk.
 //!
-//! If the codecs plan partial encodes (and the storage supports partial writes), a partial encoder keeps the state of
-//! its chunk (e.g. the shard index) between partial encodes, so that each partial encode only reads what it updates.
-//! Otherwise, each partial encode reads, decodes, updates, encodes and writes the chunk.
+//! A partial encoder keeps the state of its chunk (e.g. the shard index) between partial encodes, so that each partial
+//! encode only reads what it updates. Codecs that cannot partially encode read, decode, update, encode and write the
+//! whole chunk.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,7 +22,7 @@ use super::super::array_read_ops_planned::{
     array_to_codec_error, array_value, check_target_len, drive_blocking_one,
     static_local_subchunk_grids, whole_views,
 };
-use super::{ChunkReadWriteIo, plan_update};
+use super::ChunkReadWriteIo;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ChunkGrid, ChunkShape, CodecChainBound, Indexer,
 };
@@ -31,10 +31,8 @@ use crate::array::{
 struct PartialChunk {
     codecs: Arc<CodecChainBound>,
     shape: ChunkShape,
-    /// Whether partial encodes are planned by the codecs, rather than updates of the whole chunk.
-    partial_encodes: bool,
-    /// Whether a chunk updated in full is encoded by encode tasks planned by the codecs (see [`plan_update`]).
-    encode_subtasks: bool,
+    /// Whether the storage supports partial writes.
+    set_partial: bool,
 }
 
 impl PartialChunk {
@@ -76,29 +74,15 @@ impl PartialChunk {
         state: Option<PartialEncodeState>,
         options: &CodecOptions,
     ) -> Result<zarrs_codec::plan::Task<'a>, CodecError> {
-        if !self.partial_encodes {
-            return Ok(plan_update(
-                self.codecs.clone(),
-                SourceKey(0),
-                &self.shape,
-                PlanIndexer::Borrowed(indexer),
-                bytes.clone(),
-                options,
-                self.encode_subtasks,
-            ));
-        }
-        Ok(self
-            .codecs
-            .clone()
-            .plan_partial_encode(
-                SourceKey(0),
-                &self.shape,
-                PlanIndexer::Borrowed(indexer),
-                bytes.clone(),
-                state,
-                options,
-            )?
-            .expect("the codecs plan partial encodes"))
+        self.codecs.clone().plan_partial_encode(
+            SourceKey(0),
+            &self.shape,
+            PlanIndexer::Borrowed(indexer),
+            bytes.clone(),
+            state,
+            self.set_partial,
+            options,
+        )
     }
 }
 
@@ -218,8 +202,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             chunk: PartialChunk {
                 codecs: self.codecs_bound().clone(),
                 shape: self.chunk_shape(chunk_indices)?,
-                partial_encodes: self.partial_encodes(),
-                encode_subtasks: true,
+                set_partial: self.storage.supports_set_partial(),
             },
             io: self.chunk_read_write_io(self.one_key(chunk_indices)?)?,
             state: Mutex::new(None),
@@ -376,9 +359,7 @@ mod async_planned {
                 chunk: PartialChunk {
                     codecs: self.codecs_bound().clone(),
                     shape: self.chunk_shape(chunk_indices)?,
-                    partial_encodes: self.async_partial_encodes(),
-                    // The tasks of a chunk would run serially on the polling task
-                    encode_subtasks: false,
+                    set_partial: self.storage.supports_set_partial(),
                 },
                 io: self
                     .async_chunk_read_write_io(self.one_key(chunk_indices)?)

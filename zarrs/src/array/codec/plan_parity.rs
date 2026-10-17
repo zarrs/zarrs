@@ -358,7 +358,6 @@ pub(crate) fn assert_partial_encode_parity(
 ) {
     let options = CodecOptions::default();
     let resources = Resources::default();
-    assert!(codecs.plans_partial_encode());
     let shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
     for (name, drive) in drivers() {
         for keep_state in [false, true] {
@@ -393,10 +392,10 @@ pub(crate) fn assert_partial_encode_parity(
                         PlanIndexer::Borrowed(indexer.as_ref()),
                         bytes.clone(),
                         state.take(),
+                        true,
                         &options,
                     )
-                    .unwrap()
-                    .expect("the codecs partially encode");
+                    .unwrap();
                 let mut values = drive(vec![task], &io, &resources).unwrap();
                 let new_state = zarrs_codec::plan::partial_encode_state(values.remove(0));
                 assert!(new_state.is_some(), "{name}: a partial encode has a state");
@@ -1003,20 +1002,48 @@ mod tests {
                 data_type::uint16(),
                 FillValue::from(7u16),
             );
-            assert!(!codecs.plans_partial_encode());
-            assert!(
-                codecs
-                    .plan_partial_encode(
-                        SourceKey(0),
-                        &shape,
-                        PlanIndexer::Subset(ArraySubset::new_with_ranges(&[0..1, 0..1])),
-                        values(1, 1),
-                        None,
-                        &CodecOptions::default(),
-                    )
-                    .unwrap()
-                    .is_none()
-            );
+            let task = codecs
+                .clone()
+                .plan_partial_encode(
+                    SourceKey(0),
+                    &shape,
+                    PlanIndexer::Subset(ArraySubset::new_with_ranges(&[0..1, 0..1])),
+                    values(1, 1),
+                    None,
+                    true,
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+            // The whole chunk is updated, which has no state
+            let io = OneWritableValueIo::default();
+            let value = drive_serial(vec![task], &io, &Resources::default())
+                .unwrap()
+                .remove(0);
+            assert!(zarrs_codec::plan::partial_encode_state(value).is_none());
+            let encoded = io.0.lock().unwrap().clone().expect("the chunk is written");
+            let decoded = codecs
+                .decode(
+                    CowBytes::from(encoded),
+                    &shape,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
+                .unwrap();
+            let mut expected = ArrayBytes::new_fill_value(
+                codecs.data_type(),
+                shape.iter().map(|s| s.get()).product(),
+                codecs.fill_value(),
+            )
+            .unwrap();
+            expected = update_array_bytes(
+                expected,
+                bytemuck::must_cast_slice(&shape),
+                &ArraySubset::new_with_ranges(&[0..1, 0..1]),
+                &values(1, 1),
+                codecs.data_type().size(),
+            )
+            .unwrap();
+            assert_eq!(decoded, expected);
         }
     }
 
@@ -1191,9 +1218,9 @@ mod tests {
                 PlanIndexer::Subset(ArraySubset::new_with_ranges(&[0..1, 0..1])),
                 ArrayBytes::new_flen(vec![1, 0]),
                 Some(state),
+                true,
                 &CodecOptions::default(),
             )
-            .unwrap()
             .unwrap();
         let io = OneWritableValueIo::default();
         assert!(drive_serial(vec![task], &io, &Resources::default()).is_err());

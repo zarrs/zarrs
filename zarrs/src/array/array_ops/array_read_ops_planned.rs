@@ -166,9 +166,6 @@ pub(super) struct ChunkPlanner {
     pub(super) codecs: Arc<CodecChainBound>,
     pub(super) data_type: DataType,
     pub(super) options: CodecOptions,
-    /// Whether chunks of codecs that plan encode tasks of their own (e.g. a task per block of subchunks of a shard)
-    /// are encoded by those tasks, rather than in one compute step.
-    pub(super) encode_subtasks: bool,
 }
 
 impl ChunkPlanner {
@@ -343,7 +340,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
             codecs: self.codecs_bound().clone(),
             data_type: self.data_type().clone(),
             options: *options,
-            encode_subtasks: true,
         }
     }
 
