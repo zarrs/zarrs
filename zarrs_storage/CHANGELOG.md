@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `MemoryStore` guards its values with a `RwLock` rather than a `Mutex`, so concurrent reads do not block each other
+- `AsyncMemoryStore` guards its values with a `std::sync::RwLock` rather than a `futures::lock::Mutex`, so concurrent reads do not block each other
 - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them
 - **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
 - **Breaking**: `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
