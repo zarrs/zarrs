@@ -129,9 +129,12 @@ where
 /// The source of the elements of the overlap of a chunk with an array subset in a cached read.
 pub(super) enum OverlapSource {
     /// The elements of the overlap.
+    #[cfg(feature = "async")]
     Overlap(Arc<ArrayBytes<'static>>),
     /// The decoded chunk (or [`None`] if it does not exist), and the overlap relative to the chunk.
     Chunk(Option<Arc<ArrayBytes<'static>>>, ArraySubset),
+    /// A partial decoder of the chunk, and the overlap relative to the chunk.
+    Decoder(Arc<dyn ArrayPartialDecoderTraits>, ArraySubset),
 }
 
 impl OverlapSource {
@@ -141,8 +144,11 @@ impl OverlapSource {
         array: &Array<TStorage>,
         chunk_shape: &[u64],
         target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         match self {
+            #[cfg(feature = "async")]
             Self::Overlap(bytes) => decode_into_array_bytes_target(bytes, target),
             Self::Chunk(Some(chunk), overlap) => copy_array_subset_into_target(
                 chunk,
@@ -153,6 +159,9 @@ impl OverlapSource {
             ),
             Self::Chunk(None, _) => {
                 copy_fill_value_into(array.data_type(), array.fill_value(), target)
+            }
+            Self::Decoder(decoder, overlap) => {
+                decoder.partial_decode_into(overlap, target, options, resources)
             }
         }
     }
@@ -189,20 +198,17 @@ where
             )?;
             OverlapSource::Chunk(chunk, overlap.relative_to(chunk_subset.start())?)
         } else {
-            OverlapSource::Overlap(retrieve_chunk_overlap_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset,
-                &overlap,
-                options,
-                resources,
-            )?)
+            // The elements are decoded into the output, rather than decoded then copied
+            let decoder =
+                C::Value::partial_decoder(cache, array, &chunk_indices, options, resources)?;
+            OverlapSource::Decoder(decoder, overlap.relative_to(chunk_subset.start())?)
         };
         // SAFETY: the chunks are disjoint
         unsafe {
             views.with_subdivided(output_subset, |views| {
-                views.with_target(|target| source.copy_into(array, chunk_subset.shape(), target))
+                views.with_target(|target| {
+                    source.copy_into(array, chunk_subset.shape(), target, options, resources)
+                })
             })
         }??;
         Ok::<_, ArrayError>(())

@@ -183,8 +183,9 @@ where
             // SAFETY: the chunks are disjoint
             unsafe {
                 views.with_subdivided(output_subset, |views| {
-                    views
-                        .with_target(|target| source.copy_into(array, chunk_subset.shape(), target))
+                    views.with_target(|target| {
+                        source.copy_into(array, chunk_subset.shape(), target, options, resources)
+                    })
                 })
             }??;
             Ok::<_, ArrayError>(())
