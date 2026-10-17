@@ -527,9 +527,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         target: TaskTarget<'a>,
         options: &CodecOptions,
     ) -> Result<(Task<'a>, ChunkKeys), ArrayError> {
-        let task =
-            self.chunk_planner(options)
-                .plan_chunk(SourceKey(0), chunk_shape, indexer, target)?;
+        let task = self.codecs_bound().plan_decode(
+            ByteSource::external(SourceKey(0)),
+            chunk_shape,
+            DecodeRequest { indexer, target },
+            options,
+        )?;
         Ok((task, self.one_key(chunk_indices)?))
     }
 
