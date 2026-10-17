@@ -91,6 +91,11 @@ impl ContiguousIndices {
         self.subset_contiguous_start.num_elements_usize()
     }
 
+    /// The subset of the starts of the contiguous runs.
+    pub(crate) fn run_starts(&self) -> &ArraySubset {
+        &self.subset_contiguous_start
+    }
+
     /// Returns true if the number of starting indices is zero.
     #[must_use]
     pub fn is_empty(&self) -> bool {

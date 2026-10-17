@@ -179,6 +179,61 @@ mod tests {
         // assert_eq!(indices.into_par_iter().collect::<Vec<_>>(), expected);
     }
 
+    /// Iterating contiguous linearised indices in either direction matches ravelling contiguous indices.
+    #[test]
+    fn array_subset_iter_contiguous_linearised_indices_match_ravelled() {
+        // A linear congruential generator, for reproducible pseudo-random cases
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut random = |bound: u64| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) % bound
+        };
+        for _ in 0..2000 {
+            let dimensionality = 1 + usize::try_from(random(5)).unwrap();
+            let array_shape: Vec<u64> = (0..dimensionality).map(|_| 1 + random(5)).collect();
+            let ranges: Vec<_> = array_shape
+                .iter()
+                .map(|&size| {
+                    let start = random(size + 1);
+                    start..start + random(size - start + 1)
+                })
+                .collect();
+            let region = ArraySubset::new_with_ranges(&ranges);
+            let expected: Vec<(u64, u64)> = region
+                .contiguous_indices(&array_shape)
+                .unwrap()
+                .into_iter()
+                .map(|(indices, len)| (crate::ravel_indices(&indices, &array_shape).unwrap(), len))
+                .collect();
+            let indices = region.contiguous_linearised_indices(&array_shape).unwrap();
+            assert_eq!(indices.len(), expected.len());
+            assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
+            assert_eq!(
+                indices.iter().rev().collect::<Vec<_>>(),
+                expected.iter().rev().copied().collect::<Vec<_>>()
+            );
+            assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
+
+            // Alternate between the front and the back
+            let mut iter = indices.iter();
+            let (mut front, mut back) = (0, expected.len());
+            while front < back {
+                if random(2) == 0 {
+                    assert_eq!(iter.next(), Some(expected[front]));
+                    front += 1;
+                } else {
+                    back -= 1;
+                    assert_eq!(iter.next_back(), Some(expected[back]));
+                }
+                assert_eq!(iter.len(), back - front);
+            }
+            assert_eq!(iter.next(), None);
+            assert_eq!(iter.next_back(), None);
+        }
+    }
+
     /// An empty array subset references no elements, so it is in-bounds irrespective of its start.
     /// `LinearisedIndices` and `ContiguousIndices` must agree on this.
     #[test]
