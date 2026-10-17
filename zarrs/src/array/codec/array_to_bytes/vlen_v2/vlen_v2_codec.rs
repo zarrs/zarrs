@@ -4,8 +4,7 @@ use std::sync::Arc;
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, DataTypeSize, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
@@ -36,19 +35,6 @@ impl CodecTraits for VlenV2Codec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(Configuration::default())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false, // NOTE: It is effectively a full decode when separating offsets/bytes
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

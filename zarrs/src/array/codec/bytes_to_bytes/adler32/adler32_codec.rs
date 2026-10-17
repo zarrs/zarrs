@@ -7,8 +7,7 @@ use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
@@ -54,19 +53,6 @@ impl CodecTraits for Adler32Codec {
             location: self.location,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,   // TODO
-            partial_decode: false, // TODO
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

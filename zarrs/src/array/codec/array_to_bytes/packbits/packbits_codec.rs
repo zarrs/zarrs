@@ -17,15 +17,14 @@ use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, sign_extend_co
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::plan::{
-    ByteSource, DecodeRequest, Task, TaskHint, decode_whole, is_whole_chunk, place_decoded,
-    plan_decode_whole,
+    ByteSource, DecodeRequest, PrepareDecode, SourceDecoder, Task, TaskHint, decode_whole,
+    is_whole_chunk, place_decoded, plan_decode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::{Configuration, Endianness};
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
@@ -140,19 +139,6 @@ impl CodecTraits for PackBitsCodec {
             last_bit: self.last_bit,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 
@@ -461,6 +447,18 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
 
         let bytes = self.decode(bytes, shape, options, resources)?;
         decode_into_array_bytes_target(&bytes, output_target)
+    }
+
+    fn prepare_decode(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<PrepareDecode, CodecError> {
+        // Requests are planned from the source, as only their bytes are read and decoded
+        Ok(PrepareDecode::Ready(Arc::new(SourceDecoder::new(
+            self, source, shape,
+        ))))
     }
 
     fn plan_decode<'a>(

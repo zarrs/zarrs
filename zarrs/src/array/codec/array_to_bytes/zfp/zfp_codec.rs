@@ -13,8 +13,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
     decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
@@ -138,19 +137,6 @@ impl CodecTraits for ZfpCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

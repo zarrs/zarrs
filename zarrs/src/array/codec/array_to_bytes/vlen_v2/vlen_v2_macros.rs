@@ -48,7 +48,7 @@ macro_rules! vlen_v2_codec {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-        use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, Resources, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits};
+        use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, Resources, CodecTraits, UnboundArrayToBytesCodecTraits};
         use crate::array::{codec::VlenV2Codec, ArrayBytes, CowBytes, BytesRepresentation};
         use zarrs_metadata::Configuration;
         use zarrs_plugin::{ExtensionAliasesConfig, ExtensionAliases, ZarrVersion2, ZarrVersion3};
@@ -92,13 +92,7 @@ macro_rules! vlen_v2_codec {
                 self.inner.configuration(version, options)
             }
 
-            fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-                self.inner.partial_decoder_capability()
-            }
 
-            fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-                self.inner.partial_encoder_capability()
-            }
         }
 
         #[cfg_attr(

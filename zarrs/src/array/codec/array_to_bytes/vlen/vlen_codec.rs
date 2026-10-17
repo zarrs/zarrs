@@ -9,8 +9,7 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
@@ -130,19 +129,6 @@ impl CodecTraits for VlenCodec {
             index_location: self.index_location,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false, // TODO: could read offsets first, ideally cached, then grab values as needed
-            partial_decode: false, // TODO
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

@@ -287,7 +287,10 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     ///
     /// Preparation reads and decodes what every request needs once (e.g. a shard index).
     ///
-    /// The default implementation prepares nothing, and plans each request with [`plan_decode`](Self::plan_decode).
+    /// The default implementation reads and decodes the entire chunk once ([`prepare_decode_whole`](crate::plan::prepare_decode_whole)),
+    /// consistent with the default [`plan_decode`](Self::plan_decode).
+    /// Codecs that override [`plan_decode`](Self::plan_decode) to decode part of a chunk should override this too, e.g.
+    /// with a [`SourceDecoder`](crate::plan::SourceDecoder) that plans each request with [`plan_decode`](Self::plan_decode).
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the chunk shape is invalid for the codec.
@@ -297,9 +300,11 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<crate::plan::PrepareDecode, CodecError> {
-        _ = options;
-        Ok(crate::plan::PrepareDecode::Ready(Arc::new(
-            crate::plan::SourceDecoder::new(self.into_dyn(), source, shape),
-        )))
+        Ok(crate::plan::prepare_decode_whole(
+            self.into_dyn(),
+            source,
+            shape,
+            options,
+        ))
     }
 }

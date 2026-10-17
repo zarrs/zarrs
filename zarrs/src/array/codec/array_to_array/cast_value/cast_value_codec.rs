@@ -6,8 +6,7 @@ use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_data_type::codec_traits::cast_value::{
     CastValueDataTypeExt, CastValueDataTypeTraits, CastValueKernel,
@@ -82,19 +81,6 @@ impl CodecTraits for CastValueCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(CastValueCodecConfiguration::V1(self.configuration.clone()).into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 

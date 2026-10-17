@@ -9,8 +9,7 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, Resources, register_codec_v3,
-    unregister_codec_v3,
+    Resources, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{RuntimePlugin, ZarrVersion};
 
@@ -27,19 +26,6 @@ impl CodecTraits for TestPassthroughCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(Configuration::default())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

@@ -3,10 +3,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{ExtensionName, MaybeSend, MaybeSync, ZarrVersion};
 
-use crate::{
-    Codec, CodecCreateError, CodecMetadataOptions, PartialDecoderCapability,
-    PartialEncoderCapability,
-};
+use crate::{Codec, CodecCreateError, CodecMetadataOptions};
 
 pub(crate) mod array;
 #[cfg(feature = "async")]
@@ -62,10 +59,4 @@ pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
     fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
         self.configuration(ZarrVersion::V2, options)
     }
-
-    /// Returns the partial decoder capability of this codec.
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability;
-
-    /// Returns the partial encoder capability of this codec.
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability;
 }

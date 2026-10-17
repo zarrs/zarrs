@@ -13,8 +13,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 
@@ -73,19 +72,6 @@ impl CodecTraits for BitroundCodec {
             Some(configuration.into())
         } else {
             None
-        }
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
         }
     }
 }

@@ -25,8 +25,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
@@ -243,19 +242,6 @@ impl CodecTraits for ShardingCodec {
             index_location: self.index_location,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 

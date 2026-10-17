@@ -15,7 +15,7 @@ use super::super::{
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
+    InvalidBytesLengthError, Resources,
 };
 use zarrs_plugin::PluginCreateError;
 
@@ -185,19 +185,6 @@ impl CodecTraits for BloscCodec {
                 });
                 Some(configuration.into())
             }
-        }
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false, // TODO: the blosc codec technically supports partial decoding, but it needs coalescing to be efficient. So, use a cache for now
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
         }
     }
 }

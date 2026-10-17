@@ -16,7 +16,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits,
     CodecCreateError, CodecMetadataOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::ZarrVersion;
@@ -57,20 +57,6 @@ impl CodecTraits for CountingCodec<dyn UnboundArrayToBytesCodecTraits> {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        // Keep the wrapper visible even when its inner codec caches decoded data.
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

@@ -10,8 +10,7 @@ use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
@@ -119,19 +118,6 @@ impl CodecTraits for SqueezeCodec {
     ) -> Option<Configuration> {
         let configuration = SqueezeCodecConfiguration::V0(SqueezeCodecConfigurationV0 {});
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 

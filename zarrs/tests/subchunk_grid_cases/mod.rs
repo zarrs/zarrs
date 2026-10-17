@@ -24,7 +24,6 @@ use zarrs::array::{
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError, CodecSpecificOptions,
-    PartialDecoderCapability, PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
 
@@ -54,20 +53,6 @@ impl CodecTraits for IdentityCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(Configuration::default())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        // The default array-to-array partial decoder supports partial read/decode.
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

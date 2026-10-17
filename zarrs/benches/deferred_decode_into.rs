@@ -21,8 +21,8 @@ use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecTraits,
     BytesRepresentation, BytesToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::Configuration;
@@ -43,19 +43,6 @@ impl ExtensionName for DecodeOnly {
 impl CodecTraits for DecodeOnly {
     fn configuration(&self, _: ZarrVersion, _: &CodecMetadataOptions) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 
@@ -107,12 +94,6 @@ impl CodecTraits for OwnedIntermediate {
     ) -> Option<Configuration> {
         self.0.configuration(version, opts)
     }
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        self.0.partial_decoder_capability()
-    }
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        self.0.partial_encoder_capability()
-    }
 }
 
 impl BytesToBytesCodecTraits for OwnedIntermediate {
@@ -157,12 +138,6 @@ impl ExtensionName for OrdinaryBytes {
 impl CodecTraits for OrdinaryBytes {
     fn configuration(&self, _: ZarrVersion, _: &CodecMetadataOptions) -> Option<Configuration> {
         None
-    }
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        DecodeOnly.partial_decoder_capability()
-    }
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        DecodeOnly.partial_encoder_capability()
     }
 }
 

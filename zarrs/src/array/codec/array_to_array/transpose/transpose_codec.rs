@@ -13,8 +13,7 @@ use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
@@ -110,19 +109,6 @@ impl CodecTraits for TransposeCodec {
             order: self.order.clone(),
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 

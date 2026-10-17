@@ -10,16 +10,15 @@ use smallvec::SmallVec;
 use std::num::NonZeroU64;
 use zarrs_chunk_grid::IndexerError;
 use zarrs_codec::plan::{
-    ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, SourceKey,
-    Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_and_update, decode_whole, encode_hint,
-    is_whole_chunk, partial_encode_value, plan_decode_whole,
+    ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, PrepareDecode,
+    SourceDecoder, SourceKey, Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_and_update,
+    decode_whole, encode_hint, is_whole_chunk, partial_encode_value, plan_decode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_storage::byte_range::ByteRange;
@@ -94,19 +93,6 @@ impl CodecTraits for BytesCodec {
             endian: self.endian,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 
@@ -283,6 +269,18 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 decode_into_array_bytes_target(&decoded, target)
             }
         }
+    }
+
+    fn prepare_decode(
+        self: Arc<Self>,
+        source: ByteSource<'static>,
+        shape: &[NonZeroU64],
+        _options: &CodecOptions,
+    ) -> Result<PrepareDecode, CodecError> {
+        // Requests are planned from the source, as only their bytes are read and decoded
+        Ok(PrepareDecode::Ready(Arc::new(SourceDecoder::new(
+            self, source, shape,
+        ))))
     }
 
     fn plan_decode<'a>(

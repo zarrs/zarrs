@@ -23,8 +23,7 @@ use zarrs_codec::plan::{ByteSource, Outcome, Task, local_subchunk_grids_value};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
-    CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
-    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
+    CodecSpecificOptions, UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -109,19 +108,6 @@ impl CodecTraits for DynamicLocalSubchunkCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(Configuration::default())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 
@@ -346,19 +332,6 @@ impl CodecTraits for LocalOnlyReshapeGridCodec {
     ) -> Option<Configuration> {
         None
     }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
-    }
 }
 
 impl UnboundArrayToArrayCodecTraits for LocalOnlyReshapeGridCodec {
@@ -476,19 +449,6 @@ impl CodecTraits for TestSubchunkingCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: true,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: true,
-        }
     }
 }
 

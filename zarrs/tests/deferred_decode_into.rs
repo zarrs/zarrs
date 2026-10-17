@@ -10,8 +10,7 @@ use zarrs::array::{ArraySubset, Endianness, data_type};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    PartialDecoderCapability, PartialEncoderCapability, Resources,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::Configuration;
@@ -43,17 +42,6 @@ impl ExtensionName for Producer {
 impl CodecTraits for Producer {
     fn configuration(&self, _: ZarrVersion, _: &CodecMetadataOptions) -> Option<Configuration> {
         None
-    }
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

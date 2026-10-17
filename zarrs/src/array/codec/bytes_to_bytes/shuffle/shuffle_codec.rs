@@ -6,7 +6,7 @@ use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
+    InvalidBytesLengthError, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -69,19 +69,6 @@ impl CodecTraits for ShuffleCodec {
             elementsize: self.elementsize,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

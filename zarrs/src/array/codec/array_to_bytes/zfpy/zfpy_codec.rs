@@ -8,8 +8,7 @@ use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, PartialDecoderCapability,
-    PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -107,14 +106,6 @@ impl CodecTraits for ZfpyCodec {
             ZfpMode::Expert { .. } => return None, // Expert mode not supported in zfpy
         };
         Some(ZfpyCodecConfiguration::Numcodecs(ZfpyCodecConfigurationNumcodecs { mode }).into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        self.inner.partial_decoder_capability()
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        self.inner.partial_encoder_capability()
     }
 }
 

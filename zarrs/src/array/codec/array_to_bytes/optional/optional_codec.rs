@@ -14,8 +14,8 @@ use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
-    PartialDecoderCapability, PartialEncoderCapability, Resources, UnboundArrayToBytesCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
 
@@ -299,20 +299,6 @@ impl CodecTraits for OptionalCodec {
             data_codecs: self.data_codecs.create_metadatas(options),
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        // For now, disable partial decoding
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

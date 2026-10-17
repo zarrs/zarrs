@@ -7,8 +7,12 @@ use smallvec::SmallVec;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 
 use zarrs_data_type::DataType;
+use zarrs_storage::byte_range::ByteRange;
 
-use super::{ByteSource, DecodeRequest, Join, Outcome, Task, TaskTarget, TaskValue, decode_whole};
+use super::{
+    ByteSource, DecodeRequest, Join, Outcome, Task, TaskTarget, TaskValue, decode_whole,
+    whole_chunk_hint,
+};
 use crate::{
     ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, decode_into_array_bytes_target,
 };
@@ -76,6 +80,45 @@ pub fn prepared(value: TaskValue<'_>) -> Result<Arc<dyn PreparedDecoder>, CodecE
     value
         .into_prepared()
         .ok_or_else(|| CodecError::Other("expected a prepared decoder".to_string()))
+}
+
+/// Prepare a decoder of the chunk `source` of `shape` by reading and decoding the entire chunk once.
+///
+/// The prepared decoder is a [`DecodedDecoder`], or a [`MissingDecoder`] if the chunk does not exist.
+/// This is the default of [`ArrayToBytesCodecTraits::prepare_decode`], for codecs that cannot decode part of a chunk.
+#[must_use]
+pub fn prepare_decode_whole(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    source: ByteSource<'static>,
+    shape: &[NonZeroU64],
+    options: &CodecOptions,
+) -> PrepareDecode {
+    let hint = whole_chunk_hint(&*codec, &source, shape);
+    let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
+    let options = *options;
+    PrepareDecode::Plan(
+        Task::read(
+            source,
+            [ByteRange::FromStart(0, None)],
+            move |mut reads, ctx| {
+                let decoder: Arc<dyn PreparedDecoder> = if let Some(encoded) = reads.pop().flatten()
+                {
+                    let bytes = codec
+                        .decode(encoded, &shape, &options, ctx.resources())?
+                        .into_owned();
+                    Arc::new(DecodedDecoder::new(
+                        bytes,
+                        &shape,
+                        codec.data_type().clone(),
+                    ))
+                } else {
+                    Arc::new(MissingDecoder::new(codec, &shape))
+                };
+                Ok(Outcome::Value(TaskValue::Prepared(decoder)))
+            },
+        )
+        .with_hint(hint),
+    )
 }
 
 /// A decoder that plans each request from a source with [`ArrayToBytesCodecTraits::plan_decode`].

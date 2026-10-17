@@ -116,34 +116,6 @@ impl<'a> From<&'a mut ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoT
     }
 }
 
-/// Describes the partial decoding capabilities of a codec.
-///
-/// The capability describes:
-/// - `partial_read`: Whether the codec can perform partial reading from its input.
-/// - `partial_decode`: Whether the codec supports partial decoding decoding, or it must decode the entire input.
-///
-/// If `partial_read` is false and `partial_decode` is true, input should be cached for optimal performance.
-/// If `partial_decode` is false, a cache should be inserted after this codec in a codec chain partial decoder.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PartialDecoderCapability {
-    /// Whether the codec can perform partial reading from its input.
-    /// If false, the codec needs to read all input data before decoding.
-    pub partial_read: bool,
-    /// Whether the codec supports partial decoding operations.
-    /// If false, the codec needs to decode the entire input.
-    pub partial_decode: bool,
-}
-
-/// Describes the partial encoding capabilities of a codec.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PartialEncoderCapability {
-    /// Whether the codec supports partial encoding operations.
-    ///
-    /// If this returns `true`, the codec can efficiently handle partial encoding operations if supported by the parent codec or storage handle.
-    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
-    pub partial_encode: bool,
-}
-
 mod chunk_grid_mapped {
     use super::ChunkGrid;
 

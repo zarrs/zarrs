@@ -4,8 +4,7 @@ use zarrs_plugin::ZarrVersion;
 
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -39,19 +38,6 @@ impl CodecTraits for TestUnboundedCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: true,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

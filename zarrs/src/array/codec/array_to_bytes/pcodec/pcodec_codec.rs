@@ -16,8 +16,8 @@ use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability, Resources,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    InvalidBytesLengthError, Resources, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::pcodec::{
@@ -140,19 +140,6 @@ impl CodecTraits for PcodecCodec {
         });
 
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

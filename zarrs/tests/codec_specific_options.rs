@@ -13,7 +13,6 @@ use zarrs::array::{
     UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
-use zarrs_codec::{PartialDecoderCapability, PartialEncoderCapability};
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use zarrs_plugin::ZarrVersion;
 
@@ -36,14 +35,6 @@ impl CodecTraits for ProbeCodec {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        self.inner.partial_decoder_capability()
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        self.inner.partial_encoder_capability()
     }
 }
 

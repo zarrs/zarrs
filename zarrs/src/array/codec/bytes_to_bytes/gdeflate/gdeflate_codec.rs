@@ -9,8 +9,7 @@ use super::{
 };
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
 };
 use zarrs_metadata::Configuration;
 
@@ -60,19 +59,6 @@ impl CodecTraits for GDeflateCodec {
             level: self.compression_level,
         });
         Some(configuration.into())
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
     }
 }
 

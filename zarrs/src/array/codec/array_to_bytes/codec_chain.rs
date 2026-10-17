@@ -10,19 +10,18 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::plan::{
-    ArrayToArrayDecodePlan, ByteSource, DecodeRequest, DecodedDecoder, Join, MissingDecoder,
-    Outcome, PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey,
-    SourceStep, Task, TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value,
-    is_whole_chunk, local_subchunk_grids, local_subchunk_grids_value, place_decoded,
-    plan_decode_whole, plan_encode_whole, whole_chunk_hint,
+    ArrayToArrayDecodePlan, ByteSource, DecodeRequest, Join, MissingDecoder, Outcome,
+    PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey, SourceStep, Task,
+    TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, is_whole_chunk,
+    local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
+    plan_encode_whole, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeSource, BytesToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, Resources, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, Resources,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
@@ -102,8 +101,6 @@ pub struct CodecChainBound {
     array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    /// True if an array codec cannot decode part of a chunk, so prepared decoders decode the whole chunk once.
-    decodes_whole: bool,
     /// The array-to-bytes and bytes-to-bytes codecs of the chain, if it has array-to-array codecs (for planning).
     bytes_chain: Option<Arc<CodecChainBound>>,
 }
@@ -145,21 +142,11 @@ impl CodecChain {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let decodes_whole = !self
-            .array_to_bytes
-            .partial_decoder_capability()
-            .partial_decode
-            || self.array_to_array.iter().any(|codec| {
-                let capability = codec.partial_decoder_capability();
-                !capability.partial_read || !capability.partial_decode
-            });
-
         let bytes_chain = (!array_to_array.is_empty()).then(|| {
             Arc::new(CodecChainBound {
                 array_to_array: vec![],
                 array_to_bytes: array_to_bytes.clone(),
                 bytes_to_bytes: bytes_to_bytes.clone(),
-                decodes_whole: false,
                 bytes_chain: None,
             })
         });
@@ -168,7 +155,6 @@ impl CodecChain {
             array_to_array,
             array_to_bytes,
             bytes_to_bytes,
-            decodes_whole,
             bytes_chain,
         }))
     }
@@ -539,50 +525,6 @@ impl CodecTraits for CodecChain {
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
-    }
-
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        // All codecs in the chain must support partial decoding capabilities
-        itertools::chain!(
-            self.array_to_array
-                .iter()
-                .map(|codec| codec.partial_decoder_capability()),
-            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_decoder_capability()),
-            self.bytes_to_bytes
-                .iter()
-                .map(|codec| codec.partial_decoder_capability())
-        )
-        .fold(
-            PartialDecoderCapability {
-                partial_read: true,
-                partial_decode: true,
-            },
-            |acc, capability| PartialDecoderCapability {
-                partial_read: acc.partial_read && capability.partial_read,
-                partial_decode: acc.partial_decode && capability.partial_decode,
-            },
-        )
-    }
-
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        // All codecs in the chain must support partial encoding capabilities
-        itertools::chain!(
-            self.array_to_array
-                .iter()
-                .map(|codec| codec.partial_encoder_capability()),
-            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_encoder_capability()),
-            self.bytes_to_bytes
-                .iter()
-                .map(|codec| codec.partial_encoder_capability())
-        )
-        .fold(
-            PartialEncoderCapability {
-                partial_encode: true,
-            },
-            |acc, capability| PartialEncoderCapability {
-                partial_encode: acc.partial_encode && capability.partial_encode,
-            },
-        )
     }
 }
 
@@ -1065,32 +1007,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<PrepareDecode, CodecError> {
-        if self.decodes_whole {
-            // An array codec cannot decode part of a chunk, so decode the whole chunk once
-            let hint = whole_chunk_hint(&*self, &source, shape);
-            let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
-            let options = *options;
-            return Ok(PrepareDecode::Plan(
-                Task::read(
-                    source,
-                    [ByteRange::FromStart(0, None)],
-                    move |mut reads, ctx| {
-                        let decoder: Arc<dyn PreparedDecoder> = if let Some(encoded) =
-                            reads.pop().flatten()
-                        {
-                            let bytes = self
-                                .decode(encoded, &shape, &options, ctx.resources())?
-                                .into_owned();
-                            Arc::new(DecodedDecoder::new(bytes, &shape, self.data_type().clone()))
-                        } else {
-                            Arc::new(MissingDecoder::new(self.into_dyn(), &shape))
-                        };
-                        Ok(Outcome::Value(TaskValue::Prepared(decoder)))
-                    },
-                )
-                .with_hint(hint),
-            ));
-        }
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             // Requests are mapped through the array-to-array codecs as they are planned
             let array_representations = self.get_array_representations(shape)?;
@@ -1315,19 +1231,6 @@ mod tests {
             _options: &CodecMetadataOptions,
         ) -> Option<Configuration> {
             None
-        }
-
-        fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-            PartialDecoderCapability {
-                partial_read: false,
-                partial_decode: false,
-            }
-        }
-
-        fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-            PartialEncoderCapability {
-                partial_encode: false,
-            }
         }
     }
 

@@ -34,17 +34,6 @@ impl CodecTraits for Producer {
     ) -> Option<zarrs_metadata::Configuration> {
         None
     }
-    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
-        PartialDecoderCapability {
-            partial_read: false,
-            partial_decode: false,
-        }
-    }
-    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
-        PartialEncoderCapability {
-            partial_encode: false,
-        }
-    }
 }
 
 impl BytesToBytesCodecTraits for Producer {
