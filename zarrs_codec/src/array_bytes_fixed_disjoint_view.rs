@@ -284,6 +284,31 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         source_shape: &[u64],
         subset: &dyn ArraySubsetTraits,
     ) -> Result<(), CodecError> {
+        self.try_copy_from_subset_with(source, source_shape, subset, |source, destination| {
+            destination.copy_from_slice(source);
+            Ok(())
+        })
+    }
+
+    /// Copy the elements of `subset` of `source` into the view with a custom copy for each contiguous region.
+    ///
+    /// This is [`copy_from_subset`](Self::copy_from_subset) where `copy` is called with each contiguous region of
+    /// `source` and the region of the view it is destined for, which have the same length and hold whole elements.
+    /// This can transform bytes as they are copied, e.g. to change their endianness.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the length of `source` is not that of an array of `source_shape`, `subset` is
+    /// out-of-bounds of `source_shape`, `subset` does not have as many elements as the view, or `copy` fails.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn try_copy_from_subset_with(
+        &mut self,
+        source: &[u8],
+        source_shape: &[u64],
+        subset: &dyn ArraySubsetTraits,
+        mut copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), CodecError>,
+    ) -> Result<(), CodecError> {
         let size = self.data_type_size;
         let source_len = usize::try_from(source_shape.iter().product::<u64>()).unwrap() * size;
         if source.len() != source_len {
@@ -308,8 +333,9 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                     (destination, destination_len) = (to_bytes(index), to_bytes(elements));
                 }
                 let n = len.min(destination_len);
-                unsafe { self.bytes.index_mut(destination..destination + n) }
-                    .copy_from_slice(&source[offset..offset + n]);
+                copy(&source[offset..offset + n], unsafe {
+                    self.bytes.index_mut(destination..destination + n)
+                })?;
                 (offset, len) = (offset + n, len - n);
                 (destination, destination_len) = (destination + n, destination_len - n);
             }
