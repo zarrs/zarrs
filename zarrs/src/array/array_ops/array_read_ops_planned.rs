@@ -254,38 +254,42 @@ impl ChunkPlanner {
         array_subset: ArraySubset,
         chunks: ArraySubset,
     ) -> Result<Task<'static>, ArrayError> {
-        let overlaps = chunks
+        // The subset and the overlap with the array subset of each chunk
+        let overlaps: Arc<[(ArraySubset, ArraySubset)]> = chunks
             .indices()
             .iter()
             .map(|chunk_indices| {
-                Ok(self
-                    .chunk_subset(&chunk_indices)?
-                    .overlap(&array_subset)?
-                    .relative_to(array_subset.start())?)
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let overlap = chunk_subset.overlap(&array_subset)?;
+                Ok((chunk_subset, overlap))
             })
-            .collect::<Result<Vec<_>, ArrayError>>()?;
+            .collect::<Result<_, ArrayError>>()?;
+        let output_start = array_subset.start().to_vec();
         let output_shape = array_subset.shape().to_vec();
         let planner = self.clone();
-        let tasks = Generator::indexed(chunks.num_elements_usize(), move |i| {
-            let chunk_indices = subset_indices_at(&chunks, i as u64);
-            let chunk_subset = planner.chunk_subset(&chunk_indices).map_err(plan_error)?;
-            let overlap = chunk_subset.overlap(&array_subset)?;
-            planner
-                .plan_chunk(
-                    SourceKey(i),
-                    subset_chunk_shape(&chunk_subset).map_err(plan_error)?,
-                    PlanIndexer::Subset(overlap.relative_to(chunk_subset.start())?),
-                    TaskTarget::Value,
-                )
-                .map(Some)
+        let tasks = Generator::indexed(overlaps.len(), {
+            let overlaps = overlaps.clone();
+            move |i| {
+                let (chunk_subset, overlap) = &overlaps[i];
+                planner
+                    .plan_chunk(
+                        SourceKey(i),
+                        subset_chunk_shape(chunk_subset).map_err(plan_error)?,
+                        PlanIndexer::Subset(overlap.relative_to(chunk_subset.start())?),
+                        TaskTarget::Value,
+                    )
+                    .map(Some)
+            }
         });
         let data_type = self.data_type.clone();
         Ok(Task::compute(move |_| {
             Ok(Outcome::Generate {
                 children: tasks,
                 join: Some(Join::new(move |values, _ctx| {
-                    let chunks = std::iter::zip(values, overlaps)
-                        .map(|(value, overlap)| Ok((array_value(value)?, overlap)))
+                    let chunks = std::iter::zip(values, overlaps.iter())
+                        .map(|(value, (_, overlap))| {
+                            Ok((array_value(value)?, overlap.relative_to(&output_start)?))
+                        })
                         .collect::<Result<Vec<_>, CodecError>>()?;
                     Ok(Outcome::Value(TaskValue::Array(merge_chunks(
                         chunks,
@@ -933,16 +937,15 @@ pub(super) fn subset_chunk_shape(chunk_subset: &ArraySubset) -> Result<&[NonZero
 
 #[cfg(feature = "async")]
 mod async_planned {
-    use zarrs_codec::plan::{AsyncIo, drive_async_one};
+    use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
     use zarrs_storage::{AsyncReadableStorage, AsyncReadableStorageTraits};
 
     use super::{
         Array, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayError, ArraySubset, ArraySubsetTraits,
         ByteRange, Bytes, ChunkKeys, CodecOptions, EncodedSubchunk, Indexer, NonZeroU64,
         PlanIndexer, ReadBytes, Resources, SmallVec, SourceKey, StorageError, StorageHandle,
-        StoreKey, SubsetPlan, Task, TaskTarget, TaskValue, array_value, check_target_len,
-        chunk_if_exists, encoded_chunks, encoded_subchunk, plan_encoded_chunks, smallvec,
-        whole_views,
+        StoreKey, SubsetPlan, TaskTarget, array_value, check_target_len, chunk_if_exists,
+        encoded_chunks, encoded_subchunk, plan_encoded_chunks, smallvec, whole_views,
     };
 
     /// The asynchronous I/O backend of the chunks of an array.
@@ -996,18 +999,6 @@ mod async_planned {
                 Ok(Some(bytes))
             }
         }
-    }
-
-    /// Drive a task that does not borrow, with compute offloaded to Rayon where supported.
-    pub(super) async fn drive_owned(
-        task: Task<'static>,
-        io: &AsyncChunkIo,
-        resources: &Resources,
-    ) -> Result<TaskValue<'static>, ArrayError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        return Ok(zarrs_codec::plan::drive_async_offload_one(task, io, resources).await?);
-        #[cfg(target_arch = "wasm32")]
-        return Ok(drive_async_one(task, io, resources).await?);
     }
 
     impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
@@ -1065,7 +1056,7 @@ mod async_planned {
         ) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
             let (task, keys) = self.plan_chunk_if_exists(chunk_indices, options)?;
             let io = self.async_chunk_io(keys).await?;
-            chunk_if_exists(drive_owned(task, &io, resources).await?)
+            chunk_if_exists(drive_async_offload_one(task, &io, resources).await?)
         }
 
         /// Retrieve `array_subset` with a planned read.
@@ -1082,7 +1073,7 @@ mod async_planned {
             let value = match task {
                 Some(task) => {
                     let io = self.async_chunk_io(keys).await?;
-                    Some(drive_owned(task, &io, resources).await?)
+                    Some(drive_async_offload_one(task, &io, resources).await?)
                 }
                 None => None,
             };
@@ -1127,7 +1118,8 @@ mod async_planned {
                 options,
             )?;
             let io = self.async_chunk_io(keys).await?;
-            let bytes = array_value(drive_owned(task, &io, resources).await?)?.into_owned();
+            let bytes =
+                array_value(drive_async_offload_one(task, &io, resources).await?)?.into_owned();
             bytes.validate(num_elements, self.data_type())?;
             Ok(bytes)
         }
@@ -1152,7 +1144,7 @@ mod async_planned {
                     options,
                 )?;
                 let io = self.async_chunk_io(keys).await?;
-                array_value(drive_owned(task, &io, resources).await?)?.into_owned()
+                array_value(drive_async_offload_one(task, &io, resources).await?)?.into_owned()
             } else {
                 let (task, keys) = self.plan_partial_chunk(
                     chunk_indices,

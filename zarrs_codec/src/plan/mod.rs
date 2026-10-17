@@ -21,12 +21,12 @@ pub use decode::{
     local_subchunk_grids_value, place_decoded, place_fill_value, plan_decode_request_elementwise,
     plan_decode_whole, whole_chunk_hint,
 };
+#[cfg(all(feature = "async", not(target_arch = "wasm32")))]
+pub use driver::OFFLOAD_THRESHOLD;
 #[cfg(not(target_family = "wasm"))]
 pub use driver::{IoPool, IoScope, drive_sync, drive_sync_one};
-#[cfg(all(feature = "async", not(target_arch = "wasm32")))]
-pub use driver::{OFFLOAD_THRESHOLD, drive_async_offload, drive_async_offload_one};
 #[cfg(feature = "async")]
-pub use driver::{drive_async, drive_async_one};
+pub use driver::{drive_async, drive_async_offload, drive_async_offload_one, drive_async_one};
 pub use driver::{drive_blocking_one, drive_memory_one, drive_serial, drive_serial_one};
 pub use encode::{
     PartialEncodeState, decode_and_update, encode_and_write, encode_hint, encoded_value,

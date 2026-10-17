@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
   - `TargetViews`, `SharedOutput` (and `SharedOutput::for_data_type`), `TaskTarget`, `DecodeRequest` and `PlanIndexer`
   - The `SyncIo` and `AsyncIo` backends, and the `drive_serial`, `drive_sync`, `drive_async` and `drive_async_offload` drivers
+    - `drive_async_offload` is `drive_async` on `wasm32`
   - `IoPool`, a scoped thread pool for blocking I/O
 - Add `build_nested_optional_target` and `extract_target_views`
 - Add planned decoding to the codec traits

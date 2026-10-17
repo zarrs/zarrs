@@ -13,9 +13,11 @@ mod sync;
 mod tests;
 
 #[cfg(all(feature = "async", not(target_arch = "wasm32")))]
-pub use asynchronous::{OFFLOAD_THRESHOLD, drive_async_offload, drive_async_offload_one};
+pub use asynchronous::OFFLOAD_THRESHOLD;
 #[cfg(feature = "async")]
-pub use asynchronous::{drive_async, drive_async_one};
+pub use asynchronous::{
+    drive_async, drive_async_offload, drive_async_offload_one, drive_async_one,
+};
 #[cfg(not(target_family = "wasm"))]
 pub use io_pool::{IoPool, IoScope};
 pub use serial::{drive_serial, drive_serial_one};

@@ -399,7 +399,9 @@ mod async_partial_decoder {
     use zarrs_data_type::DataType;
     use zarrs_storage::{AsyncReadableStorageTraits, StorageError};
 
-    use super::super::async_planned::{AsyncChunkIo, drive_owned};
+    use zarrs_codec::plan::drive_async_offload_one;
+
+    use super::super::async_planned::AsyncChunkIo;
     use super::{
         Array, ArrayBytes, ArrayError, Indexer, PlannedChunk, SourceKey, array_to_codec_error,
         array_value, check_target_len, whole_views,
@@ -469,9 +471,7 @@ mod async_partial_decoder {
                     },
                     options,
                 )?;
-                drive_owned(task, &self.io, resources)
-                    .await
-                    .map_err(array_to_codec_error)?
+                drive_async_offload_one(task, &self.io, resources).await?
             } else {
                 let task = self
                     .chunk
@@ -522,7 +522,9 @@ mod async_partial_decoder {
             let io = self.async_chunk_io(keys).await?;
             let decoder = match prepare {
                 PrepareDecode::Ready(decoder) => decoder,
-                PrepareDecode::Plan(task) => prepared(drive_owned(task, &io, resources).await?)?,
+                PrepareDecode::Plan(task) => {
+                    prepared(drive_async_offload_one(task, &io, resources).await?)?
+                }
             };
             Ok(Arc::new(AsyncPlannedArrayPartialDecoder {
                 chunk: PlannedChunk {

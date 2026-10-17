@@ -83,18 +83,22 @@ pub async fn drive_async_one<'a>(
 ///
 /// Tasks must be `'static` because the drive can be cancelled (dropped) while compute steps are running.
 ///
+/// On `wasm32`, where there is no Rayon, this is [`drive_async`].
+///
 /// # Errors
 /// Returns the first error of a read, write, or compute step.
 ///
 /// # Panics
 /// Resumes the first panic of an offloaded compute step once the work in flight completes.
-#[cfg(not(target_arch = "wasm32"))]
 pub async fn drive_async_offload(
     tasks: Vec<Task<'static>>,
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<Vec<TaskValue<'static>>, CodecError> {
-    drive(tasks, io, resources, runs_inline, offload).await
+    #[cfg(not(target_arch = "wasm32"))]
+    return drive(tasks, io, resources, runs_inline, offload).await;
+    #[cfg(target_arch = "wasm32")]
+    return drive_async(tasks, io, resources).await;
 }
 
 /// Execute `task` as [`drive_async_offload`], returning its value.
@@ -104,13 +108,15 @@ pub async fn drive_async_offload(
 ///
 /// # Panics
 /// Resumes the first panic of an offloaded compute step once the work in flight completes.
-#[cfg(not(target_arch = "wasm32"))]
 pub async fn drive_async_offload_one(
     task: Task<'static>,
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<TaskValue<'static>, CodecError> {
-    drive_one(task, io, resources, runs_inline, offload).await
+    #[cfg(not(target_arch = "wasm32"))]
+    return drive_one(task, io, resources, runs_inline, offload).await;
+    #[cfg(target_arch = "wasm32")]
+    return drive_async_one(task, io, resources).await;
 }
 
 /// Returns true if the compute step of `task` is small enough to run on the polling task (see [`offload`]).

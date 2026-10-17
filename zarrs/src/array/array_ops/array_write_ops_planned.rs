@@ -349,7 +349,7 @@ fn is_shared(bytes: &ArrayBytes<'_>) -> bool {
 
 #[cfg(feature = "async")]
 pub(super) mod async_planned {
-    use zarrs_codec::plan::{AsyncIo, drive_async_one};
+    use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
     use zarrs_storage::{
         AsyncReadableWritableStorage, AsyncReadableWritableStorageTraits, AsyncWritableStorage,
         AsyncWritableStorageTraits,
@@ -359,8 +359,7 @@ pub(super) mod async_planned {
     use super::{
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange,
         ChunkKeys, CodecOptions, Indexer, PlanIndexer, ReadBytes, Resources, SourceKey,
-        StorageError, StorageHandle, Task, WriteOp, is_shared, plan_erase_chunks,
-        plan_store_subset,
+        StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks, plan_store_subset,
     };
 
     /// Perform the write `op` to the chunks of `keys` in `storage`.
@@ -430,19 +429,6 @@ pub(super) mod async_planned {
         }
     }
 
-    /// Drive a task that does not borrow, with compute offloaded to Rayon where supported.
-    async fn drive_owned(
-        task: Task<'static>,
-        io: &dyn AsyncIo,
-        resources: &Resources,
-    ) -> Result<(), ArrayError> {
-        #[cfg(not(target_arch = "wasm32"))]
-        zarrs_codec::plan::drive_async_offload_one(task, io, resources).await?;
-        #[cfg(target_arch = "wasm32")]
-        drive_async_one(task, io, resources).await?;
-        Ok(())
-    }
-
     impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         /// The I/O backend for writing the chunks of `keys`.
         async fn async_chunk_write_io(
@@ -497,7 +483,8 @@ pub(super) mod async_planned {
                 let io = self
                     .async_chunk_write_io(self.one_key(chunk_indices)?)
                     .await?;
-                return drive_owned(task, &io, resources).await;
+                drive_async_offload_one(task, &io, resources).await?;
+                return Ok(());
             }
             let encoded =
                 if !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value()) {
@@ -539,7 +526,8 @@ pub(super) mod async_planned {
                 let bytes = Arc::new(chunks_bytes.into_owned());
                 let task =
                     plan_store_subset(planner, chunks.clone(), array_subset.clone(), bytes, false);
-                drive_owned(task, &io, resources).await
+                drive_async_offload_one(task, &io, resources).await?;
+                Ok(())
             } else {
                 let task = plan_store_subset(
                     planner,
@@ -596,7 +584,8 @@ pub(super) mod async_planned {
                     bytes,
                     set_partial,
                 );
-                drive_owned(task, &io, resources).await
+                drive_async_offload_one(task, &io, resources).await?;
+                Ok(())
             } else {
                 let task = plan_store_subset(
                     planner,
@@ -638,7 +627,8 @@ pub(super) mod async_planned {
                     set_partial,
                     options,
                 )?;
-                return drive_owned(task, &io, resources).await;
+                drive_async_offload_one(task, &io, resources).await?;
+                return Ok(());
             }
             let task = self.codecs_bound().plan_partial_encode(
                 SourceKey(0),
