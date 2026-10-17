@@ -82,10 +82,7 @@ impl<'a> IntoIterator for &'a Indices {
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIterator {
-            subset: &self.subset,
-            range: self.range.clone(),
-        }
+        IndicesIterator::new(&self.subset, self.range.clone())
     }
 }
 
@@ -118,10 +115,7 @@ impl IntoIterator for Indices {
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIntoIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIntoIterator::new(self.subset, self.range)
     }
 }
 
@@ -142,8 +136,10 @@ impl IntoParallelIterator for Indices {
 /// See [`Indices`].
 #[derive(Clone)]
 pub struct IndicesIterator<'a> {
-    pub(crate) subset: &'a ArraySubset,
-    pub(crate) range: std::ops::Range<usize>,
+    subset: &'a ArraySubset,
+    range: std::ops::Range<usize>,
+    /// The indices of the next element from the front, if any.
+    front: ArrayIndicesTinyVec,
 }
 
 /// Serial indices iterator.
@@ -151,8 +147,32 @@ pub struct IndicesIterator<'a> {
 /// See [`Indices`].
 #[derive(Clone)]
 pub struct IndicesIntoIterator {
-    pub(crate) subset: ArraySubset,
-    pub(crate) range: std::ops::Range<usize>,
+    subset: ArraySubset,
+    range: std::ops::Range<usize>,
+    /// The indices of the next element from the front, if any.
+    front: ArrayIndicesTinyVec,
+}
+
+impl<'a> IndicesIterator<'a> {
+    pub(crate) fn new(subset: &'a ArraySubset, range: std::ops::Range<usize>) -> Self {
+        let front = indices_at(subset, &range);
+        Self {
+            subset,
+            range,
+            front,
+        }
+    }
+}
+
+impl IndicesIntoIterator {
+    pub(crate) fn new(subset: ArraySubset, range: std::ops::Range<usize>) -> Self {
+        let front = indices_at(&subset, &range);
+        Self {
+            subset,
+            range,
+            front,
+        }
+    }
 }
 
 /// Compute indices from a linear index for dimensionality 1, adding subset start offset.
@@ -210,27 +230,60 @@ fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayInd
     Some(indices)
 }
 
+/// The indices of the element at `index` in `subset`.
+#[inline]
+fn unravel_subset_index(subset: &ArraySubset, index: usize) -> Option<ArrayIndicesTinyVec> {
+    let index = index as u64;
+    let shape = subset.shape();
+    let start = subset.start();
+    match shape.len() {
+        0 => Some(ArrayIndicesTinyVec::new()),
+        1 => Some(unravel_index_1d(index, shape, start)),
+        2 => Some(unravel_index_2d(index, shape, start)),
+        3 => Some(unravel_index_3d(index, shape, start)),
+        4 => Some(unravel_index_4d(index, shape, start)),
+        _ => unravel_index_nd(index, shape, start),
+    }
+}
+
+/// The indices of the first element of `range` in `subset`, or no indices if `range` is empty.
+fn indices_at(subset: &ArraySubset, range: &std::ops::Range<usize>) -> ArrayIndicesTinyVec {
+    if range.is_empty() {
+        ArrayIndicesTinyVec::new()
+    } else {
+        unravel_subset_index(subset, range.start).unwrap_or_default()
+    }
+}
+
 macro_rules! impl_indices_iterator {
     ($iterator_type:ty) => {
         impl Iterator for $iterator_type {
             type Item = ArrayIndicesTinyVec;
 
+            /// Steps the indices of the front element like an odometer, by incrementing the innermost index and
+            /// carrying into outer dimensions, so that no index is unravelled.
+            #[inline]
             fn next(&mut self) -> Option<Self::Item> {
-                if self.range.start >= self.range.end {
+                if self.range.is_empty() {
                     return None;
                 }
-                let index = self.range.start as u64;
+                let indices = self.front.clone();
                 self.range.start += 1;
-                let shape = self.subset.shape();
-                let start = self.subset.start();
-                match shape.len() {
-                    0 => Some(ArrayIndicesTinyVec::new()),
-                    1 => Some(unravel_index_1d(index, &shape, &start)),
-                    2 => Some(unravel_index_2d(index, &shape, &start)),
-                    3 => Some(unravel_index_3d(index, &shape, &start)),
-                    4 => Some(unravel_index_4d(index, &shape, &start)),
-                    _ => unravel_index_nd(index, &shape, &start),
+                if !self.range.is_empty() {
+                    let subset_start = self.subset.start();
+                    let subset_shape = self.subset.shape();
+                    for ((index, &start), &size) in std::iter::zip(&mut self.front, subset_start)
+                        .zip(subset_shape)
+                        .rev()
+                    {
+                        *index += 1;
+                        if *index < start + size {
+                            break;
+                        }
+                        *index = start;
+                    }
                 }
+                Some(indices)
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
@@ -241,22 +294,8 @@ macro_rules! impl_indices_iterator {
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                if self.range.end > self.range.start {
-                    self.range.end -= 1;
-                    let index = self.range.end as u64;
-                    let shape = self.subset.shape();
-                    let start = self.subset.start();
-                    match shape.len() {
-                        0 => Some(ArrayIndicesTinyVec::new()),
-                        1 => Some(unravel_index_1d(index, &shape, &start)),
-                        2 => Some(unravel_index_2d(index, &shape, &start)),
-                        3 => Some(unravel_index_3d(index, &shape, &start)),
-                        4 => Some(unravel_index_4d(index, &shape, &start)),
-                        _ => unravel_index_nd(index, &shape, &start),
-                    }
-                } else {
-                    None
-                }
+                let index = self.range.next_back()?;
+                unravel_subset_index(&self.subset, index)
             }
         }
 
@@ -326,10 +365,7 @@ impl<'a> Producer for ParIndicesIterator<'a> {
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIterator::new(self.subset, self.range)
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
@@ -350,10 +386,7 @@ impl Producer for ParIndicesIntoIterator {
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIntoIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIntoIterator::new(self.subset, self.range)
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {

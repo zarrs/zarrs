@@ -131,10 +131,7 @@ impl<'a> IntoIterator for &'a ContiguousIndices {
     fn into_iter(self) -> Self::IntoIter {
         let n_elements = self.subset_contiguous_start.num_elements_usize();
         ContiguousIndicesIterator {
-            inner: IndicesIterator {
-                subset: &self.subset_contiguous_start,
-                range: 0..n_elements,
-            },
+            inner: IndicesIterator::new(&self.subset_contiguous_start, 0..n_elements),
             contiguous_elements: self.contiguous_elements,
         }
     }
@@ -147,10 +144,7 @@ impl IntoIterator for ContiguousIndices {
     fn into_iter(self) -> Self::IntoIter {
         let n_elements = self.subset_contiguous_start.num_elements_usize();
         ContiguousIndicesIntoIterator {
-            inner: IndicesIntoIterator {
-                subset: self.subset_contiguous_start,
-                range: 0..n_elements,
-            },
+            inner: IndicesIntoIterator::new(self.subset_contiguous_start, 0..n_elements),
             contiguous_elements: self.contiguous_elements,
         }
     }
@@ -159,6 +153,7 @@ impl IntoIterator for ContiguousIndices {
 /// Serial contiguous indices iterator.
 ///
 /// See [`ContiguousIndices`].
+#[derive(Clone)]
 pub struct ContiguousIndicesIterator<'a> {
     inner: IndicesIterator<'a>,
     contiguous_elements: u64,
@@ -167,6 +162,7 @@ pub struct ContiguousIndicesIterator<'a> {
 /// Serial contiguous indices iterator.
 ///
 /// See [`ContiguousIndices`].
+#[derive(Clone)]
 pub struct ContiguousIndicesIntoIterator {
     inner: IndicesIntoIterator,
     contiguous_elements: u64,
