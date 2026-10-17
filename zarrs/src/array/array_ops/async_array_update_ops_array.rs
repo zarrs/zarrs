@@ -36,7 +36,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
+                Box::new(array_subset.to_array_subset()),
                 self.shape().to_vec(),
             ));
         }
@@ -45,7 +45,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
+                Box::new(array_subset.to_array_subset()),
                 self.shape().to_vec(),
             ));
         };
@@ -142,7 +142,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if !chunk_subset.inbounds_shape(&chunk_shape) {
                 return Err(ArrayError::InvalidChunkSubset(
-                    chunk_subset.to_array_subset(),
+                    Box::new(chunk_subset.to_array_subset()),
                     chunk_indices.to_vec(),
                     chunk_shape,
                 ));

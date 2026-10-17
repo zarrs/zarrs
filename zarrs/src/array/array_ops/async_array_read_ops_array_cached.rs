@@ -32,13 +32,13 @@ where
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
-            array_subset.to_array_subset(),
+            Box::new(array_subset.to_array_subset()),
             array.shape().to_vec(),
         ));
     }
     let Some(chunks) = array.chunks_in_array_subset(array_subset)? else {
         return Err(ArrayError::InvalidArraySubset(
-            array_subset.to_array_subset(),
+            Box::new(array_subset.to_array_subset()),
             array.shape().to_vec(),
         ));
     };

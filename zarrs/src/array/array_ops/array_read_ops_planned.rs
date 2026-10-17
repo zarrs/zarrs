@@ -415,7 +415,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
         array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ArraySubset, ArrayError> {
         let invalid = || {
-            ArrayError::InvalidArraySubset(array_subset.to_array_subset(), self.shape().to_vec())
+            ArrayError::InvalidArraySubset(
+                Box::new(array_subset.to_array_subset()),
+                self.shape().to_vec(),
+            )
         };
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(invalid());

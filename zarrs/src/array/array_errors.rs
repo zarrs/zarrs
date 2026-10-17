@@ -119,10 +119,10 @@ pub enum ArrayError {
     ArraySubsetError(#[from] ArraySubsetError),
     /// Incompatible array subset.
     #[error("array subset {_0} is not compatible with array shape {_1:?}")]
-    InvalidArraySubset(ArraySubset, ArrayShape),
+    InvalidArraySubset(Box<ArraySubset>, ArrayShape),
     /// Incompatible chunk subset.
     #[error("chunk subset {_0} is not compatible with chunk {_1:?} with shape {_2:?}")]
-    InvalidChunkSubset(ArraySubset, ArrayIndices, ArrayShape),
+    InvalidChunkSubset(Box<ArraySubset>, ArrayIndices, ArrayShape),
     /// An unexpected chunk decoded size.
     #[error("got chunk decoded size {_0:?}, expected {_1:?}")]
     UnexpectedChunkDecodedSize(usize, usize),

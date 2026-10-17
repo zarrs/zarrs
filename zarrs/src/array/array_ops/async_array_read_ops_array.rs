@@ -265,7 +265,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             && !chunk_subset.inbounds_shape(chunk_shape_u64)
         {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.to_array_subset(),
+                Box::new(chunk_subset.to_array_subset()),
                 chunk_shape_u64.to_vec(),
             ));
         }
@@ -297,7 +297,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             && !chunk_subset.inbounds_shape(chunk_shape_u64)
         {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.to_array_subset(),
+                Box::new(chunk_subset.to_array_subset()),
                 chunk_shape_u64.to_vec(),
             ));
         }
