@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 
+use super::array_read_ops_array_cached::OverlapSource;
 use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
 use crate::array::array_bytes_internal::merge_cached_chunks;
 use crate::array::chunk_cache::{
-    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    fill_value_bytes,
+    AsyncChunkCache, Sealed, SealedAsync, async_retrieve_chunk_bytes,
+    async_retrieve_chunk_overlap_bytes, fill_value_bytes,
 };
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
 use zarrs_codec::plan::SharedOutput;
@@ -154,20 +155,36 @@ where
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let overlap = chunk_subset.overlap(array_subset)?;
             let output_subset = overlap.relative_to(array_subset_start)?;
-            let bytes = async_retrieve_chunk_overlap_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset,
-                &overlap,
-                options,
-                resources,
-            )
-            .await?;
+            let source = if C::Value::HOLDS_DECODED {
+                // The elements are copied from the decoded chunk, rather than extracted then copied
+                let chunk = C::Value::async_retrieve_chunk_bytes_if_exists(
+                    cache,
+                    array,
+                    &chunk_indices,
+                    options,
+                    resources,
+                )
+                .await?;
+                OverlapSource::Chunk(chunk, overlap.relative_to(chunk_subset.start())?)
+            } else {
+                OverlapSource::Overlap(
+                    async_retrieve_chunk_overlap_bytes(
+                        cache,
+                        array,
+                        &chunk_indices,
+                        &chunk_subset,
+                        &overlap,
+                        options,
+                        resources,
+                    )
+                    .await?,
+                )
+            };
             // SAFETY: the chunks are disjoint
             unsafe {
                 views.with_subdivided(output_subset, |views| {
-                    views.with_target(|target| decode_into_array_bytes_target(&bytes, target))
+                    views
+                        .with_target(|target| source.copy_into(array, chunk_subset.shape(), target))
                 })
             }??;
             Ok::<_, ArrayError>(())

@@ -133,10 +133,16 @@ mod chunk_cache_type_sealed {
         ChunkCacheTypeAsyncPartialDecoder,
     };
 
-    pub trait Sealed {}
+    pub trait Sealed {
+        /// Whether a value holds the decoded chunk, so the elements of a chunk subset can be copied from it without
+        /// extracting them first.
+        const HOLDS_DECODED: bool = false;
+    }
 
     impl Sealed for ChunkCacheTypeEncoded {}
-    impl Sealed for ChunkCacheTypeDecoded {}
+    impl Sealed for ChunkCacheTypeDecoded {
+        const HOLDS_DECODED: bool = true;
+    }
     impl Sealed for ChunkCacheTypePartialDecoder {}
     #[cfg(feature = "async")]
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
@@ -228,7 +234,7 @@ mod chunk_cache_type_sealed {
 
 #[cfg(feature = "async")]
 pub(crate) use chunk_cache_type_sealed::SealedAsync;
-pub(crate) use chunk_cache_type_sealed::SealedSync;
+pub(crate) use chunk_cache_type_sealed::{Sealed, SealedSync};
 
 /// A chunk cache.
 ///

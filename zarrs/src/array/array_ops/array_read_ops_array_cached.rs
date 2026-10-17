@@ -8,13 +8,13 @@ use super::{ArrayReadOps, *};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::merge_cached_chunks;
 use crate::array::chunk_cache::{
-    SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+    Sealed, SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
 use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
 use zarrs_codec::plan::SharedOutput;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError,
-    decode_into_array_bytes_target,
+    copy_array_subset_into_target, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::Bytes;
 
@@ -126,6 +126,38 @@ where
     .into())
 }
 
+/// The source of the elements of the overlap of a chunk with an array subset in a cached read.
+pub(super) enum OverlapSource {
+    /// The elements of the overlap.
+    Overlap(Arc<ArrayBytes<'static>>),
+    /// The decoded chunk (or [`None`] if it does not exist), and the overlap relative to the chunk.
+    Chunk(Option<Arc<ArrayBytes<'static>>>, ArraySubset),
+}
+
+impl OverlapSource {
+    /// Copy the elements of the overlap into `target`, given the shape of the chunk.
+    pub(super) fn copy_into<TStorage: ?Sized>(
+        &self,
+        array: &Array<TStorage>,
+        chunk_shape: &[u64],
+        target: ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Result<(), CodecError> {
+        match self {
+            Self::Overlap(bytes) => decode_into_array_bytes_target(bytes, target),
+            Self::Chunk(Some(chunk), overlap) => copy_array_subset_into_target(
+                chunk,
+                chunk_shape,
+                overlap,
+                array.data_type(),
+                target,
+            ),
+            Self::Chunk(None, _) => {
+                copy_fill_value_into(array.data_type(), array.fill_value(), target)
+            }
+        }
+    }
+}
+
 fn retrieve_multi_chunk_fixed<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
@@ -146,19 +178,31 @@ where
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let overlap = chunk_subset.overlap(array_subset)?;
         let output_subset = overlap.relative_to(&array_subset_start)?;
-        let bytes = retrieve_chunk_overlap_bytes(
-            cache,
-            array,
-            &chunk_indices,
-            &chunk_subset,
-            &overlap,
-            options,
-            resources,
-        )?;
+        let source = if C::Value::HOLDS_DECODED {
+            // The elements are copied from the decoded chunk, rather than extracted then copied
+            let chunk = C::Value::retrieve_chunk_bytes_if_exists(
+                cache,
+                array,
+                &chunk_indices,
+                options,
+                resources,
+            )?;
+            OverlapSource::Chunk(chunk, overlap.relative_to(chunk_subset.start())?)
+        } else {
+            OverlapSource::Overlap(retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset,
+                &overlap,
+                options,
+                resources,
+            )?)
+        };
         // SAFETY: the chunks are disjoint
         unsafe {
             views.with_subdivided(output_subset, |views| {
-                views.with_target(|target| decode_into_array_bytes_target(&bytes, target))
+                views.with_target(|target| source.copy_into(array, chunk_subset.shape(), target))
             })
         }??;
         Ok::<_, ArrayError>(())
