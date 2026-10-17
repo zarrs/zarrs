@@ -20,6 +20,7 @@ use zarrs_storage::{
     WritableStorage, WritableStorageTraits,
 };
 
+use super::super::codec::CodecChainBound;
 use super::array_read_ops_planned::{
     ChunkKeys, ChunkPlanner, drive_blocking_one, plan_error, read_ranges, subset_chunk_shape,
 };
@@ -98,10 +99,20 @@ impl ChunkPlanner {
         shape: &[NonZeroU64],
         bytes: ArrayBytes<'a>,
     ) -> Task<'a> {
+        Self::plan_store_with(self.codecs.clone(), self.options, key, shape, bytes)
+    }
+
+    /// Plan storing `bytes`, the chunk of `shape` with source `key`, with `codecs`.
+    fn plan_store_with<'a>(
+        codecs: Arc<CodecChainBound>,
+        options: CodecOptions,
+        key: SourceKey,
+        shape: &[NonZeroU64],
+        bytes: ArrayBytes<'a>,
+    ) -> Task<'a> {
         let hint = encode_hint(&bytes);
-        let codecs: Arc<dyn ArrayToBytesCodecTraits> = self.codecs.clone();
+        let codecs: Arc<dyn ArrayToBytesCodecTraits> = codecs;
         let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
-        let options = self.options;
         Task::compute(move |ctx| encode_and_write(codecs, key, &shape, bytes, &options, ctx))
             .with_hint(hint)
     }
@@ -210,9 +221,6 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Store `chunk_bytes` (validated) at `chunk_indices` with a planned write.
-    ///
-    /// A chunk of codecs that plan no encode tasks of their own is encoded and written directly, under the I/O limit
-    /// of `resources`.
     pub(crate) fn store_chunk_planned(
         &self,
         chunk_indices: &[u64],
@@ -221,31 +229,15 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let shape = self.chunk_shape(chunk_indices)?;
-        let codecs = self.codecs_bound();
-        if codecs.plans_encode_subtasks() {
-            let task = self
-                .chunk_planner(options)
-                .plan_store(SourceKey(0), &shape, chunk_bytes);
-            let io = self.chunk_write_io(self.one_key(chunk_indices)?)?;
-            drive_blocking_one(task, &io, resources)?;
-            return Ok(());
-        }
-        let encoded =
-            if !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value()) {
-                None
-            } else {
-                Some(codecs.encode(chunk_bytes, &shape, options, resources)?)
-            };
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        let key = self.chunk_key(chunk_indices)?;
-        let _permit = resources.io_permit_blocking();
-        match encoded {
-            Some(encoded) => storage.set(&key, encoded)?,
-            None => storage.erase(&key)?,
-        }
+        let task = ChunkPlanner::plan_store_with(
+            self.codecs_bound(),
+            *options,
+            SourceKey(0),
+            &shape,
+            chunk_bytes,
+        );
+        let io = self.chunk_write_io(self.one_key(chunk_indices)?)?;
+        drive_blocking_one(task, &io, resources)?;
         Ok(())
     }
 
@@ -358,8 +350,9 @@ pub(super) mod async_planned {
     use super::super::array_read_ops_planned::async_read_ranges;
     use super::{
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange,
-        ChunkKeys, CodecOptions, Indexer, PlanIndexer, ReadBytes, Resources, SourceKey,
-        StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks, plan_store_subset,
+        ChunkKeys, ChunkPlanner, CodecOptions, Indexer, PlanIndexer, ReadBytes, Resources,
+        SourceKey, StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks,
+        plan_store_subset,
     };
 
     /// Perform the write `op` to the chunks of `keys` in `storage`.
@@ -461,9 +454,7 @@ pub(super) mod async_planned {
 
         /// Store `chunk_bytes` (validated) at `chunk_indices` with a planned write.
         ///
-        /// A chunk of codecs that plan encode tasks of their own (e.g. a shard) is encoded by those tasks offloaded to
-        /// Rayon if `chunk_bytes` are not borrowed. Otherwise, the chunk is encoded on the polling task and written
-        /// directly, under the I/O limit of `resources`.
+        /// Compute is offloaded to Rayon if `chunk_bytes` are not borrowed, and otherwise runs on the polling task.
         pub(crate) async fn async_store_chunk_planned(
             &self,
             chunk_indices: &[u64],
@@ -472,36 +463,27 @@ pub(super) mod async_planned {
             resources: &Resources,
         ) -> Result<(), ArrayError> {
             let shape = self.chunk_shape(chunk_indices)?;
-            let codecs = self.codecs_bound();
-            if codecs.plans_encode_subtasks() && is_shared(&chunk_bytes) {
-                // The encode tasks are offloaded to Rayon
-                let task = self.chunk_planner(options).plan_store(
+            let io = self
+                .async_chunk_write_io(self.one_key(chunk_indices)?)
+                .await?;
+            if is_shared(&chunk_bytes) {
+                let task = ChunkPlanner::plan_store_with(
+                    self.codecs_bound(),
+                    *options,
                     SourceKey(0),
                     &shape,
                     chunk_bytes.into_owned(),
                 );
-                let io = self
-                    .async_chunk_write_io(self.one_key(chunk_indices)?)
-                    .await?;
                 drive_async_offload_one(task, &io, resources).await?;
-                return Ok(());
-            }
-            let encoded =
-                if !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value()) {
-                    None
-                } else {
-                    Some(codecs.encode(chunk_bytes, &shape, options, resources)?)
-                };
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            let storage = self
-                .storage_transformers()
-                .create_async_writable_transformer(storage_handle)
-                .await?;
-            let key = self.chunk_key(chunk_indices)?;
-            let _permit = resources.io_permit().await;
-            match encoded {
-                Some(encoded) => storage.set(&key, encoded).await?,
-                None => storage.erase(&key).await?,
+            } else {
+                let task = ChunkPlanner::plan_store_with(
+                    self.codecs_bound(),
+                    *options,
+                    SourceKey(0),
+                    &shape,
+                    chunk_bytes,
+                );
+                drive_async_one(task, &io, resources).await?;
             }
             Ok(())
         }

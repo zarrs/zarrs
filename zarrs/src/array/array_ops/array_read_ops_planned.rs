@@ -20,7 +20,7 @@ use zarrs_codec::plan::{
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
-    EncodedSubchunk, InvalidNumberOfElementsError, Resources, copy_fill_value_into,
+    EncodedSubchunk, InvalidNumberOfElementsError, Resources,
 };
 use zarrs_data_type::DataType;
 use zarrs_storage::byte_range::ByteRange;
@@ -32,7 +32,7 @@ use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape,
-    ChunkShapeTraits, Indexer, subset_indices_at,
+    Indexer, subset_indices_at,
 };
 use crate::node::{NodePath, data_key};
 
@@ -541,7 +541,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Plan reading the chunk at `chunk_indices` if it exists: the value of the task is the decoded chunk, or
     /// [`TaskValue::None`] if the chunk does not exist.
-    #[cfg(feature = "async")]
     fn plan_chunk_if_exists(
         &self,
         chunk_indices: &[u64],
@@ -590,23 +589,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
         Ok((task, self.one_key(chunk_indices)?))
     }
 
-    /// The indices of the chunk that is all of `array_subset`, if its codecs plan no tasks of their own, so it can be
-    /// read with one read and one decode.
-    fn whole_single_chunk(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<Option<Vec<u64>>, ArrayError> {
-        let chunks = self.planned_chunks(array_subset)?;
-        if chunks.num_elements() != 1 || self.codecs_bound().plans_subtasks() {
-            return Ok(None);
-        }
-        let chunk_indices = chunks.start();
-        let chunk_subset = self.chunk_subset(chunk_indices)?;
-        Ok((chunk_subset.start() == &*array_subset.start()
-            && chunk_subset.shape() == &*array_subset.shape())
-            .then(|| chunk_indices.to_vec()))
-    }
-
     /// The shape of the chunk at `chunk_indices`, and an array subset of all of its elements.
     pub(crate) fn whole_chunk_indexer(
         &self,
@@ -628,23 +610,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .create_readable_transformer(storage_handle)?,
             keys,
         })
-    }
-
-    /// Read the whole encoded chunk at `chunk_indices` under the I/O limit of `resources`.
-    ///
-    /// This is the plan of a whole chunk whose codecs plan no tasks of their own: one read, then one decode.
-    fn read_chunk_planned(
-        &self,
-        chunk_indices: &[u64],
-        resources: &Resources,
-    ) -> Result<Option<Bytes>, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
-        let key = self.chunk_key(chunk_indices)?;
-        let _permit = resources.io_permit_blocking();
-        Ok(storage.get(&key)?)
     }
 
     /// Retrieve the encoded chunks selected by `chunks` (validated) with a planned read.
@@ -690,15 +655,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
-        let shape = self.chunk_shape(chunk_indices)?;
-        self.read_chunk_planned(chunk_indices, resources)?
-            .map(|encoded| {
-                Ok(self
-                    .codecs_bound()
-                    .decode(CowBytes::Shared(encoded), &shape, options, resources)?
-                    .into_owned())
-            })
-            .transpose()
+        let (task, keys) = self.plan_chunk_if_exists(chunk_indices, options)?;
+        chunk_if_exists(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?)
     }
 
     /// Retrieve the chunk at `chunk_indices` with a planned read, and its shape.
@@ -708,34 +666,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(ArrayBytes<'static>, ChunkShape), ArrayError> {
-        let codecs = self.codecs_bound();
-        if codecs.plans_subtasks() {
-            let (shape, indexer) = self.whole_chunk_indexer(chunk_indices)?;
-            let bytes = self.retrieve_partial_chunk_planned(
-                chunk_indices,
-                &shape,
-                &indexer,
-                options,
-                resources,
-            )?;
-            return Ok((bytes, shape));
-        }
-        let shape = self.chunk_shape(chunk_indices)?;
-        let bytes = match self.read_chunk_planned(chunk_indices, resources)? {
-            Some(encoded) => {
-                let bytes = codecs
-                    .decode(CowBytes::Shared(encoded), &shape, options, resources)?
-                    .into_owned();
-                bytes.validate(shape.num_elements_u64(), self.data_type())?;
-                bytes
-            }
-            None => ArrayBytes::new_fill_value(
-                self.data_type(),
-                shape.num_elements_u64(),
-                self.fill_value(),
-            )
-            .map_err(CodecError::from)?,
-        };
+        let (shape, indexer) = self.whole_chunk_indexer(chunk_indices)?;
+        let bytes = self.retrieve_partial_chunk_planned(
+            chunk_indices,
+            &shape,
+            &indexer,
+            options,
+            resources,
+        )?;
         Ok((bytes, shape))
     }
 
@@ -748,28 +686,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let (chunk_shape, indexer) = self.whole_chunk_indexer(chunk_indices)?;
-        if self.codecs_bound().plans_subtasks() {
-            return self.retrieve_partial_chunk_into_planned(
-                chunk_indices,
-                &chunk_shape,
-                &indexer,
-                output_target,
-                options,
-                resources,
-            );
-        }
-        check_target_len(&indexer, &output_target)?;
-        match self.read_chunk_planned(chunk_indices, resources)? {
-            Some(encoded) => self.codecs_bound().decode_into(
-                CowBytes::Shared(encoded).into(),
-                &chunk_shape,
-                output_target,
-                options,
-                resources,
-            )?,
-            None => copy_fill_value_into(self.data_type(), self.fill_value(), output_target)?,
-        }
-        Ok(())
+        self.retrieve_partial_chunk_into_planned(
+            chunk_indices,
+            &chunk_shape,
+            &indexer,
+            output_target,
+            options,
+            resources,
+        )
     }
 
     /// Retrieve `array_subset` with a planned read.
@@ -779,11 +703,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'static>, ArrayError> {
-        if let Some(chunk_indices) = self.whole_single_chunk(array_subset)? {
-            return Ok(self
-                .retrieve_chunk_planned(&chunk_indices, options, resources)?
-                .0);
-        }
         let (SubsetPlan { task, finish }, keys) = self.plan_array_subset(array_subset, options)?;
         let value = match task {
             Some(task) => Some(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?),
@@ -802,14 +721,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        if let Some(chunk_indices) = self.whole_single_chunk(array_subset)? {
-            return self.retrieve_chunk_into_planned(
-                &chunk_indices,
-                output_target,
-                options,
-                resources,
-            );
-        }
         let (task, keys) = self.plan_array_subset_into(array_subset, &output_target, options)?;
         drive_blocking_one(task, &self.chunk_io(keys)?, resources)?;
         Ok(())
@@ -915,7 +826,6 @@ pub(super) fn check_target_len(
 }
 
 /// The decoded chunk of a task of [`Array::plan_chunk_if_exists`].
-#[cfg(feature = "async")]
 fn chunk_if_exists(value: TaskValue<'static>) -> Result<Option<ArrayBytes<'static>>, ArrayError> {
     match value {
         TaskValue::None => Ok(None),

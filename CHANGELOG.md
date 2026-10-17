@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Partial decoders read and decode what every request needs once (e.g. a shard index, or the bytes of a chunk compressed with a codec that cannot decode part of it)
   - `Resources::chunk_concurrent_minimum` no longer affects reads
   - Reads of many tiny chunks from memory (e.g. 64-byte chunks, or 2 KiB chunks asynchronously) can be about 10% slower, as each chunk is planned as a task
+  - A read of a whole chunk is also planned as a task, which adds about 0.3 µs to a read without decoding work (e.g. of an uncompressed chunk in memory)
 - Array writes are planned as tasks and executed by the drivers of `zarrs_codec::plan`, with separate I/O and compute concurrency limits
   - Applies to `store_chunk[s]`, `store_array_subset`, `store_partial_chunk` and their async variants, the partial encoders of sharded chunks, `retrieve_encoded_chunks` and `erase_chunks`
   - The chunks that `store_array_subset` covers partially are read, decoded, updated and encoded in the same operation as the other chunks, interleaved with their writes
