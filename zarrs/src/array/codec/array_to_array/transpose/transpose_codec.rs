@@ -343,7 +343,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
-        let transposed_shape = permute(shape_u64, &self.order.0).expect("validated");
+        let transposed_shape: ArrayIndices = permute(shape_u64, &self.order.0).expect("validated");
         apply_permutation(
             &bytes,
             &transposed_shape,

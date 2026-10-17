@@ -761,7 +761,9 @@ impl ArrayToBytesCodecTraits for BlockCodecBound {
         let location = SubchunkLocation {
             source: source.interval(block * block_size, block_size)?,
             shape: self.block_shape.clone(),
-            coordinates: vec![coordinates[0] % self.block_shape[0].get()],
+            coordinates: [coordinates[0] % self.block_shape[0].get()]
+                .as_slice()
+                .into(),
         };
         Ok(Task::compute(move |_| {
             Ok(Outcome::Value(subchunk_location_value(Some(location))))

@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 
 use crate::array::{
-    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
+    ArrayBytesFixedDisjointView, ArrayError, ArrayIndices, ArrayOps, ArraySubset,
     ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
@@ -142,7 +142,7 @@ where
     let parent_start = data_view_ref.subset().start().to_vec();
     let array_subset_start = array_subset.start();
 
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let array_subset_start = &array_subset_start;
         let parent_start = &parent_start;
         let mask_view_refs = &mask_view_refs;

@@ -11,7 +11,7 @@ use crate::array::chunk_cache::{
     AsyncChunkCache, Sealed, SealedAsync, async_retrieve_chunk_bytes,
     async_retrieve_chunk_overlap_bytes, fill_value_bytes,
 };
-use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
+use crate::array::{ArrayBytes, ArrayIndices};
 use zarrs_codec::plan::{SharedOutput, TargetViews};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, CodecError};
 use zarrs_storage::Bytes;
@@ -97,7 +97,7 @@ where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncChunkCache + ?Sized,
 {
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
         let bytes = async_retrieve_chunk_overlap_bytes(
@@ -232,7 +232,7 @@ where
     let (output, views) = SharedOutput::for_data_type(array.data_type(), &array_subset.shape())
         .expect("fixed data type");
     let array_subset_start = array_subset.start();
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let (array_subset_start, views) = (&array_subset_start, &views);
         async move {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;

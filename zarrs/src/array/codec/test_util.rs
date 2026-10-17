@@ -34,7 +34,11 @@ pub(crate) fn partial_decode_bytes(
         .unwrap();
     let indices: Vec<ArrayIndices> = ranges
         .iter()
-        .flat_map(|range| range.to_range(decoded_len).map(|i| vec![i]))
+        .flat_map(|range| {
+            range
+                .to_range(decoded_len)
+                .map(|i| ArrayIndices::from([i].as_slice()))
+        })
         .collect();
     let decoded = partial_decode_memory(
         chain,

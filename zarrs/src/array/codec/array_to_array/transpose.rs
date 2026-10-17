@@ -134,16 +134,8 @@ fn transpose_array(
     }
 }
 
-fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
-    if v.len() == order.len() {
-        let mut vec = Vec::<T>::with_capacity(v.len());
-        for axis in order {
-            vec.push(v[*axis]);
-        }
-        Some(vec)
-    } else {
-        None
-    }
+fn permute<T: Copy, C: FromIterator<T>>(v: &[T], order: &[usize]) -> Option<C> {
+    (v.len() == order.len()).then(|| order.iter().map(|&axis| v[axis]).collect())
 }
 
 fn transpose_vlen<'a>(
@@ -181,8 +173,10 @@ fn get_transposed_array_subset(
 ) -> Result<ArraySubset, CodecError> {
     decoded_region.validate(bytemuck::must_cast_slice(shape))?;
 
-    let start = permute(&decoded_region.start(), order).expect("matching dimensionality");
-    let size = permute(&decoded_region.shape(), order).expect("matching dimensionality");
+    let start: crate::array::ArrayIndices =
+        permute(&decoded_region.start(), order).expect("matching dimensionality");
+    let size: crate::array::ArrayIndices =
+        permute(&decoded_region.shape(), order).expect("matching dimensionality");
     let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
     Ok(ArraySubset::from(ranges))
 }

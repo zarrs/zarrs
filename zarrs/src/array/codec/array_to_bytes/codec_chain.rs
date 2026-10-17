@@ -943,7 +943,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             // Map the element through the array-to-array codecs, outermost first
             let mut shape = ChunkShape::from(shape.to_vec());
-            let mut coordinates = coordinates.to_vec();
+            let mut coordinates = crate::array::ArrayIndices::from(coordinates);
             for codec in &self.array_to_array {
                 coordinates = codec.encoded_coordinates(&shape, &coordinates)?;
                 shape = codec.encoded_shape(&shape)?;

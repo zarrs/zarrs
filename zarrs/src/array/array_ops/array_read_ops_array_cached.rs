@@ -10,7 +10,7 @@ use crate::array::array_bytes_internal::merge_cached_chunks;
 use crate::array::chunk_cache::{
     Sealed, SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
-use crate::array::{ArrayBytes, ArrayIndicesTinyVec};
+use crate::array::{ArrayBytes, ArrayIndices};
 use zarrs_codec::plan::SharedOutput;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError,
@@ -224,7 +224,7 @@ where
     let (output, views) = SharedOutput::for_data_type(array.data_type(), &array_subset.shape())
         .expect("fixed data type");
     let array_subset_start = array_subset.start();
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let overlap = chunk_subset.overlap(array_subset)?;
         let output_subset = overlap.relative_to(&array_subset_start)?;
@@ -850,7 +850,7 @@ mod tests {
 
     #[derive(Default)]
     struct CustomDecodedCache {
-        values: Mutex<HashMap<Vec<u64>, ChunkCacheTypeDecoded>>,
+        values: Mutex<HashMap<ArrayIndices, ChunkCacheTypeDecoded>>,
     }
 
     impl ChunkCache for CustomDecodedCache {
@@ -858,7 +858,7 @@ mod tests {
 
         fn try_get_or_insert_with<F>(
             &self,
-            chunk_indices: Vec<u64>,
+            chunk_indices: ArrayIndices,
             f: F,
         ) -> Result<Self::Value, Arc<ArrayError>>
         where

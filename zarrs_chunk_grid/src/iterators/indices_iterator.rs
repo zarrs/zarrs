@@ -5,7 +5,7 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{ArrayIndicesTinyVec, ArraySubset, unravel_index};
+use crate::{ArrayIndices, ArraySubset, unravel_index};
 
 /// An iterator over the indices in an array subset.
 ///
@@ -78,7 +78,7 @@ impl Indices {
 }
 
 impl<'a> IntoIterator for &'a Indices {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -87,7 +87,7 @@ impl<'a> IntoIterator for &'a Indices {
 }
 
 impl<'a> IntoParallelRefIterator<'a> for &'a Indices {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type Iter = ParIndicesIterator<'a>;
 
     fn par_iter(&self) -> Self::Iter {
@@ -99,7 +99,7 @@ impl<'a> IntoParallelRefIterator<'a> for &'a Indices {
 }
 
 impl<'a> IntoParallelIterator for &'a Indices {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type Iter = ParIndicesIterator<'a>;
 
     fn into_par_iter(self) -> Self::Iter {
@@ -111,7 +111,7 @@ impl<'a> IntoParallelIterator for &'a Indices {
 }
 
 impl IntoIterator for Indices {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -120,7 +120,7 @@ impl IntoIterator for Indices {
 }
 
 impl IntoParallelIterator for Indices {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type Iter = ParIndicesIntoIterator;
 
     fn into_par_iter(self) -> Self::Iter {
@@ -139,7 +139,7 @@ pub struct IndicesIterator<'a> {
     subset: &'a ArraySubset,
     range: std::ops::Range<usize>,
     /// The indices of the next element from the front, if any.
-    front: ArrayIndicesTinyVec,
+    front: ArrayIndices,
 }
 
 /// Serial indices iterator.
@@ -150,7 +150,7 @@ pub struct IndicesIntoIterator {
     subset: ArraySubset,
     range: std::ops::Range<usize>,
     /// The indices of the next element from the front, if any.
-    front: ArrayIndicesTinyVec,
+    front: ArrayIndices,
 }
 
 impl<'a> IndicesIterator<'a> {
@@ -177,7 +177,7 @@ impl IndicesIntoIterator {
 
 /// Compute indices from a linear index for dimensionality 1, adding subset start offset.
 #[inline]
-fn unravel_index_1d(index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+fn unravel_index_1d(index: u64, shape: &[u64], start: &[u64]) -> ArrayIndices {
     debug_assert_eq!(shape.len(), 1);
     debug_assert_eq!(start.len(), 1);
     tinyvec::tiny_vec!([u64; 4] => start[0] + (index % shape[0]))
@@ -185,7 +185,7 @@ fn unravel_index_1d(index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTin
 
 /// Compute indices from a linear index for dimensionality 2, adding subset start offset.
 #[inline]
-fn unravel_index_2d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+fn unravel_index_2d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndices {
     debug_assert_eq!(shape.len(), 2);
     debug_assert_eq!(start.len(), 2);
     let i1 = start[1] + (index % shape[1]);
@@ -196,7 +196,7 @@ fn unravel_index_2d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndice
 
 /// Compute indices from a linear index for dimensionality 3, adding subset start offset.
 #[inline]
-fn unravel_index_3d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+fn unravel_index_3d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndices {
     debug_assert_eq!(shape.len(), 3);
     debug_assert_eq!(start.len(), 3);
     let i2 = start[2] + (index % shape[2]);
@@ -209,7 +209,7 @@ fn unravel_index_3d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndice
 
 /// Compute indices from a linear index for dimensionality 4, adding subset start offset.
 #[inline]
-fn unravel_index_4d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+fn unravel_index_4d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndices {
     debug_assert_eq!(shape.len(), 4);
     debug_assert_eq!(start.len(), 4);
     let i3 = start[3] + (index % shape[3]);
@@ -224,7 +224,7 @@ fn unravel_index_4d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndice
 
 /// Compute indices from a linear index for dimensionality 5+, adding subset start offset.
 #[inline]
-fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayIndicesTinyVec> {
+fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayIndices> {
     let mut indices = unravel_index(index, shape)?;
     std::iter::zip(indices.iter_mut(), start).for_each(|(idx, st)| *idx += st);
     Some(indices)
@@ -232,12 +232,12 @@ fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayInd
 
 /// The indices of the element at `index` in `subset`.
 #[inline]
-fn unravel_subset_index(subset: &ArraySubset, index: usize) -> Option<ArrayIndicesTinyVec> {
+fn unravel_subset_index(subset: &ArraySubset, index: usize) -> Option<ArrayIndices> {
     let index = index as u64;
     let shape = subset.shape();
     let start = subset.start();
     match shape.len() {
-        0 => Some(ArrayIndicesTinyVec::new()),
+        0 => Some(ArrayIndices::new()),
         1 => Some(unravel_index_1d(index, shape, start)),
         2 => Some(unravel_index_2d(index, shape, start)),
         3 => Some(unravel_index_3d(index, shape, start)),
@@ -247,9 +247,9 @@ fn unravel_subset_index(subset: &ArraySubset, index: usize) -> Option<ArrayIndic
 }
 
 /// The indices of the first element of `range` in `subset`, or no indices if `range` is empty.
-fn indices_at(subset: &ArraySubset, range: &std::ops::Range<usize>) -> ArrayIndicesTinyVec {
+fn indices_at(subset: &ArraySubset, range: &std::ops::Range<usize>) -> ArrayIndices {
     if range.is_empty() {
-        ArrayIndicesTinyVec::new()
+        ArrayIndices::new()
     } else {
         unravel_subset_index(subset, range.start).unwrap_or_default()
     }
@@ -258,7 +258,7 @@ fn indices_at(subset: &ArraySubset, range: &std::ops::Range<usize>) -> ArrayIndi
 macro_rules! impl_indices_iterator {
     ($iterator_type:ty) => {
         impl Iterator for $iterator_type {
-            type Item = ArrayIndicesTinyVec;
+            type Item = ArrayIndices;
 
             /// Steps the indices of the front element like an odometer, by incrementing the innermost index and
             /// carrying into outer dimensions, so that no index is unravelled.
@@ -327,7 +327,7 @@ pub struct ParIndicesIntoIterator {
 macro_rules! impl_par_chunks_iterator {
     ($iterator_type:ty) => {
         impl ParallelIterator for $iterator_type {
-            type Item = ArrayIndicesTinyVec;
+            type Item = ArrayIndices;
 
             fn drive_unindexed<C>(self, consumer: C) -> C::Result
             where
@@ -361,7 +361,7 @@ impl_par_chunks_iterator!(ParIndicesIterator<'_>);
 impl_par_chunks_iterator!(ParIndicesIntoIterator);
 
 impl<'a> Producer for ParIndicesIterator<'a> {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -382,7 +382,7 @@ impl<'a> Producer for ParIndicesIterator<'a> {
 }
 
 impl Producer for ParIndicesIntoIterator {
-    type Item = ArrayIndicesTinyVec;
+    type Item = ArrayIndices;
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -405,7 +405,7 @@ impl Producer for ParIndicesIntoIterator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ArrayIndicesTinyVec;
+    use crate::ArrayIndices;
 
     #[test]
     fn indices_iterator_partial() {
@@ -413,12 +413,9 @@ mod tests {
             Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 1..4);
         assert_eq!(indices.len(), 3);
         let mut iter = indices.iter();
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 6])));
-        assert_eq!(
-            iter.next_back(),
-            Some(ArrayIndicesTinyVec::Heap(vec![2, 6]))
-        );
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![2, 5])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![1, 6])));
+        assert_eq!(iter.next_back(), Some(ArrayIndices::Heap(vec![2, 6])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![2, 5])));
         assert_eq!(iter.next(), None);
 
         assert_eq!(
@@ -430,7 +427,7 @@ mod tests {
             Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), ..=0);
         assert_eq!(indices.len(), 1);
         let mut iter = indices.iter();
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 5])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![1, 5])));
         assert_eq!(iter.next(), None);
     }
 

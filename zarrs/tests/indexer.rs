@@ -10,8 +10,8 @@ use zarrs::array::codec::{BytesCodec, ShardingCodecBuilder, SqueezeCodec, VlenCo
 #[cfg(feature = "transpose")]
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    ArrayIndices, ArrayIndicesTinyVec, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain,
-    DataType, ElementOwned, Indexer, IndexerError, data_type,
+    ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, DataType, ElementOwned, Indexer,
+    IndexerError, data_type,
 };
 use zarrs_codec::plan::{partial_decode_memory, partial_encode_memory};
 use zarrs_codec::{
@@ -23,7 +23,7 @@ fn indexer_basic<T: Indexer>(
     indexer: T,
     dimensionality: usize,
     output_shape: Vec<u64>,
-    indices: Vec<ArrayIndices>,
+    indices: Vec<Vec<u64>>,
     linearised_indices: Vec<u64>,
     contiguous_indices: Vec<(u64, u64)>,
 ) {
@@ -39,11 +39,11 @@ fn indexer_basic<T: Indexer>(
         contiguous_indices
     );
     assert_eq!(
-        indexer.iter_indices().collect_vec(),
+        indexer
+            .iter_indices()
+            .map(|indices| indices.to_vec())
+            .collect_vec(),
         indices
-            .into_iter()
-            .map(ArrayIndicesTinyVec::Heap)
-            .collect_vec()
     );
     assert_eq!(
         indexer

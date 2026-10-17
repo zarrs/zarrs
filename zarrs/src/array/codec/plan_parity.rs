@@ -184,7 +184,7 @@ fn indexers(shape: &[NonZeroU64]) -> Vec<Box<dyn Indexer>> {
         .collect();
     indexers.push(Box::new(ArraySubset::new_with_ranges(&partial)));
     let last: ArrayIndices = shape.iter().map(|s| s - 1).collect();
-    let first: ArrayIndices = vec![0; shape.len()];
+    let first: ArrayIndices = std::iter::repeat_n(0, shape.len()).collect();
     let middle: ArrayIndices = shape.iter().map(|s| s / 2).collect();
     indexers.push(Box::new(vec![last.clone(), first, middle, last]));
     indexers

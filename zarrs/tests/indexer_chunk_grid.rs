@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs::array::{ArrayBuilder, ArrayIndices, data_type};
+use zarrs::array::{ArrayBuilder, data_type};
 use zarrs::storage::store::MemoryStore;
 
 #[test]
@@ -15,7 +15,7 @@ fn chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn std::error::E
         array.store_chunk(&chunk, &[1u16, 1, 1, 1], &Resources::default())?;
     }
 
-    let scattered: Vec<ArrayIndices> = vec![vec![1, 0], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![1, 0], vec![0, 1]];
     let encoded = array.retrieve_encoded_chunks(&scattered, &Resources::default())?;
     assert_eq!(encoded[0], array.retrieve_encoded_chunk(&[1, 0])?);
     assert_eq!(encoded[1], array.retrieve_encoded_chunk(&[0, 1])?);
@@ -51,7 +51,7 @@ async fn async_chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn s
         .async_store_chunk(&[1, 0], &[2u16, 2, 2, 2], &Resources::default())
         .await?;
 
-    let scattered: Vec<ArrayIndices> = vec![vec![1, 0], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![1, 0], vec![0, 1]];
     let encoded = array
         .async_retrieve_encoded_chunks(&scattered, &Resources::default())
         .await?;

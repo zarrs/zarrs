@@ -82,7 +82,7 @@ where
         decoded_coordinates: &[u64],
     ) -> Result<ArrayIndices, CodecError> {
         let _ = decoded_shape;
-        Ok(decoded_coordinates.to_vec())
+        Ok(decoded_coordinates.into())
     }
 }
 

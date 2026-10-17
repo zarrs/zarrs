@@ -263,7 +263,7 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             .map(|(&coordinate, _)| coordinate)
             .collect();
         if encoded_coordinates.is_empty() {
-            Ok(vec![0])
+            Ok(ArrayIndices::from([0].as_slice()))
         } else {
             Ok(encoded_coordinates)
         }

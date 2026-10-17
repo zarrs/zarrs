@@ -212,7 +212,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                     None
                 }
             })
-            .collect::<Option<Vec<_>>>())
+            .collect::<Option<ArrayIndices>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -238,7 +238,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                     None
                 }
             })
-            .collect::<Option<Vec<_>>>())
+            .collect::<Option<ArrayIndices>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),
@@ -264,7 +264,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                     None
                 }
             })
-            .collect::<Option<Vec<_>>>())
+            .collect::<Option<ArrayIndices>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),
@@ -307,7 +307,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
+    use crate::array::{ArrayIndices, ArraySubset};
 
     #[test]
     fn chunk_grid_regular_bounded_edge_lengths() {
@@ -384,7 +384,7 @@ mod tests {
             assert_eq!(chunk_grid.array_shape(), &array_shape);
             assert_eq!(
                 chunk_grid.chunk_origin(&[1, 1, 1]).unwrap(),
-                Some(vec![1, 2, 3])
+                Some([1, 2, 3].as_slice().into())
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(),
@@ -396,19 +396,19 @@ mod tests {
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
-                Some(vec![NonZeroU64::new(1).unwrap(); 3])
+                Some([NonZeroU64::new(1).unwrap(); 3].as_slice().into())
             );
             assert_eq!(chunk_grid.chunk_shape(&[5, 0, 0]).unwrap(), None);
             let chunk_grid_shape = chunk_grid.grid_shape();
             assert_eq!(chunk_grid_shape, &[5, 4, 18]);
-            let array_index: ArrayIndices = vec![3, 5, 50];
+            let array_index: ArrayIndices = [3, 5, 50].as_slice().into();
             assert_eq!(
                 chunk_grid.chunk_indices(&array_index).unwrap(),
-                Some(vec![3, 2, 16])
+                Some([3, 2, 16].as_slice().into())
             );
             assert_eq!(
                 chunk_grid.chunk_element_indices(&array_index).unwrap(),
-                Some(vec![0, 1, 2])
+                Some([0, 1, 2].as_slice().into())
             );
 
             assert_eq!(
@@ -440,7 +440,7 @@ mod tests {
         ];
         let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
-        let array_indices: ArrayIndices = vec![3, 5, 53];
+        let array_indices: ArrayIndices = [3, 5, 53].as_slice().into();
         assert_eq!(chunk_grid.chunk_indices(&array_indices).unwrap(), None);
 
         let chunk_indices: ArrayShape = vec![6, 1, 1];
@@ -476,17 +476,21 @@ mod tests {
         // Partially out-of-bounds (edge) last chunk: origin valid but extends beyond array
         // Chunk [3, 2]: origin [9, 10], full extent [12, 15], array [10, 12]
         // -> reduced shape [1, 2]
-        assert_eq!(chunk_grid.chunk_origin(&[3, 2]).unwrap(), Some(vec![9, 10]));
+        assert_eq!(
+            chunk_grid.chunk_origin(&[3, 2]).unwrap(),
+            Some([9, 10].as_slice().into())
+        );
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 2]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(2).unwrap()
-            ])
+            Some(
+                [NonZeroU64::new(1).unwrap(), NonZeroU64::new(2).unwrap()]
+                    .as_slice()
+                    .into()
+            )
         );
         assert_eq!(
             chunk_grid.chunk_shape_u64(&[3, 2]).unwrap(),
-            Some(vec![1, 2])
+            Some([1, 2].as_slice().into())
         );
         assert_eq!(
             chunk_grid.subset(&[3, 2]).unwrap(),
@@ -498,10 +502,11 @@ mod tests {
         // -> reduced shape [1, 5]
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 0]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(5).unwrap()
-            ])
+            Some(
+                [NonZeroU64::new(1).unwrap(), NonZeroU64::new(5).unwrap()]
+                    .as_slice()
+                    .into()
+            )
         );
 
         // Partially out-of-bounds edge in second dim only
@@ -509,24 +514,28 @@ mod tests {
         // -> reduced shape [3, 2]
         assert_eq!(
             chunk_grid.chunk_shape(&[0, 2]).unwrap(),
-            Some(vec![
-                NonZeroU64::new(3).unwrap(),
-                NonZeroU64::new(2).unwrap()
-            ])
+            Some(
+                [NonZeroU64::new(3).unwrap(), NonZeroU64::new(2).unwrap()]
+                    .as_slice()
+                    .into()
+            )
         );
 
         // In-bounds array index at array boundary -> last chunk
         assert_eq!(
             chunk_grid.chunk_indices(&[9, 11]).unwrap(),
-            Some(vec![3, 2])
+            Some([3, 2].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_element_indices(&[9, 11]).unwrap(),
-            Some(vec![0, 1])
+            Some([0, 1].as_slice().into())
         );
 
         // In-bounds array index just inside boundary
-        assert_eq!(chunk_grid.chunk_indices(&[8, 9]).unwrap(), Some(vec![2, 1]));
+        assert_eq!(
+            chunk_grid.chunk_indices(&[8, 9]).unwrap(),
+            Some([2, 1].as_slice().into())
+        );
     }
 
     #[test]
@@ -547,7 +556,7 @@ mod tests {
         assert!(!chunk_grid.array_indices_inbounds(&[3, 5, 0]));
 
         // Query methods return None for zero-dim
-        let array_indices: ArrayIndices = vec![3, 5, 1000];
+        let array_indices: ArrayIndices = [3, 5, 1000].as_slice().into();
         assert_eq!(chunk_grid.chunk_indices(&array_indices).unwrap(), None);
         assert_eq!(chunk_grid.chunk_origin(&[0, 0, 0]).unwrap(), None);
         assert_eq!(chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(), None);
@@ -567,10 +576,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+                ArrayIndices::Heap(vec![0, 0, 0]),
+                ArrayIndices::Heap(vec![0, 0, 1]),
+                ArrayIndices::Heap(vec![1, 0, 0]),
+                ArrayIndices::Heap(vec![1, 0, 1]),
             ]
         );
 
@@ -578,10 +587,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+                ArrayIndices::Heap(vec![0, 0, 0]),
+                ArrayIndices::Heap(vec![0, 0, 1]),
+                ArrayIndices::Heap(vec![1, 0, 0]),
+                ArrayIndices::Heap(vec![1, 0, 1]),
             ]
         );
     }

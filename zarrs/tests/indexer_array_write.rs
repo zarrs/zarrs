@@ -6,7 +6,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::builder::ArrayBuilderFillValue;
 use zarrs::array::codec::{ShardingCodecBuilder, SqueezeCodec};
-use zarrs::array::{Array, ArrayBuilder, ArrayIndices, DataType, data_type};
+use zarrs::array::{Array, ArrayBuilder, DataType, data_type};
 use zarrs::storage::store::MemoryStore;
 
 #[test]
@@ -19,7 +19,7 @@ fn chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std::error::Err
         (0u16..16).collect::<Vec<_>>(),
         &Resources::default(),
     )?;
-    let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
+    let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
     array.store_partial_chunk(
         &[0, 0],
         &scattered,
@@ -62,7 +62,7 @@ fn partial_encoding_sharded_scattered_write() -> Result<(), Box<dyn std::error::
 
     // Writes spanning multiple subchunks (including the empty subchunk) with a duplicate index,
     // then a write that empties the top-right subchunk
-    let writes: [(Vec<ArrayIndices>, Vec<u16>); 2] = [
+    let writes: [(Vec<Vec<u64>>, Vec<u16>); 2] = [
         (
             vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2], vec![0, 1]],
             vec![100, 101, 102, 103, 104],
@@ -98,7 +98,7 @@ fn partial_encoding_sharded_scattered_write_string() -> Result<(), Box<dyn std::
     let original = [
         "a", "bb", "", "", "ccc", "d", "", "", "", "", "", "", "", "", "", "",
     ];
-    let indices: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 0], vec![1, 3], vec![0, 0]];
+    let indices: Vec<Vec<u64>> = vec![vec![3, 3], vec![0, 0], vec![1, 3], vec![0, 0]];
     let values = ["xyz", "q", "long string", "w"];
     for array in [&expected, &array] {
         array.store_chunk(&[0, 0], &original, &Resources::default())?;
@@ -121,7 +121,7 @@ fn partial_encoding_sharded_rejects_out_of_bounds_scattered_write()
     let array = array(&data_type::uint16(), 0u16, true)?;
     let original = (0u16..16).collect::<Vec<_>>();
     array.store_chunk(&[0, 0], &original, &Resources::default())?;
-    let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 4]];
+    let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![3, 4]];
     assert!(
         array
             .store_partial_chunk(&[0, 0], &scattered, &[100u16, 101], &Resources::default())
@@ -142,7 +142,7 @@ fn squeeze_rejects_out_of_bounds_scattered_write() -> Result<(), Box<dyn std::er
         .build(store, "/array")?;
     let original = (0u16..16).collect::<Vec<_>>();
     array.store_chunk(&[0, 0, 0], &original, &Resources::default())?;
-    let oob: Vec<ArrayIndices> = vec![vec![0, 7, 2]];
+    let oob: Vec<Vec<u64>> = vec![vec![0, 7, 2]];
     assert!(
         array
             .store_partial_chunk(&[0, 0, 0], &oob, &[999u16], &Resources::default())
@@ -170,7 +170,7 @@ async fn async_chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std
             &Resources::default(),
         )
         .await?;
-    let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![3, 3], vec![0, 1]];
     array
         .async_store_partial_chunk(&[0, 0], &scattered, &[99u16, 88], &Resources::default())
         .await?;
@@ -202,7 +202,7 @@ async fn async_partial_encoding_sharded_scattered_write() -> Result<(), Box<dyn 
             &Resources::default(),
         )
         .await?;
-    let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1], vec![2, 0], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![3, 3], vec![0, 1], vec![2, 0], vec![0, 1]];
     array
         .async_store_partial_chunk(
             &[0, 0],

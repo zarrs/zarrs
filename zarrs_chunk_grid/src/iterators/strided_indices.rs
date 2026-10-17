@@ -1,4 +1,4 @@
-use crate::ArrayIndicesTinyVec;
+use crate::ArrayIndices;
 
 /// The linearised indices of a regular grid of positions in an array, in C order.
 ///
@@ -11,9 +11,9 @@ pub(crate) struct StridedIndices {
     /// The linearised index of the first position.
     first: u64,
     /// The number of positions along each dimension in which there is more than one, outermost first.
-    counts: ArrayIndicesTinyVec,
+    counts: ArrayIndices,
     /// The distance between the linearised indices of adjacent positions along each dimension of `counts`.
-    strides: ArrayIndicesTinyVec,
+    strides: ArrayIndices,
 }
 
 impl StridedIndices {
@@ -29,8 +29,8 @@ impl StridedIndices {
         debug_assert_eq!(counts.len(), array_shape.len());
         let len = usize::try_from(counts.iter().product::<u64>()).unwrap();
         let mut first = 0;
-        let mut stride_counts = ArrayIndicesTinyVec::new();
-        let mut strides = ArrayIndicesTinyVec::new();
+        let mut stride_counts = ArrayIndices::new();
+        let mut strides = ArrayIndices::new();
         if len > 0 {
             let mut stride = 1;
             for ((&start, &count), &array_size) in
@@ -77,7 +77,7 @@ impl StridedIndices {
 #[derive(Clone)]
 pub(crate) struct StridedOdometer {
     /// The position of the next index from the front along each dimension of the counts.
-    positions: ArrayIndicesTinyVec,
+    positions: ArrayIndices,
     /// The next linearised index from the front.
     front: u64,
     /// The positions of the remaining indices.

@@ -398,11 +398,12 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
         &self,
         decoded_shape: &[NonZeroU64],
         decoded_coordinates: &[u64],
-    ) -> Result<Vec<u64>, CodecError> {
+    ) -> Result<zarrs::array::ArrayIndices, CodecError> {
         let shape: &[u64] = bytemuck::must_cast_slice(decoded_shape);
-        Ok(vec![
-            zarrs::array::ravel_indices(decoded_coordinates, shape).unwrap(),
-        ])
+        Ok(
+            std::iter::once(zarrs::array::ravel_indices(decoded_coordinates, shape).unwrap())
+                .collect(),
+        )
     }
 }
 

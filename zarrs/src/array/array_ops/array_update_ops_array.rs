@@ -142,7 +142,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             if !chunk_subset.inbounds_shape(&chunk_shape) {
                 return Err(ArrayError::InvalidChunkSubset(
                     Box::new(chunk_subset.to_array_subset()),
-                    chunk_indices.to_vec(),
+                    chunk_indices.into(),
                     chunk_shape,
                 ));
             }

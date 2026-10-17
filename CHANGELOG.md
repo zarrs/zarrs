@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Encode chunk keys in one allocation, rather than allocating per index and growing the key
+- **Breaking**: `ArrayIndices` holds up to four indices inline (see `zarrs_chunk_grid`), so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
+  - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension
 - **Breaking**: `ArrayError::{InvalidArraySubset,InvalidChunkSubset}` box their `ArraySubset`, so array results stay small now that subsets are stored inline
 - The `bytes` codec decodes a subset of a chunk in memory with a non-native endianness directly into the output, swapping bytes as they are copied
 - Array reads are planned as tasks and executed by the drivers of `zarrs_codec::plan`, with separate I/O and compute concurrency limits (`Resources::{compute_target,io_target}`)
@@ -136,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
   - `try_get_or_insert_with` is no longer `#[doc(hidden)]`
+  - **Breaking**: `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key
   - Add `invalidate` methods
 - Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently
   - This has always been the case, but was only explicitly stated for concurrent writes

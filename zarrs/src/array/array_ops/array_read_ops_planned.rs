@@ -31,7 +31,7 @@ use zarrs_storage::{
 use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape,
     Indexer, subset_indices_at,
 };
 use crate::node::{NodePath, data_key};
@@ -60,7 +60,7 @@ pub(super) enum ChunkKeys {
     List {
         path: NodePath,
         encoding: ChunkKeyEncoding,
-        indices: Vec<ArrayIndicesTinyVec>,
+        indices: Vec<ArrayIndices>,
     },
 }
 
@@ -196,16 +196,16 @@ impl ChunkPlanner {
         chunks: ArraySubset,
         views: TargetViews<'a>,
     ) -> Result<Task<'a>, CodecError> {
-        let output_start = ArrayIndicesTinyVec::from(views.subset().start());
+        let output_start = ArrayIndices::from(views.subset().start());
         let chunks_len = chunks.num_elements_usize();
         let planner = self.clone();
         let tasks = Generator::indexed(chunks_len, move |i| {
             let chunk_indices = subset_indices_at(&chunks, i as u64);
             let chunk_subset = planner.chunk_subset(&chunk_indices).map_err(plan_error)?;
             // The overlap of the chunk with the subset, relative to the chunk and positioned in the output
-            let mut overlap_start = ArrayIndicesTinyVec::new();
-            let mut overlap_shape = ArrayIndicesTinyVec::new();
-            let mut output_subset_start = ArrayIndicesTinyVec::new();
+            let mut overlap_start = ArrayIndices::new();
+            let mut overlap_shape = ArrayIndices::new();
+            let mut output_subset_start = ArrayIndices::new();
             for (dim, ((&chunk_start, &chunk_len), (&subset_start, &subset_len))) in
                 std::iter::zip(chunk_subset.start(), chunk_subset.shape())
                     .zip(std::iter::zip(array_subset.start(), array_subset.shape()))
