@@ -1115,7 +1115,7 @@ impl<'a> Scheduler<'a> {
 
         // Queued reads of the same key, and their requests
         let key = request.key;
-        let mut candidates: Vec<((usize, usize), IoRequest, TaskHint)> = self
+        let candidates: Vec<((usize, usize), IoRequest, TaskHint)> = self
             .io
             .scan(coalesce::SCAN_LIMIT)
             .filter(|(_, candidate)| candidate.key() == key)
@@ -1129,32 +1129,21 @@ impl<'a> Scheduler<'a> {
                 coalesce::coalescable(&request).then_some((position, request, hint))
             })
             .collect();
-        // Grow the group with the candidates that coalesce with its ranges, while admitted
-        let mut group = IoRequest {
-            key,
-            ranges: request.ranges.clone(),
-        };
-        let mut members = Vec::new();
-        let mut grew = true;
-        while grew && !candidates.is_empty() {
-            grew = false;
-            let mut i = 0;
-            while i < candidates.len() {
-                if coalesce::coalesces_with(&group, &candidates[i].1.ranges, coalescing) {
-                    let Some(bytes) = budget.try_reserve(candidates[i].2) else {
-                        grew = false;
-                        candidates.clear();
-                        break;
-                    };
-                    reserved = reserved.saturating_add(bytes);
-                    let (position, candidate, _) = candidates.swap_remove(i);
-                    group.ranges.extend_from_slice(&candidate.ranges);
-                    members.push((position, candidate));
-                    grew = true;
-                } else {
-                    i += 1;
-                }
-            }
+        // The group is the candidates that coalesce with the read, in queue order, while admitted
+        let candidate_ranges: Vec<&[ByteRange]> = candidates
+            .iter()
+            .map(|(_, request, _)| request.ranges.as_slice())
+            .collect();
+        let joining = coalesce::coalescing_candidates(&request, &candidate_ranges, coalescing);
+        let mut candidates: Vec<Option<_>> = candidates.into_iter().map(Some).collect();
+        let mut members = Vec::with_capacity(joining.len());
+        for index in joining {
+            let (position, candidate, hint) = candidates[index].take().expect("joins once");
+            let Some(bytes) = budget.try_reserve(hint) else {
+                break;
+            };
+            reserved = reserved.saturating_add(bytes);
+            members.push((position, candidate));
         }
         if members.is_empty() {
             return Some((Ok(ReadGroup::single(read, request)), reserved));
