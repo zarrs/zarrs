@@ -377,7 +377,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             ByteSource::memory(encoded_shard),
             shape,
             DecodeRequest {
-                indexer: PlanIndexer::Subset(ArraySubset::new_with_shape(shard_shape_u64.to_vec())),
+                indexer: PlanIndexer::Subset(ArraySubset::new_with_shape(shard_shape_u64)),
                 target: TaskTarget::Value,
             },
             options,

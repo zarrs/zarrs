@@ -506,7 +506,7 @@ impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
         let state = Arc::new(Self {
             // A reference count of the inner codecs local to the generator
             inner_codecs: Arc::new(CodecChainBound::clone(&codec.inner_codecs)),
-            whole_subchunk: ArraySubset::new_with_shape(regular_shape.to_vec()),
+            whole_subchunk: ArraySubset::new_with_shape(regular_shape),
             subchunk_shape: codec.subchunk_shape.as_slice().into(),
             source,
             shard_index,

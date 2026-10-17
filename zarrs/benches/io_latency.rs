@@ -67,7 +67,7 @@ fn label(sharded: bool) -> &'static str {
 
 fn read_subset(name: &str) -> ArraySubset {
     match name {
-        "all" => ArraySubset::new_with_shape(SHAPE.to_vec()),
+        "all" => ArraySubset::new_with_shape(SHAPE),
         "straddle" => ArraySubset::new_with_ranges(&[200..312, 200..312]),
         _ => unreachable!(),
     }

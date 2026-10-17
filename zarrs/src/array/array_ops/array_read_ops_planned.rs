@@ -613,7 +613,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         chunk_indices: &[u64],
     ) -> Result<(ChunkShape, ArraySubset), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        let subset = ArraySubset::new_with_shape(bytemuck::must_cast_slice(&chunk_shape).to_vec());
+        let subset = ArraySubset::new_with_shape(bytemuck::must_cast_slice::<_, u64>(&chunk_shape));
         Ok((chunk_shape, subset))
     }
 }
@@ -1114,7 +1114,7 @@ mod async_planned {
             resources: &Resources,
         ) -> Result<ArrayBytes<'static>, ArrayError> {
             let indexer =
-                ArraySubset::new_with_shape(bytemuck::must_cast_slice(chunk_shape).to_vec());
+                ArraySubset::new_with_shape(bytemuck::must_cast_slice::<_, u64>(chunk_shape));
             let num_elements = indexer.num_elements();
             let (task, keys) = self.plan_partial_chunk(
                 chunk_indices,

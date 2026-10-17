@@ -1211,7 +1211,7 @@ mod tests {
         let data: Vec<f64> = (0..total_elements).map(|x| x as f64).collect();
         array
             .store_array_subset(
-                &ArraySubset::new_with_shape(SHAPE.to_vec()),
+                &ArraySubset::new_with_shape(SHAPE),
                 data.as_slice(),
                 &Resources::default(),
             )
@@ -1219,7 +1219,7 @@ mod tests {
 
         let read_data = array
             .retrieve_array_subset::<Vec<f64>>(
-                &ArraySubset::new_with_shape(SHAPE.to_vec()),
+                &ArraySubset::new_with_shape(SHAPE),
                 &Resources::default(),
             )
             .unwrap();

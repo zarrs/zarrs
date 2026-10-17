@@ -234,7 +234,7 @@ fn default_receiver_preserves_unique_allocation_and_checks_target_length() {
                     UnsafeCellSlice::new(&mut output),
                     1,
                     &shape,
-                    ArraySubset::new_with_shape(shape.to_vec()),
+                    ArraySubset::new_with_shape(shape),
                 )
             }
             .unwrap();

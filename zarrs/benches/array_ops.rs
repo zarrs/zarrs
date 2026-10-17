@@ -286,7 +286,7 @@ fn nested_sharding(c: &mut Criterion) {
         array
     });
     for (label, subset) in [
-        ("all", ArraySubset::new_with_shape(shape.to_vec())),
+        ("all", ArraySubset::new_with_shape(shape)),
         (
             "straddle",
             ArraySubset::new_with_ranges(&[100..300, 100..300]),

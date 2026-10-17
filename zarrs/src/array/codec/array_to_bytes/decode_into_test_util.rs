@@ -32,7 +32,7 @@ pub(crate) fn decode_into_view_array(
                 UnsafeCellSlice::new(&mut allocation[offset..]),
                 element_size,
                 &array_shape,
-                ArraySubset::new_with_shape(view_shape.to_vec()),
+                ArraySubset::new_with_shape(view_shape),
             )
         }
         .unwrap();

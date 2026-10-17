@@ -538,7 +538,7 @@ mod tests {
                     UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
                     size_of::<u16>(),
                     array_shape,
-                    ArraySubset::new_with_shape(chunk_shape.iter().map(|d| d.get()).collect()),
+                    ArraySubset::new_with_shape(bytemuck::must_cast_slice::<_, u64>(chunk_shape)),
                 )
             }
             .unwrap();

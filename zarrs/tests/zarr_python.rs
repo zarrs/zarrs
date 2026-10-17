@@ -24,7 +24,7 @@ fn zarr_python_compat_fletcher32_v2() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
     let elements = array.retrieve_array_subset::<Vec<u16>>(
-        &ArraySubset::new_with_shape(array.shape().to_vec()),
+        &ArraySubset::new_with_shape(array.shape()),
         &Resources::default(),
     )?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
@@ -47,7 +47,7 @@ fn zarr_python_compat_adler32_v2() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
     let elements = array.retrieve_array_subset::<Vec<u16>>(
-        &ArraySubset::new_with_shape(array.shape().to_vec()),
+        &ArraySubset::new_with_shape(array.shape()),
         &Resources::default(),
     )?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
