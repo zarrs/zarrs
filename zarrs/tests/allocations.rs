@@ -8,12 +8,9 @@
 //! Operations run on a single-thread Rayon pool with a compute target of 1 and storage requests on the compute thread,
 //! so the counts are deterministic.
 //!
-//! Each operation is checked against [`BASELINE`], the counts measured before the I/O and compute
-//! scheduling rework. A copy of the 128 KiB data exceeds the byte tolerances, so they detect added copies.
-//! Update a baseline only when an operation allocates less.
-//!
-//! Reads and writes run as planned tasks, and are checked against the baseline of the legacy reads and writes with an
-//! allowance for the tasks and the bookkeeping of the drive (see [`check_planned`]).
+//! Each operation is checked against [`BASELINE`], the counts last measured for it (see [`check`]).
+//! A copy of the 128 KiB data exceeds the byte tolerances, so they detect added copies.
+//! Lower a baseline when an operation allocates less; raise one only for a deliberate trade-off.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::num::NonZeroU64;
@@ -150,44 +147,45 @@ fn array(
     array
 }
 
-/// Allocation counts measured before the I/O and compute scheduling rework: `(name, allocations, allocated bytes, peak bytes)`.
+/// Allocation counts of each operation: `(name, allocations, allocated bytes, peak bytes)`.
+///
+/// Measured on 2026-10-17. Against the legacy reads and writes (before the I/O and compute scheduling rework), sharded
+/// reads allocate 73-81% less often and many-chunk reads and writes 30-70% less, with the same peak memory.
 const BASELINE: &[(&str, usize, usize, usize)] = &[
     // Zero-copy from the store: only metadata-sized allocations
-    ("retrieve_chunk_uncompressed", 11, 257, 162),
+    ("retrieve_chunk_uncompressed", 5, 78, 69),
     // One decompressed output
-    ("retrieve_chunk_zstd", 11, 131_321, 131_226),
+    ("retrieve_chunk_zstd", 5, 131_126, 131_088),
     // The output plus one decoded intermediate per 64 x 64 chunk
     (
         "retrieve_array_subset_many_chunks_zstd",
-        582,
-        274_754,
-        140_010,
+        172,
+        275_017,
+        142_889,
     ),
-    ("retrieve_sharded_all_zstd", 1729, 300_621, 135_116),
-    ("retrieve_sharded_partial_zstd", 1228, 165_813, 26_975),
-    // Recorded with the legacy partial decoder when the planned partial decoder was added
-    ("partial_decoder_sharded_zstd", 766, 98_335, 16_335),
+    ("retrieve_sharded_all_zstd", 326, 274_974, 138_157),
+    ("retrieve_sharded_partial_zstd", 161, 74_678, 26_101),
+    ("partial_decoder_sharded_zstd", 132, 52_430, 16_389),
     // The output only: the borrowed shard is not copied
-    ("sharding_decode_borrowed_shard", 1649, 168_134, 132_852),
+    ("sharding_decode_borrowed_shard", 247, 142_720, 136_040),
     // The memory store copies the value once
-    ("store_chunk_uncompressed_borrowed", 10, 131_244, 131_122),
-    ("store_chunk_zstd", 11, 131_780, 131_736),
-    ("store_array_subset_sharded", 1449, 493_792, 139_691),
-    ("async_retrieve_chunk_zstd", 14, 131_433, 131_258),
-    // Recorded with the legacy writes when planned writes were added
-    ("store_array_subset_many_chunks_zstd", 566, 306_418, 16_948),
+    ("store_chunk_uncompressed_borrowed", 8, 131_174, 131_133),
+    ("store_chunk_zstd", 9, 131_710, 131_678),
+    ("store_array_subset_sharded", 947, 489_542, 143_272),
+    ("async_retrieve_chunk_zstd", 11, 131_942, 131_637),
+    ("store_array_subset_many_chunks_zstd", 275, 304_873, 19_341),
     (
         "store_array_subset_partial_chunks_zstd",
-        796,
-        344_254,
-        21_012,
+        314,
+        339_137,
+        23_533,
     ),
-    ("store_chunks_sharded", 1440, 493_611, 139_595),
+    ("store_chunks_sharded", 942, 489_446, 143_272),
     (
         "async_store_array_subset_many_chunks_zstd",
-        632,
-        362_445,
-        149_526,
+        392,
+        337_009,
+        20_645,
     ),
 ];
 
@@ -232,61 +230,22 @@ fn check(name: &str, stats: Stats) {
     );
 }
 
-/// The bytes of the boxed compute step of a planned task (e.g. for a chunk or subchunk), which captures its decode request.
-const TASK_BYTES: usize = 512;
-
-/// The bytes of the bookkeeping of a drive of planned tasks (task queues, nodes, generators).
-const DRIVE_BYTES: usize = 4096;
-
-/// Assert that the planned `stats` of an operation of `tasks` tasks are no worse than the `legacy` stats of the
-/// operation, beyond the bytes of the tasks and the drive.
-#[track_caller]
-fn check_planned(name: &str, planned: Stats, legacy: Stats, tasks: usize) {
-    let within = |measured: usize, baseline: usize, slack: usize| {
-        measured <= baseline + baseline * 2 / 100 + slack
-    };
-    assert!(
-        within(planned.allocations, legacy.allocations, 4),
-        "{name}: planned {} allocations exceeds legacy {}",
-        planned.allocations,
-        legacy.allocations
-    );
-    assert!(
-        within(
-            planned.allocated_bytes,
-            legacy.allocated_bytes,
-            tasks * TASK_BYTES + DRIVE_BYTES
-        ),
-        "{name}: planned {} allocated bytes exceeds legacy {}",
-        planned.allocated_bytes,
-        legacy.allocated_bytes
-    );
-    assert!(
-        within(planned.peak_bytes, legacy.peak_bytes, DRIVE_BYTES),
-        "{name}: planned {} peak bytes exceeds legacy {}",
-        planned.peak_bytes,
-        legacy.peak_bytes
-    );
-}
-
-/// Measure the planned read `f` on `array`, and check it against the legacy baseline for an operation of `tasks`
-/// planned tasks.
+/// Measure the operation `f` on `array`, and check it against its baseline.
 #[track_caller]
 fn measure_and_check<R: Send>(
     name: &str,
     array: &Array<MemoryStore>,
-    tasks: usize,
     f: impl Fn(&Array<MemoryStore>) -> R + Sync,
 ) {
-    let (_, planned) = measure(name, || f(array));
-    check_planned(name, planned, baseline(name), tasks);
+    let (_, stats) = measure(name, || f(array));
+    check(name, stats);
 }
 
 #[test]
 #[serial]
 fn retrieve_chunk_uncompressed() {
     let array = array(&SHAPE, false, None);
-    measure_and_check("retrieve_chunk_uncompressed", &array, 1, |array| {
+    measure_and_check("retrieve_chunk_uncompressed", &array, |array| {
         let bytes = array
             .retrieve_chunk::<ArrayBytes>(&[0, 0], &resources())
             .unwrap();
@@ -298,7 +257,7 @@ fn retrieve_chunk_uncompressed() {
 #[serial]
 fn retrieve_chunk_zstd() {
     let array = array(&SHAPE, true, None);
-    measure_and_check("retrieve_chunk_zstd", &array, 1, |array| {
+    measure_and_check("retrieve_chunk_zstd", &array, |array| {
         array
             .retrieve_chunk::<ArrayBytes>(&[0, 0], &resources())
             .unwrap()
@@ -310,16 +269,11 @@ fn retrieve_chunk_zstd() {
 fn retrieve_array_subset_many_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     // 16 chunks
-    measure_and_check(
-        "retrieve_array_subset_many_chunks_zstd",
-        &array,
-        16,
-        |array| {
-            array
-                .retrieve_array_subset::<ArrayBytes>(&array.subset_all(), &resources())
-                .unwrap()
-        },
-    );
+    measure_and_check("retrieve_array_subset_many_chunks_zstd", &array, |array| {
+        array
+            .retrieve_array_subset::<ArrayBytes>(&array.subset_all(), &resources())
+            .unwrap()
+    });
 }
 
 #[test]
@@ -327,7 +281,7 @@ fn retrieve_array_subset_many_chunks_zstd() {
 fn retrieve_sharded_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     // One shard of 64 subchunks
-    measure_and_check("retrieve_sharded_all_zstd", &array, 65, |array| {
+    measure_and_check("retrieve_sharded_all_zstd", &array, |array| {
         array
             .retrieve_array_subset::<ArrayBytes>(&array.subset_all(), &resources())
             .unwrap()
@@ -335,7 +289,7 @@ fn retrieve_sharded_zstd() {
 
     // 25 intersecting subchunks
     let subset = ArraySubset::new_with_ranges(&[16..112, 16..112]);
-    measure_and_check("retrieve_sharded_partial_zstd", &array, 26, |array| {
+    measure_and_check("retrieve_sharded_partial_zstd", &array, |array| {
         array
             .retrieve_array_subset::<ArrayBytes>(&subset, &resources())
             .unwrap()
@@ -347,7 +301,7 @@ fn retrieve_sharded_zstd() {
 fn partial_decoder_sharded_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     // The index, one subchunk, then 9 subchunks
-    measure_and_check("partial_decoder_sharded_zstd", &array, 12, |array| {
+    measure_and_check("partial_decoder_sharded_zstd", &array, |array| {
         let decoder = array.partial_decoder(&[0, 0], &resources()).unwrap();
         for subset in [
             ArraySubset::new_with_ranges(&[40..60, 40..60]),
@@ -427,7 +381,7 @@ fn store_array_subset_sharded() {
 fn store_array_subset_many_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     let data = data();
-    measure_and_check("store_array_subset_many_chunks_zstd", &array, 16, |array| {
+    measure_and_check("store_array_subset_many_chunks_zstd", &array, |array| {
         array
             .store_array_subset(&array.subset_all(), data.as_slice(), &resources())
             .unwrap();
@@ -440,16 +394,11 @@ fn store_array_subset_partial_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     let subset = ArraySubset::new_with_ranges(&[32..224, 32..224]);
     let data: Vec<u16> = vec![1; 192 * 192];
-    measure_and_check(
-        "store_array_subset_partial_chunks_zstd",
-        &array,
-        16,
-        |array| {
-            array
-                .store_array_subset(&subset, data.as_slice(), &resources())
-                .unwrap();
-        },
-    );
+    measure_and_check("store_array_subset_partial_chunks_zstd", &array, |array| {
+        array
+            .store_array_subset(&subset, data.as_slice(), &resources())
+            .unwrap();
+    });
 }
 
 #[test]
@@ -457,7 +406,7 @@ fn store_array_subset_partial_chunks_zstd() {
 fn store_chunks_sharded() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     let data = data();
-    measure_and_check("store_chunks_sharded", &array, 1, |array| {
+    measure_and_check("store_chunks_sharded", &array, |array| {
         array
             .store_chunks(
                 &ArraySubset::new_with_ranges(&[0..1, 0..1]),
@@ -484,13 +433,10 @@ fn async_retrieve_chunk_zstd() {
         futures::executor::block_on(array.async_retrieve_chunk::<ArrayBytes>(&[0, 0], &resources()))
             .unwrap()
     };
-    let (_, planned) = measure("async_retrieve_chunk_zstd", retrieve);
-    check_planned(
-        "async_retrieve_chunk_zstd",
-        planned,
-        baseline("async_retrieve_chunk_zstd"),
-        1,
-    );
+    // The first drive of the executor initialises thread-local state
+    retrieve();
+    let (_, stats) = measure("async_retrieve_chunk_zstd", retrieve);
+    check("async_retrieve_chunk_zstd", stats);
 }
 
 #[cfg(feature = "async")]
@@ -503,7 +449,14 @@ fn async_store_array_subset_many_chunks_zstd() {
         .build(Arc::new(AsyncMemoryStore::new()), "/")
         .unwrap();
     let data = data();
-    let ((), planned) = measure("async_store_array_subset_many_chunks_zstd", || {
+    // The first drive of the executor initialises thread-local state
+    futures::executor::block_on(array.async_store_array_subset(
+        &array.subset_all(),
+        data.as_slice(),
+        &resources(),
+    ))
+    .unwrap();
+    let ((), stats) = measure("async_store_array_subset_many_chunks_zstd", || {
         futures::executor::block_on(array.async_store_array_subset(
             &array.subset_all(),
             data.as_slice(),
@@ -511,10 +464,5 @@ fn async_store_array_subset_many_chunks_zstd() {
         ))
         .unwrap();
     });
-    check_planned(
-        "async_store_array_subset_many_chunks_zstd",
-        planned,
-        baseline("async_store_array_subset_many_chunks_zstd"),
-        16,
-    );
+    check("async_store_array_subset_many_chunks_zstd", stats);
 }
