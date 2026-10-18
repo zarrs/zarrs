@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
+- Extract subset elements without boxed contiguous-run iterators
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.7.0, changing the grid types exposed by codec APIs
 - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 - Make `async-trait` optional and enable it only with the `async` feature.
