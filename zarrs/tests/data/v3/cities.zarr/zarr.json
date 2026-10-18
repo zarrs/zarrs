@@ -22,7 +22,8 @@
   "fill_value": "",
   "codecs": [
     {
-      "name": "vlen-utf8"
+      "name": "vlen-utf8",
+      "configuration": {}
     }
   ]
 }
