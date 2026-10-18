@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reserve capacity for fallible indexer collections and optional chunk-shape conversion
 - `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
 - `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
+- `ContiguousLinearisedIndices` iterates forwards by adding strides, rather than unravelling and ravelling the indices of each contiguous run
+  - **Breaking**: `ContiguousLinearisedIndices::new` takes the array shape as a `&[u64]` rather than a `Vec<u64>`
 - Bump `zarrs_metadata` to 0.7.6
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays

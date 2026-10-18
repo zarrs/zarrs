@@ -249,7 +249,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IndexerError> {
-        ContiguousLinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+        ContiguousLinearisedIndices::new(self.to_array_subset(), array_shape)
     }
 }
 
