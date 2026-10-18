@@ -92,12 +92,13 @@ impl ArraySubset {
         Self { start, shape }
     }
 
-    /// Create a new array subset with `size` starting at the origin.
+    /// Create a new array subset with `shape` starting at the origin.
     #[must_use]
-    pub fn new_with_shape(shape: ArrayShape) -> Self {
+    pub fn new_with_shape(shape: impl AsRef<[u64]>) -> Self {
+        let shape = shape.as_ref();
         Self {
             start: std::iter::repeat_n(0, shape.len()).collect(),
-            shape: shape.as_slice().into(),
+            shape: shape.into(),
         }
     }
 
@@ -107,16 +108,20 @@ impl ArraySubset {
     ///
     /// Returns [`ArraySubsetError`] if the size of `start` and `size` do not match.
     pub fn new_with_start_shape(
-        start: ArrayIndices,
-        shape: ArrayShape,
+        start: impl AsRef<[u64]>,
+        shape: impl AsRef<[u64]>,
     ) -> Result<Self, ArraySubsetError> {
+        let (start, shape) = (start.as_ref(), shape.as_ref());
         if start.len() == shape.len() {
             Ok(Self {
-                start: start.as_slice().into(),
-                shape: shape.as_slice().into(),
+                start: start.into(),
+                shape: shape.into(),
             })
         } else {
-            Err(ArraySubsetError::IncompatibleStartShape { start, shape })
+            Err(ArraySubsetError::IncompatibleStartShape {
+                start: start.to_vec(),
+                shape: shape.to_vec(),
+            })
         }
     }
 

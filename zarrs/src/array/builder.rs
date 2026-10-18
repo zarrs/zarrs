@@ -1224,14 +1224,11 @@ mod tests {
         let total_elements = SHAPE.iter().product::<u64>() as usize;
         let data: Vec<f64> = (0..total_elements).map(|x| x as f64).collect();
         array
-            .store_array_subset(
-                &ArraySubset::new_with_shape(SHAPE.to_vec()),
-                data.as_slice(),
-            )
+            .store_array_subset(&ArraySubset::new_with_shape(SHAPE), data.as_slice())
             .unwrap();
 
         let read_data = array
-            .retrieve_array_subset::<Vec<f64>>(&ArraySubset::new_with_shape(SHAPE.to_vec()))
+            .retrieve_array_subset::<Vec<f64>>(&ArraySubset::new_with_shape(SHAPE))
             .unwrap();
         assert_eq!(data, read_data);
     }

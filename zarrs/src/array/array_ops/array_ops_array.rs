@@ -318,7 +318,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subset_all(&self) -> ArraySubset {
-        ArraySubset::new_with_shape(self.shape().to_vec())
+        ArraySubset::new_with_shape(self.shape())
     }
 
     pub fn chunk_shape_usize(&self, chunk_indices: &[u64]) -> Result<Vec<usize>, ArrayError> {

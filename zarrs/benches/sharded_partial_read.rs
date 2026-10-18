@@ -73,10 +73,7 @@ fn populate_array(store: ReadableWritableListableStorage) {
     let total_elements = SHAPE.iter().product::<u64>() as usize;
     let data = random_data(total_elements);
     array
-        .store_array_subset(
-            &ArraySubset::new_with_shape(SHAPE.to_vec()),
-            data.as_slice(),
-        )
+        .store_array_subset(&ArraySubset::new_with_shape(SHAPE), data.as_slice())
         .unwrap();
 }
 
@@ -102,7 +99,7 @@ fn bench_read_full(c: &mut Criterion) {
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
     let full_bytes = SHARD_BYTES * 2; // 2 shards
-    let subset = ArraySubset::new_with_shape(SHAPE.to_vec());
+    let subset = ArraySubset::new_with_shape(SHAPE);
 
     group.throughput(Throughput::Bytes(full_bytes));
     group.bench_function("full_array", |b| {

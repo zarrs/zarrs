@@ -513,7 +513,7 @@ fn update_bytes_vlen_array_subset<'a>(
         .checked_sub(size_subset_old)
         .unwrap();
     let mut bytes_new = Vec::with_capacity(bytes_new_len);
-    let indices = ArraySubset::new_with_shape(input_shape.to_vec()).indices();
+    let indices = ArraySubset::new_with_shape(input_shape).indices();
     let update_subset_start = update_subset.start();
     let update_subset_shape = update_subset.shape();
     for (chunk_index, indices) in indices.iter().enumerate() {

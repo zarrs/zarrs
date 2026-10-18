@@ -141,10 +141,8 @@ where
             .zip(&parent_start)
             .map(|(&c, &p)| c + p)
             .collect();
-        let chunk_subset_in_view = ArraySubset::new_with_start_shape(
-            chunk_start_in_view,
-            chunk_subset_in_array.shape().to_vec(),
-        )?;
+        let chunk_subset_in_view =
+            ArraySubset::new_with_start_shape(chunk_start_in_view, chunk_subset_in_array.shape())?;
 
         let mut data_sub = unsafe {
             // SAFETY: chunks represent disjoint array subsets.

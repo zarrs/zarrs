@@ -162,7 +162,7 @@ fn subset_data(subset: &ArraySubset, offset: u16) -> Vec<u16> {
 
 /// Array subset writes, including writes at the final shard boundary and writes of the fill value.
 fn subset_writes() -> Vec<(ArraySubset, Vec<u16>)> {
-    let whole = ArraySubset::new_with_shape(SHAPE.to_vec());
+    let whole = ArraySubset::new_with_shape(SHAPE);
     let final_shard = ArraySubset::new_with_ranges(&[16..20, 12..17]);
     let final_elements = ArraySubset::new_with_ranges(&[18..20, 15..17]);
     let crossing = ArraySubset::new_with_ranges(&[5..13, 3..9]);
@@ -191,7 +191,7 @@ fn scattered_write() -> (Vec<ArrayIndices>, Vec<u16>) {
 
 fn read_subsets() -> Vec<ArraySubset> {
     vec![
-        ArraySubset::new_with_shape(SHAPE.to_vec()),
+        ArraySubset::new_with_shape(SHAPE),
         ArraySubset::new_with_ranges(&[19..20, 16..17]),
         ArraySubset::new_with_ranges(&[4..19, 5..16]),
     ]
@@ -391,7 +391,7 @@ fn assert_store_round_trip<T>(
 where
     T: IntoArrayBytes<'static> + FromArrayBytes + Clone + PartialEq + std::fmt::Debug,
 {
-    let subset = ArraySubset::new_with_shape(array.shape().to_vec());
+    let subset = ArraySubset::new_with_shape(array.shape());
     array.store_array_subset(&subset, data.clone())?;
     assert_eq!(array.retrieve_array_subset::<T>(&subset)?, data);
     Ok(())
