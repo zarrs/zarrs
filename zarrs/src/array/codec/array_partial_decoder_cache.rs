@@ -30,7 +30,7 @@ impl ArrayPartialDecoderCache {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options)?;
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
+                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape)),
                 options,
             )?
             .into_owned();
@@ -56,7 +56,7 @@ impl ArrayPartialDecoderCache {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options).await?;
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
+                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape)),
                 options,
             )
             .await?

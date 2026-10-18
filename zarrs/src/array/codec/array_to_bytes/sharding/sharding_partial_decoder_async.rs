@@ -504,10 +504,7 @@ async fn partial_decode_fixed_array_subset(
                     //     .remove(0);
 
                     let decoded_chunk = inner_partial_decoder
-                        .partial_decode(
-                            &ArraySubset::new_with_shape(chunk_subset.shape().to_vec()),
-                            options,
-                        ) // TODO: Adjust options for partial decoding
+                        .partial_decode(&ArraySubset::new_with_shape(chunk_subset.shape()), options) // TODO: Adjust options for partial decoding
                         .await?
                         .into_owned();
                     let decoded_chunk = decoded_chunk

@@ -272,7 +272,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// //   The array shape must have been set (i.e. non-zero), otherwise the
 /// //   iterator will be empty
 /// let chunk_grid_shape = array.chunk_grid_shape();
-/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape.to_vec()).indices();
+/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape).indices();
 ///
 /// // Iterate over chunk indices (in parallel)
 /// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndicesTinyVec| {
@@ -1585,7 +1585,7 @@ mod tests {
 
         println!("{array_in:?}");
 
-        let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
+        let subset_all = ArraySubset::new_with_shape(array_in.shape());
         let elements = array_in
             .retrieve_array_subset::<Vec<f32>>(&subset_all)
             .unwrap();
@@ -1756,7 +1756,7 @@ mod tests {
 
         println!("{array_in:?}");
 
-        let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
+        let subset_all = ArraySubset::new_with_shape(array_in.shape());
         let elements = array_in
             .retrieve_array_subset::<Vec<f32>>(&subset_all)
             .unwrap();

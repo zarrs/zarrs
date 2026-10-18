@@ -159,7 +159,7 @@ where
                 .collect();
             let chunk_subset_in_view = ArraySubset::new_with_start_shape(
                 chunk_start_in_view,
-                chunk_subset_in_array.shape().to_vec(),
+                chunk_subset_in_array.shape(),
             )?;
 
             let mut data_sub = unsafe {

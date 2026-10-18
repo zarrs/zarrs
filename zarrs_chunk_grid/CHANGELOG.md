@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: `LinearisedIndices::{new,new_unchecked}` take the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than an `ArrayShape`
 - `ArraySubsetTraits::{linearised_indices,contiguous_linearised_indices}` no longer copy the subset
 - Implement `Clone` for `ContiguousIndices[Into]Iterator`, `LinearisedIndices[Into]Iterator` and `ContiguousLinearisedIndices[Into]Iterator`
+- `ArraySubset::{new_with_shape,new_with_start_shape}` accept any `impl AsRef<[u64]>` (e.g. a slice) rather than a `Vec<u64>`, so a subset can be created without allocating
 - Bump `zarrs_metadata` to 0.7.6
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays

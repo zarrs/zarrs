@@ -59,7 +59,7 @@ fn label(sharded: bool) -> &'static str {
 /// Subsets read by the benchmarks: the whole array, and a region that straddles all four shards.
 fn read_subsets() -> [(&'static str, ArraySubset); 2] {
     [
-        ("all", ArraySubset::new_with_shape(SHAPE.to_vec())),
+        ("all", ArraySubset::new_with_shape(SHAPE)),
         (
             "straddle",
             ArraySubset::new_with_ranges(&[200..312, 200..312]),

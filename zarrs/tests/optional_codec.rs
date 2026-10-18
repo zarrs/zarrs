@@ -109,7 +109,11 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
     array.store_array_subset(
         &ArraySubset::new_with_start_shape(
             vec![0, 2],
-            update_data.shape().iter().map(|&x| x as u64).collect(),
+            update_data
+                .shape()
+                .iter()
+                .map(|&x| x as u64)
+                .collect::<Vec<_>>(),
         )?,
         update_data.clone(),
     )?;

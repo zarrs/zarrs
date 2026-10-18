@@ -48,7 +48,7 @@ fn fill_view(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("fill_view_{element_size}"));
         let pattern: Vec<u8> = (1..=u8::try_from(element_size).unwrap()).collect();
         for (name, subset) in [
-            ("contiguous", ArraySubset::new_with_shape(shape.to_vec())),
+            ("contiguous", ArraySubset::new_with_shape(shape)),
             ("strided", ArraySubset::new_with_ranges(&[0..64, 1..1023])),
         ] {
             let mut storage = vec![0u8; 64 * 1024 * element_size];
@@ -142,7 +142,7 @@ fn fill_output(c: &mut Criterion) {
                 fill_value = FillValue::new_optional_null();
             }
             for (layout, subset) in [
-                ("contiguous", ArraySubset::new_with_shape(shape.to_vec())),
+                ("contiguous", ArraySubset::new_with_shape(shape)),
                 ("strided", ArraySubset::new_with_ranges(&[0..64, 1..1023])),
             ] {
                 // Allocate output buffers outside the measurement. Construct views

@@ -207,7 +207,7 @@ where
     ) -> Result<(), super::CodecError> {
         // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.to_vec());
+        let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
         let encoded_value = self
             .input_output_handle
             .partial_decode(&array_subset_all, options)?;
@@ -570,7 +570,7 @@ where
     ) -> Result<(), super::CodecError> {
         // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.to_vec());
+        let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
         let encoded_value = self
             .input_output_handle
             .partial_decode(&array_subset_all, options)

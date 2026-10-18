@@ -673,8 +673,8 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                     chunk_subset.start().iter(),
                 )
                 .map(|(o, s)| o + s)
-                .collect(),
-                chunk_subset.shape().to_vec(),
+                .collect::<Vec<_>>(),
+                chunk_subset.shape(),
             )
             .unwrap();
             let mut output_view_subchunk = unsafe {
