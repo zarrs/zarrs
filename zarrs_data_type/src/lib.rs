@@ -15,6 +15,8 @@ mod optional;
 
 pub mod codec_traits;
 
+#[doc(hidden)]
+pub use codec_support::{TypeIdHasher, TypeIdMap};
 pub use cowbytes::CowBytes;
 pub use data_type::{DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3};
 pub use data_type_plugin::{

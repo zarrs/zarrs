@@ -1,5 +1,35 @@
 //! Generic codec support infrastructure for data type extensions.
 
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// A map keyed by [`TypeId`], which hashes a [`TypeId`] as itself as it is already a hash.
+#[doc(hidden)]
+pub type TypeIdMap<V> = HashMap<TypeId, V, BuildHasherDefault<TypeIdHasher>>;
+
+/// A [`Hasher`] for a [`TypeId`], which [hashes](std::hash::Hash) as a [`u64`] that is already a hash.
+#[doc(hidden)]
+#[derive(Default)]
+pub struct TypeIdHasher(u64);
+
+impl Hasher for TypeIdHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        // Not used by `TypeId`, but correct for any input
+        for &byte in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.0 ^= i;
+    }
+}
+
 /// Define codec support infrastructure for a data type extension codec.
 ///
 /// This macro generates:
@@ -42,7 +72,7 @@ macro_rules! _define_data_type_support {
             type [<$name CasterFn>] = fn(&dyn ::std::any::Any) -> ::core::option::Option<&dyn [<$name DataTypeTraits>]>;
 
             static [<$name:upper _CASTERS>]: ::std::sync::LazyLock<
-                ::std::collections::HashMap<::std::any::TypeId, [<$name CasterFn>]>
+                $crate::TypeIdMap<[<$name CasterFn>]>
             > = ::std::sync::LazyLock::new(|| {
                 ::inventory::iter::<[<$name DataTypePlugin>]>()
                     .map(|p| (p.type_id, p.caster))
@@ -116,4 +146,23 @@ macro_rules! _register_data_type_extension_codec {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn type_id_map() {
+        let map: TypeIdMap<&str> = [
+            (TypeId::of::<u8>(), "u8"),
+            (TypeId::of::<u16>(), "u16"),
+            (TypeId::of::<String>(), "String"),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(map.get(&TypeId::of::<u16>()), Some(&"u16"));
+        assert_eq!(map.get(&TypeId::of::<String>()), Some(&"String"));
+        assert_eq!(map.get(&TypeId::of::<u32>()), None);
+    }
 }
