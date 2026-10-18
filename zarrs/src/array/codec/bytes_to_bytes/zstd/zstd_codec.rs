@@ -35,6 +35,53 @@ pub(super) fn with_decompressor<R>(
     })
 }
 
+thread_local! {
+    /// The compression context of the thread, reused by encodes of small values since creating one costs more than
+    /// compressing a small value.
+    static COMPRESSOR: RefCell<Option<zstd_safe::CCtx<'static>>> = const { RefCell::new(None) };
+}
+
+/// Values larger than this are compressed with a new context rather than the context of the thread, which keeps the
+/// memory it allocates for the largest value it compresses.
+const COMPRESSOR_REUSE_MAX_LEN: usize = 1024 * 1024;
+
+/// An I/O error of a zstd error code, as the `zstd` crate maps them.
+fn map_error_code(code: zstd_safe::ErrorCode) -> std::io::Error {
+    std::io::Error::other(zstd_safe::get_error_name(code))
+}
+
+/// Compress `data` at compression `level`, with a checksum if `checksum`.
+fn compress(
+    data: &[u8],
+    level: zstd_safe::CompressionLevel,
+    checksum: bool,
+) -> std::io::Result<Vec<u8>> {
+    let compress = |context: &mut zstd_safe::CCtx<'static>| {
+        // Every parameter set on a context of the thread is set for each value
+        context
+            .set_parameter(zstd_safe::CParameter::CompressionLevel(level))
+            .map_err(map_error_code)?;
+        context
+            .set_parameter(zstd_safe::CParameter::ChecksumFlag(checksum))
+            .map_err(map_error_code)?;
+        let mut buffer = Vec::with_capacity(zstd_safe::compress_bound(data.len()));
+        context
+            .compress2(&mut buffer, data)
+            .map_err(map_error_code)?;
+        Ok(buffer)
+    };
+    if data.len() > COMPRESSOR_REUSE_MAX_LEN {
+        return compress(&mut zstd_safe::CCtx::create());
+    }
+    COMPRESSOR.with(|compressor| {
+        let Ok(mut compressor) = compressor.try_borrow_mut() else {
+            // The context is in use (e.g. by an encode reentered from an encode), so use a new one
+            return compress(&mut zstd_safe::CCtx::create());
+        };
+        compress(compressor.get_or_insert_with(zstd_safe::CCtx::create))
+    })
+}
+
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
 pub struct ZstdCodec {
@@ -125,12 +172,11 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
-        compressor.include_checksum(self.checksum)?;
-        // compressor.include_contentsize(true);
-        // compressor.set_pledged_src_size(Some(decoded_value.len()))?; // unpublished
-        let result = compressor.compress(&decoded_value)?;
-        Ok(CowBytes::from(result))
+        Ok(CowBytes::from(compress(
+            &decoded_value,
+            self.compression,
+            self.checksum,
+        )?))
     }
 
     fn decode<'a>(

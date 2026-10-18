@@ -269,4 +269,30 @@ mod tests {
         .unwrap();
         assert_eq!(nested, second);
     }
+    #[test]
+    fn encode_reuses_context_with_each_configuration() {
+        // Encodes on one thread with different configurations, and a value larger than the reused context's limit,
+        // match a new context
+        let small = b"compress with the context of the thread".repeat(64);
+        let large: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i % 251) as u8).collect();
+        for (level, checksum, data) in [
+            (1, false, &small),
+            (19, true, &small),
+            (3, false, &large),
+            (1, true, &small),
+            (19, false, &small),
+        ] {
+            let encoded = ZstdCodec::new(level, checksum)
+                .encode(CowBytes::from(data.as_slice()), &CodecOptions::default())
+                .unwrap();
+            let mut compressor = zstd::bulk::Compressor::new(level).unwrap();
+            compressor.include_checksum(checksum).unwrap();
+            let expected = compressor.compress(data).unwrap();
+            assert_eq!(
+                &*encoded,
+                expected.as_slice(),
+                "level {level}, checksum {checksum}"
+            );
+        }
+    }
 }

@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
+- The `zstd` codec reuses a compression context per thread for values of up to 1 MiB, rather than creating one per value
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
 - Reuse a `zstd` decompression context per thread for bulk decoding, with a fresh context when decoding reenters on the same thread
 - Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
