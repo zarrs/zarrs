@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reserve capacity for fallible indexer collections and optional chunk-shape conversion
+- Construct zero start indices inline
 - `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
 - `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
 - `ContiguousLinearisedIndices` iterates forwards by adding strides, rather than unravelling and ravelling the indices of each contiguous run

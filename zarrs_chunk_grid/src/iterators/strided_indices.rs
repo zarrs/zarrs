@@ -87,7 +87,7 @@ pub(crate) struct StridedOdometer {
 impl StridedOdometer {
     pub(crate) fn new(indices: &StridedIndices) -> Self {
         Self {
-            positions: std::iter::repeat_n(0, indices.counts.len()).collect(),
+            positions: crate::zero_indices(indices.counts.len()),
             front: indices.first,
             range: 0..indices.len,
         }
