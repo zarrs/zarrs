@@ -46,8 +46,6 @@ struct PackBitsCodecBound {
     last_bit: u64,
     data_type: DataType,
     fill_value: FillValue,
-    /// The equivalent `bytes` codec, if the components are whole bytes that are all packed.
-    bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
 }
 
 impl Default for PackBitsCodec {
@@ -168,23 +166,16 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             ));
         }
 
-        let bytes_codec = if components.component_size_bits.is_multiple_of(8)
+        if components.component_size_bits.is_multiple_of(8)
             && first_bit == 0
             && last_bit == components.component_size_bits - 1
         {
+            // The components are whole bytes that are all packed, so the codec is the little endian `bytes` codec.
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
-            Some(
-                Arc::new(BytesCodec::new(Some(Endianness::Little)))
-                    .with_context(
-                        data_type.clone(),
-                        fill_value.clone(),
-                        &CodecSpecificOptions::default(),
-                    )
-                    .map_err(|err| CodecCreateError::Other(err.to_string()))?,
-            )
-        } else {
-            None
-        };
+            return Arc::new(BytesCodec::new(Some(Endianness::Little)))
+                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .map_err(|err| CodecCreateError::Other(err.to_string()));
+        }
 
         Ok(Arc::new(PackBitsCodecBound {
             padding_encoding: self.padding_encoding,
@@ -193,7 +184,6 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             last_bit,
             data_type,
             fill_value,
-            bytes_codec,
         }))
     }
 }
@@ -333,8 +323,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        options: &CodecOptions,
-        resources: &ComputeResources,
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
@@ -343,11 +333,6 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         } = self.components;
         let first_bit = self.first_bit;
         let last_bit = self.last_bit;
-
-        // Bytes codec fast path
-        if let Some(bytes_codec) = &self.bytes_codec {
-            return bytes_codec.encode(bytes, shape, options, resources);
-        }
 
         // Get the component and element size in bits
         let PackBitsSizes {
@@ -410,13 +395,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         &self,
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
-        options: &CodecOptions,
-        resources: &ComputeResources,
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if let Some(bytes_codec) = &self.bytes_codec {
-            return bytes_codec.decode(bytes, shape, options, resources);
-        }
-
         let sizes = self.sizes(shape)?;
         let mut bytes_dec = vec![0u8; sizes.decoded_len()?];
         self.unpack(&bytes, &sizes, &mut bytes_dec)?;
@@ -431,9 +412,6 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
-        if let Some(bytes_codec) = &self.bytes_codec {
-            return bytes_codec.decode_into(input, shape, output_target, options, resources);
-        }
         let bytes = input.into_bytes(options, resources)?;
 
         // Unpack directly into an output that is one contiguous region
@@ -468,11 +446,6 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        if let Some(bytes_codec) = &self.bytes_codec {
-            return bytes_codec
-                .clone()
-                .plan_decode(source, shape, request, options);
-        }
         if request.indexer.is_whole(shape) {
             return plan_decode_whole(self, source, shape, request, options);
         }

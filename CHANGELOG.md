@@ -89,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - For example, a read of a 112 x 112 region straddling four shards of 8 x 8 subchunks made 8 rather than 20 requests to a store hinting object store coalescing
 - Reuse a `zstd` decompression context per thread when decoding
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
+- Bind whole-byte `packbits` components as the equivalent little endian `bytes` codec instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
+  - Its encoded representation is that of the `bytes` codec, which does not count a padding encoding byte, matching the encoded bytes
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
