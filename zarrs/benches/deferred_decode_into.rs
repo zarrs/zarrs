@@ -21,8 +21,8 @@ use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecTraits,
     BytesRepresentation, BytesToBytesCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
-    UnboundArrayToBytesCodecTraits,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    CowBytes, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::Configuration;
@@ -59,7 +59,7 @@ impl BytesToBytesCodecTraits for DecodeOnly {
         &self,
         decoded: CowBytes<'a>,
         _: &CodecOptions,
-        _: &Resources,
+        _: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded)
     }
@@ -69,7 +69,7 @@ impl BytesToBytesCodecTraits for DecodeOnly {
         encoded: CowBytes<'a>,
         _: &BytesRepresentation,
         _: &CodecOptions,
-        _: &Resources,
+        _: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded.to_vec().into())
     }
@@ -107,7 +107,7 @@ impl BytesToBytesCodecTraits for OwnedIntermediate {
         &self,
         bytes: CowBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.0.encode(bytes, options, resources)
     }
@@ -116,7 +116,7 @@ impl BytesToBytesCodecTraits for OwnedIntermediate {
         bytes: CowBytes<'a>,
         repr: &BytesRepresentation,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.0.decode(bytes, repr, options, resources)
     }
@@ -189,7 +189,7 @@ impl ArrayToBytesCodecTraits for OrdinaryReceiver {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         opts: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.0.encode(bytes, shape, opts, resources)
     }
@@ -198,7 +198,7 @@ impl ArrayToBytesCodecTraits for OrdinaryReceiver {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         opts: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.0.decode(bytes, shape, opts, resources)
     }
@@ -410,7 +410,7 @@ fn deferred_decode_into(c: &mut Criterion) {
                             ArrayBytes::new_flen(CowBytes::Borrowed(&decoded)),
                             &shape,
                             &options,
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         )
                         .unwrap()
                         .into_static();
@@ -434,7 +434,7 @@ fn deferred_decode_into(c: &mut Criterion) {
                                 &shape,
                                 ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                                 &options,
-                                &Resources::default(),
+                                &ComputeResources::default(),
                             )
                             .unwrap();
                     }
@@ -472,7 +472,7 @@ fn deferred_decode_into(c: &mut Criterion) {
                                 &shape,
                                 ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                                 &options,
-                                &Resources::default(),
+                                &ComputeResources::default(),
                             )
                             .unwrap();
                     },

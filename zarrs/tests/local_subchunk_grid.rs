@@ -11,8 +11,8 @@ use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayToBytesCodecTraits, BytesRepresentation, ChunkGrid,
     ChunkShape, ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, CowBytes, DataType, DataTypeSize, FillValue,
-    Resources, UnboundArrayToBytesCodecTraits, data_type,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, CowBytes, DataType,
+    DataTypeSize, FillValue, Resources, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -179,7 +179,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
         Ok(CowBytes::from(encode_shape_header(&next_subchunk_shape(
@@ -192,7 +192,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         decode_shape_header(&bytes, shape.len())?;
         zero_bytes(&self.data_type, shape.num_elements_u64()).map(ArrayBytes::into_owned)
@@ -431,7 +431,7 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -441,7 +441,7 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -551,7 +551,7 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }
@@ -561,7 +561,7 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         _bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         unimplemented!("test codec only exercises subchunk-grid propagation")
     }

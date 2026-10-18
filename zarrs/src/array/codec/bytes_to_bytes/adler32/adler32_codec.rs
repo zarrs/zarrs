@@ -7,7 +7,8 @@ use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
@@ -65,7 +66,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut adler = simd_adler32::Adler32::new();
         adler.write(&decoded_value);
@@ -96,7 +97,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {

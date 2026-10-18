@@ -76,7 +76,7 @@ impl CodecTraitsV2 for ZlibCodec {
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;
     use std::num::NonZeroU64;
     use std::sync::Arc;
@@ -105,7 +105,7 @@ mod tests {
             .encode(
                 CowBytes::from(decoded.as_slice()),
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
@@ -114,7 +114,7 @@ mod tests {
                 &BytesRepresentation::FixedSize(len as u64),
                 output,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
 
@@ -153,7 +153,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -161,7 +161,7 @@ mod tests {
                 encoded,
                 &bytes_representation,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
@@ -187,7 +187,7 @@ mod tests {
             .encode(
                 CowBytes::from(bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])

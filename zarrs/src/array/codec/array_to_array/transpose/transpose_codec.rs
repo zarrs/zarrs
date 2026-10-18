@@ -13,7 +13,8 @@ use crate::array::{ArrayBytes, ArrayIndices, ChunkGrid, ChunkShape, DataType, Fi
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
@@ -246,7 +247,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         let _ = (options, resources);
         let indexer = indexer.as_indexer();
@@ -323,7 +324,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 
@@ -337,7 +338,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 

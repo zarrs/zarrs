@@ -10,7 +10,8 @@ use crate::array::{ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
@@ -289,7 +290,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         let _ = (options, resources);
         // The squeezed indexer selects the same elements in the same order
@@ -350,7 +351,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -360,7 +361,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }

@@ -47,7 +47,7 @@ impl BytesToBytesCodecTraits for Producer {
         &self,
         bytes: CowBytes<'a>,
         _: &CodecOptions,
-        _: &Resources,
+        _: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -56,7 +56,7 @@ impl BytesToBytesCodecTraits for Producer {
         bytes: CowBytes<'a>,
         repr: &BytesRepresentation,
         _options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.normal.fetch_add(1, Ordering::Relaxed);
         assert_eq!(*repr, BytesRepresentation::FixedSize(3));
@@ -73,7 +73,7 @@ impl BytesToBytesCodecTraits for Producer {
         repr: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         self.direct.fetch_add(1, Ordering::Relaxed);
         assert_eq!(*repr, BytesRepresentation::FixedSize(3));
@@ -117,7 +117,7 @@ impl ArrayToBytesCodecTraits for Receiver {
         _: ArrayBytes<'a>,
         _: &[NonZeroU64],
         _: &CodecOptions,
-        _: &Resources,
+        _: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         unreachable!()
     }
@@ -126,7 +126,7 @@ impl ArrayToBytesCodecTraits for Receiver {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         assert_eq!(shape, &[NonZeroU64::new(3).unwrap()]);
@@ -142,7 +142,7 @@ fn options() -> CodecOptions {
     CodecOptions::default()
 }
 
-fn resources() -> Resources {
+fn resources() -> ComputeResources {
     // Default resources query Rayon. Keep that query on a single-thread local
     // pool so Miri does not start persistent global worker threads.
     thread_local! {
@@ -152,7 +152,7 @@ fn resources() -> Resources {
             .build()
             .unwrap();
     }
-    POOL.with(|pool| pool.install(|| Resources::default().with_compute_target(7)))
+    POOL.with(|pool| pool.install(|| ComputeResources::default().with_compute_target(7)))
 }
 
 #[test]

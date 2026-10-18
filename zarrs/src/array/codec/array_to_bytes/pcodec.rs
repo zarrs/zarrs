@@ -95,8 +95,8 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
     use crate::array::codec::test_util::MemoryPartialDecoder;
+    use crate::array::{ComputeResources, Resources};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -165,7 +165,7 @@ mod tests {
             bytes.clone(),
             chunk_shape.as_slice(),
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
         let decoded = codec
@@ -173,7 +173,7 @@ mod tests {
                 encoded,
                 chunk_shape.as_slice(),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded);
@@ -214,14 +214,14 @@ mod tests {
                 bytes.clone().into(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             let decoded = codec
                 .decode(
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )?
                 .into_fixed()?
                 .to_vec();
@@ -280,7 +280,7 @@ mod tests {
                     stream_bytes.into(),
                     &stream_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )?;
                 assert!(matches!(
                     decode_into_view(&codec, &stream, &chunk_shape, [4, 4], 4, 0, element_size),
@@ -482,7 +482,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);

@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 - Add `Resources` (re-exported from `zarrs_codec`), which sets the resources (e.g. concurrency) available to an operation
+  - Add `ComputeResources` (re-exported from `zarrs_codec`), the compute target of `Resources`, which is passed to codecs
 
 ### Changed
 - Encode chunk keys in one allocation, rather than allocating per index and growing the key

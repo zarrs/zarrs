@@ -43,7 +43,7 @@ pub use zarrs_data_type::codec_traits::cast_value::{
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use std::num::NonZeroU64;
 
     use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
@@ -75,7 +75,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements = crate::array::transmute_from_bytes_vec::<u16>(
@@ -88,7 +88,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_elements =
@@ -121,7 +121,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -152,7 +152,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -183,7 +183,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -191,7 +191,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_elements =
@@ -229,7 +229,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -262,7 +262,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -308,7 +308,7 @@ mod tests {
                     bytes,
                     &shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
@@ -373,7 +373,7 @@ mod tests {
                     bytes,
                     &shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
@@ -413,7 +413,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -435,7 +435,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -472,7 +472,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -499,7 +499,7 @@ mod tests {
                 bytes,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let encoded_elements =
@@ -616,7 +616,7 @@ mod tests {
                             ArrayBytes::from(source_bytes.clone()),
                             &shape,
                             &options,
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         );
                         if expected_err {
                             assert!(encoded.is_err(), "{case}: expected encode error");
@@ -647,7 +647,7 @@ mod tests {
                             ArrayBytes::from(encoded.clone()),
                             &shape,
                             &options,
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         );
                         if expected_decode_err {
                             assert!(decoded.is_err(), "{case}: expected decode error");

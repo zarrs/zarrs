@@ -292,8 +292,8 @@ fn zfp_decompress(
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
     use crate::array::codec::test_util::MemoryPartialDecoder;
+    use crate::array::{ComputeResources, Resources};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -368,7 +368,7 @@ mod tests {
                 bytes.clone(),
                 chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -376,7 +376,7 @@ mod tests {
                 encoded.clone(),
                 chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_owned();
@@ -404,14 +404,19 @@ mod tests {
             .unwrap();
         let options = CodecOptions::default();
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &options, &Resources::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &options,
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
             .decode(
                 encoded.clone(),
                 &chunk_shape,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_fixed()
@@ -450,7 +455,7 @@ mod tests {
             truncated.clone(),
             &chunk_shape,
             &options,
-            &Resources::default(),
+            &ComputeResources::default(),
         );
         let output = decode_into_view(&codec, &truncated, &chunk_shape, [4, 4], 4, 0, element_size);
         match (decoded_truncated, output) {
@@ -511,7 +516,7 @@ mod tests {
         let options = CodecOptions::default();
 
         let encoded = codec
-            .encode(bytes, &shape, &options, &Resources::default())
+            .encode(bytes, &shape, &options, &ComputeResources::default())
             .unwrap();
         let mut bitstream = ZfpBitStream::from_bytes(&encoded).unwrap();
         let header = bitstream.read_header(ZfpHeaderMask::FULL).unwrap();
@@ -520,7 +525,7 @@ mod tests {
         assert_eq!(metadata.dims, [3, 3, 3, 0]);
 
         let decoded = codec
-            .decode(encoded, &shape, &options, &Resources::default())
+            .decode(encoded, &shape, &options, &ComputeResources::default())
             .unwrap();
         assert_eq!(
             f32::from_array_bytes(&data_type, decoded).unwrap(),
@@ -698,7 +703,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = [

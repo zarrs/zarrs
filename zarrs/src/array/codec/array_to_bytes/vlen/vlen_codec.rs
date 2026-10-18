@@ -9,7 +9,8 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToBytesCodecTraits,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
@@ -208,7 +209,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, &self.data_type)?;
@@ -279,7 +280,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
             &bytes,

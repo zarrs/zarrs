@@ -4,7 +4,8 @@ use zarrs_plugin::ZarrVersion;
 
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources,
 };
 use zarrs_metadata::Configuration;
 
@@ -50,7 +51,7 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
@@ -60,7 +61,7 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }

@@ -190,7 +190,7 @@ impl CodecTraitsV3 for ReshapeCodec {
 #[cfg(test)]
 mod tests {
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
-    use crate::array::{CodecChainBound, Resources};
+    use crate::array::{CodecChainBound, ComputeResources, Resources};
     use std::num::NonZeroU64;
     use zarrs_codec::ArrayToBytesCodecTraits;
     use zarrs_codec::plan::partial_encode_memory;
@@ -268,13 +268,13 @@ mod tests {
             bytes.clone(),
             &shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
         let decoded = codec.decode(
             encoded,
             &shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
         assert_eq!(bytes, decoded);
         Ok(())
@@ -1003,7 +1003,7 @@ mod tests {
                     bytes,
                     shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap()
                 .into_vec(),
@@ -1016,7 +1016,7 @@ mod tests {
             indexer,
             &ArrayBytes::from(bytes),
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap();
         let decoded = codecs
@@ -1024,7 +1024,7 @@ mod tests {
                 encoded.unwrap().into(),
                 shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap())

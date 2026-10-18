@@ -99,7 +99,7 @@ pub(crate) use sharding_options::RequireDivisibleSubchunks;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, ChunkGridDecoded, Codec, CodecError, CodecOptions, CodecPluginV3,
-    CodecTraitsV3, Resources,
+    CodecTraitsV3, ComputeResources,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -202,7 +202,7 @@ fn decode_shard_index(
     index_shape: &[NonZeroU64],
     index_codecs: &CodecChainBound,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
     let decoded_shard_index = index_codecs.decode(
@@ -583,7 +583,7 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, FillValue, data_type};
     use zarrs_chunk_grid::Indexer;
     use zarrs_codec::{
-        BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
+        BytesToBytesCodecTraits, CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
     };
 
     fn get_concurrent_target(parallel: bool) -> usize {
@@ -650,7 +650,7 @@ mod tests {
 
     fn codec_sharding_round_trip_impl(
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
         unbounded: bool,
         index_at_end: bool,
         fill_value_amount: &FillValueAmount,
@@ -778,7 +778,7 @@ mod tests {
                             let concurrent_target = get_concurrent_target(parallel);
                             let options = CodecOptions::default();
                             let resources =
-                                Resources::default().with_compute_target(concurrent_target);
+                                ComputeResources::default().with_compute_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 &resources,
@@ -812,7 +812,7 @@ mod tests {
                             let concurrent_target = get_concurrent_target(parallel);
                             let options = CodecOptions::default();
                             let resources =
-                                Resources::default().with_compute_target(concurrent_target);
+                                ComputeResources::default().with_compute_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 &resources,
@@ -946,8 +946,8 @@ mod tests {
                     unbounded,
                 );
                 let options = CodecOptions::default();
-                let resources =
-                    Resources::default().with_compute_target(get_concurrent_target(parallel));
+                let resources = ComputeResources::default()
+                    .with_compute_target(get_concurrent_target(parallel));
                 let encoded = codec
                     .encode(bytes.clone(), &shard_shape_nz, &options, &resources)
                     .unwrap();
@@ -1036,11 +1036,16 @@ mod tests {
                             bytes.clone(),
                             &shard_shape_nz,
                             &options,
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         )
                         .unwrap();
                     let decoded = codec
-                        .decode(encoded, &shard_shape_nz, &options, &Resources::default())
+                        .decode(
+                            encoded,
+                            &shard_shape_nz,
+                            &options,
+                            &ComputeResources::default(),
+                        )
                         .unwrap();
                     assert_eq!(bytes, decoded);
                 }
@@ -1077,7 +1082,7 @@ mod tests {
                             bytes.clone(),
                             &to_nonzero(&shard_shape),
                             &CodecOptions::default(),
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         )
                         .unwrap();
                     let indexers: Vec<Box<dyn Indexer>> = vec![
@@ -1151,8 +1156,8 @@ mod tests {
         for index_at_end in [true, false] {
             for parallel in [true, false] {
                 let options = CodecOptions::default();
-                let resources =
-                    Resources::default().with_compute_target(get_concurrent_target(parallel));
+                let resources = ComputeResources::default()
+                    .with_compute_target(get_concurrent_target(parallel));
                 let codec = Arc::new(
                     ShardingCodecBuilder::new(subchunk_shape.clone(), &data_type::uint8())
                         .index_location(if index_at_end {
@@ -1183,7 +1188,7 @@ mod tests {
     #[cfg(feature = "async")]
     async fn codec_sharding_async_round_trip_impl(
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
         unbounded: bool,
         index_at_end: bool,
         all_fill_value: bool,
@@ -1234,7 +1239,8 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options = CodecOptions::default();
-                        let resources = Resources::default().with_compute_target(concurrent_target);
+                        let resources =
+                            ComputeResources::default().with_compute_target(concurrent_target);
                         codec_sharding_async_round_trip_impl(
                             &options,
                             &resources,
@@ -1296,7 +1302,7 @@ mod tests {
         .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, options, resources)
+            .encode(bytes.clone(), &chunk_shape, options, resources.compute())
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let partial_decoder =
@@ -1364,7 +1370,7 @@ mod tests {
                 bytes,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3]);
@@ -1410,7 +1416,7 @@ mod tests {
                 bytes,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
@@ -1463,7 +1469,7 @@ mod tests {
                 original_bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let original_size = original_encoded.len();
@@ -1474,7 +1480,7 @@ mod tests {
                 original_encoded.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(original_bytes, decoded);
@@ -1493,7 +1499,7 @@ mod tests {
                 &subchunk_subset,
                 &ArrayBytes::from(updated_bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         }
@@ -1512,7 +1518,7 @@ mod tests {
                 updated_encoded.into(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let compacted = compacted.expect("compaction should have occurred");
@@ -1530,7 +1536,7 @@ mod tests {
                 compacted.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 
@@ -1551,7 +1557,7 @@ mod tests {
                 CowBytes::Borrowed(&compacted),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert!(compacted_again.is_none());
@@ -1562,7 +1568,7 @@ mod tests {
                 CowBytes::Borrowed(&original_encoded),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert!(original_compacted.is_none());

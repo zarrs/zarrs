@@ -18,8 +18,8 @@ use zarrs::array::codec::{CastValueCodec, ReshapeCodec, SqueezeCodec};
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, DataType, DataTypeSize, FillValue, Resources,
-    UnboundArrayToArrayCodecTraits, data_type,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, DataType, DataTypeSize,
+    FillValue, UnboundArrayToArrayCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
@@ -108,7 +108,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }
@@ -118,7 +118,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }

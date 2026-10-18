@@ -112,7 +112,7 @@ mod tests {
     use crate::array::element::Element;
     use crate::array::{FillValue, data_type};
     use zarrs_codec::{
-        CodecOptions, CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+        CodecOptions, CodecSpecificOptions, ComputeResources, UnboundArrayToBytesCodecTraits,
     };
 
     /// `decode_into` is the `decode_into` of the inner `zfp` codec.
@@ -132,7 +132,12 @@ mod tests {
             .unwrap();
         let options = CodecOptions::default();
         let encoded = codec
-            .encode(bytes.clone(), &chunk_shape, &options, &Resources::default())
+            .encode(
+                bytes.clone(),
+                &chunk_shape,
+                &options,
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = bytes.into_fixed().unwrap().to_vec();
 

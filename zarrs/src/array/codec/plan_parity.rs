@@ -8,8 +8,8 @@ use zarrs_codec::plan::{
     TaskValue, drive_serial, drive_sync, encoded_value,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
-    update_array_bytes,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, ComputeResources,
+    Resources, update_array_bytes,
 };
 use zarrs_storage::byte_range::{ByteRange, extract_byte_ranges};
 use zarrs_storage::{Bytes, StorageError};
@@ -202,7 +202,7 @@ pub(crate) fn planned_bytes_read(
             bytes,
             shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap()
         .into_vec();
@@ -236,7 +236,12 @@ fn assert_encode_parity(
     let options = CodecOptions::default();
     let resources = Resources::default();
     let expected = codecs
-        .decode(CowBytes::Borrowed(encoded), shape, &options, &resources)
+        .decode(
+            CowBytes::Borrowed(encoded),
+            shape,
+            &options,
+            resources.compute(),
+        )
         .unwrap();
     let io = OneValueIo::new(Bytes::new());
     for (name, drive) in drivers() {
@@ -246,7 +251,9 @@ fn assert_encode_parity(
             .unwrap();
         let mut values = drive(vec![task], &io, &resources).unwrap();
         let planned = encoded_value(values.remove(0)).unwrap();
-        let decoded = codecs.decode(planned, shape, &options, &resources).unwrap();
+        let decoded = codecs
+            .decode(planned, shape, &options, resources.compute())
+            .unwrap();
         assert_eq!(decoded, expected, "{name}: encode");
     }
 }
@@ -261,13 +268,18 @@ pub(crate) fn assert_plan_parity(
     let options = CodecOptions::default();
     let resources = Resources::default();
     let encoded = codecs
-        .encode(bytes.clone(), shape, &options, &resources)
+        .encode(bytes.clone(), shape, &options, resources.compute())
         .unwrap()
         .into_vec();
     assert_encode_parity(codecs, shape, &bytes, &encoded);
     let io = OneValueIo::new(Bytes::from(encoded.clone()));
     let decoded = codecs
-        .decode(CowBytes::from(encoded), shape, &options, &resources)
+        .decode(
+            CowBytes::from(encoded),
+            shape,
+            &options,
+            resources.compute(),
+        )
         .unwrap();
     for indexer in indexers(shape) {
         let expected = decoded
@@ -373,9 +385,11 @@ pub(crate) fn assert_partial_encode_parity(
                     codecs.data_type().size(),
                 )
                 .unwrap();
-                let encoded = codecs.encode(updated, shape, &options, &resources).unwrap();
+                let encoded = codecs
+                    .encode(updated, shape, &options, resources.compute())
+                    .unwrap();
                 expected = codecs
-                    .decode(encoded, shape, &options, &resources)
+                    .decode(encoded, shape, &options, resources.compute())
                     .unwrap()
                     .into_owned();
                 let task = codecs
@@ -399,7 +413,12 @@ pub(crate) fn assert_partial_encode_parity(
                 // A chunk that is entirely the fill value may be erased
                 let decoded = match io.0.lock().unwrap().clone() {
                     Some(encoded) => codecs
-                        .decode(CowBytes::from(encoded), shape, &options, &resources)
+                        .decode(
+                            CowBytes::from(encoded),
+                            shape,
+                            &options,
+                            resources.compute(),
+                        )
                         .unwrap(),
                     None => ArrayBytes::new_fill_value(
                         codecs.data_type(),
@@ -1020,7 +1039,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             let mut expected = ArrayBytes::new_fill_value(

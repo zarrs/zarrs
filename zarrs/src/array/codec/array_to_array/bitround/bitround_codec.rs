@@ -13,7 +13,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 
@@ -140,7 +140,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
     }
@@ -176,7 +176,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
         bytes.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
@@ -188,7 +188,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
     }

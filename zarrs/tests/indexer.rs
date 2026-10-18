@@ -3,7 +3,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs::array::Resources;
+use zarrs::array::ComputeResources;
 
 use itertools::Itertools;
 use zarrs::array::codec::{BytesCodec, ShardingCodecBuilder, SqueezeCodec, VlenCodec};
@@ -262,7 +262,7 @@ fn encode_chunk<T: ElementOwned>(
             T::to_array_bytes(data_type, bytes).unwrap(),
             shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap()
         .into_vec();
@@ -283,7 +283,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
         shape,
         indexer,
         &CodecOptions::default(),
-        &Resources::default(),
+        &ComputeResources::default(),
     )
     .unwrap();
     T::from_array_bytes(&data_type, decoded).unwrap()
@@ -306,7 +306,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
         indexer,
         &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
         &CodecOptions::default(),
-        &Resources::default(),
+        &ComputeResources::default(),
     )
     .unwrap();
     T::from_array_bytes(
@@ -316,7 +316,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
                 encoded_chunk.unwrap().into(),
                 shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap(),
     )

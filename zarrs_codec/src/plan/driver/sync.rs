@@ -50,7 +50,7 @@ pub fn drive_sync<'a>(
     io: &dyn SyncIo,
     resources: &Resources,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
-    let ctx = ComputeCtx::new(resources.clone());
+    let ctx = ComputeCtx::new(resources.compute().clone());
     let scheduler = if let [_] = tasks.as_slice() {
         let task = tasks.pop().expect("one task");
         match drive_single(task, io, resources, &ctx)? {
@@ -75,7 +75,7 @@ pub fn drive_sync_one<'a>(
     io: &dyn SyncIo,
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
-    let ctx = ComputeCtx::new(resources.clone());
+    let ctx = ComputeCtx::new(resources.compute().clone());
     match drive_single(task, io, resources, &ctx)? {
         Ok(value) => Ok(value),
         Err(scheduler) => Ok(drive_scheduler(scheduler, io, resources, &ctx)?
@@ -351,7 +351,7 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
     /// The resources of a compute step: a share of the compute target.
     fn compute_ctx(&self) -> ComputeCtx {
         let busy = self.compute_in_flight + self.scheduler.compute_queued() + 1;
-        ComputeCtx::new(self.resources.with_compute_share(busy))
+        ComputeCtx::new(self.resources.compute().with_compute_share(busy))
     }
 
     fn dispatch<'scope>(
@@ -1003,7 +1003,7 @@ mod tests {
             let io = LatencyIo::new(8, Duration::from_millis(1));
             let resources = Resources::default().with_read_dispatch(Some(dispatch));
             let completed = AtomicUsize::new(0);
-            let (io, completed) = (&io, &completed);
+            let (io, completed, resources_ref) = (&io, &completed, &resources);
             let tasks = (0..8)
                 .map(|key| {
                     Task::read(
@@ -1023,7 +1023,9 @@ mod tests {
                                     )
                                 })
                                 .collect();
-                            drive_sync(nested, io, ctx.resources())?;
+                            let nested_resources =
+                                resources_ref.clone().with_compute(ctx.resources().clone());
+                            drive_sync(nested, io, &nested_resources)?;
                             Ok(Outcome::Done)
                         },
                     )

@@ -78,7 +78,7 @@ impl CodecTraitsV2 for ZstdCodec {
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
@@ -127,7 +127,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -135,7 +135,7 @@ mod tests {
                 encoded,
                 &bytes_representation,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
@@ -155,7 +155,7 @@ mod tests {
             .encode(
                 CowBytes::from(bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = [
@@ -188,7 +188,11 @@ mod tests {
         let options = CodecOptions::default();
         let encode = |decoded: &[u8]| -> Vec<u8> {
             codec
-                .encode(CowBytes::from(decoded), &options, &Resources::default())
+                .encode(
+                    CowBytes::from(decoded),
+                    &options,
+                    &ComputeResources::default(),
+                )
                 .unwrap()
                 .to_vec()
         };
@@ -198,7 +202,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::FixedSize(len as u64),
                     &options,
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .map(|decoded| decoded.to_vec())
         };
@@ -237,7 +241,7 @@ mod tests {
             .encode(
                 CowBytes::from(decoded.as_slice()),
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decode_into = |output: &mut [u8]| {
@@ -246,7 +250,7 @@ mod tests {
                 &BytesRepresentation::FixedSize(len as u64),
                 output,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
 
@@ -276,7 +280,7 @@ mod tests {
                 &BytesRepresentation::UnboundedSize,
                 output,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
 
@@ -305,7 +309,7 @@ mod tests {
             .encode(
                 CowBytes::from(decoded.as_slice()),
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
@@ -319,7 +323,7 @@ mod tests {
                     &BytesRepresentation::FixedSize(8),
                     &mut output,
                     &options,
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 ),
                 Err(CodecError::IOError(_))
             ));

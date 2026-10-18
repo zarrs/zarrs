@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use zarrs_storage::byte_range::ByteRange;
 
 use super::{ByteSource, SourceKey};
-use crate::{ArrayBytes, CodecError, CowBytes, Resources};
+use crate::{ArrayBytes, CodecError, ComputeResources, CowBytes};
 
 /// The bytes read by a task, one per requested byte range.
 ///
@@ -16,14 +16,14 @@ pub type Reads<'a> = SmallVec<[Option<CowBytes<'a>>; 1]>;
 /// The context of a compute step.
 #[derive(Debug, Clone)]
 pub struct ComputeCtx {
-    resources: Resources,
+    resources: ComputeResources,
     inline: bool,
 }
 
 impl ComputeCtx {
     /// Create a compute context.
     #[must_use]
-    pub fn new(resources: Resources) -> Self {
+    pub fn new(resources: ComputeResources) -> Self {
         Self {
             resources,
             inline: false,
@@ -33,7 +33,7 @@ impl ComputeCtx {
     /// Create the context of a compute step that runs on the polling task of an asynchronous drive.
     #[cfg(feature = "async")]
     #[must_use]
-    pub(crate) fn new_inline(resources: Resources) -> Self {
+    pub(crate) fn new_inline(resources: ComputeResources) -> Self {
         Self {
             resources,
             inline: true,
@@ -49,12 +49,12 @@ impl ComputeCtx {
         self.inline
     }
 
-    /// The resources available to the compute step.
+    /// The compute resources available to the compute step.
     ///
     /// The compute target is the share of the compute target of the drive available to this step.
     /// A compute step that runs an operation with its own concurrency (e.g. a nested drive) should use these resources.
     #[must_use]
-    pub fn resources(&self) -> &Resources {
+    pub fn resources(&self) -> &ComputeResources {
         &self.resources
     }
 }
@@ -515,7 +515,7 @@ mod tests {
             },
         );
         assert!(!task.needs_io());
-        let ctx = ComputeCtx::new(Resources::default());
+        let ctx = ComputeCtx::new(ComputeResources::default());
         assert!(matches!(task.run_without_io(&ctx), Ok(Outcome::Done)));
 
         let task = Task::read(
@@ -533,7 +533,7 @@ mod tests {
             assert!(matches!(values[0], TaskValue::Bytes(None)));
             Ok(Outcome::Value(TaskValue::None))
         });
-        let ctx = ComputeCtx::new(Resources::default());
+        let ctx = ComputeCtx::new(ComputeResources::default());
         assert!(matches!(
             join.run(vec![TaskValue::Bytes(None)], &ctx),
             Ok(Outcome::Value(TaskValue::None))

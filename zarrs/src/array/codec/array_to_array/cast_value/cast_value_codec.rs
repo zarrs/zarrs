@@ -6,7 +6,7 @@ use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_data_type::codec_traits::cast_value::{
     CastValueDataTypeExt, CastValueDataTypeTraits, CastValueKernel,
@@ -199,7 +199,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
     }
@@ -221,7 +221,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.data_type.codec_castvalue()?;
         let target = self.encoded_data_type.codec_castvalue()?;
@@ -245,7 +245,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.encoded_data_type.codec_castvalue()?;
         let target = self.data_type.codec_castvalue()?;

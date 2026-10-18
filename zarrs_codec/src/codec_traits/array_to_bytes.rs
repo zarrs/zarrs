@@ -9,7 +9,7 @@ use crate::plan::{ByteSource, DecodeRequest, PartialEncodeState, PlanIndexer, So
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes,
     decode_into_array_bytes_target,
 };
 
@@ -127,7 +127,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode a chunk.
@@ -139,7 +139,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Compact a chunk to remove any extraneous data.
@@ -156,7 +156,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         Ok(None)
     }
@@ -186,7 +186,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let bytes = input.into_bytes(options, resources)?;
         let bytes = self.decode(bytes, shape, options, resources)?;

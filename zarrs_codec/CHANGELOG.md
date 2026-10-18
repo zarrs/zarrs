@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `IoLimiter` and `IoPermit`, a limit on concurrent storage requests that synchronous and asynchronous operations can share
   - Add `Resources::{io_permit,io_permit_blocking}`, which acquire a permit of the I/O limiter if set
 - Add `Resources::{compute_limit,io_limit,with_compute_share}`
+- Add `ComputeResources`, the compute target of `Resources`, which is passed to codecs
+  - Add `Resources::{compute,set_compute,with_compute}` and `From<ComputeResources> for Resources`
 - Add the `plan` module for planned (sans-I/O) operations, whose I/O and compute run with separate concurrency limits
   - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
   - `TargetViews`, `SharedOutput` (and `SharedOutput::for_data_type`), `TaskTarget`, `DecodeRequest` and `PlanIndexer`
@@ -109,7 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - Bump `itertools` to 0.15.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- **Breaking**: Codec, partial decoder, and partial encoder trait methods that take `&CodecOptions` also take `&Resources`
+- **Breaking**: Partial decoder and partial encoder trait methods that take `&CodecOptions` also take `&Resources`
+- **Breaking**: Codec trait methods and `BytesDecodeSource` methods that take `&CodecOptions` also take `&ComputeResources`
+  - `plan::ComputeCtx::resources`, `plan::drive_memory_one` and the `plan::*_memory` helpers use `ComputeResources`
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`

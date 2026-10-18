@@ -21,7 +21,7 @@ use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayCached, ArrayError, ArrayOps, ArrayToBytesCodecTraits,
     ArrayUpdateOps, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, CodecChain,
     CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    CowBytes, DataType, EncodedSubchunk, FillValue, FromArrayBytes, Resources,
+    ComputeResources, CowBytes, DataType, EncodedSubchunk, FillValue, FromArrayBytes, Resources,
     UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
@@ -56,7 +56,7 @@ fn decode_subchunk<A: ArrayOps>(
         CowBytes::from(encoded.bytes().to_vec()),
         encoded.shape(),
         &CodecOptions::default(),
-        &Resources::default(),
+        &ComputeResources::default(),
     )?;
     Ok(Vec::<u16>::from_array_bytes(
         bytes.into_owned(),
@@ -697,7 +697,7 @@ impl ArrayToBytesCodecTraits for BlockCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
         let num_blocks = usize::try_from(self.num_blocks(shape)?).unwrap();
@@ -720,7 +720,7 @@ impl ArrayToBytesCodecTraits for BlockCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let num_blocks = usize::try_from(self.num_blocks(shape)?).unwrap();
         let block_size = usize::try_from(self.block_size()?).unwrap();

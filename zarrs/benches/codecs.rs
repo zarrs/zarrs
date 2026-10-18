@@ -3,7 +3,7 @@
 
 use std::cell::LazyCell;
 
-use zarrs::array::{CodecSpecificOptions, CowBytes, Resources};
+use zarrs::array::{CodecSpecificOptions, ComputeResources, CowBytes};
 
 use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
@@ -53,7 +53,7 @@ fn codec_bytes(c: &mut Criterion) {
                     bytes.clone(),
                     &shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap()
         });
@@ -86,7 +86,7 @@ fn codec_blosc(c: &mut Criterion) {
             .encode(
                 CowBytes::Borrowed(&data_decoded),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_static();
@@ -101,7 +101,7 @@ fn codec_blosc(c: &mut Criterion) {
                 .encode(
                     CowBytes::Borrowed(data_decoded),
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap()
         });
@@ -115,7 +115,7 @@ fn codec_blosc(c: &mut Criterion) {
                     CowBytes::Borrowed(data_encoded),
                     &rep,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap()
         });
@@ -153,7 +153,7 @@ fn codec_sharding(c: &mut Criterion) {
                     (*bytes).clone(),
                     &shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap()
                 .into_static();
@@ -170,7 +170,7 @@ fn codec_sharding(c: &mut Criterion) {
                         bytes.clone(),
                         &shape,
                         &CodecOptions::default(),
-                        &Resources::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap()
             });
@@ -183,7 +183,7 @@ fn codec_sharding(c: &mut Criterion) {
                         encoded.clone(),
                         &shape,
                         &CodecOptions::default(),
-                        &Resources::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap()
             });

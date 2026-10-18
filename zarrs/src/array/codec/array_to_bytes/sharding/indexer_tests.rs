@@ -109,7 +109,7 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.inner.encode(bytes, shape, options, resources)
     }
@@ -118,7 +118,7 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.inner.decode(bytes, shape, options, resources)
     }
@@ -318,7 +318,7 @@ fn decode_into(
         },
         &CodecOptions::default(),
     )?;
-    drive_memory_one(task, &Resources::default()).map(|_| ())
+    drive_memory_one(task, &ComputeResources::default()).map(|_| ())
 }
 
 /// Requests for the elements of generic indexers are batched by subchunk.
@@ -333,7 +333,7 @@ fn sharding_indexer_batches() {
             counts,
         } = &fixture;
         let options = CodecOptions::default();
-        let resources = Resources::default().with_compute_target(concurrency);
+        let resources = ComputeResources::default().with_compute_target(concurrency);
         let encoded = (!absent).then(|| {
             codec
                 .encode(bytes.clone(), &shape, &options, &resources)

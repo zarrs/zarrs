@@ -385,7 +385,9 @@ mod tests {
     use super::*;
     use crate::array::codec::{BytesCodec, ShardingCodecBuilder};
     use crate::array::{FillValue, data_type, transmute_to_bytes_vec};
-    use zarrs_codec::{CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{
+        CodecSpecificOptions, ComputeResources, Resources, UnboundArrayToBytesCodecTraits,
+    };
 
     /// Encode and decode shards with each write order, index location, and inner representation, with one and many
     /// blocks of subchunks.
@@ -431,10 +433,10 @@ mod tests {
                         let options = CodecOptions::default();
                         let resources = Resources::default().with_compute_target(compute_target);
                         let shard = codec
-                            .encode(bytes.clone(), &shape, &options, &resources)
+                            .encode(bytes.clone(), &shape, &options, resources.compute())
                             .unwrap();
                         let decoded = codec
-                            .decode(shard.clone(), &shape, &options, &resources)
+                            .decode(shard.clone(), &shape, &options, resources.compute())
                             .unwrap();
                         assert_eq!(decoded, bytes, "{location:?} {order:?} gzip: {gzip}");
                         if location == ShardingIndexLocation::End {
@@ -469,7 +471,7 @@ mod tests {
                 fill,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(shard.len(), 4 * 3 * 16 + 4);

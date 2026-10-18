@@ -22,7 +22,7 @@ pub fn drive_serial<'a>(
     io: &dyn SyncIo,
     resources: &Resources,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
-    let ctx = ComputeCtx::new(resources.clone());
+    let ctx = ComputeCtx::new(resources.compute().clone());
     let scheduler = if let [_] = tasks.as_slice() {
         let task = tasks.pop().expect("one task");
         match drive_single(task, io, resources, &ctx)? {
@@ -44,7 +44,7 @@ pub fn drive_serial_one<'a>(
     io: &dyn SyncIo,
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
-    let ctx = ComputeCtx::new(resources.clone());
+    let ctx = ComputeCtx::new(resources.compute().clone());
     match drive_single(task, io, resources, &ctx)? {
         Ok(value) => Ok(value),
         Err(scheduler) => Ok(drive_scheduler(scheduler, io, resources, &ctx)?

@@ -24,7 +24,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
@@ -342,7 +342,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let task = self.arc().plan_encode_shard(bytes, shape, options)?;
         encoded_value(drive_memory_one(task, resources)?)
@@ -353,7 +353,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         encoded_shard: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let data_type = self.data_type();
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
@@ -394,7 +394,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         // Calculate chunks per shard
         let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
@@ -497,7 +497,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let encoded_shard = input.into_bytes(options, resources)?;
         // SAFETY: the views of the target are only used through the whole views while the drive runs
@@ -703,7 +703,7 @@ impl ShardingCodecBound {
         encoded_shard: &[u8],
         chunks_per_shard: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Vec<u64>, CodecError> {
         // Get index array representation and encoded size
         let index_shape = sharding_index_shape(chunks_per_shard);

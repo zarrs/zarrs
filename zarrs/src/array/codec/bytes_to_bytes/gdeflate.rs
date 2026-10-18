@@ -384,7 +384,7 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
 
@@ -451,7 +451,7 @@ mod tests {
                 .encode(
                     CowBytes::Borrowed(&bytes),
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             let decoded = codec
@@ -459,7 +459,7 @@ mod tests {
                     encoded,
                     &BytesRepresentation::FixedSize(len as u64),
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
@@ -480,7 +480,7 @@ mod tests {
             .encode(
                 CowBytes::from(decoded.as_slice()),
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
@@ -489,7 +489,7 @@ mod tests {
                 &BytesRepresentation::FixedSize(len as u64),
                 output,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
 
@@ -528,7 +528,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::UnboundedSize,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
         // The length of the page sizes overflows when added to the length of the static header
@@ -555,7 +555,7 @@ mod tests {
                     CowBytes::from(encoded.clone()),
                     &representation,
                     &CodecOptions::default(),
-                    &Resources::default()
+                    &ComputeResources::default()
                 ),
                 Err(CodecError::UnexpectedChunkDecodedSize(_))
             ));
@@ -571,7 +571,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .is_err()
         );
@@ -599,7 +599,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .is_err()
         );
@@ -618,7 +618,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .to_vec();
@@ -627,7 +627,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::FixedSize(bytes.len() as u64),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
         assert!(decode(encoded.clone()).is_ok());
@@ -657,7 +657,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -665,7 +665,7 @@ mod tests {
                 encoded,
                 &bytes_representation,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
@@ -685,7 +685,7 @@ mod tests {
             .encode(
                 CowBytes::from(bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = [

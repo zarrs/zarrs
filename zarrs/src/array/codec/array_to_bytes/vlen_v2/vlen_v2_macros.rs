@@ -48,7 +48,7 @@ macro_rules! vlen_v2_codec {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-        use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, Resources, CodecTraits, UnboundArrayToBytesCodecTraits};
+        use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, ComputeResources, CodecTraits, UnboundArrayToBytesCodecTraits};
         use crate::array::{codec::VlenV2Codec, ArrayBytes, CowBytes, BytesRepresentation};
         use zarrs_metadata::Configuration;
         use zarrs_plugin::{ExtensionAliasesConfig, ExtensionAliases, ZarrVersion2, ZarrVersion3};
@@ -167,7 +167,7 @@ macro_rules! vlen_v2_codec {
                 bytes: ArrayBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
-                resources: &Resources,
+                resources: &ComputeResources,
             ) -> Result<CowBytes<'a>, CodecError> {
                 self.inner.encode(bytes, shape, options, resources)
             }
@@ -177,7 +177,7 @@ macro_rules! vlen_v2_codec {
                 bytes: CowBytes<'a>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
-                resources: &Resources,
+                resources: &ComputeResources,
             ) -> Result<ArrayBytes<'a>, CodecError> {
                 self.inner.decode(bytes, shape, options, resources)
             }

@@ -7,10 +7,13 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError};
 use zarrs_storage::{Bytes, StorageError};
 
+use super::driver::memory_resources;
 use super::{
     ByteSource, DecodeRequest, PlanIndexer, ReadBytes, SourceKey, SyncIo, TaskTarget, WriteOp,
 };
-use crate::{ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes, Resources};
+use crate::{
+    ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, ComputeResources, CowBytes,
+};
 
 /// Decode the elements `indexer` of the encoded chunk `encoded` of `shape` with `codec`.
 ///
@@ -24,7 +27,7 @@ pub fn partial_decode_memory(
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let data_type = codec.data_type().clone();
     let source = match &encoded {
@@ -40,10 +43,14 @@ pub fn partial_decode_memory(
         },
         options,
     )?;
-    let bytes = super::drive_blocking_one(task, &MemoryValueIo::default(), resources)?
-        .into_array()
-        .ok_or_else(|| CodecError::Other("a decode task did not produce array bytes".to_string()))?
-        .into_owned();
+    let bytes = super::drive_blocking_one(
+        task,
+        &MemoryValueIo::default(),
+        &memory_resources(resources),
+    )?
+    .into_array()
+    .ok_or_else(|| CodecError::Other("a decode task did not produce array bytes".to_string()))?
+    .into_owned();
     bytes.validate(indexer.len(), &data_type)?;
     Ok(bytes)
 }
@@ -62,7 +69,7 @@ pub fn partial_encode_memory(
     indexer: &dyn Indexer,
     bytes: &ArrayBytes<'_>,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<(), CodecError> {
     bytes.validate(indexer.len(), codec.data_type())?;
     let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
@@ -75,7 +82,7 @@ pub fn partial_encode_memory(
         true,
         options,
     )?;
-    let result = super::drive_blocking_one(task, &io, resources);
+    let result = super::drive_blocking_one(task, &io, &memory_resources(resources));
     *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
     result?;
     Ok(())
@@ -99,7 +106,7 @@ pub fn store_encoded_subchunk_memory(
     coordinates: &[u64],
     encoded_subchunk: Option<Bytes>,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<(), CodecError> {
     let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
     let task = codec.plan_store_encoded_subchunk(
@@ -111,7 +118,7 @@ pub fn store_encoded_subchunk_memory(
         true,
         options,
     )?;
-    let result = super::drive_blocking_one(task, &io, resources);
+    let result = super::drive_blocking_one(task, &io, &memory_resources(resources));
     *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
     result?;
     Ok(())

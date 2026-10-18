@@ -94,10 +94,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
         if let Some(chunk_bytes) = chunk_bytes {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            if let Some(compacted_bytes) =
-                self.codecs_bound
-                    .compact(chunk_bytes.into(), &chunk_shape, options, resources)?
-            {
+            if let Some(compacted_bytes) = self.codecs_bound.compact(
+                chunk_bytes.into(),
+                &chunk_shape,
+                options,
+                resources.compute(),
+            )? {
                 unsafe {
                     self.async_store_encoded_chunk(chunk_indices, compacted_bytes)
                         .await?;

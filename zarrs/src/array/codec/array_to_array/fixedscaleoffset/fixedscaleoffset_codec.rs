@@ -13,7 +13,7 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
     ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -394,7 +394,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         indexer: PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
     }
@@ -416,7 +416,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_encode(
             bytes,
@@ -432,7 +432,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_decode(
             bytes,

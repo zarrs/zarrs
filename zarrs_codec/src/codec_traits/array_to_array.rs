@@ -8,7 +8,7 @@ use zarrs_metadata::ChunkShape;
 use crate::{
     ArrayBytes, ArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
     ChunkGridEncodedRef, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
-    CodecTraits, Resources,
+    CodecTraits, ComputeResources,
 };
 
 /// Subchunking traits for an array-to-array codec bound to a data type and fill value.
@@ -151,7 +151,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Decode a chunk.
@@ -163,7 +163,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Plan a request for decoded elements of a chunk of `shape` through this codec.
@@ -197,7 +197,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         indexer: crate::plan::PlanIndexer<'a>,
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<(crate::plan::PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
         let _ = (shape, indexer, bytes, options, resources);
         Ok(None)

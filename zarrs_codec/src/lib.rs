@@ -62,7 +62,7 @@ pub use array_bytes::{
 use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
 pub use plan::EncodedSubchunk;
-pub use resources::{IoLimiter, IoPermit, ReadDispatch, Resources};
+pub use resources::{ComputeResources, IoLimiter, IoPermit, ReadDispatch, Resources};
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, Configuration};
 use zarrs_storage::StorageError;

@@ -9,7 +9,8 @@ use super::{
 };
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources,
 };
 use zarrs_metadata::Configuration;
 
@@ -71,7 +72,7 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
@@ -105,7 +106,7 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         encoded_value: CowBytes<'a>,
         decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(CowBytes::from(gdeflate_decode(
             &encoded_value,
@@ -123,7 +124,7 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         _decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         gdeflate_decode_into(&encoded_value, output)
     }

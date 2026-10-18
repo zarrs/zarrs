@@ -16,7 +16,7 @@ use zarrs_codec::plan::{
 };
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, ComputeResources, Resources, UnboundArrayToBytesCodecTraits,
 };
 
 const SHAPE: [u64; 2] = [8, 6];
@@ -157,7 +157,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
             T::to_array_bytes(&data_type, shard_elements)?,
             &shard_shape,
             &options,
-            &Resources::default(),
+            &ComputeResources::default(),
         )?
         .into_vec();
 
@@ -166,7 +166,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         encoded.clone().into(),
         &shard_shape,
         &options,
-        &Resources::default(),
+        &ComputeResources::default(),
     )?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, shard_elements);
 
@@ -182,7 +182,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         &shard_shape,
         &indexer,
         &options,
-        &Resources::default(),
+        &ComputeResources::default(),
     )?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected);
 
@@ -201,7 +201,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         &shard_shape,
         &subset,
         &options,
-        &Resources::default(),
+        &ComputeResources::default(),
     )?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     if fixed {
@@ -216,7 +216,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
                 },
                 &options,
             )?;
-            drive_memory_one(task, &Resources::default()).map(|_| ())
+            drive_memory_one(task, &ComputeResources::default()).map(|_| ())
         });
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     }

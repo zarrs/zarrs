@@ -15,8 +15,8 @@ use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, BytesRepresentation, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes,
-    InvalidBytesLengthError, Resources, UnboundArrayToBytesCodecTraits,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    CowBytes, InvalidBytesLengthError, UnboundArrayToBytesCodecTraits,
     decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
@@ -258,7 +258,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
@@ -290,7 +290,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         bytes: CowBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
@@ -320,7 +320,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         shape: &[NonZeroU64],
         mut output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let bytes = input.into_bytes(options, resources)?;
         // Decompress directly into an output that is one contiguous region

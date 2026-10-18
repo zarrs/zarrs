@@ -266,8 +266,8 @@ pub(crate) fn apply_permutation<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
+    use crate::array::{ComputeResources, Resources};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -301,7 +301,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -309,7 +309,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded);
@@ -354,7 +354,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -362,7 +362,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 
@@ -419,7 +419,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -427,7 +427,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded);

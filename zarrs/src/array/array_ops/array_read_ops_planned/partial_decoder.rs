@@ -361,7 +361,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
             let source = ByteSource::memory(CowBytes::Shared(encoded.clone()));
             match codecs.clone().prepare_decode(source, &shape, options)? {
                 PrepareDecode::Ready(decoder) => decoder,
-                PrepareDecode::Plan(task) => prepared(drive_memory_one(task, resources)?)?,
+                PrepareDecode::Plan(task) => {
+                    prepared(drive_memory_one(task, resources.compute())?)?
+                }
             }
         } else {
             Arc::new(MissingDecoder::new(codecs.clone().into_dyn(), &shape))

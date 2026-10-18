@@ -97,7 +97,7 @@ pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -144,7 +144,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -152,7 +152,7 @@ mod tests {
                 encoded,
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_elements =
@@ -185,7 +185,7 @@ mod tests {
                 ArrayBytes::from(elements),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -193,7 +193,7 @@ mod tests {
                 encoded.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         (

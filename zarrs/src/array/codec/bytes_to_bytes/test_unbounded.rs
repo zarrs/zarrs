@@ -8,7 +8,7 @@ pub use test_unbounded_codec::TestUnboundedCodec;
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
@@ -30,7 +30,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -38,7 +38,7 @@ mod tests {
                 encoded,
                 &bytes_representation,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
@@ -56,7 +56,7 @@ mod tests {
             .encode(
                 CowBytes::from(bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = [
@@ -93,7 +93,7 @@ mod tests {
                 &BytesRepresentation::UnboundedSize,
                 output,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
 

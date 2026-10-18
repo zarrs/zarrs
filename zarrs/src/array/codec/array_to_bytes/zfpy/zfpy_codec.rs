@@ -8,7 +8,7 @@ use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -152,7 +152,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.inner.encode(bytes, shape, options, resources)
     }
@@ -162,7 +162,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.inner.decode(bytes, shape, options, resources)
     }
@@ -173,7 +173,7 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         self.inner
             .decode_into(input, shape, output_target, options, resources)

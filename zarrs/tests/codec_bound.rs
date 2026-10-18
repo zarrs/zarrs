@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
-use zarrs::array::Resources;
+use zarrs::array::ComputeResources;
 
 use zarrs::array::codec::BytesCodec;
 use zarrs::array::{
@@ -25,14 +25,14 @@ fn codec_chain_bound_context_and_runtime() -> Result<(), Box<dyn std::error::Err
         decoded.clone(),
         &shape,
         &CodecOptions::default(),
-        &Resources::default(),
+        &ComputeResources::default(),
     )?;
     assert_eq!(
         codecs.decode(
             encoded,
             &shape,
             &CodecOptions::default(),
-            &Resources::default()
+            &ComputeResources::default()
         )?,
         decoded
     );

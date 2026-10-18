@@ -47,17 +47,16 @@ pub fn drive_blocking_one<'a>(
 /// Returns a [`CodecError`](crate::CodecError) if a task fails or reads a byte source that is not in memory.
 pub fn drive_memory_one<'a>(
     task: super::Task<'a>,
-    resources: &crate::Resources,
+    resources: &crate::ComputeResources,
 ) -> Result<super::TaskValue<'a>, crate::CodecError> {
-    // The tasks never read, so the drive needs no I/O pool
-    if resources.read_dispatch() == Some(crate::ReadDispatch::Inline) {
-        drive_blocking_one(task, &NoIo, resources)
-    } else {
-        let resources = resources
-            .clone()
-            .with_read_dispatch(Some(crate::ReadDispatch::Inline));
-        drive_blocking_one(task, &NoIo, &resources)
-    }
+    drive_blocking_one(task, &NoIo, &memory_resources(resources))
+}
+
+/// The resources of a drive whose reads are all in memory.
+///
+/// Reads are inline, so the drive never starts an I/O pool.
+pub(crate) fn memory_resources(resources: &crate::ComputeResources) -> crate::Resources {
+    crate::Resources::from(resources.clone()).with_read_dispatch(Some(crate::ReadDispatch::Inline))
 }
 
 /// The I/O backend of drives of tasks whose byte sources are all in memory.

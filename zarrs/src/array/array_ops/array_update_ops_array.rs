@@ -97,7 +97,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 chunk_bytes.into(),
                 &self.chunk_shape(chunk_indices)?,
                 options,
-                resources,
+                resources.compute(),
             )? {
                 // SAFETY: The compacted bytes are already encoded
                 unsafe {

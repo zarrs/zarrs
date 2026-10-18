@@ -14,7 +14,7 @@ use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
@@ -366,7 +366,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let ArrayBytes::Optional(optional_bytes) = bytes else {
             return Err(CodecError::Other(
@@ -425,7 +425,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
         if bytes.len() < 2 * size_of::<u64>() {
@@ -631,13 +631,13 @@ mod tests {
             input,
             &chunk_shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
         let decoded = codec.decode(
             encoded,
             &chunk_shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
 
         // The codec now returns optional ArrayBytes
@@ -834,7 +834,7 @@ mod tests {
                 input.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -842,7 +842,7 @@ mod tests {
                 encoded,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 
@@ -909,7 +909,7 @@ mod tests {
                 input.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -917,7 +917,7 @@ mod tests {
                 encoded,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 
@@ -1012,7 +1012,7 @@ mod tests {
                 input.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -1020,7 +1020,7 @@ mod tests {
                 encoded,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 
@@ -1091,7 +1091,7 @@ mod tests {
                 input.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -1099,7 +1099,7 @@ mod tests {
                 encoded,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
 

@@ -14,7 +14,7 @@ use super::super::{
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, Resources,
+    ComputeResources, InvalidBytesLengthError,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
@@ -202,7 +202,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -218,7 +218,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -239,7 +239,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         _decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let n_threads = 1;
         Self::do_decode_into(&encoded_value, output, n_threads)

@@ -10,7 +10,8 @@ use zarrs::array::{ArraySubset, Endianness, data_type};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CowBytes, Resources,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    CowBytes, Resources,
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::Configuration;
@@ -82,7 +83,7 @@ impl BytesToBytesCodecTraits for Producer {
         &self,
         bytes: CowBytes<'a>,
         _: &CodecOptions,
-        _: &Resources,
+        _: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut bytes = bytes.into_vec();
         if self.trailer {
@@ -95,7 +96,7 @@ impl BytesToBytesCodecTraits for Producer {
         bytes: CowBytes<'a>,
         repr: &BytesRepresentation,
         options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if !options.validate_checksums() {
             self.record(false, repr, 0);
@@ -117,7 +118,7 @@ impl BytesToBytesCodecTraits for Producer {
         repr: &BytesRepresentation,
         output: &mut [u8],
         options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         self.record(true, repr, output.as_ptr() as usize);
         if !options.validate_checksums() {
@@ -185,7 +186,7 @@ fn run(chain: &dyn ArrayToBytesCodecTraits, padded: bool) -> (Vec<u8>, usize) {
             ArrayBytes::new_flen(native_bytes()),
             &shape,
             &options,
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap();
     let mut output = vec![0xa5; if padded { 12 } else { 8 }];
@@ -208,7 +209,7 @@ fn run(chain: &dyn ArrayToBytesCodecTraits, padded: bool) -> (Vec<u8>, usize) {
                 &shape,
                 ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
     }
@@ -401,7 +402,7 @@ fn producer_error_and_malformed_length_are_not_retried() {
                         &shape,
                         ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                         &CodecOptions::default(),
-                        &Resources::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap_err();
                 if fail {
@@ -462,7 +463,7 @@ impl ArrayToBytesCodecTraits for OrdinaryReceiver {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.bytes.encode(bytes, shape, options, resources)
     }
@@ -471,7 +472,7 @@ impl ArrayToBytesCodecTraits for OrdinaryReceiver {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.pointers.lock().unwrap().push(bytes.as_ptr() as usize);
         let decoded = self.bytes.decode(bytes, shape, options, resources)?;
@@ -507,7 +508,7 @@ fn unknown_receiver_default_resolves_owned_producer_without_reallocating() {
                 ArrayBytes::new_flen(native_bytes()),
                 &shape,
                 &options,
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let mut output = [0xa5; 8];
@@ -532,7 +533,7 @@ fn unknown_receiver_default_resolves_owned_producer_without_reallocating() {
                     &shape,
                     ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                     &options,
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
         }
@@ -711,7 +712,7 @@ fn operation_options_reach_producer_and_rejection_is_not_retried() {
                     &[NonZeroU64::new(4).unwrap()],
                     ArrayBytesDecodeIntoTarget::Fixed(&mut view),
                     &CodecOptions::default().with_validate_checksums(false),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap_err();
             assert!(
@@ -765,7 +766,7 @@ fn run_planned(
             ArrayBytes::new_flen(native_bytes()),
             &shape,
             &options,
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap()
         .into_bytes();

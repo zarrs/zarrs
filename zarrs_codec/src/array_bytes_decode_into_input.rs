@@ -1,5 +1,6 @@
 use crate::{
-    BytesRepresentation, BytesToBytesCodecTraits, CodecError, CodecOptions, CowBytes, Resources,
+    BytesRepresentation, BytesToBytesCodecTraits, CodecError, CodecOptions, ComputeResources,
+    CowBytes,
 };
 
 /// Immediate or deferred encoded input for an array-to-bytes decoder.
@@ -25,7 +26,7 @@ impl<'a> ArrayBytesDecodeIntoInput<'a> {
     pub fn into_bytes(
         self,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         match self {
             Self::Bytes(bytes) => Ok(bytes),
@@ -49,8 +50,8 @@ impl<'a> ArrayBytesDecodeIntoInput<'a> {
 ///
 /// Nor can a consumed source be decoded again:
 /// ```compile_fail
-/// use zarrs_codec::{BytesDecodeSource, CodecOptions, Resources};
-/// fn twice(source: BytesDecodeSource<'_>, options: &CodecOptions, resources: &Resources) {
+/// use zarrs_codec::{BytesDecodeSource, CodecOptions, ComputeResources};
+/// fn twice(source: BytesDecodeSource<'_>, options: &CodecOptions, resources: &ComputeResources) {
 ///     let _ = source.decode(options, resources);
 ///     let _ = source.decode(options, resources);
 /// }
@@ -98,7 +99,7 @@ impl<'a> BytesDecodeSource<'a> {
     pub fn decode(
         self,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         self.codec
             .decode(self.bytes, &self.decoded_representation, options, resources)
@@ -114,7 +115,7 @@ impl<'a> BytesDecodeSource<'a> {
         self,
         output: &mut [u8],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         self.codec.decode_into(
             self.bytes,

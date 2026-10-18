@@ -8,7 +8,7 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, Resources,
+    ComputeResources, InvalidBytesLengthError,
 };
 use zarrs_metadata::Configuration;
 
@@ -98,7 +98,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
         compressor.include_checksum(self.checksum)?;
@@ -113,7 +113,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
@@ -140,7 +140,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         _decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         // Never materialise an oversized frame just to improve a length diagnostic.
         let decoded_len = with_decompressor(|decompressor| {

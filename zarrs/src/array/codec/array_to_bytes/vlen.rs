@@ -110,7 +110,7 @@ use crate::array::{
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
-    CodecTraitsV3, InvalidBytesLengthError, Resources,
+    CodecTraitsV3, ComputeResources, InvalidBytesLengthError,
 };
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
@@ -143,7 +143,7 @@ fn get_vlen_bytes_and_offsets(
     data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<(Bytes, ArrayBytesOffsets), CodecError> {
     let index_shape = ChunkShape::from(vec![
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
@@ -229,7 +229,7 @@ fn get_vlen_bytes_and_offsets(
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -271,7 +271,7 @@ mod tests {
                 bytes.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             let encoded = CowBytes::Shared(encoded.into_bytes());
             let encoded_range = encoded.as_ptr_range();
@@ -279,7 +279,7 @@ mod tests {
                 encoded.clone(),
                 &shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert_eq!(decoded, bytes);
             let offsets = decoded.offsets().unwrap();

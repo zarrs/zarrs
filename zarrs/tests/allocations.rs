@@ -316,7 +316,7 @@ fn sharding_decode_borrowed_shard() {
                 CowBytes::Borrowed(&encoded),
                 &shape,
                 &CodecOptions::default(),
-                &resources(),
+                resources().compute(),
             )
             .unwrap()
             .into_owned()

@@ -11,7 +11,8 @@ use super::{
 };
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoInput, ArrayToBytesCodecTraits, CodecError, CodecOptions,
-    Resources, copy_array_subset_into_target, copy_fill_value_into, decode_into_array_bytes_target,
+    ComputeResources, copy_array_subset_into_target, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 use zarrs_data_type::{DataType, FillValue};
 
@@ -88,7 +89,7 @@ pub fn decode_whole<'a>(
     shape: &[NonZeroU64],
     request: DecodeRequest<'a>,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<Outcome<'a>, CodecError> {
     let data_type = codec.data_type();
     let Some(encoded) = encoded else {

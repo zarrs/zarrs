@@ -9,7 +9,7 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    Resources, register_codec_v3, unregister_codec_v3,
+    ComputeResources, Resources, register_codec_v3, unregister_codec_v3,
 };
 use zarrs_plugin::{RuntimePlugin, ZarrVersion};
 
@@ -38,7 +38,7 @@ impl BytesToBytesCodecTraits for TestPassthroughCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(decoded_value)
     }
@@ -48,7 +48,7 @@ impl BytesToBytesCodecTraits for TestPassthroughCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(encoded_value)
     }
@@ -85,7 +85,7 @@ fn codec_runtime_registration() {
             .encode(
                 CowBytes::Borrowed(&data),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -93,7 +93,7 @@ fn codec_runtime_registration() {
                 encoded,
                 &BytesRepresentation::FixedSize(5),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(data, decoded.as_ref());

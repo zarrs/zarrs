@@ -4,7 +4,7 @@ use crate::plan::SourceStep;
 
 use crate::{
     BytesRepresentation, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
-    CodecTraits, CowBytes, InvalidBytesLengthError, Resources,
+    CodecTraits, ComputeResources, CowBytes, InvalidBytesLengthError,
 };
 
 /// Traits for bytes to bytes codecs.
@@ -39,7 +39,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         &self,
         decoded_value: CowBytes<'a>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode chunk bytes.
@@ -51,7 +51,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         encoded_value: CowBytes<'a>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError>;
 
     /// Decode chunk bytes into a preallocated output buffer.
@@ -67,7 +67,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let decoded_value =
             self.decode(encoded_value, decoded_representation, options, resources)?;

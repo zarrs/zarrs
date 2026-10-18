@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     ArrayBytes, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
-    CowBytes, Resources, update_array_bytes,
+    ComputeResources, CowBytes, update_array_bytes,
 };
 
 /// Decode the `encoded` chunk of `shape` with `codec` (or the fill value if [`None`]), and update its elements `indexer` to `bytes`.
@@ -31,7 +31,7 @@ pub fn decode_and_update<'a>(
     indexer: &dyn Indexer,
     bytes: &ArrayBytes<'_>,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let chunk = match encoded {
         Some(encoded) => codec.decode(encoded, shape, options, resources)?,
@@ -182,7 +182,7 @@ pub fn partial_encode_request_elementwise<'a>(
     indexer: PlanIndexer<'a>,
     bytes: ArrayBytes<'a>,
     options: &CodecOptions,
-    resources: &Resources,
+    resources: &ComputeResources,
 ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
     indexer.validate(shape)?;
     let bytes = match NonZeroU64::new(indexer.as_indexer().len()) {

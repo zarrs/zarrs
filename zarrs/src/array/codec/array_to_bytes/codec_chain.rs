@@ -21,7 +21,7 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeSource, BytesToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, Resources,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
     UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
@@ -447,7 +447,7 @@ impl CodecChainBound {
         shape: &[NonZeroU64],
         num_materialized: usize,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ByteSource<'a>, CodecError> {
         let representations = self.bytes_representations(shape)?;
         if let SourceStep::RangeDecode(decoder) = self.bytes_to_bytes[0].source_step() {
@@ -482,7 +482,7 @@ impl CodecChainBound {
         representations: &[BytesRepresentation],
         codecs: std::ops::Range<usize>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         for (codec, representation) in std::iter::zip(
             self.bytes_to_bytes[codecs.clone()].iter().rev(),
@@ -664,7 +664,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
 
@@ -694,7 +694,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let shapes = (!self.array_to_array.is_empty())
             .then(|| self.encoded_shapes(shape))
@@ -741,7 +741,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         if self.array_to_array.is_empty() {
             let input = if let Some(last) = self.bytes_to_bytes.first() {
@@ -1260,7 +1260,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         mut bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         let encoded_shape = self.array_encoded_shape(shape)?;
         let encoded_shape = encoded_shape.as_ref();
@@ -1441,7 +1441,7 @@ mod tests {
             &self,
             decoded_value: CowBytes<'a>,
             _options: &CodecOptions,
-            _resources: &Resources,
+            _resources: &ComputeResources,
         ) -> Result<CowBytes<'a>, CodecError> {
             let mut encoded = decoded_value.into_vec();
             encoded.push(0);
@@ -1453,7 +1453,7 @@ mod tests {
             encoded_value: CowBytes<'a>,
             decoded_representation: &BytesRepresentation,
             _options: &CodecOptions,
-            _resources: &Resources,
+            _resources: &ComputeResources,
         ) -> Result<CowBytes<'a>, CodecError> {
             assert_eq!(
                 decoded_representation,
@@ -1529,7 +1529,7 @@ mod tests {
                 bytes.clone(),
                 shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -1537,7 +1537,7 @@ mod tests {
                 encoded.clone(),
                 shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         if not_just_bytes {
@@ -1562,7 +1562,7 @@ mod tests {
             shape,
             decoded_region,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap();
 
@@ -1626,7 +1626,7 @@ mod tests {
             &shape,
             &ArraySubset::new_with_ranges(&[1..3]),
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
         .unwrap();
     }

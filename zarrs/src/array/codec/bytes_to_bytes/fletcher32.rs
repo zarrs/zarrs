@@ -86,7 +86,7 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;
     use std::sync::Arc;
     use zarrs_codec::CowBytes;
@@ -119,7 +119,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::FixedSize(3),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(decoded.as_ref(), data);
@@ -130,7 +130,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::FixedSize(3),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             ),
             Err(zarrs_codec::CodecError::InvalidChecksum)
         ));
@@ -169,7 +169,7 @@ mod tests {
             .encode(
                 CowBytes::Borrowed(&bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded = codec
@@ -177,7 +177,7 @@ mod tests {
                 encoded.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
@@ -206,7 +206,7 @@ mod tests {
             .encode(
                 CowBytes::from(bytes),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap();
         let decoded_regions = [ByteRange::FromStart(3, Some(2))];

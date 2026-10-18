@@ -109,8 +109,8 @@ fn sign_extend_component(
 
 #[cfg(test)]
 mod tests {
-    use crate::array::Resources;
     use crate::array::codec::test_util::MemoryPartialDecoder;
+    use crate::array::{ComputeResources, Resources};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -230,14 +230,18 @@ mod tests {
                         fill_value.clone(),
                         &CodecSpecificOptions::default(),
                     )?;
-                let encoded =
-                    codec.encode(bytes.clone(), &chunk_shape, &options, &Resources::default())?;
+                let encoded = codec.encode(
+                    bytes.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default(),
+                )?;
                 let decoded = codec
                     .decode(
                         encoded.clone(),
                         &chunk_shape,
                         &options,
-                        &Resources::default(),
+                        &ComputeResources::default(),
                     )?
                     .into_fixed()?
                     .to_vec();
@@ -308,7 +312,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= 40.div_ceil(&8) + 1);
 
@@ -318,7 +322,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -382,7 +386,7 @@ mod tests {
                         ArrayBytes::new_flen(vec![0u8]),
                         &shape,
                         &options,
-                        &Resources::default()
+                        &ComputeResources::default()
                     )
                     .is_err()
             );
@@ -392,7 +396,7 @@ mod tests {
                         CowBytes::from(vec![0u8]),
                         &shape,
                         &options,
-                        &Resources::default()
+                        &ComputeResources::default()
                     )
                     .is_err()
             );
@@ -425,7 +429,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (40 * 32).div_ceil(&8) + 1);
 
@@ -435,7 +439,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -451,7 +455,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -489,7 +493,7 @@ mod tests {
                         bytes.clone(),
                         &chunk_shape,
                         &CodecOptions::default(),
-                        &Resources::default(),
+                        &ComputeResources::default(),
                     )?;
                     assert!(
                         (encoded.len() as u64) <= (40 * (last_bit - first_bit + 1)).div_ceil(8) + 1
@@ -501,7 +505,7 @@ mod tests {
                             encoded.clone(),
                             &chunk_shape,
                             &CodecOptions::default(),
-                            &Resources::default(),
+                            &ComputeResources::default(),
                         )
                         .unwrap();
                     assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
@@ -550,7 +554,7 @@ mod tests {
             bytes,
             &chunk_shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
 
         // Decoding
@@ -558,7 +562,7 @@ mod tests {
             encoded.clone(),
             &chunk_shape,
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )?;
         assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
 
@@ -600,7 +604,7 @@ mod tests {
                 bytes,
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
 
             // Decoding
@@ -608,7 +612,7 @@ mod tests {
                 encoded.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
 
@@ -653,7 +657,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
 
@@ -663,7 +667,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(elements, u8::from_array_bytes(&data_type, decoded)?);
@@ -696,7 +700,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
@@ -706,7 +710,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(elements, u8::from_array_bytes(&data_type, decoded)?);
@@ -739,7 +743,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
 
@@ -749,7 +753,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
@@ -795,7 +799,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
@@ -805,7 +809,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
@@ -850,7 +854,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
@@ -860,7 +864,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -892,7 +896,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
 
@@ -902,7 +906,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
@@ -934,7 +938,7 @@ mod tests {
                 bytes.clone(),
                 &chunk_shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
 
@@ -944,7 +948,7 @@ mod tests {
                     encoded.clone(),
                     &chunk_shape,
                     &CodecOptions::default(),
-                    &Resources::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);

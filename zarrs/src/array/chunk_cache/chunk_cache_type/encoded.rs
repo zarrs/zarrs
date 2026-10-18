@@ -61,7 +61,7 @@ where
                     CowBytes::Shared(encoded.clone()),
                     chunk_shape,
                     options,
-                    resources,
+                    resources.compute(),
                 )
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;

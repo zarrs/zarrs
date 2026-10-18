@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, ComputeResources};
 
 use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, CowBytes};
 
@@ -41,7 +41,7 @@ pub(crate) fn decode_into_view_array(
             chunk_shape,
             (&mut view).into(),
             &CodecOptions::default(),
-            &Resources::default(),
+            &ComputeResources::default(),
         )
     };
     (allocation.split_off(offset), result)

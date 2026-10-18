@@ -25,53 +25,29 @@ pub enum ReadDispatch {
     Pooled,
 }
 
-/// Resources available to an encode/decode or array operation.
+/// Compute resources available to an encode or decode.
 ///
-/// These are passed at each call and control how much of the system an operation may use.
-/// They are distinct from [`CodecOptions`](super::CodecOptions), which control the behaviour of an operation.
+/// These are the part of [`Resources`] that codecs use. They are passed to the encode and decode methods of codecs,
+/// which never read storage.
 ///
-/// Compute (encoding and decoding) and I/O (storage requests) have separate limits.
-///
-/// The default values are:
-/// - `compute_target`: number of threads available to Rayon
-/// - `io_target`: `32`
-/// - `io_limiter`: none
-/// - `fetched_bytes_limit`: 256 MiB
-/// - `read_dispatch`: none (adapt to the latency of reads)
-/// - `read_coalescing`: none (use the hint of the store)
-/// - `io_pool`: none (use the global I/O pool)
-#[derive(Debug, Clone)]
-pub struct Resources {
+/// The default compute target is the number of threads available to Rayon.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputeResources {
     compute_target: usize,
-    io_target: usize,
-    io_limiter: Option<IoLimiter>,
-    fetched_bytes_limit: usize,
-    read_dispatch: Option<ReadDispatch>,
-    read_coalescing: Option<ReadCoalescing>,
-    #[cfg(not(target_family = "wasm"))]
-    io_pool: Option<Arc<IoPool>>,
 }
 
-impl Default for Resources {
+impl Default for ComputeResources {
     fn default() -> Self {
         Self {
             compute_target: rayon::current_num_threads(),
-            io_target: DEFAULT_IO_TARGET,
-            io_limiter: None,
-            fetched_bytes_limit: DEFAULT_FETCHED_BYTES_LIMIT,
-            read_dispatch: None,
-            read_coalescing: None,
-            #[cfg(not(target_family = "wasm"))]
-            io_pool: None,
         }
     }
 }
 
-impl Resources {
+impl ComputeResources {
     /// Return the compute target.
     ///
-    /// This is the number of concurrent compute (encoding/decoding) operations to target for an operation.
-    /// Limiting concurrent operations is needed to reduce memory usage and improve performance.
+    /// This is the number of concurrent compute (encoding/decoding) operations to target.
     /// Concurrency is unconstrained if the compute target is set to zero.
     #[must_use]
     pub fn compute_target(&self) -> usize {
@@ -88,6 +64,121 @@ impl Resources {
     #[must_use]
     pub fn with_compute_target(mut self, compute_target: usize) -> Self {
         self.compute_target = compute_target;
+        self
+    }
+
+    /// The compute target, or [`usize::MAX`] if it is unconstrained (zero).
+    #[must_use]
+    pub fn compute_limit(&self) -> usize {
+        unconstrained_if_zero(self.compute_target)
+    }
+
+    /// These resources with an equal share (at least one) of the compute target between `shares` concurrent operations.
+    ///
+    /// An unconstrained compute target remains unconstrained.
+    #[must_use]
+    pub fn with_compute_share(&self, shares: usize) -> Self {
+        let mut resources = self.clone();
+        if self.compute_target != 0 {
+            resources.compute_target = (self.compute_target / shares.max(1)).max(1);
+        }
+        resources
+    }
+}
+
+/// Resources available to an array operation.
+///
+/// These are passed at each call and control how much of the system an operation may use.
+/// They are distinct from [`CodecOptions`](super::CodecOptions), which control the behaviour of an operation.
+///
+/// Compute (encoding and decoding) and I/O (storage requests) have separate limits.
+/// Codecs only receive the [`ComputeResources`].
+///
+/// The default values are:
+/// - `compute_target`: number of threads available to Rayon
+/// - `io_target`: `32`
+/// - `io_limiter`: none
+/// - `fetched_bytes_limit`: 256 MiB
+/// - `read_dispatch`: none (adapt to the latency of reads)
+/// - `read_coalescing`: none (use the hint of the store)
+/// - `io_pool`: none (use the global I/O pool)
+#[derive(Debug, Clone)]
+pub struct Resources {
+    compute: ComputeResources,
+    io_target: usize,
+    io_limiter: Option<IoLimiter>,
+    fetched_bytes_limit: usize,
+    read_dispatch: Option<ReadDispatch>,
+    read_coalescing: Option<ReadCoalescing>,
+    #[cfg(not(target_family = "wasm"))]
+    io_pool: Option<Arc<IoPool>>,
+}
+
+impl Default for Resources {
+    fn default() -> Self {
+        ComputeResources::default().into()
+    }
+}
+
+impl From<ComputeResources> for Resources {
+    /// Resources with `compute` and the default I/O resources.
+    fn from(compute: ComputeResources) -> Self {
+        Self {
+            compute,
+            io_target: DEFAULT_IO_TARGET,
+            io_limiter: None,
+            fetched_bytes_limit: DEFAULT_FETCHED_BYTES_LIMIT,
+            read_dispatch: None,
+            read_coalescing: None,
+            #[cfg(not(target_family = "wasm"))]
+            io_pool: None,
+        }
+    }
+}
+
+impl Resources {
+    /// Return the compute resources, which are passed to codecs.
+    #[must_use]
+    pub fn compute(&self) -> &ComputeResources {
+        &self.compute
+    }
+
+    /// Set the compute resources.
+    pub fn set_compute(&mut self, compute: ComputeResources) -> &mut Self {
+        self.compute = compute;
+        self
+    }
+
+    /// Set the compute resources.
+    ///
+    /// For example, a compute step that drives tasks reading storage uses the compute resources of its
+    /// [`ComputeCtx`](crate::plan::ComputeCtx) with the I/O resources of the operation.
+    #[must_use]
+    pub fn with_compute(mut self, compute: ComputeResources) -> Self {
+        self.compute = compute;
+        self
+    }
+
+    /// Return the compute target.
+    ///
+    /// This is the number of concurrent compute (encoding/decoding) operations to target for an operation.
+    /// Limiting concurrent operations is needed to reduce memory usage and improve performance.
+    /// Concurrency is unconstrained if the compute target is set to zero.
+    #[must_use]
+    pub fn compute_target(&self) -> usize {
+        self.compute.compute_target
+    }
+
+    /// Set the compute target.
+    pub fn set_compute_target(&mut self, compute_target: usize) -> &mut Self {
+        self.compute.compute_target = compute_target;
+        self
+    }
+
+    /// Set the compute target.
+    #[must_use]
+    pub fn with_compute_target(mut self, compute_target: usize) -> Self {
+        self.compute.compute_target = compute_target;
         self
     }
 
@@ -159,7 +250,7 @@ impl Resources {
     /// The compute target, or [`usize::MAX`] if it is unconstrained (zero).
     #[must_use]
     pub fn compute_limit(&self) -> usize {
-        unconstrained_if_zero(self.compute_target)
+        self.compute.compute_limit()
     }
 
     /// The I/O target, or [`usize::MAX`] if it is unconstrained (zero).
@@ -174,9 +265,7 @@ impl Resources {
     #[must_use]
     pub fn with_compute_share(&self, shares: usize) -> Self {
         let mut resources = self.clone();
-        if self.compute_target != 0 {
-            resources.compute_target = (self.compute_target / shares.max(1)).max(1);
-        }
+        resources.compute = self.compute.with_compute_share(shares);
         resources
     }
 

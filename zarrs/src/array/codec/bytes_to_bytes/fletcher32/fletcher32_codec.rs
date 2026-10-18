@@ -8,7 +8,8 @@ use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::plan::SourceStep;
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources,
 };
 use zarrs_metadata::Configuration;
 
@@ -87,7 +88,7 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
         let mut encoded_value = into_owned_with_spare_capacity(decoded_value, CHECKSUM_SIZE);
@@ -100,7 +101,7 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             if options.validate_checksums() {

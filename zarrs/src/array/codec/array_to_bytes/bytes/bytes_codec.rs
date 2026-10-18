@@ -17,7 +17,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
@@ -177,7 +177,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
         bytes.validate(num_elements, &self.data_type)?;
@@ -191,7 +191,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
         let bytes = if self.passthrough {
@@ -212,7 +212,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         match output_target {
             ArrayBytesDecodeIntoTarget::Fixed(output) if self.data_type.is_fixed() => {
@@ -544,7 +544,7 @@ mod tests {
                 chunk_shape,
                 (&mut view).into(),
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
         };
         (output, result)
@@ -647,7 +647,7 @@ mod tests {
                         },
                         &CodecOptions::default(),
                     )
-                    .and_then(|task| drive_memory_one(task, &Resources::default()))
+                    .and_then(|task| drive_memory_one(task, &ComputeResources::default()))
                     .map(|_| ())
             };
             (output, result)
@@ -698,7 +698,7 @@ mod tests {
                 values.map(u16::to_be_bytes).concat()
             };
             let compressed = producer
-                .encode(encoded.into(), &options, &Resources::default())
+                .encode(encoded.into(), &options, &ComputeResources::default())
                 .unwrap();
             for representation in [
                 BytesRepresentation::FixedSize(8),
@@ -737,7 +737,7 @@ mod tests {
                         ArrayBytes::new_flen(vec![0; 2]),
                         &shape,
                         &options,
-                        &Resources::default()
+                        &ComputeResources::default()
                     )
                     .is_err()
             );
@@ -747,7 +747,7 @@ mod tests {
                         CowBytes::from(&[0; 2][..]),
                         &shape,
                         &options,
-                        &Resources::default()
+                        &ComputeResources::default()
                     )
                     .is_err()
             );

@@ -7,7 +7,7 @@ use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel}
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    Resources, read_decoded_bytes_into,
+    ComputeResources, read_decoded_bytes_into,
 };
 use zarrs_metadata::Configuration;
 
@@ -64,7 +64,7 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder = bzip2::read::BzEncoder::new(Cursor::new(decoded_value), self.compression);
         let mut out: Vec<u8> = Vec::new();
@@ -77,7 +77,7 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = bzip2::read::BzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
@@ -95,7 +95,7 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         _decoded_representation: &BytesRepresentation,
         output: &mut [u8],
         _options: &CodecOptions,
-        _resources: &Resources,
+        _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         read_decoded_bytes_into(bzip2::bufread::BzDecoder::new(&encoded_value[..]), output)
     }

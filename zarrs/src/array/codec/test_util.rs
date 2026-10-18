@@ -6,7 +6,7 @@ use std::sync::Arc;
 use zarrs_codec::plan::partial_decode_memory;
 use zarrs_codec::{
     ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
-    CodecSpecificOptions, CowBytes, Resources, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, ComputeResources, CowBytes, Resources, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_storage::byte_range::ByteRange;
@@ -46,7 +46,7 @@ pub(crate) fn partial_decode_bytes(
         &[NonZeroU64::new(decoded_len).unwrap()],
         &indices,
         &CodecOptions::default(),
-        &Resources::default(),
+        &ComputeResources::default(),
     )
     .unwrap()
     .into_fixed()
@@ -109,7 +109,7 @@ impl MemoryPartialDecoder {
                 bytes,
                 shape,
                 &CodecOptions::default(),
-                &Resources::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_vec();
@@ -129,7 +129,7 @@ impl MemoryPartialDecoder {
             &self.shape,
             indexer,
             options,
-            resources,
+            resources.compute(),
         )
     }
 }

@@ -23,7 +23,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, InvalidBytesLengthError, Resources,
+    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::{Configuration, Endianness};
@@ -334,7 +334,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
@@ -411,7 +411,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(bytes_codec) = &self.bytes_codec {
             return bytes_codec.decode(bytes, shape, options, resources);
@@ -429,7 +429,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         shape: &[NonZeroU64],
         mut output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-        resources: &Resources,
+        resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         if let Some(bytes_codec) = &self.bytes_codec {
             return bytes_codec.decode_into(input, shape, output_target, options, resources);

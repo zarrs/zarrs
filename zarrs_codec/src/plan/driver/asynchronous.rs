@@ -225,7 +225,7 @@ async fn drive_single<'a>(
     io: &dyn AsyncIo,
     resources: &Resources,
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
-    let ctx = ComputeCtx::new_inline(resources.clone());
+    let ctx = ComputeCtx::new_inline(resources.compute().clone());
     let outcome = if task.needs_io() {
         let (source, ranges, step) = single_read(task)?;
         let result = {
@@ -301,14 +301,14 @@ where
                 let running = compute_futures.len() + 1;
                 let queued = scheduler.compute_queued();
                 let offload_ctx =
-                    || ComputeCtx::new(resources.with_compute_share(running + queued));
+                    || ComputeCtx::new(resources.compute().with_compute_share(running + queued));
                 match offload(work, &offload_ctx) {
                     Ok(future) => compute_futures.push(future),
                     Err(work) => {
                         // Queued work does not run alongside work on the polling task
                         inline = Some((
                             work,
-                            ComputeCtx::new_inline(resources.with_compute_share(running)),
+                            ComputeCtx::new_inline(resources.compute().with_compute_share(running)),
                         ));
                         break;
                     }
