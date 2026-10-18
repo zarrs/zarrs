@@ -40,7 +40,7 @@ pub(crate) struct Odometer {
 impl Odometer {
     /// An odometer over the elements in `range` of a grid with `dimensions`.
     pub(crate) fn new(dimensions: &[impl GridDimension], range: Range<usize>) -> Self {
-        let mut positions: ArrayIndices = std::iter::repeat_n(0, dimensions.len()).collect();
+        let mut positions = crate::zero_indices(dimensions.len());
         if !range.is_empty() {
             let mut positions_rev = positions.iter_mut().rev();
             unravel(range.start as u64, dimensions, |_, position| {
