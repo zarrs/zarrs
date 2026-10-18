@@ -1,9 +1,9 @@
 use std::iter::FusedIterator;
 
-use super::ContiguousIndicesIterator;
-use super::contiguous_indices_iterator::ContiguousIndices;
-use crate::iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator;
-use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
+use super::contiguous_indices_iterator::shrink_to_run_starts;
+use super::strided_indices::{StridedIndices, StridedOdometer};
+use crate::indexer::validate_start_shape;
+use crate::{ArrayIndicesTinyVec, ArraySubsetTraits, IndexerError};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///
@@ -27,8 +27,9 @@ use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
 /// ```
 #[derive(Clone)]
 pub struct ContiguousLinearisedIndices {
-    inner: ContiguousIndices,
-    array_shape: Vec<u64>,
+    /// The linearised indices of the starts of the contiguous runs.
+    runs: StridedIndices,
+    contiguous_elements: u64,
 }
 
 impl ContiguousLinearisedIndices {
@@ -37,27 +38,40 @@ impl ContiguousLinearisedIndices {
     /// # Errors
     ///
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
-    pub fn new(subset: ArraySubset, array_shape: Vec<u64>) -> Result<Self, IndexerError> {
-        let inner = ContiguousIndices::new(subset, &array_shape)?;
-        Ok(Self { inner, array_shape })
+    pub fn new(
+        subset: &(impl ArraySubsetTraits + ?Sized),
+        array_shape: &[u64],
+    ) -> Result<Self, IndexerError> {
+        let start = subset.start();
+        let mut shape: ArrayIndicesTinyVec = subset.shape().iter().copied().collect();
+        validate_start_shape(&start, &shape, array_shape)?;
+        // The shape of the starts of contiguous runs, in place of the shape of the subset
+        let contiguous_elements = shrink_to_run_starts(&start, &mut shape, array_shape);
+        Ok(Self {
+            runs: StridedIndices::new(&start, &shape, array_shape),
+            contiguous_elements,
+        })
     }
 
     /// Return the number of starting indices (i.e. the length of the iterator).
+    ///
+    /// # Panics
+    /// Panics if the number of starting indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn len(&self) -> usize {
-        self.inner.len()
+        self.runs.len()
     }
 
     /// Returns true if the number of starting indices is zero.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.runs.num_elements() == 0
     }
 
     /// Return the number of contiguous elements (fixed on each iteration).
     #[must_use]
     pub fn contiguous_elements(&self) -> u64 {
-        self.inner.contiguous_elements()
+        self.contiguous_elements
     }
 
     /// Return the number of contiguous elements (fixed on each iteration).
@@ -66,10 +80,13 @@ impl ContiguousLinearisedIndices {
     /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
     #[must_use]
     pub fn contiguous_elements_usize(&self) -> usize {
-        usize::try_from(self.inner.contiguous_elements()).unwrap()
+        usize::try_from(self.contiguous_elements).unwrap()
     }
 
     /// Create a new serial iterator.
+    ///
+    /// # Panics
+    /// Panics if the number of starting indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn iter(&self) -> ContiguousLinearisedIndicesIterator<'_> {
         <&Self as IntoIterator>::into_iter(self)
@@ -82,8 +99,8 @@ impl<'a> IntoIterator for &'a ContiguousLinearisedIndices {
 
     fn into_iter(self) -> Self::IntoIter {
         ContiguousLinearisedIndicesIterator {
-            inner: self.inner.iter(),
-            array_shape: &self.array_shape,
+            odometer: StridedOdometer::new(&self.runs),
+            indices: self,
         }
     }
 }
@@ -94,8 +111,8 @@ impl IntoIterator for ContiguousLinearisedIndices {
 
     fn into_iter(self) -> Self::IntoIter {
         ContiguousLinearisedIndicesIntoIterator {
-            inner: self.inner.into_iter(),
-            array_shape: self.array_shape,
+            odometer: StridedOdometer::new(&self.runs),
+            indices: self,
         }
     }
 }
@@ -103,26 +120,28 @@ impl IntoIterator for ContiguousLinearisedIndices {
 /// Serial contiguous linearised indices iterator.
 ///
 /// See [`ContiguousLinearisedIndices`].
+#[derive(Clone)]
 pub struct ContiguousLinearisedIndicesIterator<'a> {
-    inner: ContiguousIndicesIterator<'a>,
-    array_shape: &'a [u64],
+    indices: &'a ContiguousLinearisedIndices,
+    odometer: StridedOdometer,
 }
 
 /// Serial contiguous linearised indices iterator.
 ///
 /// See [`ContiguousLinearisedIndices`].
+#[derive(Clone)]
 pub struct ContiguousLinearisedIndicesIntoIterator {
-    inner: ContiguousIndicesIntoIterator,
-    array_shape: ArrayShape,
+    indices: ContiguousLinearisedIndices,
+    odometer: StridedOdometer,
 }
 
 macro_rules! impl_contiguous_linearised_indices_iterator {
-    (private $iterator_type:ty, $qualifier:tt) => {
+    ($iterator_type:ty) => {
         impl $iterator_type {
             /// Return the number of contiguous elements (fixed on each iteration).
             #[must_use]
             pub fn contiguous_elements(&self) -> u64 {
-                self.inner.contiguous_elements()
+                self.indices.contiguous_elements()
             }
 
             /// Return the number of contiguous elements (fixed on each iteration).
@@ -131,37 +150,28 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
             /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
             #[must_use]
             pub fn contiguous_elements_usize(&self) -> usize {
-                self.inner.contiguous_elements_usize()
+                self.indices.contiguous_elements_usize()
             }
         }
 
         impl Iterator for $iterator_type {
             type Item = (u64, u64);
 
+            #[inline]
             fn next(&mut self) -> Option<Self::Item> {
-                self.inner.next().map(|indices| {
-                    (
-                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape))
-                            .expect("inbounds indices"),
-                        indices.1,
-                    )
-                })
+                let run = self.odometer.next(&self.indices.runs)?;
+                Some((run, self.indices.contiguous_elements))
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
-                self.inner.size_hint()
+                self.odometer.size_hint()
             }
         }
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                self.inner.next_back().map(|indices| {
-                    (
-                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape))
-                            .expect("inbounds indices"),
-                        indices.1,
-                    )
-                })
+                let run = self.odometer.next_back(&self.indices.runs)?;
+                Some((run, self.indices.contiguous_elements))
             }
         }
 
@@ -169,23 +179,7 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
 
         impl FusedIterator for $iterator_type {}
     };
-    ($iterator_type:ty) => {
-        macro_rules! qualifier {
-            ($v:expr) => {
-                $v
-            };
-        }
-        impl_contiguous_linearised_indices_iterator! {private $iterator_type, qualifier}
-    };
-    (ref $iterator_type:ty) => {
-        macro_rules! qualifier {
-            ($v:expr) => {
-                &$v
-            };
-        }
-        impl_contiguous_linearised_indices_iterator! {private $iterator_type, qualifier}
-    };
 }
 
 impl_contiguous_linearised_indices_iterator!(ContiguousLinearisedIndicesIterator<'_>);
-impl_contiguous_linearised_indices_iterator!(ref ContiguousLinearisedIndicesIntoIterator);
+impl_contiguous_linearised_indices_iterator!(ContiguousLinearisedIndicesIntoIterator);

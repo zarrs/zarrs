@@ -5,7 +5,8 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{ArrayIndicesTinyVec, ArraySubset, unravel_index};
+use super::odometer::{GridDimension, Odometer, unravel};
+use crate::{ArrayIndicesTinyVec, ArraySubset};
 
 /// An iterator over the indices in an array subset.
 ///
@@ -82,10 +83,7 @@ impl<'a> IntoIterator for &'a Indices {
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIterator {
-            subset: &self.subset,
-            range: self.range.clone(),
-        }
+        IndicesIterator::new(&self.subset, self.range.clone())
     }
 }
 
@@ -118,10 +116,7 @@ impl IntoIterator for Indices {
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIntoIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIntoIterator::new(self.subset, self.range)
     }
 }
 
@@ -142,8 +137,8 @@ impl IntoParallelIterator for Indices {
 /// See [`Indices`].
 #[derive(Clone)]
 pub struct IndicesIterator<'a> {
-    pub(crate) subset: &'a ArraySubset,
-    pub(crate) range: std::ops::Range<usize>,
+    subset: &'a ArraySubset,
+    odometer: IndicesOdometer,
 }
 
 /// Serial indices iterator.
@@ -151,63 +146,103 @@ pub struct IndicesIterator<'a> {
 /// See [`Indices`].
 #[derive(Clone)]
 pub struct IndicesIntoIterator {
-    pub(crate) subset: ArraySubset,
-    pub(crate) range: std::ops::Range<usize>,
+    subset: ArraySubset,
+    odometer: IndicesOdometer,
 }
 
-/// Compute indices from a linear index for dimensionality 1, adding subset start offset.
-#[inline]
-fn unravel_index_1d(index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
-    debug_assert_eq!(shape.len(), 1);
-    debug_assert_eq!(start.len(), 1);
-    tinyvec::tiny_vec!([u64; 4] => start[0] + (index % shape[0]))
+impl<'a> IndicesIterator<'a> {
+    pub(crate) fn new(subset: &'a ArraySubset, range: std::ops::Range<usize>) -> Self {
+        Self {
+            odometer: IndicesOdometer::new(subset, range),
+            subset,
+        }
+    }
 }
 
-/// Compute indices from a linear index for dimensionality 2, adding subset start offset.
-#[inline]
-fn unravel_index_2d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
-    debug_assert_eq!(shape.len(), 2);
-    debug_assert_eq!(start.len(), 2);
-    let i1 = start[1] + (index % shape[1]);
-    index /= shape[1];
-    let i0 = start[0] + (index % shape[0]);
-    tinyvec::tiny_vec!([u64; 4] => i0, i1)
+impl IndicesIntoIterator {
+    pub(crate) fn new(subset: ArraySubset, range: std::ops::Range<usize>) -> Self {
+        Self {
+            odometer: IndicesOdometer::new(&subset, range),
+            subset,
+        }
+    }
 }
 
-/// Compute indices from a linear index for dimensionality 3, adding subset start offset.
-#[inline]
-fn unravel_index_3d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
-    debug_assert_eq!(shape.len(), 3);
-    debug_assert_eq!(start.len(), 3);
-    let i2 = start[2] + (index % shape[2]);
-    index /= shape[2];
-    let i1 = start[1] + (index % shape[1]);
-    index /= shape[1];
-    let i0 = start[0] + (index % shape[0]);
-    tinyvec::tiny_vec!([u64; 4] => i0, i1, i2)
+/// An iterator position over the indices of the elements in a range of an array subset.
+///
+/// Only the dimensions of the subset with more than one element are stepped through, with an [`Odometer`].
+#[derive(Clone)]
+struct IndicesOdometer {
+    /// The dimensions of the subset with more than one element.
+    dimensions: tinyvec::TinyVec<[SubsetDimension; 4]>,
+    odometer: Odometer,
+    /// The indices of the next element from the front, if any.
+    front: ArrayIndicesTinyVec,
 }
 
-/// Compute indices from a linear index for dimensionality 4, adding subset start offset.
-#[inline]
-fn unravel_index_4d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
-    debug_assert_eq!(shape.len(), 4);
-    debug_assert_eq!(start.len(), 4);
-    let i3 = start[3] + (index % shape[3]);
-    index /= shape[3];
-    let i2 = start[2] + (index % shape[2]);
-    index /= shape[2];
-    let i1 = start[1] + (index % shape[1]);
-    index /= shape[1];
-    let i0 = start[0] + (index % shape[0]);
-    tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3)
+/// A dimension of an array subset with more than one element.
+#[derive(Clone, Copy, Default)]
+struct SubsetDimension {
+    /// The dimension of the subset.
+    axis: usize,
+    /// The length of the subset along the dimension.
+    count: u64,
 }
 
-/// Compute indices from a linear index for dimensionality 5+, adding subset start offset.
-#[inline]
-fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayIndicesTinyVec> {
-    let mut indices = unravel_index(index, shape)?;
-    std::iter::zip(indices.iter_mut(), start).for_each(|(idx, st)| *idx += st);
-    Some(indices)
+impl GridDimension for SubsetDimension {
+    fn count(&self) -> u64 {
+        self.count
+    }
+}
+
+impl IndicesOdometer {
+    fn new(subset: &ArraySubset, range: std::ops::Range<usize>) -> Self {
+        let dimensions: tinyvec::TinyVec<[SubsetDimension; 4]> =
+            (subset.shape().iter().enumerate())
+                .filter(|&(_, &count)| count > 1)
+                .map(|(axis, &count)| SubsetDimension { axis, count })
+                .collect();
+        let odometer = Odometer::new(&dimensions, range);
+        let mut front: ArrayIndicesTinyVec = subset.start().iter().copied().collect();
+        for (dimension, &position) in std::iter::zip(&dimensions, odometer.positions()) {
+            front[dimension.axis] += position;
+        }
+        Self {
+            dimensions,
+            odometer,
+            front,
+        }
+    }
+
+    #[inline]
+    fn next(&mut self) -> Option<ArrayIndicesTinyVec> {
+        let indices = self.front.clone();
+        let front = &mut self.front;
+        self.odometer
+            .pop_front(&self.dimensions, |dimension, position| {
+                let index = &mut front[dimension.axis];
+                if position == 0 {
+                    *index -= dimension.count - 1;
+                } else {
+                    *index += 1;
+                }
+            })
+            .then_some(indices)
+    }
+
+    /// The next indices from the back of a subset with `start`.
+    fn next_back(&mut self, start: &[u64]) -> Option<ArrayIndicesTinyVec> {
+        let index = self.odometer.pop_back()?;
+        let mut indices: ArrayIndicesTinyVec = start.iter().copied().collect();
+        unravel(index, &self.dimensions, |dimension, position| {
+            indices[dimension.axis] += position;
+        });
+        Some(indices)
+    }
+
+    fn len(&self) -> usize {
+        self.odometer.len()
+    }
 }
 
 macro_rules! impl_indices_iterator {
@@ -215,48 +250,20 @@ macro_rules! impl_indices_iterator {
         impl Iterator for $iterator_type {
             type Item = ArrayIndicesTinyVec;
 
+            #[inline]
             fn next(&mut self) -> Option<Self::Item> {
-                if self.range.start >= self.range.end {
-                    return None;
-                }
-                let index = self.range.start as u64;
-                self.range.start += 1;
-                let shape = self.subset.shape();
-                let start = self.subset.start();
-                match shape.len() {
-                    0 => Some(ArrayIndicesTinyVec::new()),
-                    1 => Some(unravel_index_1d(index, &shape, &start)),
-                    2 => Some(unravel_index_2d(index, &shape, &start)),
-                    3 => Some(unravel_index_3d(index, &shape, &start)),
-                    4 => Some(unravel_index_4d(index, &shape, &start)),
-                    _ => unravel_index_nd(index, &shape, &start),
-                }
+                self.odometer.next()
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
-                let length = self.range.end.saturating_sub(self.range.start);
+                let length = self.odometer.len();
                 (length, Some(length))
             }
         }
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                if self.range.end > self.range.start {
-                    self.range.end -= 1;
-                    let index = self.range.end as u64;
-                    let shape = self.subset.shape();
-                    let start = self.subset.start();
-                    match shape.len() {
-                        0 => Some(ArrayIndicesTinyVec::new()),
-                        1 => Some(unravel_index_1d(index, &shape, &start)),
-                        2 => Some(unravel_index_2d(index, &shape, &start)),
-                        3 => Some(unravel_index_3d(index, &shape, &start)),
-                        4 => Some(unravel_index_4d(index, &shape, &start)),
-                        _ => unravel_index_nd(index, &shape, &start),
-                    }
-                } else {
-                    None
-                }
+                self.odometer.next_back(self.subset.start())
             }
         }
 
@@ -326,10 +333,7 @@ impl<'a> Producer for ParIndicesIterator<'a> {
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIterator::new(self.subset, self.range)
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
@@ -350,10 +354,7 @@ impl Producer for ParIndicesIntoIterator {
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        IndicesIntoIterator {
-            subset: self.subset,
-            range: self.range,
-        }
+        IndicesIntoIterator::new(self.subset, self.range)
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
@@ -399,6 +400,49 @@ mod tests {
         let mut iter = indices.iter();
         assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 5])));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn indices_iterator_5d_overflowing_num_elements() {
+        // The number of elements overflows a `u64`, but the indices of its leading elements do not
+        let subset = ArraySubset::new_with_start_shape(vec![1; 5], vec![1 << 16; 5]).unwrap();
+        let indices = Indices {
+            subset,
+            range: 0..3,
+        };
+        let mut iter = indices.iter();
+        assert_eq!(
+            iter.next(),
+            Some(ArrayIndicesTinyVec::Heap(vec![1, 1, 1, 1, 1]))
+        );
+        assert_eq!(
+            iter.next_back(),
+            Some(ArrayIndicesTinyVec::Heap(vec![1, 1, 1, 1, 3]))
+        );
+        assert_eq!(
+            iter.next(),
+            Some(ArrayIndicesTinyVec::Heap(vec![1, 1, 1, 1, 2]))
+        );
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn indices_iterator_max_index() {
+        // Stepping past the last index along a dimension must not overflow
+        let subset = ArraySubset::new_with_start_shape(vec![0, u64::MAX], vec![2, 1]).unwrap();
+        let expected = vec![
+            ArrayIndicesTinyVec::Heap(vec![0, u64::MAX]),
+            ArrayIndicesTinyVec::Heap(vec![1, u64::MAX]),
+        ];
+        assert_eq!(subset.indices().iter().collect::<Vec<_>>(), expected);
+        let subset = ArraySubset::new_with_start_shape(vec![u64::MAX - 1, 0], vec![2, 2]).unwrap();
+        let expected = vec![
+            ArrayIndicesTinyVec::Heap(vec![u64::MAX - 1, 0]),
+            ArrayIndicesTinyVec::Heap(vec![u64::MAX - 1, 1]),
+            ArrayIndicesTinyVec::Heap(vec![u64::MAX, 0]),
+            ArrayIndicesTinyVec::Heap(vec![u64::MAX, 1]),
+        ];
+        assert_eq!(subset.indices().iter().collect::<Vec<_>>(), expected);
     }
 
     #[allow(clippy::reversed_empty_ranges)]

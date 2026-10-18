@@ -3,6 +3,7 @@
 use std::ops::Range;
 use thiserror::Error;
 
+use crate::array_subset_traits::inbounds_start_shape;
 use crate::{
     ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits,
     IncompatibleDimensionalityError, MaybeSend, MaybeSync, ravel_indices,
@@ -54,18 +55,33 @@ pub(crate) fn validate_array_subset(
     subset: &(impl ArraySubsetTraits + ?Sized),
     array_shape: &[u64],
 ) -> Result<(), IndexerError> {
-    if subset.start().len() != array_shape.len() {
+    validate_start_shape(&subset.start(), &subset.shape(), array_shape)
+}
+
+/// Validate the region with `start` and `shape` against `array_shape`.
+pub(crate) fn validate_start_shape(
+    start: &[u64],
+    shape: &[u64],
+    array_shape: &[u64],
+) -> Result<(), IndexerError> {
+    if start.len() != array_shape.len() {
         Err(IndexerError::new_incompatible_dimensionality(
-            subset.start().len(),
+            start.len(),
             array_shape.len(),
         ))
-    } else if subset.inbounds_shape(array_shape) {
+    } else if shape.len() != array_shape.len() {
+        Err(IndexerError::new_incompatible_dimensionality(
+            shape.len(),
+            array_shape.len(),
+        ))
+    } else if inbounds_start_shape(start, shape, array_shape) {
         Ok(())
     } else {
-        Err(IndexerError::new_oob(
-            subset.end_exc(),
-            array_shape.to_vec(),
-        ))
+        // The end saturates so that an end beyond `u64::MAX` is reported rather than wrapping
+        let end_exc = std::iter::zip(start, shape)
+            .map(|(&start, &size)| start.saturating_add(size))
+            .collect();
+        Err(IndexerError::new_oob(end_exc, array_shape.to_vec()))
     }
 }
 
@@ -633,6 +649,17 @@ mod tests {
                     (0..count).rev().map(|i| (i, 1)).collect::<Vec<_>>()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn validate_start_shape_dimensionality() {
+        assert!(validate_start_shape(&[0, 0], &[1, 1], &[2, 2]).is_ok());
+        for (start, shape) in [(&[0][..], &[1, 1][..]), (&[0, 0], &[1])] {
+            assert!(matches!(
+                validate_start_shape(start, shape, &[2, 2]),
+                Err(IndexerError::IncompatibleDimensionality(_))
+            ));
         }
     }
 

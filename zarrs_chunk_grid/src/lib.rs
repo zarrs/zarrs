@@ -464,10 +464,7 @@ pub unsafe trait ChunkGridTraits:
         let shape = self.grid_shape().to_vec();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
-        IndicesIntoIterator {
-            subset: ArraySubset::new_with_shape(shape),
-            range: 0..n_chunks,
-        }
+        IndicesIntoIterator::new(ArraySubset::new_with_shape(shape), 0..n_chunks)
     }
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.
@@ -528,82 +525,6 @@ pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
         count *= s;
     }
     Some(index)
-}
-
-/// Unravel a linearised index to ND indices.
-#[must_use]
-fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
-    let total_size: u64 = shape
-        .iter()
-        .try_fold(1u64, |acc, &dim| acc.checked_mul(dim))?;
-    if index >= total_size {
-        return None;
-    }
-
-    // Specialised routines for dimensions <=4, unrolled and no dynamic allocation
-    match shape.len() {
-        0 => Some(ArrayIndicesTinyVec::new()),
-        1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
-        2 => {
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1))
-        }
-        3 => {
-            let i2 = index % shape[2];
-            index /= shape[2];
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2))
-        }
-        4 => {
-            let i3 = index % shape[3];
-            index /= shape[3];
-            let i2 = index % shape[2];
-            index /= shape[2];
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3))
-        }
-        len => {
-            // For 5+ dimensions, use Vec path with spare_capacity_mut
-            let mut vec = Vec::with_capacity(len);
-
-            {
-                // SAFETY: `indices` are initialised and never read below
-                let indices = unsafe { vec_spare_capacity_to_mut_slice(&mut vec) };
-
-                // Fill in reverse order
-                for i in (0..len).rev() {
-                    indices[i] = index % shape[i];
-                    index /= shape[i];
-                }
-            }
-
-            // SAFETY: all `len` elements are initialised
-            unsafe { vec.set_len(len) };
-
-            Some(ArrayIndicesTinyVec::Heap(vec))
-        }
-    }
-}
-
-/// Get a mutable slice of the spare capacity in a vector.
-///
-/// # Safety
-/// The caller must not read from the returned slice before it has been initialised.
-unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
-    let spare_capacity = vec.spare_capacity_mut();
-    // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
-    unsafe {
-        std::slice::from_raw_parts_mut(
-            spare_capacity.as_mut_ptr().cast::<T>(),
-            spare_capacity.len(),
-        )
-    }
 }
 
 #[cfg(test)]

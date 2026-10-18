@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reserve capacity for fallible indexer collections and optional chunk-shape conversion
 - `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
 - `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
+- `ContiguousLinearisedIndices` iterates forwards by adding strides, rather than unravelling and ravelling the indices of each contiguous run
+  - **Breaking**: `ContiguousLinearisedIndices::new` takes the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than a `Vec<u64>`
+- `Indices`, `LinearisedIndices` and `ContiguousIndices` also iterate forwards by stepping their indices, unravelling only the first index of an iterator
+  - All of these iterators step through only the dimensions in which they have more than one index
+  - **Breaking**: `LinearisedIndices::{new,new_unchecked}` take the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than an `ArrayShape`
+- `ArraySubsetTraits::{linearised_indices,contiguous_linearised_indices}` no longer copy the subset
+- Implement `Clone` for `ContiguousIndices[Into]Iterator`, `LinearisedIndices[Into]Iterator` and `ContiguousLinearisedIndices[Into]Iterator`
 - Bump `zarrs_metadata` to 0.7.6
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
@@ -29,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An empty array subset is now always in-bounds, since it references no elements (unless it has an incompatible dimensionality)
 - `ravel_indices` now returns `None` if `indices` and `shape` have a different length
 - `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
+- `ArraySubset[Traits]::inbounds_shape` now returns `false` for a subset whose end exceeds `u64::MAX`, and `LinearisedIndices::new`, `ContiguousIndices::new` and `ContiguousLinearisedIndices::new` return an error for it, rather than wrapping in release builds
+- `Indices` iterators over a subset with five or more dimensions no longer yield nothing if the number of elements in the subset exceeds `u64::MAX`
 
 ## [0.5.1] - 2026-02-08
 

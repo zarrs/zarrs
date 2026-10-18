@@ -94,14 +94,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// An empty region references no elements, so it is in-bounds of any array with a matching
     /// dimensionality, irrespective of its start.
     fn inbounds_shape(&self, array_shape: &[u64]) -> bool {
-        if self.start().len() != array_shape.len() || self.shape().len() != array_shape.len() {
-            return false;
-        }
-        let start = self.start();
-        let shape = self.shape();
-        shape.contains(&0)
-            || izip!(start.iter(), shape.iter(), array_shape)
-                .all(|(&start, &size, &bound)| start + size <= bound)
+        inbounds_start_shape(&self.start(), &self.shape(), array_shape)
     }
 
     /// Returns true if the region is within another region.
@@ -228,7 +221,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// # Errors
     /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     fn linearised_indices(&self, array_shape: &[u64]) -> Result<LinearisedIndices, IndexerError> {
-        LinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+        LinearisedIndices::new(self, array_shape)
     }
 
     /// Returns an iterator over the indices of contiguous elements within the subset.
@@ -249,8 +242,21 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IndexerError> {
-        ContiguousLinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+        ContiguousLinearisedIndices::new(self, array_shape)
     }
+}
+
+/// Returns true if the region with `start` and `shape` is within the bounds of an array with the given shape.
+///
+/// An empty region references no elements, so it is in-bounds of any array with a matching dimensionality,
+/// irrespective of its start.
+pub(crate) fn inbounds_start_shape(start: &[u64], shape: &[u64], array_shape: &[u64]) -> bool {
+    if start.len() != array_shape.len() || shape.len() != array_shape.len() {
+        return false;
+    }
+    shape.contains(&0)
+        || izip!(start, shape, array_shape)
+            .all(|(&start, &size, &bound)| start.checked_add(size).is_some_and(|end| end <= bound))
 }
 
 impl PartialEq<ArraySubset> for &dyn ArraySubsetTraits {
