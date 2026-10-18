@@ -94,15 +94,55 @@ macro_rules! _define_data_type_support {
             impl [<$name DataTypeExt>] for $crate::DataType {
                 fn [<codec_ $name:lower>](&self) -> ::core::result::Result<&dyn [<$name DataTypeTraits>], $crate::DataTypeCodecError> {
                     let caster = [<$name:upper _CASTERS>].get(&self.as_any().type_id())
-                        .ok_or_else(|| $crate::DataTypeCodecError::UnsupportedDataType {
-                            data_type: self.clone(),
-                            codec_name: stringify!([<$name>]),
-                        })?;
-                    caster(self.as_any())
-                        .ok_or_else(|| $crate::DataTypeCodecError::UnsupportedDataType {
-                            data_type: self.clone(),
-                            codec_name: stringify!([<$name>]),
-                        })
+                        .ok_or_else(|| [<$name:lower _unsupported>](self))?;
+                    caster(self.as_any()).ok_or_else(|| [<$name:lower _unsupported>](self))
+                }
+            }
+
+            fn [<$name:lower _unsupported>](data_type: &$crate::DataType) -> $crate::DataTypeCodecError {
+                $crate::DataTypeCodecError::UnsupportedDataType {
+                    data_type: data_type.clone(),
+                    codec_name: stringify!([<$name>]),
+                }
+            }
+
+            #[doc = "The `" $name:lower "` codec support of a [`DataType`](crate::DataType), looked up once."]
+            ///
+            #[doc = "[`" $name DataTypeExt "`] looks up the support of a data type in a registry on each call, whereas [`get`](Self::get) only casts the data type."]
+            #[derive(Clone, Debug)]
+            pub struct [<$name DataTypeSupport>] {
+                data_type: $crate::DataType,
+                caster: [<$name CasterFn>],
+            }
+
+            impl [<$name DataTypeSupport>] {
+                #[doc = "Look up the `" $name:lower "` codec support of `data_type`."]
+                ///
+                /// # Errors
+                /// Returns [`DataTypeCodecError`](crate::DataTypeCodecError) if the data type does not support the codec.
+                pub fn new(data_type: &$crate::DataType) -> ::core::result::Result<Self, $crate::DataTypeCodecError> {
+                    let caster = *[<$name:upper _CASTERS>].get(&data_type.as_any().type_id())
+                        .ok_or_else(|| [<$name:lower _unsupported>](data_type))?;
+                    caster(data_type.as_any()).ok_or_else(|| [<$name:lower _unsupported>](data_type))?;
+                    Ok(Self {
+                        data_type: data_type.clone(),
+                        caster,
+                    })
+                }
+
+                /// The data type.
+                #[must_use]
+                #[inline]
+                pub fn data_type(&self) -> &$crate::DataType {
+                    &self.data_type
+                }
+
+                #[doc = "The `" $name:lower "` codec support of the data type."]
+                #[must_use]
+                #[inline]
+                pub fn get(&self) -> &dyn [<$name DataTypeTraits>] {
+                    (self.caster)(self.data_type.as_any())
+                        .unwrap_or_else(|| unreachable!("the caster of a data type casts it"))
                 }
             }
         }
