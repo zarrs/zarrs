@@ -402,7 +402,7 @@ fn group_indices_by_subchunk(
 
 /// Restore indexer order after independently decoding each subchunk's selected elements.
 fn merge_indexer_subchunks(
-    groups: Vec<(ArrayBytes<'static>, Vec<usize>)>,
+    groups: Vec<(ArrayBytes<'static>, &[usize])>,
     num_elements: usize,
     data_type: &DataType,
 ) -> Result<ArrayBytes<'static>, CodecError> {
@@ -421,7 +421,7 @@ fn merge_indexer_subchunks(
 
 /// Merge subchunk groups validated by [`merge_indexer_subchunks`].
 fn merge_validated_indexer_subchunks(
-    groups: Vec<(ArrayBytes<'static>, Vec<usize>)>,
+    groups: Vec<(ArrayBytes<'static>, &[usize])>,
     num_elements: usize,
     data_type: &DataType,
 ) -> Result<ArrayBytes<'static>, CodecError> {
@@ -445,7 +445,7 @@ fn merge_validated_indexer_subchunks(
         let mut output = vec![0; num_elements * element_size];
         for (bytes, positions) in groups {
             let bytes = bytes.into_fixed()?;
-            for (element, position) in positions.into_iter().enumerate() {
+            for (element, &position) in positions.iter().enumerate() {
                 output[position * element_size..(position + 1) * element_size]
                     .copy_from_slice(&bytes[element * element_size..(element + 1) * element_size]);
             }

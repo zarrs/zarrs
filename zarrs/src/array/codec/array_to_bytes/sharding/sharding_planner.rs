@@ -382,7 +382,9 @@ impl ShardingCodecBound {
             let subchunk_subset = subchunk_grid
                 .subset(&subchunk)?
                 .expect("subchunk is within the shard");
-            positions.push(group.positions.clone());
+            // The join reads the positions from the indexer of the subchunk
+            let group = Arc::new(group);
+            positions.push(group.clone());
             let child = self
                 .plan_subchunk(
                     source,
@@ -391,7 +393,7 @@ impl ShardingCodecBound {
                     &subchunk,
                     subset_shape(&subchunk_subset),
                     DecodeRequest {
-                        indexer: PlanIndexer::Shared(Arc::new(group)),
+                        indexer: PlanIndexer::Shared(group),
                         target: TaskTarget::Value,
                     },
                     options,
@@ -403,8 +405,10 @@ impl ShardingCodecBound {
         Ok(Outcome::Fork {
             children,
             join: Join::new(move |values, _ctx| {
-                let groups = std::iter::zip(values, positions)
-                    .map(|(value, positions)| Ok((array_value(value)?.into_owned(), positions)))
+                let groups = std::iter::zip(values, &positions)
+                    .map(|(value, group)| {
+                        Ok((array_value(value)?.into_owned(), group.positions.as_slice()))
+                    })
                     .collect::<Result<Vec<_>, CodecError>>()?;
                 let merged =
                     merge_indexer_subchunks(groups, num_elements, self.inner_codecs.data_type())?;
