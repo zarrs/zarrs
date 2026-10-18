@@ -39,7 +39,7 @@ impl ContiguousIndices {
     ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
-    pub fn new(subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
+    pub fn new(mut subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
@@ -54,42 +54,33 @@ impl ContiguousIndices {
                 contiguous_elements: 0,
             });
         }
-        if std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape) {
+        if izip!(&subset.start, &subset.shape, array_shape)
+            .any(|(&start, &size, &bound)| start.checked_add(size).is_none_or(|end| end > bound))
+        {
             return Err(IndexerError::new_oob(
                 subset.end_exc(),
                 array_shape.to_vec(),
             ));
         }
 
+        // The subset of the starts of contiguous runs, in place of the subset: the trailing dimensions of a run have a
+        // length of one
         let mut contiguous = true;
         let mut contiguous_elements = 1;
-        let mut shape_out: Vec<u64> = Vec::with_capacity(array_shape.len());
-        let subset_start = subset.start();
-        let subset_shape = subset.shape();
-        for (&subset_start, &subset_size, &array_size, shape_out_i) in izip!(
-            subset_start.iter().rev(),
-            subset_shape.iter().rev(),
+        for (&start, size, &array_size) in izip!(
+            subset.start.iter().rev(),
+            subset.shape.iter_mut().rev(),
             array_shape.iter().rev(),
-            shape_out.spare_capacity_mut().iter_mut().rev(),
         ) {
-            if contiguous {
-                contiguous_elements *= subset_size;
-                shape_out_i.write(1);
-                contiguous = subset_start == 0 && subset_size == array_size;
-            } else {
-                shape_out_i.write(subset_size);
+            if !contiguous {
+                break;
             }
+            contiguous_elements *= *size;
+            contiguous = start == 0 && *size == array_size;
+            *size = 1;
         }
-        // SAFETY: each element is initialised
-        unsafe { shape_out.set_len(array_shape.len()) };
-        let ranges = subset_start
-            .iter()
-            .zip(shape_out)
-            .map(|(&st, sh)| st..(st + sh));
-        let subset_contiguous_start = ArraySubset::from(ranges);
-        // let inner = subset_contiguous_start.iter_indices();
         Ok(Self {
-            subset_contiguous_start,
+            subset_contiguous_start: subset,
             contiguous_elements,
         })
     }
