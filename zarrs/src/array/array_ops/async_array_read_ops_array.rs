@@ -9,7 +9,7 @@ use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks, optional_nesting_depth,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use super::super::{ArrayBytesFixedDisjointView, ArrayIndices};
 use super::async_array_read_ops_common::AsyncRetrieveInto;
 use super::{AsyncArrayReadOps, *};
 use crate::array::{ArrayBytes, ChunkShapeTraits};
@@ -196,7 +196,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .create_async_readable_transformer(storage_handle)
             .await?;
 
-        let retrieve_encoded_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let retrieve_encoded_chunk = |chunk_indices: ArrayIndices| {
             let storage_transformer = storage_transformer.clone();
             async move {
                 Ok::<_, ArrayError>(
@@ -472,7 +472,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let array_subset_start = array_subset.start();
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let retrieve_chunk = |chunk_indices: ArrayIndices| {
             let array_subset_start = &array_subset_start;
             async move {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
@@ -540,7 +540,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let array_subset_start = array_subset.start();
             let array_subset_shape = array_subset.shape();
 
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let retrieve_chunk = |chunk_indices: ArrayIndices| {
                 let array_subset_start = &array_subset_start;
                 let array_subset_shape = &array_subset_shape;
                 async move {

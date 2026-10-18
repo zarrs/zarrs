@@ -485,7 +485,7 @@ fn update_bytes_vlen_array_subset<'a>(
 
     if !update_subset.inbounds_shape(input_shape) {
         return Err(IndexerError::new_oob(
-            update_subset.end_exc(),
+            update_subset.end_exc().to_vec(),
             input_shape.to_vec(),
         ));
     }

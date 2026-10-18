@@ -42,7 +42,7 @@ impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for CacheChunkLimit<CT> {
 
     async fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         init: F,
     ) -> Result<CT, Arc<ArrayError>>
     where
@@ -105,7 +105,7 @@ impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for CacheSizeLimit<CT> {
 
     async fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         init: F,
     ) -> Result<CT, Arc<ArrayError>>
     where

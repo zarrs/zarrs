@@ -81,7 +81,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         let encoded = cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+            .try_get_or_insert_with(chunk_indices.into(), || {
                 array.retrieve_encoded_chunk(chunk_indices)
             })
             .map_err(cache_error)?;
@@ -100,7 +100,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let encoded = cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+            .try_get_or_insert_with(chunk_indices.into(), || {
                 array.retrieve_encoded_chunk(chunk_indices)
             })
             .map_err(cache_error)?;
@@ -137,7 +137,7 @@ where
     C: AsyncChunkCache<Value = ChunkCacheTypeEncoded> + ?Sized,
 {
     cache
-        .try_get_or_insert_with(chunk_indices.to_vec(), async move {
+        .try_get_or_insert_with(chunk_indices.into(), async move {
             array.async_retrieve_encoded_chunk(chunk_indices).await
         })
         .await

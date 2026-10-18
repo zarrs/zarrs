@@ -8,7 +8,7 @@ use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayBytes, ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -254,7 +254,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
-        let transposed_shape = permute(shape_u64, &self.order.0).expect("validated");
+        let transposed_shape: ArrayIndices = permute(shape_u64, &self.order.0).expect("validated");
         apply_permutation(
             &bytes,
             &transposed_shape,

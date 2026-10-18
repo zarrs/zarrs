@@ -101,9 +101,9 @@ use crate::array::array_bytes_internal::split_optional;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
-    ArrayBytes, ArrayIndices, ArrayIndicesTinyVec, BytesRepresentation, ChunkGrid, ChunkShape,
-    CodecChain, CodecChainBound, DataType, FillValue, Indexer, IndexerError,
-    RecommendedConcurrency, ravel_indices,
+    ArrayBytes, ArrayIndices, BytesRepresentation, ChunkGrid, ChunkShape, CodecChain,
+    CodecChainBound, DataType, FillValue, Indexer, IndexerError, RecommendedConcurrency,
+    ravel_indices,
 };
 pub use sharding_codec::{ShardingCodec, ShardingCodecBound};
 pub use sharding_codec_builder::ShardingCodecBuilder;
@@ -340,7 +340,7 @@ impl Indexer for SubchunkIndices {
         })
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         let dimensionality = self.dimensionality();
         let indices = self.indices.clone();
         Box::new((0..self.positions.len()).map(move |element| {
@@ -393,7 +393,7 @@ fn group_indices_by_subchunk(
 ) -> BTreeMap<u64, SubchunkIndices> {
     let mut groups: BTreeMap<u64, SubchunkIndices> = BTreeMap::new();
     for (position, indices) in indexer.iter_indices().enumerate() {
-        let subchunk_indices: ArrayIndicesTinyVec = std::iter::zip(&indices, subchunk_shape)
+        let subchunk_indices: ArrayIndices = std::iter::zip(&indices, subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
         let subchunk_index = ravel_indices(&subchunk_indices, subchunk_grid.grid_shape())
@@ -531,7 +531,7 @@ fn subchunk_updates<'a>(
         let iterator = subchunks.indices().into_iter();
 
         iterator
-            .map(|subchunk_indices: ArrayIndicesTinyVec| {
+            .map(|subchunk_indices: ArrayIndices| {
                 let subchunk_index = ravel_indices(&subchunk_indices, chunk_grid.grid_shape())
                     .expect("inbounds chunk");
                 let subchunk_subset = chunk_grid
@@ -572,7 +572,7 @@ fn subchunk_updates<'a>(
                 let positions: Vec<ArrayIndices> = group
                     .positions
                     .iter()
-                    .map(|&position| vec![position as u64])
+                    .map(|&position| std::iter::once(position as u64).collect())
                     .collect();
                 Ok(SubchunkUpdate {
                     subchunk_index,
@@ -1179,7 +1179,7 @@ mod tests {
                             Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s / 2)..s))),
                             Box::new(vec![
                                 shard_shape.iter().map(|&s| s - 1).collect::<ArrayIndices>(),
-                                vec![0; shard_shape.len()],
+                                std::iter::repeat_n(0, shard_shape.len()).collect(),
                                 shard_shape.iter().map(|&s| s / 2).collect(),
                                 shard_shape.iter().map(|&s| s - 1).collect(),
                             ]),

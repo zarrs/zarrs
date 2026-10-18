@@ -504,11 +504,11 @@ mod tests {
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
         assert_eq!(
             chunk_grid.chunk_indices(&[17, 17]).unwrap(),
-            Some(vec![3, 1])
+            Some([3, 1].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_element_indices(&[17, 17]).unwrap(),
-            Some(vec![2, 7])
+            Some([2, 7].as_slice().into())
         );
 
         assert_eq!(
@@ -536,7 +536,10 @@ mod tests {
         assert_eq!(chunk_grid.grid_shape(), &[3, 3]);
 
         // In-bounds array index resolves to a chunk
-        assert_eq!(chunk_grid.chunk_indices(&[5, 5]).unwrap(), Some(vec![1, 1]));
+        assert_eq!(
+            chunk_grid.chunk_indices(&[5, 5]).unwrap(),
+            Some([1, 1].as_slice().into())
+        );
 
         // array_indices_inbounds respects array shape, not chunk extent
         assert!(chunk_grid.array_indices_inbounds(&[5, 5]));
@@ -568,10 +571,10 @@ mod tests {
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
 
-        let array_indices: ArrayIndices = vec![99, 99];
+        let array_indices = [99, 99];
         assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_some());
 
-        let array_indices: ArrayIndices = vec![100, 100];
+        let array_indices = [100, 100];
         assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
 
         let chunk_indices: ArrayShape = vec![6, 9];
@@ -616,13 +619,34 @@ mod tests {
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
 
         // Verify chunk origins to ensure expansion worked correctly
-        assert_eq!(chunk_grid.chunk_origin(&[0, 0]).unwrap(), Some(vec![0, 0]));
-        assert_eq!(chunk_grid.chunk_origin(&[1, 0]).unwrap(), Some(vec![5, 0]));
-        assert_eq!(chunk_grid.chunk_origin(&[2, 0]).unwrap(), Some(vec![10, 0]));
-        assert_eq!(chunk_grid.chunk_origin(&[3, 0]).unwrap(), Some(vec![15, 0])); // After 3 chunks of 5
-        assert_eq!(chunk_grid.chunk_origin(&[4, 0]).unwrap(), Some(vec![30, 0])); // After 3×5 + 15
-        assert_eq!(chunk_grid.chunk_origin(&[5, 0]).unwrap(), Some(vec![45, 0])); // After 3×5 + 2×15
-        assert_eq!(chunk_grid.chunk_origin(&[6, 0]).unwrap(), Some(vec![65, 0]));
+        assert_eq!(
+            chunk_grid.chunk_origin(&[0, 0]).unwrap(),
+            Some([0, 0].as_slice().into())
+        );
+        assert_eq!(
+            chunk_grid.chunk_origin(&[1, 0]).unwrap(),
+            Some([5, 0].as_slice().into())
+        );
+        assert_eq!(
+            chunk_grid.chunk_origin(&[2, 0]).unwrap(),
+            Some([10, 0].as_slice().into())
+        );
+        assert_eq!(
+            chunk_grid.chunk_origin(&[3, 0]).unwrap(),
+            Some([15, 0].as_slice().into())
+        ); // After 3 chunks of 5
+        assert_eq!(
+            chunk_grid.chunk_origin(&[4, 0]).unwrap(),
+            Some([30, 0].as_slice().into())
+        ); // After 3×5 + 15
+        assert_eq!(
+            chunk_grid.chunk_origin(&[5, 0]).unwrap(),
+            Some([45, 0].as_slice().into())
+        ); // After 3×5 + 2×15
+        assert_eq!(
+            chunk_grid.chunk_origin(&[6, 0]).unwrap(),
+            Some([65, 0].as_slice().into())
+        );
         // After 3×5 + 2×15 + 20
     }
 
@@ -698,7 +722,7 @@ mod tests {
         // origin [40, 45], chunk size [10, 15], extent [50, 60] = exactly at boundary
         assert_eq!(
             chunk_grid.chunk_origin(&[4, 3]).unwrap(),
-            Some(vec![40, 45])
+            Some([40, 45].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_shape(&[4, 3]).unwrap(),
@@ -719,17 +743,17 @@ mod tests {
         // In-bounds array index at array boundary -> last chunk
         assert_eq!(
             chunk_grid.chunk_indices(&[49, 59]).unwrap(),
-            Some(vec![4, 3])
+            Some([4, 3].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_element_indices(&[49, 59]).unwrap(),
-            Some(vec![9, 14])
+            Some([9, 14].as_slice().into())
         );
 
         // In-bounds interior chunk
         assert_eq!(
             chunk_grid.chunk_origin(&[2, 1]).unwrap(),
-            Some(vec![20, 10])
+            Some([20, 10].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_shape(&[2, 1]).unwrap(),
@@ -760,11 +784,11 @@ mod tests {
         assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
 
         // No array indices are in-bounds when second dimension is zero
-        let array_indices: ArrayIndices = vec![50, 0];
+        let array_indices = [50, 0];
         assert!(!chunk_grid.array_indices_inbounds(&array_indices));
 
         // Array indices beyond explicit chunks in the first dimension should be out of bounds
-        let array_indices: ArrayIndices = vec![101, 0];
+        let array_indices = [101, 0];
         assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
     }
 
@@ -783,13 +807,13 @@ mod tests {
         // Test chunk indices calculation for scalar chunks
         assert_eq!(
             chunk_grid.chunk_indices(&[25, 45]).unwrap(),
-            Some(vec![2, 2])
+            Some([2, 2].as_slice().into())
         );
 
         // Test chunk origin for scalar chunks
         assert_eq!(
             chunk_grid.chunk_origin(&[2, 2]).unwrap(),
-            Some(vec![20, 40])
+            Some([20, 40].as_slice().into())
         );
 
         // Test chunk shape for scalar chunks (all chunks same size)
@@ -811,7 +835,7 @@ mod tests {
         // Test chunk element indices
         assert_eq!(
             chunk_grid.chunk_element_indices(&[25, 45]).unwrap(),
-            Some(vec![5, 5])
+            Some([5, 5].as_slice().into())
         );
     }
 
@@ -830,11 +854,11 @@ mod tests {
         // Scalar dimension behaves like a regular grid
         assert_eq!(
             chunk_grid.chunk_indices(&[25, 17]).unwrap(),
-            Some(vec![2, 3])
+            Some([2, 3].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_origin(&[2, 3]).unwrap(),
-            Some(vec![20, 15])
+            Some([20, 15].as_slice().into())
         );
     }
 

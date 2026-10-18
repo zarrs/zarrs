@@ -37,7 +37,7 @@ pub use linearised_indices_iterator::{
 
 #[cfg(test)]
 mod tests {
-    use crate::ArrayIndicesTinyVec;
+    use crate::ArrayIndices;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
     use crate::{ArraySubset, IndexerError};
@@ -49,21 +49,18 @@ mod tests {
 
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (4, Some(4)));
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 1])));
-        assert_eq!(
-            iter.next_back(),
-            Some(ArrayIndicesTinyVec::Heap(vec![2, 2]))
-        );
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 2])));
-        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![2, 1])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![1, 1])));
+        assert_eq!(iter.next_back(), Some(ArrayIndices::Heap(vec![2, 2])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![1, 2])));
+        assert_eq!(iter.next(), Some(ArrayIndices::Heap(vec![2, 1])));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next_back(), None);
 
         let expected = vec![
-            ArrayIndicesTinyVec::Heap(vec![1, 1]),
-            ArrayIndicesTinyVec::Heap(vec![1, 2]),
-            ArrayIndicesTinyVec::Heap(vec![2, 1]),
-            ArrayIndicesTinyVec::Heap(vec![2, 2]),
+            ArrayIndices::Heap(vec![1, 1]),
+            ArrayIndices::Heap(vec![1, 2]),
+            ArrayIndices::Heap(vec![2, 1]),
+            ArrayIndices::Heap(vec![2, 2]),
         ];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
@@ -105,10 +102,7 @@ mod tests {
         let mut iter = indices.into_iter();
         assert_eq!(iter.size_hint(), (1, Some(1)));
         assert_eq!(iter.contiguous_elements(), 4);
-        assert_eq!(
-            iter.next(),
-            Some((ArrayIndicesTinyVec::Heap(vec![0, 0]), 4))
-        );
+        assert_eq!(iter.next(), Some((ArrayIndices::Heap(vec![0, 0]), 4)));
         assert_eq!(iter.next(), None);
     }
 
@@ -123,19 +117,13 @@ mod tests {
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (2, Some(2)));
         assert_eq!(iter.contiguous_elements(), 2);
-        assert_eq!(
-            iter.next_back(),
-            Some((ArrayIndicesTinyVec::Heap(vec![2, 1]), 2))
-        );
-        assert_eq!(
-            iter.next(),
-            Some((ArrayIndicesTinyVec::Heap(vec![1, 1]), 2))
-        );
+        assert_eq!(iter.next_back(), Some((ArrayIndices::Heap(vec![2, 1]), 2)));
+        assert_eq!(iter.next(), Some((ArrayIndices::Heap(vec![1, 1]), 2)));
         assert_eq!(iter.next(), None);
 
         let expected = vec![
-            (ArrayIndicesTinyVec::Heap(vec![1, 1]), 2),
-            (ArrayIndicesTinyVec::Heap(vec![2, 1]), 2),
+            (ArrayIndices::Heap(vec![1, 1]), 2),
+            (ArrayIndices::Heap(vec![2, 1]), 2),
         ];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
@@ -148,7 +136,7 @@ mod tests {
         let region = ArraySubset::new_with_ranges(&[1..3, 0..1, 0..2, 0..2]);
         let indices = region.contiguous_indices(&[3, 1, 2, 2]).unwrap();
 
-        let expected = vec![(ArrayIndicesTinyVec::Heap(vec![1, 0, 0, 0]), 8)];
+        let expected = vec![(ArrayIndices::Heap(vec![1, 0, 0, 0]), 8)];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.into_iter().collect::<Vec<_>>(), expected);
@@ -237,9 +225,9 @@ mod tests {
 
             // Enumerate the elements of the region without an iterator
             let num_elements = region.num_elements_usize();
-            let expected_indices: Vec<ArrayIndicesTinyVec> = (0..num_elements as u64)
+            let expected_indices: Vec<ArrayIndices> = (0..num_elements as u64)
                 .map(|mut element| {
-                    let mut indices: ArrayIndicesTinyVec = region.start().iter().copied().collect();
+                    let mut indices: ArrayIndices = region.start().iter().copied().collect();
                     for (index, &size) in std::iter::zip(&mut indices, region.shape()).rev() {
                         *index += element % size;
                         element /= size;
@@ -288,7 +276,7 @@ mod tests {
             assert_eq!(contiguous.into_iter().collect::<Vec<_>>(), expected_runs);
 
             let contiguous = region.contiguous_indices(&array_shape).unwrap();
-            let expected_runs: Vec<(ArrayIndicesTinyVec, u64)> = if num_elements == 0 {
+            let expected_runs: Vec<(ArrayIndices, u64)> = if num_elements == 0 {
                 vec![]
             } else {
                 expected_indices

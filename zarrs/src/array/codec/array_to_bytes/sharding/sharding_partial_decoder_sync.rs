@@ -16,7 +16,7 @@ use crate::array::array_bytes_internal::{
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits, ChunkGrid,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubsetTraits, ChunkGrid,
     ChunkShape, CodecChainBound, CowBytes, DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
@@ -317,7 +317,7 @@ fn partial_decode_fixed_array_subset_into(
         options,
     )?;
     let array_subset_start = array_subset.start();
-    let decode_subchunk_subset_into_slice = |chunk_indices: ArrayIndicesTinyVec| {
+    let decode_subchunk_subset_into_slice = |chunk_indices: ArrayIndices| {
         let shard_index_idx =
             ravel_indices(&chunk_indices, subchunk_grid.grid_shape()).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
@@ -403,7 +403,7 @@ fn partial_decode_merged_array_subset(
     let options = &options;
 
     let array_subset_start = array_subset.start();
-    let decode_subchunk_subset = |chunk_indices: ArrayIndicesTinyVec| {
+    let decode_subchunk_subset = |chunk_indices: ArrayIndices| {
         let shard_index_idx =
             ravel_indices(&chunk_indices, subchunk_grid.grid_shape()).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();

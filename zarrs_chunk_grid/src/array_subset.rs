@@ -17,7 +17,7 @@ use crate::iterators::{
 use thiserror::Error;
 
 use crate::indexer::{Indexer, IndexerError, IndexerIterator};
-use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits, ChunkShape};
+use crate::{ArrayIndices, ArrayShape, ArraySubsetTraits, ChunkShape};
 
 /// An incompatible start/end indices error.
 #[derive(Clone, Debug, Error)]
@@ -29,15 +29,12 @@ pub enum ArraySubsetError {
     IncompatibleDimensionality { got: usize, expected: usize },
     /// Incompatible start and shape.
     #[error("incompatible start {start:?} with shape {shape:?}")]
-    IncompatibleStartShape {
-        start: ArrayIndices,
-        shape: ArrayShape,
-    },
+    IncompatibleStartShape { start: Vec<u64>, shape: ArrayShape },
     /// Incompatible start and end indices.
     #[error("incompatible start {start:?} with end {end:?} (inclusive: {inclusive})")]
     IncompatibleStartEnd {
-        start: ArrayIndices,
-        end: ArrayIndices,
+        start: Vec<u64>,
+        end: Vec<u64>,
         inclusive: bool,
     },
     /// Incompatible offset.
@@ -51,9 +48,9 @@ pub struct ArraySubset {
     /// The start of the array subset.
     ///
     /// Subsets of up to four dimensions are stored inline, so creating and cloning them does not allocate.
-    pub(crate) start: ArrayIndicesTinyVec,
+    pub(crate) start: ArrayIndices,
     /// The shape of the array subset.
-    pub(crate) shape: ArrayIndicesTinyVec,
+    pub(crate) shape: ArrayIndices,
 }
 
 impl Display for ArraySubset {
@@ -130,22 +127,22 @@ impl ArraySubset {
     /// # Errors
     /// Returns [`ArraySubsetError`] if `start` and `end` are incompatible, such as if any element of `end` is less than `start` or they differ in length.
     pub fn new_with_start_end_inc(
-        start: ArrayIndices,
-        end: ArrayIndices,
+        start: impl AsRef<[u64]>,
+        end: impl AsRef<[u64]>,
     ) -> Result<Self, ArraySubsetError> {
-        if start.len() != end.len() || std::iter::zip(&start, &end).any(|(start, end)| end < start)
-        {
+        let (start, end) = (start.as_ref(), end.as_ref());
+        if start.len() != end.len() || std::iter::zip(start, end).any(|(start, end)| end < start) {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start,
-                end,
+                start: start.to_vec(),
+                end: end.to_vec(),
                 inclusive: true,
             })
         } else {
-            let shape = std::iter::zip(&start, end)
-                .map(|(&start, end)| end.saturating_sub(start) + 1)
+            let shape = std::iter::zip(start, end)
+                .map(|(&start, &end)| end.saturating_sub(start) + 1)
                 .collect();
             Ok(Self {
-                start: start.as_slice().into(),
+                start: start.into(),
                 shape,
             })
         }
@@ -156,22 +153,22 @@ impl ArraySubset {
     /// # Errors
     /// Returns [`ArraySubsetError`] if `start` and `end` are incompatible, such as if any element of `end` is less than `start` or they differ in length.
     pub fn new_with_start_end_exc(
-        start: ArrayIndices,
-        end: ArrayIndices,
+        start: impl AsRef<[u64]>,
+        end: impl AsRef<[u64]>,
     ) -> Result<Self, ArraySubsetError> {
-        if start.len() != end.len() || std::iter::zip(&start, &end).any(|(start, end)| end < start)
-        {
+        let (start, end) = (start.as_ref(), end.as_ref());
+        if start.len() != end.len() || std::iter::zip(start, end).any(|(start, end)| end < start) {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start,
-                end,
+                start: start.to_vec(),
+                end: end.to_vec(),
                 inclusive: false,
             })
         } else {
-            let shape = std::iter::zip(&start, end)
-                .map(|(&start, end)| end.saturating_sub(start))
+            let shape = std::iter::zip(start, end)
+                .map(|(&start, &end)| end.saturating_sub(start))
                 .collect();
             Ok(Self {
-                start: start.as_slice().into(),
+                start: start.into(),
                 shape,
             })
         }
@@ -191,11 +188,11 @@ impl ArraySubset {
         if end.len() == self.start.len() {
             let start = std::iter::zip(&self.start, end)
                 .map(|(&a, &b)| std::cmp::min(a, b))
-                .collect();
+                .collect::<ArrayIndices>();
             let end_exc = std::iter::zip(&self.start, &self.shape).map(|(&s, &l)| s + l);
             let end = std::iter::zip(end_exc, end)
                 .map(|(a, &b)| std::cmp::min(a, b))
-                .collect();
+                .collect::<ArrayIndices>();
             Ok(Self::new_with_start_end_exc(start, end)?)
         } else {
             Err(ArraySubsetError::IncompatibleStartEnd {
@@ -391,7 +388,7 @@ impl Indexer for ArraySubset {
         self.shape.to_vec()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         Box::new(self.indices().into_iter())
     }
 

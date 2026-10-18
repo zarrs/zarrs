@@ -292,7 +292,7 @@ fn fixture(variable: bool, nested: bool, index_location: ShardingIndexLocation) 
     }
 }
 
-fn selections(nested: bool) -> Vec<(Vec<ArrayIndices>, Vec<u64>)> {
+fn selections(nested: bool) -> Vec<(Vec<Vec<u64>>, Vec<u64>)> {
     vec![
         (
             vec![
@@ -332,7 +332,7 @@ fn cases() -> impl Iterator<Item = (bool, bool, ShardingIndexLocation, usize, bo
     )
 }
 
-fn expected(fixture: &Fixture, indices: &[ArrayIndices], absent: bool) -> ArrayBytes<'static> {
+fn expected(fixture: &Fixture, indices: &[Vec<u64>], absent: bool) -> ArrayBytes<'static> {
     if absent {
         ArrayBytes::new_fill_value(
             fixture.codec.data_type(),

@@ -280,7 +280,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
+    use crate::array::{ArrayIndices, ArraySubset};
     use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraitsIterators};
 
     #[test]
@@ -368,18 +368,18 @@ mod tests {
             assert_eq!(chunk_grid.chunk_shape(), chunk_shape.as_slice());
             assert_eq!(
                 chunk_grid.chunk_origin(&[1, 1, 1]).unwrap(),
-                Some(vec![1, 2, 3])
+                Some([1, 2, 3].as_slice().into())
             );
             let chunk_grid_shape = chunk_grid.grid_shape();
             assert_eq!(chunk_grid_shape, &[5, 4, 18]);
-            let array_index: ArrayIndices = vec![3, 5, 50];
+            let array_index = [3, 5, 50];
             assert_eq!(
                 chunk_grid.chunk_indices(&array_index).unwrap(),
-                Some(vec![3, 2, 16])
+                Some([3, 2, 16].as_slice().into())
             );
             assert_eq!(
                 chunk_grid.chunk_element_indices(&array_index).unwrap(),
-                Some(vec![0, 1, 2])
+                Some([0, 1, 2].as_slice().into())
             );
 
             assert_eq!(
@@ -411,17 +411,17 @@ mod tests {
         ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
-        let array_indices: ArrayIndices = vec![3, 5, 53];
+        let array_indices = [3, 5, 53];
         assert_eq!(
             chunk_grid.chunk_indices(&array_indices).unwrap(),
-            Some(vec![3, 2, 17])
+            Some([3, 2, 17].as_slice().into())
         );
 
         let chunk_indices: ArrayShape = vec![6, 1, 1];
         assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
         assert_eq!(
             chunk_grid.chunk_origin(&chunk_indices).unwrap(),
-            Some(vec![6, 2, 3])
+            Some([6, 2, 3].as_slice().into())
         );
     }
 
@@ -440,7 +440,10 @@ mod tests {
         // even for edge chunks that extend past the array boundary.
 
         // Edge chunk [3, 2]: origin [9, 10], extends to [12, 15] but array is [10, 12]
-        assert_eq!(chunk_grid.chunk_origin(&[3, 2]).unwrap(), Some(vec![9, 10]));
+        assert_eq!(
+            chunk_grid.chunk_origin(&[3, 2]).unwrap(),
+            Some([9, 10].as_slice().into())
+        );
         assert_eq!(
             chunk_grid.chunk_shape(&[3, 2]).unwrap(),
             Some(chunk_shape.clone())
@@ -451,28 +454,31 @@ mod tests {
         );
 
         // Interior chunk [2, 1]: origin [6, 5], fully within array
-        assert_eq!(chunk_grid.chunk_origin(&[2, 1]).unwrap(), Some(vec![6, 5]));
+        assert_eq!(
+            chunk_grid.chunk_origin(&[2, 1]).unwrap(),
+            Some([6, 5].as_slice().into())
+        );
         assert_eq!(chunk_grid.chunk_shape(&[2, 1]).unwrap(), Some(chunk_shape));
 
         // Array indices at exact array boundary → map to chunk at grid boundary
         assert_eq!(
             chunk_grid.chunk_indices(&[9, 11]).unwrap(),
-            Some(vec![3, 2])
+            Some([3, 2].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_element_indices(&[9, 11]).unwrap(),
-            Some(vec![0, 1])
+            Some([0, 1].as_slice().into())
         );
 
         // Array indices past array boundary — regular grid does not gate on array bounds
         let past_array = vec![10u64, 12u64];
         assert_eq!(
             chunk_grid.chunk_indices(&past_array).unwrap(),
-            Some(vec![3, 2])
+            Some([3, 2].as_slice().into())
         );
         assert_eq!(
             chunk_grid.chunk_element_indices(&past_array).unwrap(),
-            Some(vec![1, 2])
+            Some([1, 2].as_slice().into())
         );
 
         // The in-bounds checks distinguish valid from invalid indices
@@ -501,7 +507,7 @@ mod tests {
         assert!(!grid.array_indices_inbounds(&[3, 5, 0]));
 
         // Query methods return None for zero-dim
-        let array_indices: ArrayIndices = vec![3, 5, 0];
+        let array_indices = [3, 5, 0];
         assert_eq!(grid.chunk_indices(&array_indices).unwrap(), None);
         assert_eq!(grid.chunk_origin(&[0, 0, 0]).unwrap(), None);
         assert_eq!(grid.chunk_shape(&[0, 0, 0]).unwrap(), None);
@@ -523,10 +529,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+                ArrayIndices::Heap(vec![0, 0, 0]),
+                ArrayIndices::Heap(vec![0, 0, 1]),
+                ArrayIndices::Heap(vec![1, 0, 0]),
+                ArrayIndices::Heap(vec![1, 0, 1]),
             ]
         );
 
@@ -534,10 +540,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
-                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+                ArrayIndices::Heap(vec![0, 0, 0]),
+                ArrayIndices::Heap(vec![0, 0, 1]),
+                ArrayIndices::Heap(vec![1, 0, 0]),
+                ArrayIndices::Heap(vec![1, 0, 1]),
             ]
         );
 
@@ -557,10 +563,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                (ArrayIndicesTinyVec::Heap(vec![0, 0, 0]), ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3])),
-                (ArrayIndicesTinyVec::Heap(vec![0, 0, 1]), ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6])),
-                (ArrayIndicesTinyVec::Heap(vec![1, 0, 0]), ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])),
-                (ArrayIndicesTinyVec::Heap(vec![1, 0, 1]), ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6])),
+                (ArrayIndices::Heap(vec![0, 0, 0]), ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3])),
+                (ArrayIndices::Heap(vec![0, 0, 1]), ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6])),
+                (ArrayIndices::Heap(vec![1, 0, 0]), ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])),
+                (ArrayIndices::Heap(vec![1, 0, 1]), ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6])),
             ]
         );
     }

@@ -34,7 +34,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where
@@ -56,7 +56,7 @@ impl<CT: ChunkCacheType> CacheSizeLimitTraits for Cache<CT> {
     fn new_with_size_capacity(size_capacity: u64) -> Self {
         CacheBuilder::new(size_capacity)
             .eviction_policy(EvictionPolicy::lru())
-            .weigher(|_k: &Vec<u64>, v: &CT| u32::try_from(v.size()).unwrap_or(u32::MAX))
+            .weigher(|_k: &ChunkIndices, v: &CT| u32::try_from(v.size()).unwrap_or(u32::MAX))
             .build()
     }
 }
@@ -103,7 +103,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheChunkLimit<CT> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where
@@ -175,7 +175,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheSizeLimit<CT> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where

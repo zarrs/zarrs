@@ -31,7 +31,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
     {
         validate_chunk_indices(array, chunk_indices)?;
         cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), async move {
+            .try_get_or_insert_with(chunk_indices.into(), async move {
                 array
                     .async_partial_decoder_with_options(chunk_indices, options)
                     .await

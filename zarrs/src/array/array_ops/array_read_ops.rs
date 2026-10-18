@@ -154,9 +154,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
         let concurrent_limit = self.codec_options().concurrent_target();
-        let retrieve = |chunk_indices: crate::array::ArrayIndicesTinyVec| {
-            self.retrieve_encoded_chunk(&chunk_indices)
-        };
+        let retrieve = |chunk_indices: ArrayIndices| self.retrieve_encoded_chunk(&chunk_indices);
         // `Indexer::iter_indices` is a sequential iterator, so collect it for parallel iteration.
         chunks
             .iter_indices()

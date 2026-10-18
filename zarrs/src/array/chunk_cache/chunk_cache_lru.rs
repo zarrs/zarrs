@@ -24,7 +24,7 @@ trait CacheTraits<CT: ChunkCacheType> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where
@@ -49,7 +49,7 @@ trait AsyncCacheTraits<CT: ChunkCacheType> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         init: F,
     ) -> impl Future<Output = Result<CT, Arc<ArrayError>>>
     where
@@ -134,7 +134,7 @@ macro_rules! impl_ChunkCacheLruCommon {
 
         fn try_get_or_insert_with<F>(
             &self,
-            chunk_indices: Vec<u64>,
+            chunk_indices: ChunkIndices,
             f: F,
         ) -> Result<Self::Value, Arc<ArrayError>>
         where
@@ -212,7 +212,7 @@ macro_rules! impl_AsyncChunkCacheLruCommon {
 
         async fn try_get_or_insert_with<F>(
             &self,
-            chunk_indices: Vec<u64>,
+            chunk_indices: ChunkIndices,
             init: F,
         ) -> Result<Self::Value, Arc<ArrayError>>
         where

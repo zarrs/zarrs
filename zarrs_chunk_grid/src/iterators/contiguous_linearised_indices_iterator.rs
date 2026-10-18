@@ -3,7 +3,7 @@ use std::iter::FusedIterator;
 use super::contiguous_indices_iterator::shrink_to_run_starts;
 use super::strided_indices::{StridedIndices, StridedOdometer};
 use crate::indexer::validate_start_shape;
-use crate::{ArrayIndicesTinyVec, ArraySubsetTraits, IndexerError};
+use crate::{ArrayIndices, ArraySubsetTraits, IndexerError};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///
@@ -46,7 +46,7 @@ impl ContiguousLinearisedIndices {
         array_shape: &[u64],
     ) -> Result<Self, IndexerError> {
         let start = subset.start();
-        let mut shape: ArrayIndicesTinyVec = subset.shape().iter().copied().collect();
+        let mut shape: ArrayIndices = subset.shape().iter().copied().collect();
         validate_start_shape(&start, &shape, array_shape)?;
         // The shape of the starts of contiguous runs, in place of the shape of the subset
         let contiguous_elements = shrink_to_run_starts(&start, &mut shape, array_shape);

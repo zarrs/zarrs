@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::ArrayIndicesTinyVec;
+use crate::ArrayIndices;
 
 /// A dimension of a grid of positions.
 pub(crate) trait GridDimension {
@@ -32,7 +32,7 @@ pub(crate) fn unravel<D: GridDimension>(
 #[derive(Clone)]
 pub(crate) struct Odometer {
     /// The position of the front element along each dimension, if there are any elements.
-    positions: ArrayIndicesTinyVec,
+    positions: ArrayIndices,
     /// The indices of the remaining elements.
     range: Range<usize>,
 }
@@ -40,7 +40,7 @@ pub(crate) struct Odometer {
 impl Odometer {
     /// An odometer over the elements in `range` of a grid with `dimensions`.
     pub(crate) fn new(dimensions: &[impl GridDimension], range: Range<usize>) -> Self {
-        let mut positions: ArrayIndicesTinyVec = std::iter::repeat_n(0, dimensions.len()).collect();
+        let mut positions: ArrayIndices = std::iter::repeat_n(0, dimensions.len()).collect();
         if !range.is_empty() {
             let mut positions_rev = positions.iter_mut().rev();
             unravel(range.start as u64, dimensions, |_, position| {

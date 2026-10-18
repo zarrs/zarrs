@@ -161,33 +161,34 @@ impl RepeatChunkGrid {
         &self,
         chunk_indices: &[u64],
     ) -> Option<(ArrayIndices, ArrayIndices)> {
-        if self.has_zero_sized_dimension() || !self.chunk_indices_inbounds(chunk_indices) {
+        let inner_grid_shape = self.inner_chunk_grid.grid_shape();
+        if self.has_zero_sized_dimension()
+            || inner_grid_shape.contains(&0)
+            || !self.chunk_indices_inbounds(chunk_indices)
+        {
             return None;
         }
 
-        let mut repeat_inner_indices = Vec::with_capacity(chunk_indices.len());
-        for (index, size) in std::iter::zip(chunk_indices, self.inner_chunk_grid.grid_shape()) {
-            if *size == 0 {
-                return None;
-            }
-            repeat_inner_indices.push((index / size, index % size));
-        }
-        Some(repeat_inner_indices.into_iter().unzip())
+        Some(
+            std::iter::zip(chunk_indices, inner_grid_shape)
+                .map(|(index, size)| (index / size, index % size))
+                .unzip(),
+        )
     }
 
     fn local_array_indices(&self, array_indices: &[u64]) -> Option<(ArrayIndices, ArrayIndices)> {
-        if self.has_zero_sized_dimension() || !self.array_indices_inbounds(array_indices) {
+        if self.has_zero_sized_dimension()
+            || self.shape.contains(&0)
+            || !self.array_indices_inbounds(array_indices)
+        {
             return None;
         }
 
-        let mut repeat_local_indices = Vec::with_capacity(array_indices.len());
-        for (index, size) in std::iter::zip(array_indices, &self.shape) {
-            if *size == 0 {
-                return None;
-            }
-            repeat_local_indices.push((index / size, index % size));
-        }
-        Some(repeat_local_indices.into_iter().unzip())
+        Some(
+            std::iter::zip(array_indices, &self.shape)
+                .map(|(index, size)| (index / size, index % size))
+                .unzip(),
+        )
     }
 
     fn offset_origin(&self, repeat_indices: &[u64], inner_origin: &[u64]) -> ArrayIndices {
@@ -383,12 +384,18 @@ mod tests {
             grid.chunks_subset(&[1..3, 2..4]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[3..9, 4..8]))
         );
-        assert_eq!(grid.chunk_origin(&[2, 3]).unwrap(), Some(vec![6, 6]));
+        assert_eq!(
+            grid.chunk_origin(&[2, 3]).unwrap(),
+            Some([6, 6].as_slice().into())
+        );
         assert_eq!(grid.chunk_shape(&[2, 3]).unwrap(), Some(vec![nz(3), nz(2)]));
-        assert_eq!(grid.chunk_indices(&[7, 7]).unwrap(), Some(vec![2, 3]));
+        assert_eq!(
+            grid.chunk_indices(&[7, 7]).unwrap(),
+            Some([2, 3].as_slice().into())
+        );
         assert_eq!(
             grid.chunk_element_indices(&[7, 7]).unwrap(),
-            Some(vec![1, 1])
+            Some([1, 1].as_slice().into())
         );
         assert_eq!(grid.chunk_indices(&[12, 0]).unwrap(), None);
     }
@@ -423,10 +430,19 @@ mod tests {
         );
         assert_eq!(grid.subset(&[1]).unwrap(), Some(ArraySubset::from([3..5])));
         assert_eq!(grid.subset(&[2]).unwrap(), Some(ArraySubset::from([5..8])));
-        assert_eq!(grid.chunk_origin(&[3]).unwrap(), Some(vec![8]));
+        assert_eq!(
+            grid.chunk_origin(&[3]).unwrap(),
+            Some([8].as_slice().into())
+        );
         assert_eq!(grid.chunk_shape(&[3]).unwrap(), Some(vec![nz(2)]));
-        assert_eq!(grid.chunk_indices(&[8]).unwrap(), Some(vec![3]));
-        assert_eq!(grid.chunk_element_indices(&[8]).unwrap(), Some(vec![0]));
+        assert_eq!(
+            grid.chunk_indices(&[8]).unwrap(),
+            Some([3].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_element_indices(&[8]).unwrap(),
+            Some([0].as_slice().into())
+        );
     }
 
     #[test]
