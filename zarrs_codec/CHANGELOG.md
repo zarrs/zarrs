@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `ArrayBytesFixedDisjointView::copy_from_subset` and `copy_array_subset_into_target`, which copy a subset of array bytes into a view without an intermediate copy
   - Add `ArrayBytesFixedDisjointView::try_copy_from_subset_with`, which transforms the bytes as they are copied
+  - Add `ArrayBytesFixedDisjointView::{copy_from_slices,try_copy_from_slices_with}`, which copy bytes split into several slices
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options

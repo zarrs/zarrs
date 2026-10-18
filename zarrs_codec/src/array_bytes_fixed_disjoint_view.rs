@@ -267,6 +267,48 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         Ok(())
     }
 
+    /// Copy bytes split into `slices` into the view.
+    ///
+    /// This is [`copy_from_slice`](Self::copy_from_slice) on the concatenation of `slices`, without concatenating them.
+    /// Each slice must hold whole elements.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the total length of `slices` is not the same as the byte length of the elements in the view.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn copy_from_slices<'s>(
+        &mut self,
+        slices: impl Iterator<Item = &'s [u8]> + Clone,
+    ) -> Result<(), InvalidBytesLengthError> {
+        self.try_copy_from_slices_with(slices, |source, destination| {
+            destination.copy_from_slice(source);
+            Ok(())
+        })
+    }
+
+    /// Copy bytes split into `slices` into the view with a custom copy for each contiguous region.
+    ///
+    /// This is [`try_copy_from_slice_with`](Self::try_copy_from_slice_with) on the concatenation of `slices`, without
+    /// concatenating them. Each slice must hold whole elements.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the total length of `slices` is not the same as the byte length of the elements in the view, or the first error returned by `copy`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn try_copy_from_slices_with<'s, E: From<InvalidBytesLengthError>>(
+        &mut self,
+        slices: impl Iterator<Item = &'s [u8]> + Clone,
+        copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let len = slices.clone().map(<[u8]>::len).sum::<usize>();
+        if len != self.bytes_in_subset_len {
+            return Err(InvalidBytesLengthError::new(len, self.bytes_in_subset_len).into());
+        }
+        self.copy_runs(slices, copy)
+    }
+
     /// Copy the elements of `subset` of `source`, the bytes of an array of `source_shape`, into the view.
     ///
     /// The subset must have as many elements as the view. This is equivalent to extracting the subset and copying it
@@ -307,7 +349,7 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         source: &[u8],
         source_shape: &[u64],
         subset: &dyn ArraySubsetTraits,
-        mut copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), CodecError>,
+        copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), CodecError>,
     ) -> Result<(), CodecError> {
         let size = self.data_type_size;
         let source_len = usize::try_from(source_shape.iter().product::<u64>()).unwrap() * size;
@@ -318,25 +360,42 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if subset_len != self.bytes_in_subset_len {
             return Err(InvalidBytesLengthError::new(subset_len, self.bytes_in_subset_len).into());
         }
-        let to_bytes = |elements: u64| usize::try_from(elements * size as u64).unwrap();
-        // Copy the contiguous runs of the subset into the contiguous runs of the view, which have the same elements in
-        // C order but may be split differently
+        let runs = subset
+            .contiguous_linearised_indices(source_shape)?
+            .into_iter()
+            .map(|(index, elements)| {
+                let offset = usize::try_from(index).unwrap() * size;
+                &source[offset..offset + usize::try_from(elements).unwrap() * size]
+            });
+        self.copy_runs(runs, copy)
+    }
+
+    /// Copy `runs`, whose concatenation is the bytes of the view in C order, into the contiguous runs of the view.
+    ///
+    /// The runs and the regions of the view hold the same elements but may be split differently.
+    fn copy_runs<'s, E>(
+        &mut self,
+        runs: impl Iterator<Item = &'s [u8]>,
+        mut copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let size = self.data_type_size as u64;
+        let to_bytes = |elements: u64| usize::try_from(elements * size).unwrap();
         let mut destinations = self.contiguous_linearised_indices().iter();
         let (mut destination, mut destination_len) = (0, 0);
-        for (index, elements) in &subset.contiguous_linearised_indices(source_shape)? {
-            let (mut offset, mut len) = (to_bytes(index), to_bytes(elements));
-            while len > 0 {
+        for mut run in runs {
+            while !run.is_empty() {
                 if destination_len == 0 {
                     let (index, elements) = destinations
                         .next()
-                        .expect("the view has as many elements as the subset");
+                        .expect("the runs have as many bytes as the view");
                     (destination, destination_len) = (to_bytes(index), to_bytes(elements));
                 }
-                let n = len.min(destination_len);
-                copy(&source[offset..offset + n], unsafe {
+                let n = run.len().min(destination_len);
+                debug_assert!(destination + n <= self.bytes.len());
+                copy(&run[..n], unsafe {
                     self.bytes.index_mut(destination..destination + n)
                 })?;
-                (offset, len) = (offset + n, len - n);
+                run = &run[n..];
                 (destination, destination_len) = (destination + n, destination_len - n);
             }
         }
@@ -708,5 +767,65 @@ mod tests {
             view.copy_from_subset(&source[1..], &source_shape, &subset)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn copy_from_slices_matches_copy_from_slice() {
+        let size = 2;
+        let shape = [3u64, 4, 5];
+        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3, 2..5]);
+        let len = usize::try_from(shape.iter().product::<u64>()).unwrap() * size;
+        let bytes: Vec<u8> = (0..subset.num_elements_usize() * size)
+            .map(|i| u8::try_from(i).unwrap())
+            .collect();
+        let copy = |source: &[u8], destination: &mut [u8]| {
+            destination.copy_from_slice(source);
+            Ok::<_, InvalidBytesLengthError>(())
+        };
+        let mut expected = vec![0u8; len];
+        unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut expected),
+                size,
+                &shape,
+                subset.clone(),
+            )
+        }
+        .unwrap()
+        .copy_from_slice(&bytes)
+        .unwrap();
+        // Slices that split differently from the contiguous runs of the view
+        for elements in [1, 2, 4, 5, 12] {
+            let mut output = vec![0u8; len];
+            unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut output),
+                    size,
+                    &shape,
+                    subset.clone(),
+                )
+            }
+            .unwrap()
+            .copy_from_slices(bytes.chunks(elements * size))
+            .unwrap();
+            assert_eq!(output, expected);
+        }
+
+        // The slices must have as many bytes as the view, which is checked before anything is written
+        let mut output = vec![0u8; len];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                size,
+                &shape,
+                subset,
+            )
+        }
+        .unwrap();
+        assert!(
+            view.try_copy_from_slices_with(bytes[size..].chunks(size), copy)
+                .is_err()
+        );
+        assert!(output.iter().all(|&byte| byte == 0));
     }
 }

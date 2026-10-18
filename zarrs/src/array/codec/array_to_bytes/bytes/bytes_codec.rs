@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
-use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness};
+use super::{
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
+    Endianness,
+};
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use smallvec::SmallVec;
 use std::num::NonZeroU64;
@@ -15,9 +18,9 @@ use zarrs_codec::plan::{
     decode_whole, encode_hint, partial_encode_value, plan_decode_whole, plan_partial_encode_whole,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
-    ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
@@ -149,6 +152,99 @@ impl BytesCodecBound {
             .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
         Ok((num_elements, len))
     }
+
+    /// How encoded elements are decoded as they are copied into an output.
+    ///
+    /// Returns [`None`] if the elements are not decoded efficiently as they are copied.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the data type is unsupported or the endianness is invalid, so the error is returned
+    /// before anything is written to the output.
+    fn in_place(&self) -> Result<Option<InPlace<'_>>, CodecError> {
+        if self.passthrough {
+            return Ok(Some(InPlace::Copy));
+        }
+        let codec = self.data_type.codec_bytes()?;
+        if !codec.is_decode_in_place_efficient() {
+            return Ok(None);
+        }
+        // `decode_in_place` checks the endianness even for empty bytes
+        codec.decode_in_place(&mut [], self.endian)?;
+        Ok(Some(InPlace::Decode(codec, self.endian)))
+    }
+
+    /// Plan the decoding of a subset of a chunk in memory into target views, which decodes it as it is copied.
+    ///
+    /// The request must be for an array subset into views, `source` must be in memory, and the elements must be
+    /// [copied in place](Self::copy_in_place).
+    fn plan_decode_memory_subset<'a>(
+        self: Arc<Self>,
+        source: ByteSource<'a>,
+        shape: &[NonZeroU64],
+        request: DecodeRequest<'a>,
+    ) -> Result<Task<'a>, CodecError> {
+        let indexer = request.indexer.as_indexer();
+        indexer.validate(bytemuck::must_cast_slice(shape))?;
+        let shape = shape.to_vec();
+        Ok(Task::compute(move |_| {
+            let DecodeRequest { indexer, target } = request;
+            let TaskTarget::Views(views) = target else {
+                unreachable!("the target is views")
+            };
+            let bytes = source.memory_slice().expect("the source is in memory")?;
+            let subset = indexer
+                .as_indexer()
+                .as_array_subset()
+                .expect("an array subset");
+            let in_place = self.in_place()?.expect("decoded in place");
+            let shape = bytemuck::must_cast_slice(&shape);
+            views.with_target(|target| {
+                let view = fixed_view(target)?;
+                match in_place {
+                    InPlace::Copy => view.copy_from_subset(bytes, shape, subset),
+                    InPlace::Decode(codec, endian) => view.try_copy_from_subset_with(
+                        bytes,
+                        shape,
+                        subset,
+                        decode_copy(codec, endian),
+                    ),
+                }
+            })?;
+            Ok(Outcome::Done)
+        }))
+    }
+}
+
+/// How encoded elements are decoded as they are copied into an output.
+#[derive(Clone, Copy)]
+enum InPlace<'a> {
+    /// The encoded elements are the decoded elements.
+    Copy,
+    /// The elements are decoded in place after they are copied.
+    Decode(&'a dyn BytesDataTypeTraits, Option<Endianness>),
+}
+
+/// Copy a contiguous region of encoded elements into an output and decode them in place.
+fn decode_copy(
+    codec: &dyn BytesDataTypeTraits,
+    endian: Option<Endianness>,
+) -> impl Fn(&[u8], &mut [u8]) -> Result<(), CodecError> {
+    move |source, destination| {
+        destination.copy_from_slice(source);
+        Ok(codec.decode_in_place(destination, endian)?)
+    }
+}
+
+/// The view of a fixed-length `target`.
+fn fixed_view(
+    target: ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<&mut ArrayBytesFixedDisjointView<'_>, CodecError> {
+    match target {
+        ArrayBytesDecodeIntoTarget::Fixed(view) => Ok(view),
+        ArrayBytesDecodeIntoTarget::Optional(..) => {
+            Err(zarrs_codec::ExpectedFixedLengthBytesError.into())
+        }
+    }
 }
 
 impl ArrayCodecTraits for BytesCodecBound {
@@ -260,10 +356,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 } else if codec.is_decode_in_place_efficient() {
                     // Validate endianness before anything is written to the output.
                     codec.decode_in_place(&mut [], self.endian)?;
-                    output.try_copy_from_slice_with(&bytes, |source, destination| {
-                        destination.copy_from_slice(source);
-                        Ok::<_, CodecError>(codec.decode_in_place(destination, self.endian)?)
-                    })
+                    output.try_copy_from_slice_with(&bytes, decode_copy(codec, self.endian))
                 } else {
                     let decoded = codec.decode(bytes, self.endian)?;
                     Ok(output.copy_from_slice(&decoded)?)
@@ -312,53 +405,12 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             .into());
         }
 
-        // A subset of a chunk in memory is decoded directly into the target views as it is copied
         if indexer.as_array_subset().is_some()
             && matches!(request.target, TaskTarget::Views(_))
             && matches!(source.memory_slice(), Some(Ok(_)))
-            && (self.passthrough || self.data_type.codec_bytes()?.is_decode_in_place_efficient())
+            && self.in_place()?.is_some()
         {
-            indexer.validate(bytemuck::must_cast_slice(shape))?;
-            if !self.passthrough {
-                // Validate endianness before anything is written to the output.
-                self.data_type
-                    .codec_bytes()?
-                    .decode_in_place(&mut [], self.endian)?;
-            }
-            let shape = shape.to_vec();
-            return Ok(Task::compute(move |_| {
-                let DecodeRequest { indexer, target } = request;
-                let TaskTarget::Views(views) = target else {
-                    unreachable!("the target is views")
-                };
-                let bytes = source.memory_slice().expect("the source is in memory")?;
-                let subset = indexer
-                    .as_indexer()
-                    .as_array_subset()
-                    .expect("an array subset");
-                let shape = bytemuck::must_cast_slice(&shape);
-                views.with_target(|target| match target {
-                    ArrayBytesDecodeIntoTarget::Fixed(view) if self.passthrough => {
-                        view.copy_from_subset(bytes, shape, subset)
-                    }
-                    ArrayBytesDecodeIntoTarget::Fixed(view) => {
-                        let codec = self.data_type.codec_bytes()?;
-                        view.try_copy_from_subset_with(
-                            bytes,
-                            shape,
-                            subset,
-                            |source, destination| {
-                                destination.copy_from_slice(source);
-                                Ok(codec.decode_in_place(destination, self.endian)?)
-                            },
-                        )
-                    }
-                    ArrayBytesDecodeIntoTarget::Optional(..) => {
-                        Err(zarrs_codec::ExpectedFixedLengthBytesError.into())
-                    }
-                })?;
-                Ok(Outcome::Done)
-            }));
+            return self.plan_decode_memory_subset(source, shape, request);
         }
 
         // Read only the bytes of the requested elements
@@ -372,6 +424,23 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(Task::read(source, ranges, move |reads, ctx| {
             if reads.iter().any(Option::is_none) {
                 return decode_whole(&*self, None, &shape, request, &options, ctx.resources());
+            }
+            // Several reads are decoded directly into the target views as they are copied
+            if reads.len() > 1
+                && let Some(in_place) = self.in_place()?
+                && let TaskTarget::Views(views) = request.target
+            {
+                let reads = reads.iter().flatten().map(|read| &**read);
+                views.with_target(|target| {
+                    let view = fixed_view(target)?;
+                    match in_place {
+                        InPlace::Copy => Ok(view.copy_from_slices(reads)?),
+                        InPlace::Decode(codec, endian) => {
+                            view.try_copy_from_slices_with(reads, decode_copy(codec, endian))
+                        }
+                    }
+                })?;
+                return Ok(Outcome::Done);
             }
             let num_reads = reads.len();
             let mut reads = reads.into_iter().flatten();
@@ -516,9 +585,34 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, data_type};
+    use crate::array::{ArraySubset, data_type};
     use unsafe_cell_slice::UnsafeCellSlice;
-    use zarrs_codec::plan::{TargetViews, drive_memory_one};
+    use zarrs_codec::Resources;
+    use zarrs_codec::plan::{ReadBytes, SyncIo, TargetViews, drive_blocking_one};
+    use zarrs_storage::{Bytes, StorageError};
+
+    /// The backend of a drive with one value.
+    struct ValueIo(Bytes);
+
+    impl SyncIo for ValueIo {
+        fn read(
+            &self,
+            _key: SourceKey,
+            ranges: &[ByteRange],
+        ) -> Result<Option<ReadBytes>, StorageError> {
+            let len = self.0.len() as u64;
+            Ok(Some(
+                ranges
+                    .iter()
+                    .map(|range| self.0.slice(range.to_range_usize(len)))
+                    .collect(),
+            ))
+        }
+
+        fn write(&self, _op: WriteOp<'_>) -> Result<(), StorageError> {
+            unimplemented!("the value is only read")
+        }
+    }
 
     fn decode_into_view(
         codec: &Arc<dyn ArrayToBytesCodecTraits>,
@@ -609,11 +703,11 @@ mod tests {
 
     /// A subset of a chunk in memory is decoded as it is copied into views, in either endianness.
     #[test]
-    fn plan_decode_memory_subset_into_views() {
+    fn plan_decode_subset_into_views() {
         let values: Vec<u16> = (0..16).collect();
         let shape = [NonZeroU64::new(4).unwrap(); 2];
         let subset = ArraySubset::new_with_ranges(&[1..3, 1..4]);
-        let decode = |endian, encoded: &[u8]| {
+        let decode = |endian, encoded: &[u8], in_memory: bool| {
             let codec = BytesCodec::new(endian)
                 .with_context(
                     data_type::uint16(),
@@ -635,9 +729,16 @@ mod tests {
                 }
                 .unwrap();
                 let target = ArrayBytesDecodeIntoTarget::from(&mut view);
+                // A subset of a chunk in storage is read as a byte range per row
+                let io = ValueIo(Bytes::copy_from_slice(encoded));
+                let source = if in_memory {
+                    ByteSource::memory(CowBytes::from(encoded))
+                } else {
+                    ByteSource::external(SourceKey(0))
+                };
                 codec
                     .plan_decode(
-                        ByteSource::memory(CowBytes::from(encoded)),
+                        source,
                         &shape,
                         DecodeRequest {
                             indexer: PlanIndexer::Borrowed(&subset),
@@ -647,7 +748,7 @@ mod tests {
                         },
                         &CodecOptions::default(),
                     )
-                    .and_then(|task| drive_memory_one(task, &ComputeResources::default()))
+                    .and_then(|task| drive_blocking_one(task, &io, &Resources::default()))
                     .map(|_| ())
             };
             (output, result)
@@ -665,14 +766,18 @@ mod tests {
                 values.iter().flat_map(|v| v.to_be_bytes()).collect(),
             ),
         ] {
-            let (output, result) = decode(Some(endian), &encoded);
-            result.unwrap();
-            assert_eq!(output, [0, 5, 6, 7, 0, 9, 10, 11]);
+            for in_memory in [true, false] {
+                let (output, result) = decode(Some(endian), &encoded, in_memory);
+                result.unwrap();
+                assert_eq!(output, [0, 5, 6, 7, 0, 9, 10, 11]);
+            }
         }
         // A multi-byte data type needs an endianness, which is checked before the output is written
-        let (output, result) = decode(None, &[1; 32]);
-        assert!(result.is_err());
-        assert!(output.iter().all(|&value| value == 0));
+        for in_memory in [true, false] {
+            let (output, result) = decode(None, &[1; 32], in_memory);
+            assert!(result.is_err());
+            assert!(output.iter().all(|&value| value == 0));
+        }
     }
 
     #[cfg(feature = "zstd")]
