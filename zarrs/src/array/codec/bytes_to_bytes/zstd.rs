@@ -234,32 +234,15 @@ mod tests {
     #[test]
     fn decode_into() {
         let codec = ZstdCodec::new(1, false);
-        let options = CodecOptions::default();
-        let decoded = b"decode directly into this buffer".repeat(32);
-        let len = decoded.len();
-        let encoded = codec
-            .encode(
-                CowBytes::from(decoded.as_slice()),
-                &options,
-                &ComputeResources::default(),
-            )
-            .unwrap();
-        let decode_into = |output: &mut [u8]| {
-            codec.decode_into(
-                encoded.clone(),
-                &BytesRepresentation::FixedSize(len as u64),
-                output,
-                &options,
-                &ComputeResources::default(),
-            )
-        };
-
-        let mut output = vec![0; len];
-        decode_into(&mut output).unwrap();
-        assert_eq!(output, decoded);
-
-        assert!(decode_into(&mut vec![0; len + 1]).is_err());
-        assert!(decode_into(&mut output[..len - 1]).is_err());
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &b"decode directly into this buffer".repeat(32),
+            1,
+            |encoded| {
+                // A truncated stream, and bytes that are not a zstd stream
+                vec![encoded[..encoded.len() / 2].to_vec(), vec![0u8; 64]]
+            },
+        );
     }
 
     #[test]
@@ -313,20 +296,26 @@ mod tests {
             )
             .unwrap();
         let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
-        for encoded in [known_size, CowBytes::from(unknown_size)] {
+        for (encoded, size_known) in [(known_size, true), (CowBytes::from(unknown_size), false)] {
             let mut output = [0u8; 8];
-            // The old allocating retry returned UnexpectedChunkDecodedSize only
-            // after expanding the entire 8 MiB frame. Preserve the direct error.
-            assert!(matches!(
-                codec.decode_into(
-                    encoded,
-                    &BytesRepresentation::FixedSize(8),
-                    &mut output,
-                    &options,
-                    &ComputeResources::default(),
-                ),
-                Err(CodecError::IOError(_))
-            ));
+            // The old allocating retry returned UnexpectedChunkDecodedSize only after expanding the entire 8 MiB
+            // frame. A size in the frame header is compared without decompressing, otherwise decompressing fails
+            // once the output is full.
+            let result = codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(8),
+                &mut output,
+                &options,
+                &ComputeResources::default(),
+            );
+            if size_known {
+                assert!(matches!(
+                    result,
+                    Err(CodecError::UnexpectedChunkDecodedSize(_))
+                ));
+            } else {
+                assert!(matches!(result, Err(CodecError::IOError(_))));
+            }
         }
     }
 }

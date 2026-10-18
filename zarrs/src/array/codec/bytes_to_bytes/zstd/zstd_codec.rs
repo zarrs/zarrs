@@ -142,7 +142,17 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<(), CodecError> {
-        // Never materialise an oversized frame just to improve a length diagnostic.
+        // The decoded size in the frame headers (if all present) reports an output of the wrong length without
+        // decompressing. Never materialise an oversized frame just to improve a length diagnostic.
+        if let Ok(Some(decoded_len)) = zstd::zstd_safe::find_decompressed_size(&encoded_value)
+            && decoded_len != output.len() as u64
+        {
+            return Err(InvalidBytesLengthError::new(
+                usize::try_from(decoded_len).unwrap_or(usize::MAX),
+                output.len(),
+            )
+            .into());
+        }
         let decoded_len = with_decompressor(|decompressor| {
             decompressor.decompress_to_buffer(&encoded_value, output)
         })?;
