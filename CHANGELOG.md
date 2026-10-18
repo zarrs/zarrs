@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ComputeResources` (re-exported from `zarrs_codec`), the compute target of `Resources`, which is passed to codecs
 
 ### Changed
+- The `zstd` codec reuses a compression context per thread for values of up to 1 MiB, rather than creating one per value
 - Encode chunks and subchunks, and plan the decoding of subsets of chunks, without allocating their shapes (up to 4 dimensions)
 - The bound `bytes` codec looks up the `bytes` codec support of its data type once, rather than on each encode and decode
 - Re-export `<Codec>DataTypeSupport` alongside `<Codec>DataTypePlugin` for the `bitround`, `bytes`, `cast_value`, `fixedscaleoffset`, `packbits`, `pcodec` and `zfp` codecs
