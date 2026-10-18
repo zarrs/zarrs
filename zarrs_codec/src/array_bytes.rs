@@ -7,7 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
 use zarrs_data_type::{DataTypeFillValueError, OptionalDataType};
 use zarrs_metadata::DataTypeSize;
-use zarrs_storage::byte_range::extract_byte_ranges_concat;
+use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_ranges_concat};
 
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
@@ -397,13 +397,23 @@ fn extract_elements(
 ) -> Result<Vec<u8>, CodecError> {
     let element_size = element_size as u64;
     let bytes = if let Some(subset) = indexer.as_array_subset() {
-        // The contiguous runs of an array subset are iterated without boxing an iterator
+        // The contiguous runs of an array subset are iterated without boxing an iterator, and copied into an output of
+        // the known size
         let runs = subset.contiguous_linearised_indices(array_shape)?;
-        extract_byte_ranges_concat(
-            bytes,
-            runs.iter()
-                .map(|(index, elements)| index * element_size..(index + elements) * element_size),
-        )?
+        let mut out =
+            Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
+        for (index, elements) in runs.iter() {
+            let range = index * element_size..(index + elements) * element_size;
+            let run = usize::try_from(range.start)
+                .ok()
+                .zip(usize::try_from(range.end).ok())
+                .and_then(|(start, end)| bytes.get(start..end))
+                .ok_or_else(|| {
+                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64)
+                })?;
+            out.extend_from_slice(run);
+        }
+        out
     } else {
         let byte_ranges = indexer
             .iter_contiguous_byte_ranges(array_shape, usize::try_from(element_size).unwrap())?;

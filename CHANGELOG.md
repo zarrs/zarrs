@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encode chunk keys in one allocation, rather than allocating per index and growing the key
 - Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
 - Use `ArraySubsetTraits::is_whole` for whole-chunk read and update checks
-- **Breaking**: `ArrayIndices` holds up to four indices inline (see `zarrs_chunk_grid`), so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
+- **Breaking**: `ArrayIndices` holds up to four indices inline (see `zarrs_chunk_grid`), so chunk grid lookups and chunk cache keys do not allocate
   - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension
   - **Breaking**: `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key
 - **Breaking**: Bump `zarrs_codec` to 0.4.0
