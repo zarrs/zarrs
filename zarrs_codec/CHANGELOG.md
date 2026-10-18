@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make `async-trait` optional and enable it only with the `async` feature.
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
-- **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0
+- **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, changing the grid types exposed by codec APIs
+- Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 - Bump `zarrs_metadata` to 0.7.6
 - **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
   - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`

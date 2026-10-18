@@ -541,17 +541,18 @@ impl InvalidNumberOfElementsError {
 #[derive(Clone, Debug, Display, Error)]
 #[display("Subset {subset} is out of bounds of {must_be_within}")]
 pub struct SubsetOutOfBoundsError {
-    subset: ArraySubset,
-    must_be_within: ArraySubset,
+    // Boxed, as array subsets are stored inline and would enlarge every result with a codec error
+    subset: Box<ArraySubset>,
+    must_be_within: Box<ArraySubset>,
 }
 
 impl SubsetOutOfBoundsError {
-    /// Create a new [`InvalidNumberOfElementsError`].
+    /// Create a new [`SubsetOutOfBoundsError`].
     #[must_use]
     pub fn new(subset: ArraySubset, must_be_within: ArraySubset) -> Self {
         Self {
-            subset,
-            must_be_within,
+            subset: Box::new(subset),
+            must_be_within: Box::new(must_be_within),
         }
     }
 }

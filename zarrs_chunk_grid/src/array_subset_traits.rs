@@ -176,12 +176,12 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
                 offset: offset.to_vec(),
             })
         } else {
-            ArraySubset::new_with_start_shape(
-                std::iter::zip(self_start.iter(), offset)
+            Ok(ArraySubset {
+                start: std::iter::zip(self_start.iter(), offset)
                     .map(|(&start, offset)| start - offset)
-                    .collect::<Vec<_>>(),
-                self.shape().into_owned(),
-            )
+                    .collect(),
+                shape: self.shape().iter().copied().collect(),
+            })
         }
     }
 
@@ -194,12 +194,12 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     fn offset(&self, offset: &[u64]) -> Result<ArraySubset, ArraySubsetError> {
         let self_start = self.start();
         if offset.len() == self_start.len() {
-            ArraySubset::new_with_start_shape(
-                std::iter::zip(self_start.iter(), offset)
+            Ok(ArraySubset {
+                start: std::iter::zip(self_start.iter(), offset)
                     .map(|(&start, offset)| start + offset)
-                    .collect::<Vec<_>>(),
-                self.shape().into_owned(),
-            )
+                    .collect(),
+                shape: self.shape().iter().copied().collect(),
+            })
         } else {
             Err(ArraySubsetError::IncompatibleOffset {
                 start: self_start.to_vec(),
@@ -210,8 +210,11 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
 
     /// Converts to an owned `ArraySubset`.
     fn to_array_subset(&self) -> ArraySubset {
-        ArraySubset::new_with_start_shape(self.start().into_owned(), self.shape().into_owned())
-            .expect("start and shape have the same dimensionality") // true for all sealed impls
+        // Start and shape have the same dimensionality for all sealed implementations
+        ArraySubset {
+            start: self.start().iter().copied().collect(),
+            shape: self.shape().iter().copied().collect(),
+        }
     }
 
     /// Returns an iterator over the indices of elements within the subset.

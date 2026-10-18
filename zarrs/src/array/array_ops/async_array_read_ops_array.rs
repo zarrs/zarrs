@@ -81,7 +81,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         let options = self.codec_options();
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
+                Box::new(array_subset.to_array_subset()),
                 self.shape().to_vec(),
             ));
         }
@@ -89,7 +89,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
+                Box::new(array_subset.to_array_subset()),
                 self.shape().to_vec(),
             ));
         };
@@ -344,7 +344,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if !chunk_subset.inbounds_shape(chunk_shape_u64) {
                 return Err(ArrayError::InvalidArraySubset(
-                    chunk_subset.to_array_subset(),
+                    Box::new(chunk_subset.to_array_subset()),
                     chunk_shape_u64.to_vec(),
                 ));
             }
@@ -384,7 +384,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_subset) = indexer.as_array_subset() {
             if !chunk_subset.inbounds_shape(chunk_shape_u64) {
                 return Err(ArrayError::InvalidArraySubset(
-                    chunk_subset.to_array_subset(),
+                    Box::new(chunk_subset.to_array_subset()),
                     chunk_shape_u64.to_vec(),
                 ));
             }
