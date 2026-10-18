@@ -13,9 +13,9 @@ use zarrs_codec::plan::{
     ArrayToArrayDecodePlan, ByteSource, ComputeCtx, DecodeRequest, Join, MissingDecoder, Outcome,
     PartialEncodeRequest, PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder,
     SourceKey, SourceStep, Task, TaskTarget, TaskValue, WriteOp, decode_whole, encode_hint,
-    encoded_value, local_subchunk_grids, local_subchunk_grids_value, place_decoded,
-    plan_decode_whole, plan_encode_whole, plan_partial_encode_whole, store_encoded_subchunk_memory,
-    subchunk_location_value, whole_chunk_hint,
+    local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
+    plan_partial_encode_whole, store_encoded_subchunk_memory, subchunk_location_value,
+    then_encoded, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -847,10 +847,6 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         ))
     }
 
-    fn plans_subtasks(&self) -> bool {
-        self.array_to_bytes.plans_subtasks()
-    }
-
     fn plan_local_subchunk_grids<'a>(
         self: Arc<Self>,
         source: ByteSource<'a>,
@@ -1087,54 +1083,44 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         ))
     }
 
-    fn plan_encode<'a>(
+    fn encode_step<'a>(
         self: Arc<Self>,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Task<'a>, CodecError> {
-        if !self.array_to_bytes.plans_encode_subtasks() {
-            return plan_encode_whole(self, bytes, shape, options);
-        }
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
         if self.array_to_array.is_empty() && self.bytes_to_bytes.is_empty() {
             return self
                 .array_to_bytes
                 .clone()
-                .plan_encode(bytes, shape, options);
+                .encode_step(bytes, shape, options, ctx);
         }
 
-        // Encode the array-to-array codecs, then plan the array-to-bytes codec, and encode its value with the
-        // bytes-to-bytes codecs
-        let hint = encode_hint(&bytes);
-        let shape = ChunkShape::from(shape.to_vec());
+        // Encode with the array-to-array codecs, then the array-to-bytes codec (which may fork tasks of its own), then
+        // the bytes-to-bytes codecs
+        let mut bytes = bytes;
+        let mut shape = ChunkShape::from(shape.to_vec());
+        for codec in &self.array_to_array {
+            bytes = codec.encode(bytes, &shape, options, ctx.resources())?;
+            shape = codec.encoded_shape(&shape)?;
+        }
+        let outcome = self
+            .array_to_bytes
+            .clone()
+            .encode_step(bytes, &shape, options, ctx)?;
         let options = *options;
-        Ok(Task::compute(move |ctx| {
-            let (mut bytes, mut shape) = (bytes, shape);
-            for codec in &self.array_to_array {
-                bytes = codec.encode(bytes, &shape, &options, ctx.resources())?;
-                shape = codec.encoded_shape(&shape)?;
-            }
-            let task = self
-                .array_to_bytes
-                .clone()
-                .plan_encode(bytes, &shape, &options)?;
-            Ok(Outcome::Fork {
-                children: vec![task],
-                join: Join::new(move |mut values, ctx| {
-                    let mut bytes = encoded_value(values.pop().unwrap_or_default())?;
-                    for codec in &self.bytes_to_bytes {
-                        bytes = codec.encode(bytes, &options, ctx.resources())?;
-                    }
-                    Ok(Outcome::Value(TaskValue::Bytes(Some(bytes))))
-                }),
-            })
-        })
-        .with_hint(hint))
-    }
-
-    fn plans_encode_subtasks(&self) -> bool {
-        self.array_to_bytes.plans_encode_subtasks()
+        then_encoded(
+            outcome,
+            move |mut bytes, ctx| {
+                for codec in &self.bytes_to_bytes {
+                    bytes = codec.encode(bytes, &options, ctx.resources())?;
+                }
+                Ok(Outcome::Value(TaskValue::Bytes(Some(bytes))))
+            },
+            ctx,
+        )
     }
 
     fn plan_partial_encode<'a>(

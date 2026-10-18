@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToBytesCodecTraits::plan_decode`, which plans the decoding of a request from a `plan::ByteSource` (by default, `plan::plan_decode_whole`)
   - `ArrayToBytesCodecTraits::prepare_decode`, which prepares a `plan::PreparedDecoder` of a chunk that plans many requests (e.g. reading a shard index once)
     - By default, the whole chunk is read and decoded once (`plan::prepare_decode_whole`)
-  - `ArrayToBytesCodecTraits::plans_subtasks`, which is true if planning the decoding of a whole chunk plans tasks of its own
   - `ArrayToArrayCodecTraits::plan_decode_request`, which maps a request through an array-to-array codec (`plan::ArrayToArrayDecodePlan`)
   - `BytesToBytesCodecTraits::source_step`, which describes how partial reads pass through a bytes-to-bytes codec (`plan::SourceStep` and `plan::RangeDecoder`)
 - Add `plan::Generator`, `plan::Outcome::Generate` and `plan::Join::after` for generating the tasks of an operation as they are needed
@@ -53,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ReadDispatch` and `Resources::{read_dispatch,set_read_dispatch,with_read_dispatch}`, which override how synchronous drives dispatch reads
   - By default, a synchronous drive reads on compute threads while storage requests are fast (under 100 µs on average), and otherwise on the I/O pool, and performs writes the same way
 - Add planned encoding to the codec traits
-  - `ArrayToBytesCodecTraits::plan_encode` (by default, `plan::plan_encode_whole`) and `ArrayToBytesCodecTraits::plans_encode_subtasks`
+  - `ArrayToBytesCodecTraits::encode_step`, which encodes in a compute step and may return tasks of its own (e.g. per subchunk of a shard) unless the step runs inline (by default, `encode`)
+  - `plan::plan_encode`, a task that encodes a chunk with `encode_step`, and `plan::then_encoded`, which continues an outcome whose value is an encoded chunk
   - `ArrayToBytesCodecTraits::plan_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
     - By default, the whole chunk is read, decoded, updated, encoded and written (`plan::plan_partial_encode_whole`)
   - `plan::encode_and_write`, which encodes and writes (or erases) a chunk

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytes::Bytes;
-use zarrs_codec::plan::{ComputeCtx, Generator, Join, Outcome, Task, TaskValue, encode_hint};
+use zarrs_codec::plan::{ComputeCtx, Generator, Join, Outcome, Task, TaskValue};
 use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 
@@ -30,13 +30,15 @@ use zarrs_chunk_grid::ChunkGridTraits;
 const MAX_BLOCK_LEN: usize = 8;
 
 impl ShardingCodecBound {
-    /// Plan the encoding of `bytes`, a shard of `shape`. See [`ArrayToBytesCodecTraits::plan_encode`].
-    pub(super) fn plan_encode_shard<'a>(
+    /// Encode `bytes`, a shard of `shape`, in the compute step `ctx` with a task per block of subchunks (unless there
+    /// is one block). See [`ArrayToBytesCodecTraits::encode_step`].
+    pub(super) fn encode_shard_step<'a>(
         self: Arc<Self>,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Task<'a>, CodecError> {
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
         bytes.validate(
             shape.iter().map(|d| d.get()).product(),
             self.inner_codecs.data_type(),
@@ -63,7 +65,6 @@ impl ShardingCodecBound {
             }
             SubchunkWriteOrder::C => None,
         };
-        let hint = encode_hint(&bytes);
         let encode = Arc::new(ShardEncode {
             num_subchunks: num_subchunks(&subchunk_grid),
             codec: self,
@@ -73,7 +74,7 @@ impl ShardingCodecBound {
             index_encoded_size,
             options: *options,
         });
-        Ok(Task::compute(move |ctx| encode.plan(direct_bound, ctx)).with_hint(hint))
+        encode.plan(direct_bound, ctx)
     }
 }
 

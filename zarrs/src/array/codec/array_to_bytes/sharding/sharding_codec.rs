@@ -17,9 +17,10 @@ use crate::array::{
     ArrayBytes, ArraySubset, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits,
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
+use smallvec::SmallVec;
 use zarrs_codec::plan::{
-    ByteSource, DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget,
-    drive_memory_one, encoded_value,
+    ByteSource, DecodeRequest, PlanIndexer, SharedOutput, TargetViews, Task, TaskTarget,
+    drive_memory_one, encode_hint, encoded_value,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
@@ -344,7 +345,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let task = self.arc().plan_encode_shard(bytes, shape, options)?;
+        let codec = self.arc();
+        let hint = encode_hint(&bytes);
+        let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+        let task = Task::compute(move |ctx| codec.encode_shard_step(bytes, &shape, &options, ctx))
+            .with_hint(hint);
         encoded_value(drive_memory_one(task, resources)?)
     }
 
@@ -527,10 +533,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         self.plan_decode_shard(source, shape, request, options)
     }
 
-    fn plans_subtasks(&self) -> bool {
-        true
-    }
-
     fn plan_local_subchunk_grids<'a>(
         self: Arc<Self>,
         _source: zarrs_codec::plan::ByteSource<'a>,
@@ -549,17 +551,21 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         }))
     }
 
-    fn plan_encode<'a>(
+    fn encode_step<'a>(
         self: Arc<Self>,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<zarrs_codec::plan::Task<'a>, CodecError> {
-        self.plan_encode_shard(bytes, shape, options)
-    }
-
-    fn plans_encode_subtasks(&self) -> bool {
-        true
+        ctx: &zarrs_codec::plan::ComputeCtx,
+    ) -> Result<zarrs_codec::plan::Outcome<'a>, CodecError> {
+        if ctx.runs_inline() {
+            // Tasks of the subchunks would run serially
+            let encoded = self.encode(bytes, shape, options, ctx.resources())?;
+            return Ok(zarrs_codec::plan::Outcome::Value(
+                zarrs_codec::plan::TaskValue::Bytes(Some(encoded)),
+            ));
+        }
+        self.encode_shard_step(bytes, shape, options, ctx)
     }
 
     fn plan_partial_encode<'a>(

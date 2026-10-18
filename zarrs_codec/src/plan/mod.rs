@@ -31,7 +31,7 @@ pub use driver::{drive_blocking_one, drive_memory_one, drive_serial, drive_seria
 pub use encode::{
     PartialEncodeRequest, PartialEncodeState, decode_and_update, encode_and_write, encode_hint,
     encoded_value, partial_encode_request_elementwise, partial_encode_state, partial_encode_value,
-    plan_encode_whole, plan_partial_encode_whole,
+    plan_encode, plan_partial_encode_whole, then_encoded,
 };
 #[cfg(feature = "async")]
 pub use io::AsyncIo;

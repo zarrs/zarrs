@@ -59,7 +59,8 @@ pub fn encode_hint(bytes: &ArrayBytes<'_>) -> TaskHint {
     }
 }
 
-/// The encoded chunk that is the value of a task planned by [`ArrayToBytesCodecTraits::plan_encode`].
+/// The encoded chunk that is the value of an [`ArrayToBytesCodecTraits::encode_step`] (or a task planned by
+/// [`plan_encode`]).
 ///
 /// # Errors
 /// Returns a [`CodecError`] if `value` is not encoded bytes.
@@ -69,34 +70,52 @@ pub fn encoded_value(value: TaskValue<'_>) -> Result<CowBytes<'_>, CodecError> {
     })
 }
 
-/// Plan the encoding of a chunk of `shape` with one compute step that calls [`ArrayToBytesCodecTraits::encode`].
+/// Plan the encoding of `bytes`, a chunk of `shape`, with `codec`.
 ///
-/// This is the default plan of an array-to-bytes codec.
-/// The value of the task is the encoded chunk ([`TaskValue::Bytes`]).
-///
-/// # Errors
-/// Returns a [`CodecError`] if the shape is invalid for the codec.
-pub fn plan_encode_whole<'a>(
+/// The task encodes in a compute step ([`ArrayToBytesCodecTraits::encode_step`]), and its value is the encoded chunk
+/// ([`TaskValue::Bytes`]).
+#[must_use]
+pub fn plan_encode<'a>(
     codec: Arc<dyn ArrayToBytesCodecTraits>,
     bytes: ArrayBytes<'a>,
     shape: &[NonZeroU64],
     options: &CodecOptions,
-) -> Result<Task<'a>, CodecError> {
+) -> Task<'a> {
     let hint = encode_hint(&bytes);
     let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
     let options = *options;
-    Ok(Task::compute(move |ctx| {
-        let encoded = codec.encode(bytes, &shape, &options, ctx.resources())?;
-        Ok(Outcome::Value(TaskValue::Bytes(Some(encoded))))
-    })
-    .with_hint(hint))
+    Task::compute(move |ctx| codec.encode_step(bytes, &shape, &options, ctx)).with_hint(hint)
+}
+
+/// Continue `outcome`, whose value is the encoded chunk, with `then`.
+///
+/// `then` runs straight away if the outcome is the value, otherwise once the tasks of the outcome complete.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the outcome is a value that is not encoded bytes, or `then` fails.
+pub fn then_encoded<'a>(
+    outcome: Outcome<'a>,
+    then: impl FnOnce(CowBytes<'a>, &ComputeCtx) -> Result<Outcome<'a>, CodecError>
+    + zarrs_plugin::MaybeSend
+    + 'a,
+    ctx: &ComputeCtx,
+) -> Result<Outcome<'a>, CodecError> {
+    match outcome {
+        Outcome::Value(value) => then(encoded_value(value)?, ctx),
+        outcome => Ok(Outcome::Fork {
+            children: vec![Task::compute(move |_| Ok(outcome))],
+            join: Join::new(move |mut values, ctx| {
+                then(encoded_value(values.pop().unwrap_or_default())?, ctx)
+            }),
+        }),
+    }
 }
 
 /// Encode the chunk `bytes` of `shape` with `codec` and write it to `key`, or erase `key` if the chunk is the fill value
 /// and empty chunks are not stored.
 ///
-/// The encode tasks planned by the codec are forked ([`ArrayToBytesCodecTraits::plans_encode_subtasks`]), unless the
-/// compute step runs inline ([`ComputeCtx::runs_inline`]), where they would run serially.
+/// The chunk is encoded in the compute step `ctx` ([`ArrayToBytesCodecTraits::encode_step`]), which may fork tasks of
+/// the codec.
 ///
 /// # Errors
 /// Returns a [`CodecError`] if the codec fails.
@@ -115,21 +134,12 @@ pub fn encode_and_write<'a>(
     if !options.store_empty_chunks() && bytes.is_fill_value(codec.fill_value()) {
         return Ok(write(WriteOp::Erase(key)));
     }
-    if codec.plans_encode_subtasks() && !ctx.runs_inline() {
-        let task = codec.plan_encode(bytes, shape, options)?;
-        return Ok(Outcome::Fork {
-            children: vec![task],
-            join: Join::new(move |mut values, _ctx| {
-                let encoded = encoded_value(values.pop().unwrap_or_default())?;
-                Ok(Outcome::Write {
-                    ops: smallvec![WriteOp::Set(key, encoded)],
-                    then: TaskValue::None,
-                })
-            }),
-        });
-    }
-    let encoded = codec.encode(bytes, shape, options, ctx.resources())?;
-    Ok(write(WriteOp::Set(key, encoded)))
+    let outcome = codec.encode_step(bytes, shape, options, ctx)?;
+    then_encoded(
+        outcome,
+        move |encoded, _| Ok(write(WriteOp::Set(key, encoded))),
+        ctx,
+    )
 }
 
 /// Plan a partial encode that reads, decodes, updates, encodes and writes the whole chunk `key` of `shape`.

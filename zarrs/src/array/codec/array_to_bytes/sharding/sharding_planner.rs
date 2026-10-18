@@ -15,8 +15,8 @@ use zarrs_codec::plan::{
     subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
-    CowBytes, copy_fill_value_into,
+    ArrayBytesDecodeIntoInput, ArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes, copy_fill_value_into,
 };
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
@@ -460,8 +460,8 @@ impl ShardingCodecBound {
 /// The decoding of `subset` of a shard into views (with the shape of the subset), planned per subchunk or per block of
 /// subchunks adjacent in the last dimension.
 ///
-/// Where the shard is in memory and the inner codecs do not plan tasks of their own
-/// ([`ArrayToBytesCodecTraits::plans_subtasks`]), a task decodes a block of subchunks with the inner codecs, bytes,
+/// Where the shard is in memory and the inner codecs do not plan tasks of their own (they have no subchunks, see
+/// [`ArrayToBytesCodecSubchunkingTraits::subchunk_codecs`]), a task decodes a block of subchunks with the inner codecs, bytes,
 /// and views borrowed by the task, so that decoding a subchunk does not touch shared reference counts. Atomic
 /// operations are full barriers on common architectures, which wait for the writes of a decoded subchunk to the
 /// output, so they are costly per subchunk.
@@ -503,8 +503,8 @@ impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
         options: CodecOptions,
         parallelism: usize,
     ) -> Generator<'a> {
-        let blocks =
-            !codec.inner_codecs.plans_subtasks() && matches!(source.memory_slice(), Some(Ok(_)));
+        let blocks = codec.inner_codecs.subchunk_codecs().is_empty()
+            && matches!(source.memory_slice(), Some(Ok(_)));
         let num_subchunks = subchunk_indices.num_elements_usize();
         let row_len = usize::try_from(*subchunk_indices.shape().last().expect("nonempty")).unwrap();
         let block_len = if blocks {

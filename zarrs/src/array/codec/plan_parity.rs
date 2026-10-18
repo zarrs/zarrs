@@ -245,10 +245,7 @@ fn assert_encode_parity(
         .unwrap();
     let io = OneValueIo::new(Bytes::new());
     for (name, drive) in drivers() {
-        let task = codecs
-            .clone()
-            .plan_encode(bytes.clone(), shape, &options)
-            .unwrap();
+        let task = zarrs_codec::plan::plan_encode(codecs.clone(), bytes.clone(), shape, &options);
         let mut values = drive(vec![task], &io, &resources).unwrap();
         let planned = encoded_value(values.remove(0)).unwrap();
         let decoded = codecs

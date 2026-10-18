@@ -214,22 +214,27 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         crate::plan::plan_decode_whole(self.into_dyn(), source, shape, request, options)
     }
 
-    /// Plan the encoding of `bytes`, a chunk of `shape`.
+    /// Encode `bytes`, a chunk of `shape`, in the compute step `ctx`.
     ///
-    /// Returns a task whose value is the encoded chunk ([`TaskValue::Bytes`](crate::plan::TaskValue::Bytes)).
-    ///
-    /// The default implementation encodes in one compute step with [`encode`](Self::encode) ([`plan_encode_whole`](crate::plan::plan_encode_whole)).
-    /// Codecs that can encode parts of a chunk independently (e.g. `sharding_indexed`) may override this.
+    /// The value of the outcome is the encoded chunk ([`TaskValue::Bytes`](crate::plan::TaskValue::Bytes)).
+    /// The default implementation encodes with [`encode`](Self::encode).
+    /// Codecs that encode parts of a chunk independently (e.g. `sharding_indexed`) may instead return an outcome with
+    /// tasks of their own, unless the compute step runs inline ([`ComputeCtx::runs_inline`](crate::plan::ComputeCtx::runs_inline)),
+    /// where they would run serially.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the shape is invalid for the codec.
-    fn plan_encode<'a>(
+    /// Returns a [`CodecError`] if the shape is invalid for the codec or the codec fails.
+    fn encode_step<'a>(
         self: Arc<Self>,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Task<'a>, CodecError> {
-        crate::plan::plan_encode_whole(self.into_dyn(), bytes, shape, options)
+        ctx: &crate::plan::ComputeCtx,
+    ) -> Result<crate::plan::Outcome<'a>, CodecError> {
+        let encoded = self.encode(bytes, shape, options, ctx.resources())?;
+        Ok(crate::plan::Outcome::Value(crate::plan::TaskValue::Bytes(
+            Some(encoded),
+        )))
     }
 
     /// Plan a partial encode: update the elements of `indexer` of the encoded chunk `key` of `shape` to `bytes`.
@@ -268,23 +273,6 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
             bytes,
             options,
         ))
-    }
-
-    /// Returns true if [`plan_encode`](Self::plan_encode) plans tasks of its own (e.g. a task per subchunk of a shard).
-    ///
-    /// Otherwise, planning the encoding of a chunk and running it is equivalent to [`encode`](Self::encode), which
-    /// planners may call directly.
-    fn plans_encode_subtasks(&self) -> bool {
-        false
-    }
-
-    /// Returns true if [`plan_decode`](Self::plan_decode) of a whole chunk plans tasks of its own (e.g. a task per
-    /// subchunk of a shard).
-    ///
-    /// Otherwise, planning the decoding of a whole chunk in memory into a target and running it is equivalent to
-    /// [`decode_into`](Self::decode_into), which planners may call directly.
-    fn plans_subtasks(&self) -> bool {
-        false
     }
 
     /// Plan resolving the chunk-local subchunk grids of the encoded chunk `source` of `shape`, outermost first.
