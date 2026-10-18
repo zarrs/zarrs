@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::byte_range::ByteRangeIterator;
+use super::byte_range::{ByteRange, ByteRangeIterator};
 #[cfg(feature = "async")]
 use super::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
@@ -36,6 +36,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         self.0.get_partial_many(key, byte_ranges)
+    }
+
+    fn get_partial(
+        &self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
+        self.0.get_partial(key, byte_range)
     }
 
     fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {

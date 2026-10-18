@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Convert the value and drop a replaced or erased value outside of the lock in `MemoryStore::{set,erase}`, and clone the key only when it is inserted
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - Reserve the byte ranges of `extract_byte_ranges_concat` from the size hint of the iterator, rather than growing them
+- `MemoryStore` and `StorageHandle` implement `get_partial` directly, rather than through `get_partial_many` (which allocates an iterator of byte ranges and of values)
 
 ### Fixed
 - Make test utilities available to unit tests without the `tests` feature, and require `async` and `tests` for the adapter integration tests so default all-targets checks compile
