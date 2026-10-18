@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `itertools` to 0.15.0
 - Acquire the lock and resolve the key once per `set_partial_many` call in `MemoryStore` and `AsyncMemoryStore` rather than once per offset
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- `MemoryStore` and `StorageHandle` implement `get_partial` directly, rather than through `get_partial_many` (which allocates an iterator of byte ranges and of values)
 
 ### Fixed
 - `extract_byte_ranges` and `extract_byte_ranges_concat` return an `InvalidByteRangeError` rather than panicking for a byte range whose end overflows

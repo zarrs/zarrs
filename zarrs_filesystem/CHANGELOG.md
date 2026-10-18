@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `zarrs_storage` to 0.5.0
 - Bump `itertools` to 0.15.0
 - Bump `lru` to 0.18.2
+- `FilesystemStore` implements `get_partial` directly, rather than through `get_partial_many`
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed

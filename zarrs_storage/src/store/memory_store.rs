@@ -5,7 +5,7 @@ use std::sync::RwLock;
 
 use bytes::BytesMut;
 
-use crate::byte_range::{ByteRangeIterator, InvalidByteRangeError};
+use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
@@ -59,6 +59,21 @@ impl ReadableStorageTraits for MemoryStore {
         } else {
             Ok(None)
         }
+    }
+
+    fn get_partial(
+        &self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
+        let data_map = self.data_map.read().unwrap();
+        let Some(data) = data_map.get(key) else {
+            return Ok(None);
+        };
+        let range = byte_range
+            .checked_range_usize(data.len())
+            .ok_or_else(|| InvalidByteRangeError::new(byte_range, data.len() as u64))?;
+        Ok(Some(data.slice(range)))
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {

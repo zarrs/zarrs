@@ -10,11 +10,11 @@
 use bytes::BytesMut;
 use thiserror::Error;
 use walkdir::WalkDir;
-use zarrs_storage::byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError};
+use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
+    AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
+    MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
+    StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -455,6 +455,32 @@ impl FilesystemStore {
     }
 }
 
+/// Read `byte_range` of `file` of `file_size` bytes.
+fn read_range(
+    file: &RandomAccessFile,
+    file_size: u64,
+    byte_range: ByteRange,
+) -> Result<Bytes, StorageError> {
+    let range = byte_range
+        .checked_range(file_size)
+        .ok_or_else(|| StorageError::from(InvalidByteRangeError::new(byte_range, file_size)))?;
+    let offset = range.start;
+    let length = usize::try_from(range.end - range.start).unwrap();
+
+    // Read at position
+    let mut buffer = Vec::with_capacity(length);
+    let spare = buffer.spare_capacity_mut();
+    // SAFETY: We're reading into uninitialised memory, which is safe because
+    // read_exact_at will fill all bytes or return an error
+    let slice = unsafe { std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), length) };
+    file.read_exact_at(offset, slice)?;
+    // SAFETY: read_exact_at succeeded, so all bytes are now initialised
+    unsafe {
+        buffer.set_len(length);
+    }
+    Ok(Bytes::from(buffer))
+}
+
 impl ReadableStorageTraits for FilesystemStore {
     fn get_partial_many<'a>(
         &'a self,
@@ -474,31 +500,28 @@ impl ReadableStorageTraits for FilesystemStore {
         let file_size = handle.size;
 
         let out = byte_ranges
-            .map(|byte_range| {
-                let range = byte_range.checked_range(file_size).ok_or_else(|| {
-                    StorageError::from(InvalidByteRangeError::new(byte_range, file_size))
-                })?;
-                let offset = range.start;
-                let length = usize::try_from(range.end - range.start).unwrap();
-
-                // Read at position
-                let mut buffer = Vec::with_capacity(length);
-                let spare = buffer.spare_capacity_mut();
-                // SAFETY: We're reading into uninitialised memory, which is safe because
-                // read_exact_at will fill all bytes or return an error
-                let slice = unsafe {
-                    std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), length)
-                };
-                file.read_exact_at(offset, slice)?;
-                // SAFETY: read_exact_at succeeded, so all bytes are now initialised
-                unsafe {
-                    buffer.set_len(length);
-                }
-                Ok(Bytes::from(buffer))
-            })
+            .map(|byte_range| read_range(file, file_size, byte_range))
             .collect::<Vec<_>>();
 
         Ok(Some(Box::new(out.into_iter())))
+    }
+
+    fn get_partial(
+        &self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
+        #[cfg(target_os = "linux")]
+        if self.options.direct_io {
+            return self
+                .get_partial_many_direct_io(key, Box::new([byte_range].into_iter()))?
+                .map(|mut bytes| bytes.next().expect("one byte range"))
+                .transpose();
+        }
+        let Some(handle) = self.open_or_cached(key)? else {
+            return Ok(None);
+        };
+        read_range(&handle.file, handle.size, byte_range).map(Some)
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
