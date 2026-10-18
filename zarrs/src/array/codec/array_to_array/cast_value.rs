@@ -36,9 +36,9 @@ impl CodecTraitsV3 for CastValueCodec {
 }
 
 pub use zarrs_data_type::codec_traits::cast_value::{
-    CastValueDataTypeExt, CastValueDataTypePlugin, CastValueDataTypeTraits, CastValueIntStored,
-    CastValueKernel, CastValueRepr, impl_cast_value_data_type_traits_float,
-    impl_cast_value_data_type_traits_signed_integer,
+    CastValueDataTypeExt, CastValueDataTypePlugin, CastValueDataTypeSupport,
+    CastValueDataTypeTraits, CastValueIntStored, CastValueKernel, CastValueRepr,
+    impl_cast_value_data_type_traits_float, impl_cast_value_data_type_traits_signed_integer,
     impl_cast_value_data_type_traits_unsigned_integer, select_cast_kernel,
 };
 

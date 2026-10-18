@@ -66,9 +66,9 @@ impl CodecTraitsV3 for BitroundCodec {
 
 // Re-export the trait, plugin, and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bitround::{
-    BitroundDataTypeExt, BitroundDataTypePlugin, BitroundDataTypeTraits, impl_bitround_codec,
-    round_bytes_float16, round_bytes_float32, round_bytes_float64, round_bytes_int8,
-    round_bytes_int16, round_bytes_int32, round_bytes_int64,
+    BitroundDataTypeExt, BitroundDataTypePlugin, BitroundDataTypeSupport, BitroundDataTypeTraits,
+    impl_bitround_codec, round_bytes_float16, round_bytes_float32, round_bytes_float64,
+    round_bytes_int8, round_bytes_int16, round_bytes_int32, round_bytes_int64,
 };
 
 fn round_bytes(

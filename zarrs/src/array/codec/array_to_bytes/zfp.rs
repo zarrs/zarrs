@@ -126,8 +126,8 @@ impl CodecTraitsV3 for ZfpCodec {
 
 // Re-export the trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::zfp::{
-    ZfpDataTypeExt, ZfpDataTypePlugin, ZfpDataTypeTraits, ZfpEncoding, ZfpNativeType,
-    impl_zfp_data_type_traits,
+    ZfpDataTypeExt, ZfpDataTypePlugin, ZfpDataTypeSupport, ZfpDataTypeTraits, ZfpEncoding,
+    ZfpNativeType, impl_zfp_data_type_traits,
 };
 
 const fn zfp_native_type_to_scalar_type(native_type: ZfpNativeType) -> ZfpScalarType {

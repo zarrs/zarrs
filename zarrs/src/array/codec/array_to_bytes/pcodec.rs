@@ -89,8 +89,8 @@ impl CodecTraitsV2 for PcodecCodec {
 
 // Re-export the trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::pcodec::{
-    PcodecDataTypeExt, PcodecDataTypePlugin, PcodecDataTypeTraits, PcodecElementType,
-    impl_pcodec_data_type_traits,
+    PcodecDataTypeExt, PcodecDataTypePlugin, PcodecDataTypeSupport, PcodecDataTypeTraits,
+    PcodecElementType, impl_pcodec_data_type_traits,
 };
 
 #[cfg(test)]
