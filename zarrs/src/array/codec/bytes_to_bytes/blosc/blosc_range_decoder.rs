@@ -26,17 +26,9 @@ fn blosc_partial_decode<'a>(
     let mut decoded_value: Option<Vec<u8>> = None;
     decoded_regions
         .map(|byte_range| {
-            let in_bounds = match byte_range {
-                ByteRange::FromStart(offset, length) => offset
-                    .checked_add(length.unwrap_or(0))
-                    .is_some_and(|end| end <= nbytes as u64),
-                ByteRange::Suffix(length) => length <= nbytes as u64,
-            };
-            if !in_bounds {
-                return Err(InvalidByteRangeError::new(byte_range, nbytes as u64).into());
-            }
-            let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
-            let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
+            let std::ops::Range { start, end } = byte_range
+                .checked_range_usize(nbytes)
+                .ok_or_else(|| InvalidByteRangeError::new(byte_range, nbytes as u64))?;
             if start == end {
                 // `blosc_getitem` fails to retrieve zero items
                 Ok(CowBytes::from(Vec::new()))

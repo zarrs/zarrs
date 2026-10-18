@@ -138,21 +138,13 @@ impl SyncIo for MemoryValueIo {
         let Some(value) = value.as_ref() else {
             return Ok(None);
         };
-        let len = value.len() as u64;
         let read: ReadBytes = ranges
             .iter()
             .map(|range| {
-                let valid = match *range {
-                    ByteRange::FromStart(offset, length) => offset
-                        .checked_add(length.unwrap_or(0))
-                        .is_some_and(|end| offset <= len && end <= len),
-                    ByteRange::Suffix(length) => length <= len,
-                };
-                if valid {
-                    Ok(value.slice(range.to_range_usize(len)))
-                } else {
-                    Err(InvalidByteRangeError::new(*range, len))
-                }
+                range
+                    .checked_range_usize(value.len())
+                    .map(|within| value.slice(within))
+                    .ok_or_else(|| InvalidByteRangeError::new(*range, value.len() as u64))
             })
             .collect::<Result<_, _>>()?;
         Ok(Some(read))

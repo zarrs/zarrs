@@ -260,7 +260,10 @@ impl<'a> ByteSource<'a> {
                 offset: window_offset,
                 len: window_len,
             } => {
-                if offset.checked_add(len).is_none_or(|end| end > window_len) {
+                if ByteRange::FromStart(offset, Some(len))
+                    .checked_range(window_len)
+                    .is_none()
+                {
                     return Err(invalid(window_len));
                 }
                 Window::Known {
@@ -328,24 +331,15 @@ impl<'a> ByteSource<'a> {
     pub(crate) fn resolve(&self, range: ByteRange) -> Result<ResolvedRange, InvalidByteRangeError> {
         match self.window {
             Window::Known { offset, len } => {
-                let invalid = || InvalidByteRangeError::new(range, len);
-                let (start, length) = match range {
-                    ByteRange::FromStart(start, None) => {
-                        (start, len.checked_sub(start).ok_or_else(invalid)?)
-                    }
-                    ByteRange::FromStart(start, Some(length)) => {
-                        if start.checked_add(length).is_none_or(|end| end > len) {
-                            return Err(invalid());
-                        }
-                        (start, length)
-                    }
-                    ByteRange::Suffix(length) => {
-                        (len.checked_sub(length).ok_or_else(invalid)?, length)
-                    }
-                };
+                let within = range
+                    .checked_range(len)
+                    .ok_or_else(|| InvalidByteRangeError::new(range, len))?;
                 Ok(ResolvedRange {
                     // Cannot overflow: the range is within the window, which is within the root
-                    range: ByteRange::FromStart(offset + start, Some(length)),
+                    range: ByteRange::FromStart(
+                        offset + within.start,
+                        Some(within.end - within.start),
+                    ),
                     drop_tail: 0,
                 })
             }
@@ -494,23 +488,11 @@ impl<'a> ByteSource<'a> {
             return None;
         };
         Some(self.resolve(range).and_then(|resolved| {
-            let root_len = bytes.len() as u64;
-            let invalid = || InvalidByteRangeError::new(range, root_len);
-            let (start, end) = match resolved.range {
-                ByteRange::FromStart(start, None) => (start, root_len),
-                ByteRange::FromStart(start, Some(length)) => {
-                    (start, start.checked_add(length).ok_or_else(invalid)?)
-                }
-                ByteRange::Suffix(length) => {
-                    (root_len.checked_sub(length).ok_or_else(invalid)?, root_len)
-                }
-            };
-            if start > end || end > root_len {
-                return Err(invalid());
-            }
-            // Cannot truncate: both are at most the length of the root
-            let (start, end) = (start as usize, end as usize);
-            resolved.finish(bytes.slice(start..end), range)
+            let within = resolved
+                .range
+                .checked_range_usize(bytes.len())
+                .ok_or_else(|| InvalidByteRangeError::new(range, bytes.len() as u64))?;
+            resolved.finish(bytes.slice(within), range)
         }))
     }
 }
