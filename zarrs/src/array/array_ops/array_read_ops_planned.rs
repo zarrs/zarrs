@@ -53,17 +53,18 @@ pub(super) enum ChunkKeys {
     One(StoreKey),
     /// The chunks of a region of the chunk grid. The source key of a chunk is its index in the region (in C order),
     /// and its store key is created when it is read.
-    Grid {
-        path: NodePath,
-        encoding: ChunkKeyEncoding,
-        chunks: ArraySubset,
-    },
-    /// Chunks by their indices. The source key of a chunk is its position in `indices`.
-    List {
-        path: NodePath,
-        encoding: ChunkKeyEncoding,
-        indices: Vec<ArrayIndices>,
-    },
+    Grid(Box<ManyChunkKeys<ArraySubset>>),
+    /// Chunks by their indices. The source key of a chunk is its position in the indices.
+    List(Box<ManyChunkKeys<Vec<ArrayIndices>>>),
+}
+
+/// The chunks of an operation on many chunks, with the path and chunk key encoding of their array.
+///
+/// It is boxed, so that operations on one chunk move small [`ChunkKeys`].
+pub(super) struct ManyChunkKeys<C> {
+    path: NodePath,
+    encoding: ChunkKeyEncoding,
+    chunks: C,
 }
 
 impl ChunkKeys {
@@ -71,23 +72,15 @@ impl ChunkKeys {
     pub(super) fn store_key(&self, key: SourceKey) -> Result<Cow<'_, StoreKey>, StorageError> {
         match self {
             Self::One(store_key) => Ok(Cow::Borrowed(store_key)),
-            Self::Grid {
-                path,
-                encoding,
-                chunks,
-            } => {
-                let chunk_indices = subset_indices_at(chunks, key.0 as u64);
-                chunk_store_key(path, encoding, &chunk_indices).map(Cow::Owned)
+            Self::Grid(grid) => {
+                let chunk_indices = subset_indices_at(&grid.chunks, key.0 as u64);
+                chunk_store_key(&grid.path, &grid.encoding, &chunk_indices).map(Cow::Owned)
             }
-            Self::List {
-                path,
-                encoding,
-                indices,
-            } => {
-                let chunk_indices = indices.get(key.0).ok_or_else(|| {
+            Self::List(list) => {
+                let chunk_indices = list.chunks.get(key.0).ok_or_else(|| {
                     StorageError::Other(format!("no chunk with source key {}", key.0))
                 })?;
-                chunk_store_key(path, encoding, chunk_indices).map(Cow::Owned)
+                chunk_store_key(&list.path, &list.encoding, chunk_indices).map(Cow::Owned)
             }
         }
     }
@@ -363,22 +356,22 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// The keys of the chunks of the region `chunks` of the chunk grid.
     pub(super) fn grid_keys(&self, chunks: ArraySubset) -> ChunkKeys {
-        ChunkKeys::Grid {
+        ChunkKeys::Grid(Box::new(ManyChunkKeys {
             path: self.path().clone(),
             encoding: self.chunk_key_encoding().clone(),
             chunks,
-        }
+        }))
     }
 
     /// The keys of the chunks selected by `chunks`, in the order of `chunks.iter_indices()`.
     pub(super) fn indexer_keys(&self, chunks: &dyn Indexer) -> ChunkKeys {
         match chunks.as_array_subset() {
             Some(subset) => self.grid_keys(subset.to_array_subset()),
-            None => ChunkKeys::List {
+            None => ChunkKeys::List(Box::new(ManyChunkKeys {
                 path: self.path().clone(),
                 encoding: self.chunk_key_encoding().clone(),
-                indices: chunks.iter_indices().collect(),
-            },
+                chunks: chunks.iter_indices().collect(),
+            })),
         }
     }
 
