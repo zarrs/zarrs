@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
+- Look up the data type support of the bound `bytes` codec once, instead of on every encode and decode
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
 - Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0

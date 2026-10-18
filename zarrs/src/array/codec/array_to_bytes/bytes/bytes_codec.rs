@@ -5,7 +5,7 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeSupport, Endianness,
     bytes_codec_partial,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
@@ -34,7 +34,7 @@ pub struct BytesCodec {
 #[derive(Debug, Clone)]
 struct BytesCodecBound {
     endian: Option<Endianness>,
-    data_type: DataType,
+    support: BytesDataTypeSupport,
     fill_value: FillValue,
 }
 
@@ -129,10 +129,10 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        data_type.codec_bytes()?;
+        let support = BytesDataTypeSupport::new(&data_type)?;
         Ok(Arc::new(BytesCodecBound {
             endian: self.endian,
-            data_type,
+            support,
             fill_value,
         }))
     }
@@ -140,9 +140,9 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
 
 impl BytesCodecBound {
     fn decoded_size(&self, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
-        let data_type_size = self.data_type.fixed_size().ok_or_else(|| {
+        let data_type_size = self.support.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(
-                self.data_type.clone(),
+                self.support.data_type().clone(),
                 BytesCodec::aliases_v3().default_name.to_string(),
             )
         })?;
@@ -170,7 +170,7 @@ impl ArrayCodecTraits for BytesCodecBound {
     }
 
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.support.data_type()
     }
 
     fn fill_value(&self) -> &FillValue {
@@ -211,13 +211,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     }
 
     fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
+        if !self.support.data_type().is_fixed() || self.support.data_type().is_optional() {
             return Ok(false);
         }
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .is_decode_passthrough(self.endian))
+        Ok(self.support.get().is_decode_passthrough(self.endian))
     }
 
     fn encode<'a>(
@@ -227,10 +224,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
-        bytes.validate(num_elements, &self.data_type)?;
+        bytes.validate(num_elements, self.support.data_type())?;
         let bytes = bytes.into_fixed()?;
 
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.support.get().encode(bytes, self.endian)?)
     }
 
     fn decode<'a>(
@@ -240,10 +237,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
-        let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
+        let bytes = self.support.get().decode(bytes, self.endian)?;
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
-        bytes_decoded.validate(num_elements, &self.data_type)?;
+        bytes_decoded.validate(num_elements, self.support.data_type())?;
 
         Ok(bytes_decoded)
     }
@@ -257,7 +254,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
             shape,
-            &self.data_type,
+            self.support.data_type(),
             &self.fill_value,
             self.endian,
         )))
@@ -272,7 +269,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
             shape,
-            &self.data_type,
+            self.support.data_type(),
             &self.fill_value,
             self.endian,
         )))
@@ -288,7 +285,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
             shape,
-            &self.data_type,
+            self.support.data_type(),
             &self.fill_value,
             self.endian,
         )))
@@ -304,7 +301,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
             shape,
-            &self.data_type,
+            self.support.data_type(),
             &self.fill_value,
             self.endian,
         )))
