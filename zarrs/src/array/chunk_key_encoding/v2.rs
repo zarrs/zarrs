@@ -81,6 +81,20 @@ impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
             super::join_chunk_key("", chunk_grid_indices, self.separator, "")
         })
     }
+
+    fn encode_into(
+        &self,
+        chunk_grid_indices: &[u64],
+        key: &mut String,
+    ) -> Result<(), ChunkKeyEncodingError> {
+        if chunk_grid_indices.is_empty() {
+            key.push('0');
+        } else {
+            key.reserve(super::chunk_key_capacity("", chunk_grid_indices, ""));
+            super::push_chunk_key(key, "", chunk_grid_indices, self.separator, "");
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

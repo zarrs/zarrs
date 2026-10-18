@@ -31,11 +31,12 @@ use zarrs_storage::{
 use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
 use super::OpStorage;
+use crate::array::chunk_key_encoding::chunk_store_key_path;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape,
     Indexer, subset_indices_at,
 };
-use crate::node::{NodePath, data_key};
+use crate::node::NodePath;
 
 mod partial_decoder;
 
@@ -76,12 +77,7 @@ impl ChunkKeys {
                 chunks,
             } => {
                 let chunk_indices = subset_indices_at(chunks, key.0 as u64);
-                let chunk_key = encoding
-                    .encode(&chunk_indices)
-                    .map_err(|err| StorageError::Other(err.to_string()))?;
-                data_key(path, &chunk_key)
-                    .map(Cow::Owned)
-                    .map_err(StorageError::from)
+                chunk_store_key(path, encoding, &chunk_indices).map(Cow::Owned)
             }
             Self::List {
                 path,
@@ -91,12 +87,7 @@ impl ChunkKeys {
                 let chunk_indices = indices.get(key.0).ok_or_else(|| {
                     StorageError::Other(format!("no chunk with source key {}", key.0))
                 })?;
-                let chunk_key = encoding
-                    .encode(chunk_indices)
-                    .map_err(|err| StorageError::Other(err.to_string()))?;
-                data_key(path, &chunk_key)
-                    .map(Cow::Owned)
-                    .map_err(StorageError::from)
+                chunk_store_key(path, encoding, chunk_indices).map(Cow::Owned)
             }
         }
     }
@@ -134,6 +125,17 @@ impl<TStorage: ?Sized + ReadableStorageTraits> SyncIo for ChunkIo<'_, TStorage> 
     fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
         with_op_storage!(self.storage, |storage| storage.read_coalescing())
     }
+}
+
+/// The store key of the chunk at `chunk_indices` of the array at `path`.
+fn chunk_store_key(
+    path: &NodePath,
+    encoding: &ChunkKeyEncoding,
+    chunk_indices: &[u64],
+) -> Result<StoreKey, StorageError> {
+    let key = chunk_store_key_path(path, encoding, chunk_indices)
+        .map_err(|err| StorageError::Other(err.to_string()))?;
+    Ok(StoreKey::new(key)?)
 }
 
 /// Read `ranges` of the value of `key` in `storage`.

@@ -83,6 +83,16 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
             "",
         ))
     }
+
+    fn encode_into(
+        &self,
+        chunk_grid_indices: &[u64],
+        key: &mut String,
+    ) -> Result<(), ChunkKeyEncodingError> {
+        key.reserve(super::chunk_key_capacity("c", chunk_grid_indices, ""));
+        super::push_chunk_key(key, "c", chunk_grid_indices, self.separator, "");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
