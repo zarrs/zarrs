@@ -49,9 +49,11 @@ pub enum ArraySubsetError {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ArraySubset {
     /// The start of the array subset.
-    pub(crate) start: ArrayIndices,
+    ///
+    /// Subsets of up to four dimensions are stored inline, so creating and cloning them does not allocate.
+    pub(crate) start: ArrayIndicesTinyVec,
     /// The shape of the array subset.
-    pub(crate) shape: ArrayShape,
+    pub(crate) shape: ArrayIndicesTinyVec,
 }
 
 impl Display for ArraySubset {
@@ -75,8 +77,8 @@ impl ArraySubset {
     #[must_use]
     pub fn new_empty(dimensionality: usize) -> Self {
         Self {
-            start: vec![0; dimensionality],
-            shape: vec![0; dimensionality],
+            start: std::iter::repeat_n(0, dimensionality).collect(),
+            shape: std::iter::repeat_n(0, dimensionality).collect(),
         }
     }
 
@@ -94,8 +96,8 @@ impl ArraySubset {
     #[must_use]
     pub fn new_with_shape(shape: ArrayShape) -> Self {
         Self {
-            start: vec![0; shape.len()],
-            shape,
+            start: std::iter::repeat_n(0, shape.len()).collect(),
+            shape: shape.as_slice().into(),
         }
     }
 
@@ -109,7 +111,10 @@ impl ArraySubset {
         shape: ArrayShape,
     ) -> Result<Self, ArraySubsetError> {
         if start.len() == shape.len() {
-            Ok(Self { start, shape })
+            Ok(Self {
+                start: start.as_slice().into(),
+                shape: shape.as_slice().into(),
+            })
         } else {
             Err(ArraySubsetError::IncompatibleStartShape { start, shape })
         }
@@ -134,7 +139,10 @@ impl ArraySubset {
             let shape = std::iter::zip(&start, end)
                 .map(|(&start, end)| end.saturating_sub(start) + 1)
                 .collect();
-            Ok(Self { start, shape })
+            Ok(Self {
+                start: start.as_slice().into(),
+                shape,
+            })
         }
     }
 
@@ -157,7 +165,10 @@ impl ArraySubset {
             let shape = std::iter::zip(&start, end)
                 .map(|(&start, end)| end.saturating_sub(start))
                 .collect();
-            Ok(Self { start, shape })
+            Ok(Self {
+                start: start.as_slice().into(),
+                shape,
+            })
         }
     }
 
@@ -183,7 +194,7 @@ impl ArraySubset {
             Ok(Self::new_with_start_end_exc(start, end)?)
         } else {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start: self.start.clone(),
+                start: self.start.to_vec(),
                 end: end.to_vec(),
                 inclusive: false,
             })
@@ -372,7 +383,7 @@ impl Indexer for ArraySubset {
     }
 
     fn output_shape(&self) -> Vec<u64> {
-        self.shape.clone()
+        self.shape.to_vec()
     }
 
     fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
