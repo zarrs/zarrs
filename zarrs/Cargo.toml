@@ -198,3 +198,7 @@ required-features = ["zstd"]
 name = "array_ops"
 harness = false
 required-features = ["zstd", "crc32c"]
+
+[[bench]]
+name = "sharded_partial_read_memory"
+harness = false

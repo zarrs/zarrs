@@ -1,4 +1,4 @@
-//! Benchmark the `ArraySubset` indices iterator.
+//! Benchmark the `ArraySubset` indices iterators.
 #![allow(missing_docs)]
 
 use criterion::{
@@ -23,6 +23,31 @@ fn array_subset_indices_iterator(c: &mut Criterion) {
             });
         });
     }
+    group.finish();
+
+    let mut group = c.benchmark_group("array_subset_linearised_indices_iterator".to_string());
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+    for array_subset_size in [4, 16, 64, 256] {
+        let array_shape = vec![array_subset_size * 2; 3];
+        let array_subset = ArraySubset::new_with_start_shape(
+            vec![array_subset_size / 2; 3],
+            vec![array_subset_size; 3],
+        )
+        .unwrap();
+        group.throughput(Throughput::Elements(array_subset.num_elements()));
+        group.bench_function(BenchmarkId::new("size", array_subset_size), |b| {
+            b.iter(|| {
+                array_subset
+                    .linearised_indices(&array_shape)
+                    .unwrap()
+                    .into_iter()
+                    .for_each(|index| {
+                        std::hint::black_box(index);
+                    });
+            });
+        });
+    }
+    group.finish();
 }
 
 criterion_group!(benches, array_subset_indices_iterator);
