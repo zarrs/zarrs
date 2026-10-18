@@ -293,7 +293,7 @@ fn fixture(variable: bool, nested: bool, index_location: ShardingIndexLocation) 
 }
 
 fn selections(nested: bool) -> Vec<(Vec<ArrayIndices>, Vec<u64>)> {
-    vec![
+    let selections: Vec<(Vec<Vec<u64>>, Vec<u64>)> = vec![
         (
             vec![
                 vec![3, 3],
@@ -318,7 +318,19 @@ fn selections(nested: bool) -> Vec<(Vec<ArrayIndices>, Vec<u64>)> {
         ),
         (vec![vec![0, 0], vec![1, 1], vec![0, 0]], vec![]),
         (vec![], vec![]),
-    ]
+    ];
+    selections
+        .into_iter()
+        .map(|(points, values)| {
+            (
+                points
+                    .into_iter()
+                    .map(|point| point.as_slice().into())
+                    .collect(),
+                values,
+            )
+        })
+        .collect()
 }
 
 /// Every (variable, nested, index location, concurrency, absent) combination.

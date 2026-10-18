@@ -383,12 +383,21 @@ mod tests {
             grid.chunks_subset(&[1..3, 2..4]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[3..9, 4..8]))
         );
-        assert_eq!(grid.chunk_origin(&[2, 3]).unwrap(), Some(vec![6, 6]));
-        assert_eq!(grid.chunk_shape(&[2, 3]).unwrap(), Some(vec![nz(3), nz(2)]));
-        assert_eq!(grid.chunk_indices(&[7, 7]).unwrap(), Some(vec![2, 3]));
+        assert_eq!(
+            grid.chunk_origin(&[2, 3]).unwrap(),
+            Some([6, 6].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_shape(&[2, 3]).unwrap(),
+            Some([nz(3), nz(2)].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_indices(&[7, 7]).unwrap(),
+            Some([2, 3].as_slice().into())
+        );
         assert_eq!(
             grid.chunk_element_indices(&[7, 7]).unwrap(),
-            Some(vec![1, 1])
+            Some([1, 1].as_slice().into())
         );
         assert_eq!(grid.chunk_indices(&[12, 0]).unwrap(), None);
     }
@@ -423,10 +432,22 @@ mod tests {
         );
         assert_eq!(grid.subset(&[1]).unwrap(), Some(ArraySubset::from([3..5])));
         assert_eq!(grid.subset(&[2]).unwrap(), Some(ArraySubset::from([5..8])));
-        assert_eq!(grid.chunk_origin(&[3]).unwrap(), Some(vec![8]));
-        assert_eq!(grid.chunk_shape(&[3]).unwrap(), Some(vec![nz(2)]));
-        assert_eq!(grid.chunk_indices(&[8]).unwrap(), Some(vec![3]));
-        assert_eq!(grid.chunk_element_indices(&[8]).unwrap(), Some(vec![0]));
+        assert_eq!(
+            grid.chunk_origin(&[3]).unwrap(),
+            Some([8].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_shape(&[3]).unwrap(),
+            Some([nz(2)].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_indices(&[8]).unwrap(),
+            Some([3].as_slice().into())
+        );
+        assert_eq!(
+            grid.chunk_element_indices(&[8]).unwrap(),
+            Some([0].as_slice().into())
+        );
     }
 
     #[test]

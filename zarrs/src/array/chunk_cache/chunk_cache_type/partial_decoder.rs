@@ -29,7 +29,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
     {
         validate_chunk_indices(array, chunk_indices)?;
         cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+            .try_get_or_insert_with(chunk_indices.into(), || {
                 array.partial_decoder_with_options(chunk_indices, options)
             })
             .map_err(cache_error)

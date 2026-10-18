@@ -5,7 +5,7 @@ use futures::{StreamExt, TryStreamExt};
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{AsyncArrayUpdateOps, *};
-use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
+use crate::array::{ArrayIndices, update_array_bytes};
 use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
@@ -86,7 +86,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
 
             let array_subset_start = array_subset.start();
             let array_subset_shape = array_subset.shape();
-            let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let store_chunk = |chunk_indices: ArrayIndices| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                 let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
                 let chunk_subset_in_array_subset =
@@ -172,7 +172,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             if !chunk_subset.inbounds_shape(&chunk_shape) {
                 return Err(ArrayError::InvalidChunkSubset(
                     Box::new(chunk_subset.to_array_subset()),
-                    chunk_indices.to_vec(),
+                    chunk_indices.into(),
                     chunk_shape,
                 ));
             }

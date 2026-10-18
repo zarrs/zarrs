@@ -8,7 +8,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayWriteOps, *};
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
+use crate::array::{ArrayIndices, ChunkShapeTraits};
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::StorageHandle;
@@ -119,7 +119,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                     &codec_concurrency,
                 );
 
-                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
+                let store_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
                         &chunk_subset.relative_to(array_subset.start())?,
@@ -155,7 +155,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
+        let erase_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
             Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
 

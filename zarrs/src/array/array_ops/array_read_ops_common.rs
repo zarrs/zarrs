@@ -1,7 +1,5 @@
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{
-    ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer,
-};
+use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -130,7 +128,7 @@ where
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
     let parent_start = data_view_ref.subset().start().to_vec();
 
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
         let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset.start())?;

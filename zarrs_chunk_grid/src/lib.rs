@@ -28,11 +28,9 @@ use derive_more::{Deref, From};
 pub use zarrs_metadata::{ArrayShape, ChunkShape};
 
 /// An ND index to an element in an array or chunk.
-pub type ArrayIndices = Vec<u64>;
-
-/// An ND index to an element in an array or chunk.
-/// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
-pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
+///
+/// The indices are held inline (without allocating) for up to 4 dimensions.
+pub type ArrayIndices = tinyvec::TinyVec<[u64; 4]>;
 
 use std::num::NonZeroU64;
 
@@ -493,7 +491,7 @@ pub trait ChunkGridTraitsIterators: ChunkGridTraits {
     /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
     fn iter_chunk_indices_and_subsets(
         &self,
-    ) -> Box<dyn Iterator<Item = (ArrayIndicesTinyVec, ArraySubset)> + '_> {
+    ) -> Box<dyn Iterator<Item = (ArrayIndices, ArraySubset)> + '_> {
         Box::new(self.iter_chunk_indices().map(|chunk_indices| {
             let chunk_subset = self
                 .subset(&chunk_indices)
@@ -528,8 +526,10 @@ pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
 }
 
 /// Unravel a linearised index to ND indices.
+///
+/// Returns [`None`] if `index` is out-of-bounds of `shape`.
 #[must_use]
-fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
+pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
     let total_size: u64 = shape
         .iter()
         .try_fold(1u64, |acc, &dim| acc.checked_mul(dim))?;
@@ -539,7 +539,7 @@ fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
 
     // Specialised routines for dimensions <=4, unrolled and no dynamic allocation
     match shape.len() {
-        0 => Some(ArrayIndicesTinyVec::new()),
+        0 => Some(ArrayIndices::new()),
         1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
         2 => {
             let i1 = index % shape[1];
@@ -583,7 +583,7 @@ fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
             // SAFETY: all `len` elements are initialised
             unsafe { vec.set_len(len) };
 
-            Some(ArrayIndicesTinyVec::Heap(vec))
+            Some(ArrayIndices::Heap(vec))
         }
     }
 }

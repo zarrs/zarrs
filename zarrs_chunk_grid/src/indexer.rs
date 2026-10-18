@@ -4,8 +4,8 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::{
-    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits,
-    IncompatibleDimensionalityError, MaybeSend, MaybeSync, ravel_indices,
+    ArrayIndices, ArrayShape, ArraySubsetTraits, IncompatibleDimensionalityError, MaybeSend,
+    MaybeSync, ravel_indices,
 };
 
 /// An incompatible indexer and array shape error.
@@ -95,7 +95,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     fn output_shape(&self) -> Vec<u64>;
 
     /// Returns an iterator over the indices of elements.
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>>;
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>>;
 
     /// Returns an iterator over the linearised indices of elements.
     ///
@@ -169,7 +169,7 @@ impl<T: Indexer> Indexer for &T {
         (**self).output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         (**self).iter_indices()
     }
 
@@ -211,7 +211,7 @@ impl<T: Indexer> Indexer for &[T] {
         vec![self.len()]
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         let indices = self.iter().map(Indexer::iter_indices).collect::<Vec<_>>();
 
         Box::new(indices.into_iter().flat_map(IntoIterator::into_iter))
@@ -272,7 +272,7 @@ impl<T: Indexer> Indexer for Vec<T> {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         self.as_slice().iter_indices()
     }
 
@@ -313,7 +313,7 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         self.as_slice().iter_indices()
     }
 
@@ -333,170 +333,193 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
     }
 }
 
-impl Indexer for &[ArrayIndices] {
-    fn dimensionality(&self) -> usize {
-        self.first().map_or(0, Vec::len)
-    }
-
-    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
-        self.iter().try_for_each(|indices| {
-            if indices.len() != array_shape.len() {
-                Err(
-                    IncompatibleDimensionalityError::new(self.dimensionality(), array_shape.len())
-                        .into(),
-                )
-            } else if std::iter::zip(indices, array_shape).any(|(index, size)| index >= size) {
-                Err(IndexerError::new_oob(indices.clone(), array_shape.to_vec()))
-            } else {
-                Ok(())
+/// Implement [`Indexer`] for a list of the indices of elements, with `$indices` the indices of an element.
+macro_rules! impl_indexer_for_indices {
+    ($indices:ty) => {
+        impl Indexer for &[$indices] {
+            fn dimensionality(&self) -> usize {
+                self.first().map_or(0, |indices| indices.len())
             }
-        })
-    }
 
-    fn len(&self) -> u64 {
-        <[ArrayIndices]>::len(self) as u64
-    }
+            fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+                self.iter().try_for_each(|indices| {
+                    if indices.len() != array_shape.len() {
+                        Err(IncompatibleDimensionalityError::new(
+                            self.dimensionality(),
+                            array_shape.len(),
+                        )
+                        .into())
+                    } else if std::iter::zip(indices.iter(), array_shape)
+                        .any(|(index, size)| index >= size)
+                    {
+                        Err(IndexerError::new_oob(
+                            ArrayIndices::from(&indices[..]),
+                            array_shape.to_vec(),
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                })
+            }
 
-    fn is_empty(&self) -> bool {
-        <[ArrayIndices]>::is_empty(self)
-    }
+            fn len(&self) -> u64 {
+                <[$indices]>::len(self) as u64
+            }
 
-    fn output_shape(&self) -> Vec<u64> {
-        vec![self.len()]
-    }
+            fn is_empty(&self) -> bool {
+                <[$indices]>::is_empty(self)
+            }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
-        let indices: Vec<ArrayIndicesTinyVec> = self
-            .iter()
-            .map(|v| v.iter().copied().collect::<ArrayIndicesTinyVec>())
-            .collect();
-        Box::new(indices.into_iter())
-    }
+            fn output_shape(&self) -> Vec<u64> {
+                vec![self.len()]
+            }
 
-    fn iter_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
-        for indices in *self {
-            if indices.len() == array_shape.len() {
-                let index = ravel_indices(indices, array_shape)
-                    .ok_or_else(|| IndexerError::new_oob(indices.clone(), array_shape.to_vec()))?;
-                linearised_indices.push(index);
-            } else {
-                return Err(IncompatibleDimensionalityError::new(
-                    self.dimensionality(),
-                    array_shape.len(),
-                )
-                .into());
+            fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+                let indices: Vec<ArrayIndices> = self
+                    .iter()
+                    .map(|indices| ArrayIndices::from(&indices[..]))
+                    .collect();
+                Box::new(indices.into_iter())
+            }
+
+            fn iter_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
+                let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+                for indices in *self {
+                    if indices.len() == array_shape.len() {
+                        let index = ravel_indices(indices, array_shape).ok_or_else(|| {
+                            IndexerError::new_oob(
+                                ArrayIndices::from(&indices[..]),
+                                array_shape.to_vec(),
+                            )
+                        })?;
+                        linearised_indices.push(index);
+                    } else {
+                        return Err(IncompatibleDimensionalityError::new(
+                            self.dimensionality(),
+                            array_shape.len(),
+                        )
+                        .into());
+                    }
+                }
+                Ok(Box::new(linearised_indices.into_iter()))
+            }
+
+            fn iter_contiguous_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
+                let mut contiguous_linearised_indices =
+                    Vec::with_capacity(self.iter().size_hint().0);
+                for indices in *self {
+                    if indices.len() == array_shape.len() {
+                        let index = ravel_indices(indices, array_shape).ok_or_else(|| {
+                            IndexerError::new_oob(
+                                ArrayIndices::from(&indices[..]),
+                                array_shape.to_vec(),
+                            )
+                        })?;
+                        contiguous_linearised_indices.push((index, 1));
+                    } else {
+                        return Err(IncompatibleDimensionalityError::new(
+                            self.dimensionality(),
+                            array_shape.len(),
+                        )
+                        .into());
+                    }
+                }
+                Ok(Box::new(contiguous_linearised_indices.into_iter()))
             }
         }
-        Ok(Box::new(linearised_indices.into_iter()))
-    }
 
-    fn iter_contiguous_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        let mut contiguous_linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
-        for indices in *self {
-            if indices.len() == array_shape.len() {
-                let index = ravel_indices(indices, array_shape)
-                    .ok_or_else(|| IndexerError::new_oob(indices.clone(), array_shape.to_vec()))?;
-                contiguous_linearised_indices.push((index, 1));
-            } else {
-                return Err(IncompatibleDimensionalityError::new(
-                    self.dimensionality(),
-                    array_shape.len(),
-                )
-                .into());
+        impl Indexer for Vec<$indices> {
+            fn dimensionality(&self) -> usize {
+                self.as_slice().dimensionality()
+            }
+
+            fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+                self.as_slice().validate(array_shape)
+            }
+
+            fn len(&self) -> u64 {
+                self.len() as u64
+            }
+
+            fn is_empty(&self) -> bool {
+                self.is_empty()
+            }
+
+            fn output_shape(&self) -> Vec<u64> {
+                self.as_slice().output_shape()
+            }
+
+            fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+                self.as_slice().iter_indices()
+            }
+
+            fn iter_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
+                self.as_slice().iter_linearised_indices(array_shape)
+            }
+
+            fn iter_contiguous_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
+                self.as_slice()
+                    .iter_contiguous_linearised_indices(array_shape)
             }
         }
-        Ok(Box::new(contiguous_linearised_indices.into_iter()))
-    }
+
+        impl<const N: usize> Indexer for [$indices; N] {
+            fn dimensionality(&self) -> usize {
+                self.as_slice().dimensionality()
+            }
+
+            fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
+                self.as_slice().validate(array_shape)
+            }
+
+            fn len(&self) -> u64 {
+                self.as_slice().len() as u64
+            }
+
+            fn is_empty(&self) -> bool {
+                self.as_slice().is_empty()
+            }
+
+            fn output_shape(&self) -> Vec<u64> {
+                self.as_slice().output_shape()
+            }
+
+            fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+                self.as_slice().iter_indices()
+            }
+
+            fn iter_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
+                self.as_slice().iter_linearised_indices(array_shape)
+            }
+
+            fn iter_contiguous_linearised_indices(
+                &self,
+                array_shape: &[u64],
+            ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
+                self.as_slice()
+                    .iter_contiguous_linearised_indices(array_shape)
+            }
+        }
+    };
 }
 
-impl Indexer for Vec<ArrayIndices> {
-    fn dimensionality(&self) -> usize {
-        self.as_slice().dimensionality()
-    }
-
-    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
-        self.as_slice().validate(array_shape)
-    }
-
-    fn len(&self) -> u64 {
-        self.len() as u64
-    }
-
-    fn is_empty(&self) -> bool {
-        self.is_empty()
-    }
-
-    fn output_shape(&self) -> Vec<u64> {
-        self.as_slice().output_shape()
-    }
-
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
-        self.as_slice().iter_indices()
-    }
-
-    fn iter_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        self.as_slice().iter_linearised_indices(array_shape)
-    }
-
-    fn iter_contiguous_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        self.as_slice()
-            .iter_contiguous_linearised_indices(array_shape)
-    }
-}
-
-impl<const N: usize> Indexer for [ArrayIndices; N] {
-    fn dimensionality(&self) -> usize {
-        self.as_slice().dimensionality()
-    }
-
-    fn validate(&self, array_shape: &[u64]) -> Result<(), IndexerError> {
-        self.as_slice().validate(array_shape)
-    }
-
-    fn len(&self) -> u64 {
-        self.as_slice().len() as u64
-    }
-
-    fn is_empty(&self) -> bool {
-        self.as_slice().is_empty()
-    }
-
-    fn output_shape(&self) -> Vec<u64> {
-        self.as_slice().output_shape()
-    }
-
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
-        self.as_slice().iter_indices()
-    }
-
-    fn iter_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        self.as_slice().iter_linearised_indices(array_shape)
-    }
-
-    fn iter_contiguous_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        self.as_slice()
-            .iter_contiguous_linearised_indices(array_shape)
-    }
-}
+impl_indexer_for_indices!(ArrayIndices);
+impl_indexer_for_indices!(Vec<u64>);
 
 // specialisation?
 // impl<T> Indexer for T where T: Iterator<Item = ArrayIndices> {}
@@ -520,7 +543,7 @@ macro_rules! impl_indexer_for_ranges {
                 self.iter().map(|r| r.end.saturating_sub(r.start)).collect()
             }
 
-            fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+            fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
                 Box::new(self.to_array_subset().indices().into_iter())
             }
 
@@ -573,7 +596,7 @@ impl<const N: usize> Indexer for [Range<u64>; N] {
         self.iter().map(|r| r.end.saturating_sub(r.start)).collect()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         Box::new(self.to_array_subset().indices().into_iter())
     }
 

@@ -6,7 +6,7 @@ use futures::{StreamExt, TryStreamExt};
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{AsyncArrayWriteOps, *};
-use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
+use crate::array::{ArrayIndices, ChunkShapeTraits};
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::StorageHandle;
@@ -137,7 +137,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                     &codec_concurrency,
                 );
 
-                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+                let store_chunk = |chunk_indices: ArrayIndices| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(
@@ -181,7 +181,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .storage_transformers()
             .create_async_writable_transformer(storage_handle)
             .await?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let erase_chunk = |chunk_indices: ArrayIndices| {
             let storage_transformer = storage_transformer.clone();
             async move {
                 Ok::<_, ArrayError>(

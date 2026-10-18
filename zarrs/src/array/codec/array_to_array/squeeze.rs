@@ -33,7 +33,7 @@ mod squeeze_codec_partial;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use itertools::{Itertools, izip};
+use itertools::izip;
 pub use squeeze_codec::SqueezeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
@@ -95,7 +95,7 @@ fn get_squeezed_indexer(
                 .into_iter()
                 .zip(shape)
                 .filter_map(|(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None })
-                .collect_vec()
+                .collect::<ArrayIndices>()
         })
         .collect::<Vec<ArrayIndices>>();
 

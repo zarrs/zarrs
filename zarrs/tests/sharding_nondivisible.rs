@@ -13,8 +13,8 @@ use zarrs::array::codec::array_to_array::transpose::{TransposeCodec, TransposeOr
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesCodec, OptionalCodec, VlenCodec};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayIndices, ArrayMetadata, CodecChain, CodecOptions, DataType,
-    Endianness, FillValue, FromArrayBytes, IntoArrayBytes, data_type,
+    Array, ArrayBuilder, ArrayMetadata, CodecChain, CodecOptions, DataType, Endianness, FillValue,
+    FromArrayBytes, IntoArrayBytes, data_type,
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
@@ -182,7 +182,7 @@ fn subset_writes() -> Vec<(ArraySubset, Vec<u16>)> {
 }
 
 /// Scattered writes within the final shard (`[2, 2]`), which extends beyond the array shape.
-fn scattered_write() -> (Vec<ArrayIndices>, Vec<u16>) {
+fn scattered_write() -> (Vec<Vec<u64>>, Vec<u16>) {
     (
         vec![vec![3, 4], vec![0, 0], vec![2, 5], vec![3, 4], vec![1, 3]],
         vec![4000, 4001, 4002, 4003, 4004],
@@ -198,7 +198,7 @@ fn read_subsets() -> Vec<ArraySubset> {
 }
 
 /// Generic indexer reads within each listed chunk.
-fn partial_chunk_reads() -> (Vec<[u64; 2]>, Vec<ArrayIndices>) {
+fn partial_chunk_reads() -> (Vec<[u64; 2]>, Vec<Vec<u64>>) {
     (
         vec![[0, 0], [1, 2], [2, 2]],
         vec![vec![7, 5], vec![0, 0], vec![6, 4], vec![3, 3]],

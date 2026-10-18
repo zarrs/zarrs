@@ -14,7 +14,7 @@ use crate::array::chunk_cache::{
     fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
@@ -103,7 +103,7 @@ where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncChunkCache + ?Sized,
 {
-    let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
+    let retrieve_chunk = |chunk_indices: ArrayIndices| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
         let bytes = async_retrieve_chunk_overlap_bytes(
@@ -178,7 +178,7 @@ where
         let mask_slices = mask_slices.as_slice();
         let array_subset_start = array_subset.start();
         let array_subset_shape = array_subset.shape();
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let retrieve_chunk = |chunk_indices: ArrayIndices| {
             let array_subset_start = &array_subset_start;
             let array_subset_shape = &array_subset_shape;
             async move {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{ArrayBuilder, ArrayIndices, ArraySubset, data_type};
+use zarrs::array::{ArrayBuilder, ArraySubset, data_type};
 use zarrs::storage::store::MemoryStore;
 
 #[test]
@@ -12,7 +12,7 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
         .build(store, "/array")?;
     array.store_chunk(&[0, 0], (0u16..16).collect::<Vec<_>>())?;
 
-    let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
+    let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![3, 3], vec![1, 0], vec![2, 2]];
     assert_eq!(
         array.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
         [1, 15, 4, 10]
@@ -25,7 +25,7 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
         [0, 1, 4, 5]
     );
 
-    let oob: Vec<ArrayIndices> = vec![vec![0, 4]];
+    let oob: Vec<Vec<u64>> = vec![vec![0, 4]];
     assert!(
         array
             .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
@@ -43,12 +43,12 @@ fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::err
     let array = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::uint16(), 0u16)
         .build(store, "/array")?;
     let cached = ArrayCached::new(Arc::new(array), ChunkCacheDecodedLruChunkLimit::new(4));
-    let scattered: Vec<ArrayIndices> = vec![vec![0, 1], vec![1, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![1, 1]];
     assert_eq!(
         cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)?,
         [0, 0]
     );
-    let oob: Vec<ArrayIndices> = vec![vec![0, 2]];
+    let oob: Vec<Vec<u64>> = vec![vec![0, 2]];
     assert!(
         cached
             .retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &oob)
@@ -68,7 +68,7 @@ async fn async_chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std:
     array
         .async_store_chunk(&[0, 0], &(0u16..16).collect::<Vec<_>>())
         .await?;
-    let scattered: Vec<ArrayIndices> = vec![vec![3, 3], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![3, 3], vec![0, 1]];
     assert_eq!(
         array
             .async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered)

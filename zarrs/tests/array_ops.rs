@@ -84,7 +84,7 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     assert_eq!(array.subchunk_shape_at_level(0), array.subchunk_shape());
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
     assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
-    assert_eq!(array.chunk_origin(&[1, 1])?, [3, 3]);
+    assert_eq!(array.chunk_origin(&[1, 1])?.as_slice(), [3, 3]);
     assert_eq!(
         array.chunk_shape(&[0, 0])?,
         vec![NonZeroU64::new(3).unwrap(); 2]

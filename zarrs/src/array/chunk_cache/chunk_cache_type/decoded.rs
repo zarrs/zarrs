@@ -147,7 +147,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
     {
         validate_chunk_indices(array, chunk_indices)?;
         cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), || {
+            .try_get_or_insert_with(chunk_indices.into(), || {
                 Ok(array
                     .retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
                         chunk_indices,
@@ -211,7 +211,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
     {
         validate_chunk_indices(array, chunk_indices)?;
         cache
-            .try_get_or_insert_with(chunk_indices.to_vec(), async move {
+            .try_get_or_insert_with(chunk_indices.into(), async move {
                 Ok(array
                     .async_retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
                         chunk_indices,

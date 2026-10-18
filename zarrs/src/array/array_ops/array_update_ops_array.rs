@@ -7,7 +7,7 @@ use rayon::iter::ParallelIterator;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{ArrayUpdateOps, *};
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayBytes, ArrayIndicesTinyVec, ArraySubsetTraits, update_array_bytes};
+use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
 use zarrs_storage::StorageHandle;
 
@@ -84,7 +84,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 &codec_concurrency,
             );
 
-            let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
+            let store_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
                 let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
@@ -161,7 +161,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             if !chunk_subset.inbounds_shape(&chunk_shape) {
                 return Err(ArrayError::InvalidChunkSubset(
                     Box::new(chunk_subset.to_array_subset()),
-                    chunk_indices.to_vec(),
+                    chunk_indices.into(),
                     chunk_shape,
                 ));
             }

@@ -51,7 +51,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use super::{ArrayBytes, ArrayError};
-use crate::array::{Array, Indexer};
+use crate::array::{Array, ArrayIndices, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions};
@@ -248,7 +248,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// awaiting the same value.
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ArrayIndices,
         f: F,
     ) -> Result<Self::Value, Arc<ArrayError>>
     where
@@ -316,7 +316,7 @@ pub trait AsyncChunkCache: MaybeSend + MaybeSync {
     /// awaiting the same value.
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ArrayIndices,
         init: F,
     ) -> impl Future<Output = Result<Self::Value, Arc<ArrayError>>> + MaybeSend
     where

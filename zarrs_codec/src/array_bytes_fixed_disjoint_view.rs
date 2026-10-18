@@ -304,7 +304,7 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         let position = position as u64;
         if position >= self.num_elements() {
             return Err(IndexerError::new_oob(
-                vec![position],
+                [position].as_slice().into(),
                 vec![self.num_elements()],
             ));
         }

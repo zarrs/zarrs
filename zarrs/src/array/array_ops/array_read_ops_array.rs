@@ -6,7 +6,7 @@ use super::super::array_bytes_internal::{
     build_nested_optional_target, merge_chunks, optional_nesting_depth,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::{ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
+use super::super::{ArrayBytesFixedDisjointView, ArrayIndices};
 use super::{ArrayReadOps, *};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ChunkShapeTraits};
@@ -436,7 +436,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+        let retrieve_chunk = |chunk_indices: ArrayIndices| {
             let chunk_subset = self.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
             Ok::<_, ArrayError>((
@@ -489,7 +489,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
                 .collect();
 
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let retrieve_chunk = |chunk_indices: ArrayIndices| {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 let chunk_subset_in_array =

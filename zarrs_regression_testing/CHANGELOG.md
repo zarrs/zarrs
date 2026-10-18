@@ -10,6 +10,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 ## [Unreleased]
 
 ### Changed
+- **Breaking**: Bump the `zarrs_codec` dev dependency to 0.4.0
 - Use the codec dependency feature gate so non-async compatibility runs do not enable `async-trait` through `zarrs_codec`.
 
 ### Added

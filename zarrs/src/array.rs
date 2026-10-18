@@ -55,10 +55,9 @@ use crate::config::{MetadataEraseVersion, global_config};
 use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 use crate::node::NodePath;
 pub use zarrs_chunk_grid::{
-    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
-    ArraySubsetTraits, ChunkGrid, ChunkGridCreateError, ChunkGridTraits, ChunkGridTraitsIterators,
-    ChunkShape, ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError,
-    Indexer, IndexerError, iterators,
+    ArrayIndices, ArrayShape, ArraySubset, ArraySubsetError, ArraySubsetTraits, ChunkGrid,
+    ChunkGridCreateError, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape, ChunkShapeTraits,
+    IncompatibleDimensionError, IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
@@ -262,7 +261,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec, Indexer};
+/// # use zarrs::array::{Array, ArrayBytes, ArrayIndices, Indexer};
 /// # use zarrs::array::ArraySubset;
 /// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -275,7 +274,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape).indices();
 ///
 /// // Iterate over chunk indices (in parallel)
-/// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndicesTinyVec| {
+/// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndices| {
 ///     // Retrieve the array subset of the chunk within the array bounds
 ///     //   This partially decodes chunks that extend beyond the array end
 ///     let subset: ArraySubset = array.chunk_subset_bounded(&chunk_indices)?;
@@ -985,23 +984,7 @@ pub fn transmute_to_bytes<T: bytemuck::NoUninit>(from: &[T]) -> &[u8] {
     bytemuck::must_cast_slice(from)
 }
 
-/// Unravel a linearised index to ND indices.
-#[must_use]
-pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
-    let len = shape.len();
-    let mut indices: ArrayIndices = Vec::with_capacity(len);
-    for (indices_i, &dim) in std::iter::zip(
-        indices.spare_capacity_mut().iter_mut().rev(),
-        shape.iter().rev(),
-    ) {
-        indices_i.write(index % dim);
-        index /= dim;
-    }
-    unsafe { indices.set_len(len) };
-    if index == 0 { Some(indices) } else { None }
-}
-
-pub use zarrs_chunk_grid::ravel_indices;
+pub use zarrs_chunk_grid::{ravel_indices, unravel_index};
 
 #[cfg(feature = "ndarray")]
 fn iter_u64_to_usize<'a, I: Iterator<Item = &'a u64>>(iter: I) -> Vec<usize> {

@@ -148,7 +148,7 @@ where
         Ok(Arc::new(CachedArrayPartialEncoder {
             encoder,
             cache: self.cache_arc(),
-            chunk_indices: chunk_indices.to_vec(),
+            chunk_indices: chunk_indices.into(),
         }))
     }
 }

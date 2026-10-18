@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{ArrayBuilder, ArrayIndices, data_type};
+use zarrs::array::{ArrayBuilder, data_type};
 use zarrs::storage::store::MemoryStore;
 
 #[test]
@@ -14,7 +14,7 @@ fn chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn std::error::E
         array.store_chunk(&chunk, &[1u16, 1, 1, 1])?;
     }
 
-    let scattered: Vec<ArrayIndices> = vec![vec![1, 0], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![1, 0], vec![0, 1]];
     let encoded = array.retrieve_encoded_chunks(&scattered)?;
     assert_eq!(encoded[0], array.retrieve_encoded_chunk(&[1, 0])?);
     assert_eq!(encoded[1], array.retrieve_encoded_chunk(&[0, 1])?);
@@ -42,7 +42,7 @@ async fn async_chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn s
     array.async_store_chunk(&[0, 1], &[1u16, 1, 1, 1]).await?;
     array.async_store_chunk(&[1, 0], &[2u16, 2, 2, 2]).await?;
 
-    let scattered: Vec<ArrayIndices> = vec![vec![1, 0], vec![0, 1]];
+    let scattered: Vec<Vec<u64>> = vec![vec![1, 0], vec![0, 1]];
     let encoded = array.async_retrieve_encoded_chunks(&scattered).await?;
     assert_eq!(
         encoded[0],
@@ -52,12 +52,12 @@ async fn async_chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn s
         encoded[1],
         array.async_retrieve_encoded_chunk(&[0, 1]).await?
     );
-    let empty: Vec<ArrayIndices> = Vec::new();
+    let empty: Vec<Vec<u64>> = Vec::new();
     assert_eq!(
         array.async_retrieve_encoded_chunks(&empty).await?,
         Vec::new()
     );
-    let repeated: Vec<ArrayIndices> = (0..1024)
+    let repeated: Vec<Vec<u64>> = (0..1024)
         .map(|i| if i % 2 == 0 { vec![1, 0] } else { vec![0, 0] })
         .collect();
     let many = array.async_retrieve_encoded_chunks(&repeated).await?;

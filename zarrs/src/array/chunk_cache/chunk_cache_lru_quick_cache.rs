@@ -38,7 +38,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for CacheChunkLimit<CT> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where
@@ -105,7 +105,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for CacheSizeLimit<CT> {
 
     fn try_get_or_insert_with<F>(
         &self,
-        chunk_indices: Vec<u64>,
+        chunk_indices: ChunkIndices,
         f: F,
     ) -> Result<CT, Arc<ArrayError>>
     where

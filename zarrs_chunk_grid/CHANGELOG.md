@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `IncompatibleDimensionError`
+- Add `unravel_index`
 - Add `ChunkGridCreateError` for chunk grid creation and configuration failures
 
 ### Changed
@@ -21,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: `LinearisedIndices::{new,new_unchecked}` take the subset as a `&ArraySubset` and the array shape as a `&[u64]`
 - Implement `Clone` for `ContiguousIndices[Into]Iterator`
 - `ArraySubset::{new_with_shape,new_with_start_shape}` accept any `impl AsRef<[u64]>` (e.g. a slice) rather than a `Vec<u64>`, so a subset can be created without allocating
+  - **Breaking**: So do `ArraySubset::{new_with_start_end_inc,new_with_start_end_exc}`, rather than `ArrayIndices`
+- **Breaking**: `ArrayIndices` is a `TinyVec<[u64; 4]>` rather than a `Vec<u64>`, and `ArrayIndicesTinyVec` is removed
+  - Indices of up to four dimensions are held inline, so `ChunkGridTraits::{chunk_origin,chunk_indices,chunk_element_indices}` and the indices of iterators do not allocate
+  - `Indexer` is implemented for lists of `Vec<u64>` as well as of `ArrayIndices` (e.g. `vec![vec![0, 1], vec![2, 3]]`)
 - Bump `zarrs_metadata` to 0.7.6
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
