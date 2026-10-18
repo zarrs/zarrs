@@ -104,6 +104,9 @@ pub(crate) struct RangeWork<'a> {
     parallelism: usize,
     /// Whether the job stops after a block of indices in which it runs a task (see [`Work::run_briefly`]).
     brief: bool,
+    /// Tasks without reads that compute at least this many bytes are returned to the driver rather than run
+    /// (see [`Work::defer_compute_from`]).
+    defer_compute_from: u64,
 }
 
 /// The number of indices a job claims from the cursor of a generator of `len` tasks at a time:
@@ -348,7 +351,14 @@ impl<'a> RangeWork<'a> {
                 indices = start..(start + state.block).min(state.len);
                 indices.next().expect("a nonempty block")
             };
-            let outcome = match run_indexed(&current.state.plan, index, ctx, inline, &mut slot) {
+            let outcome = match run_indexed(
+                &current.state.plan,
+                index,
+                ctx,
+                inline,
+                &mut slot,
+                self.defer_compute_from,
+            ) {
                 Ok(Some(IndexedRun::Outcome(outcome))) => {
                     if !ran {
                         ran = true;
@@ -357,6 +367,15 @@ impl<'a> RangeWork<'a> {
                     outcome
                 }
                 Ok(Some(IndexedRun::Deferred(task))) => {
+                    current.output.tasks.push((index, task));
+                    continue;
+                }
+                Ok(Some(IndexedRun::DeferredCompute(task))) => {
+                    // The generator computes, so its later jobs run where they can compute
+                    if !ran {
+                        ran = true;
+                        current.state.runs_tasks.store(true, Ordering::Relaxed);
+                    }
                     current.output.tasks.push((index, task));
                     continue;
                 }
@@ -422,17 +441,21 @@ enum IndexedRun<'a> {
     Outcome(Outcome<'a>),
     /// The task needs a read that cannot be performed inline.
     Deferred(Task<'a>),
+    /// The task computes too much to run in the job.
+    DeferredCompute(Task<'a>),
 }
 
 /// Plan the task at `index` with `plan`, and run it if possible.
 ///
 /// A read is performed inline in the I/O `slot` of the job, which is admitted for the first read of the job.
+/// A task without reads that computes at least `defer_compute_from` bytes is not run.
 fn run_indexed<'a, 's>(
     plan: &PlanFn<'a>,
     index: usize,
     ctx: &ComputeCtx,
     inline: Option<&'s dyn InlineIo>,
     slot: &mut Option<IoSlot<'s>>,
+    defer_compute_from: u64,
 ) -> Result<Option<IndexedRun<'a>>, CodecError> {
     let Some(task) = plan(index)? else {
         return Ok(None);
@@ -447,6 +470,9 @@ fn run_indexed<'a, 's>(
         slot.is_some()
     };
     let outcome = if !task.needs_io() {
+        if task.hint().compute_bytes >= defer_compute_from {
+            return Ok(Some(IndexedRun::DeferredCompute(task)));
+        }
         task.run_without_io(ctx)?
     } else if let Some(inline) = inline.filter(admitted) {
         let (source, ranges, step) = single_read(task)?;
@@ -494,6 +520,15 @@ impl<'a> Work<'a> {
     pub(crate) fn run_briefly(&mut self) {
         if let Self::Range(range) = self {
             range.brief = true;
+        }
+    }
+
+    /// Make a job of an indexed generator return tasks without reads that compute at least `bytes` to the driver
+    /// rather than run them, so that a driver running the job on a thread that should not compute for long can run
+    /// them elsewhere.
+    pub(crate) fn defer_compute_from(&mut self, bytes: u64) {
+        if let Self::Range(range) = self {
+            range.defer_compute_from = bytes;
         }
     }
 
@@ -1443,6 +1478,7 @@ impl<'a> Scheduler<'a> {
                         max_deferred: self.max_deferred,
                         parallelism: self.parallelism,
                         brief: false,
+                        defer_compute_from: u64::MAX,
                     });
                     let depth = active.depth;
                     self.generators.push(active);

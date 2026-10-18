@@ -137,13 +137,16 @@ fn polled_on_rayon() -> bool {
 /// Run `work` on Rayon if it is large enough.
 #[cfg(not(target_arch = "wasm32"))]
 fn offload(
-    work: Work<'static>,
+    mut work: Work<'static>,
     ctx: &dyn Fn() -> ComputeCtx,
 ) -> Result<EventFuture<'static, 'static>, Work<'static>> {
+    if polled_on_rayon() {
+        return Err(work);
+    }
     // Jobs of generators whose tasks compute (rather than read) plan and run several tasks
-    if (!work.is_computing_range() && work.hint().compute_bytes < OFFLOAD_THRESHOLD)
-        || polled_on_rayon()
-    {
+    if !work.is_computing_range() && work.hint().compute_bytes < OFFLOAD_THRESHOLD {
+        // A job that runs on the polling task leaves the tasks it would offload to the driver
+        work.defer_compute_from(OFFLOAD_THRESHOLD);
         return Err(work);
     }
     let ctx = ctx();
@@ -583,6 +586,46 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn large_generated_compute_steps_are_offloaded() {
+        static ON_POLLING_THREAD: AtomicUsize = AtomicUsize::new(0);
+        let io = MemoryIo::with_values([]);
+        let io = AsyncAdapter::new(&io, Duration::ZERO);
+        let generator = |compute_bytes| {
+            Task::compute(move |_| {
+                Ok(Outcome::Generate {
+                    children: crate::plan::Generator::indexed(256, move |_| {
+                        let task = Task::compute(|_| {
+                            if rayon::current_thread_index().is_none() {
+                                ON_POLLING_THREAD.fetch_add(1, Ordering::SeqCst);
+                            }
+                            Ok(Outcome::Done)
+                        });
+                        Ok(Some(task.with_hint(TaskHint {
+                            read_bytes: None,
+                            compute_bytes,
+                        })))
+                    }),
+                    join: None,
+                })
+            })
+        };
+        // Including the first job of the generator, which runs on the polling task
+        drive_async_offload(
+            vec![generator(OFFLOAD_THRESHOLD)],
+            &io,
+            &Resources::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(ON_POLLING_THREAD.load(Ordering::SeqCst), 0);
+        // Small compute steps of the first job run on the polling task
+        drive_async_offload(vec![generator(0)], &io, &Resources::default())
+            .await
+            .unwrap();
+        assert!(ON_POLLING_THREAD.load(Ordering::SeqCst) > 0);
     }
 
     #[test]
