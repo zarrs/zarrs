@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A drive of a single root task that completes with one write performs the write itself, without starting a scheduler
 
 ### Changed
+- `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
 - Make `async-trait` optional and enable it only with the `async` feature.
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput` rather than `CowBytes`
