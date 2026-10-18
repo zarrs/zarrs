@@ -32,6 +32,15 @@ pub use zarrs_metadata::{ArrayShape, ChunkShape};
 /// The indices are held inline (without allocating) for up to 4 dimensions.
 pub type ArrayIndices = tinyvec::TinyVec<[u64; 4]>;
 
+/// Indices of `len` zeros, held inline without being pushed one at a time.
+pub(crate) fn zero_indices(len: usize) -> ArrayIndices {
+    if len <= 4 {
+        tinyvec::TinyVec::Inline(tinyvec::ArrayVec::from_array_len([0; 4], len))
+    } else {
+        tinyvec::TinyVec::Heap(vec![0; len])
+    }
+}
+
 use std::num::NonZeroU64;
 
 use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};

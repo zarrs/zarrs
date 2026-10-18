@@ -77,8 +77,8 @@ impl ArraySubset {
     #[must_use]
     pub fn new_empty(dimensionality: usize) -> Self {
         Self {
-            start: std::iter::repeat_n(0, dimensionality).collect(),
-            shape: std::iter::repeat_n(0, dimensionality).collect(),
+            start: crate::zero_indices(dimensionality),
+            shape: crate::zero_indices(dimensionality),
         }
     }
 
@@ -97,7 +97,7 @@ impl ArraySubset {
     pub fn new_with_shape(shape: impl AsRef<[u64]>) -> Self {
         let shape = shape.as_ref();
         Self {
-            start: std::iter::repeat_n(0, shape.len()).collect(),
+            start: crate::zero_indices(shape.len()),
             shape: shape.into(),
         }
     }
