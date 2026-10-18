@@ -179,11 +179,6 @@ fn split_chunk_resources(num_chunks: usize, resources: &Resources) -> (usize, Re
     )
 }
 
-/// Return true if `subset` covers the whole chunk with shape `chunk_shape`.
-fn subset_is_whole_chunk(subset: &dyn ArraySubsetTraits, chunk_shape: &[u64]) -> bool {
-    subset.start().iter().all(|&o| o == 0) && subset.shape().as_ref() == chunk_shape
-}
-
 /// Return `chunk` if it exists, otherwise the fill value of the chunk at `chunk_indices`.
 fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     array: &A,

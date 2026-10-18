@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::{ArraySubset, Indexer, IndexerError};
+use zarrs_chunk_grid::{ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
 use zarrs_data_type::DataType;
 
 use crate::{
@@ -379,7 +379,7 @@ impl PlanIndexer<'_> {
     #[must_use]
     pub fn is_whole(&self, shape: &[NonZeroU64]) -> bool {
         match self {
-            Self::Subset(subset) => subset_is_whole(subset, shape),
+            Self::Subset(subset) => subset.is_whole(bytemuck::must_cast_slice(shape)),
             _ => super::is_whole_chunk(self.as_indexer(), shape),
         }
     }
@@ -390,16 +390,10 @@ impl PlanIndexer<'_> {
     /// Returns [`IndexerError`] if the indexer has an incompatible dimensionality or is out of bounds.
     pub fn validate(&self, shape: &[NonZeroU64]) -> Result<(), IndexerError> {
         match self {
-            Self::Subset(subset) if subset_is_whole(subset, shape) => Ok(()),
+            Self::Subset(subset) if subset.is_whole(bytemuck::must_cast_slice(shape)) => Ok(()),
             _ => self.as_indexer().validate(bytemuck::must_cast_slice(shape)),
         }
     }
-}
-
-/// Returns true if `subset` is all of a chunk of `shape`.
-fn subset_is_whole(subset: &ArraySubset, shape: &[NonZeroU64]) -> bool {
-    subset.start().iter().all(|&start| start == 0)
-        && subset.shape() == bytemuck::must_cast_slice::<_, u64>(shape)
 }
 
 impl From<ArraySubset> for PlanIndexer<'_> {

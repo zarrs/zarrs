@@ -18,11 +18,9 @@ use zarrs_data_type::{DataType, FillValue};
 /// Returns true if `indexer` selects every element of a chunk of `shape` in C order.
 #[must_use]
 pub fn is_whole_chunk(indexer: &dyn Indexer, shape: &[NonZeroU64]) -> bool {
-    indexer.as_array_subset().is_some_and(|subset| {
-        subset.dimensionality() == shape.len()
-            && subset.start().iter().all(|&start| start == 0)
-            && std::iter::zip(subset.shape().iter(), shape).all(|(&a, b)| a == b.get())
-    })
+    indexer
+        .as_array_subset()
+        .is_some_and(|subset| subset.is_whole(bytemuck::must_cast_slice(shape)))
 }
 
 /// The scheduling hints of a task that reads all of `source` and decodes a chunk of `shape` elements of `codec`.

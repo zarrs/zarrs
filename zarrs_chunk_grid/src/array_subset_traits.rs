@@ -89,6 +89,11 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         izip!(indices, start.iter(), shape.iter()).all(|(&i, &o, &s)| i >= o && i < o + s)
     }
 
+    /// Returns true if the region is all of an array with `array_shape`: it starts at the origin and has `array_shape`.
+    fn is_whole(&self, array_shape: &[u64]) -> bool {
+        self.start().iter().all(|&start| start == 0) && self.shape().as_ref() == array_shape
+    }
+
     /// Returns true if the region is within the bounds of an array with the given shape.
     ///
     /// An empty region references no elements, so it is in-bounds of any array with a matching
