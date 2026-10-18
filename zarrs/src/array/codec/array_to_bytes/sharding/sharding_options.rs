@@ -10,13 +10,21 @@ pub enum SubchunkWriteOrder {
     // TODO: Remove in 0.24
     Random,
     /// C order i.e., row-major
+    ///
+    /// `C` is numpy-specific - zarr-python uses "lexicographic" to refer to row-major.
+    // TODO: Remove in 0.25
     C,
+    /// "Row-major" ordering (inner-most axis is fastest varying)
+    Lexicographic,
+    /// "Column-major" ordering (outer-most axis is fastest varying)
+    Colexicographic,
     /// No order guarantee.
     ///
     /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
     /// For example in the degenerate case of one thread, you may observe (mostly) ordered chunks.
     Unordered,
-    // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
+    /// Morton (Z-order) ordering, first axis most significant.
+    Morton,
 }
 
 /// Runtime options for the [`ShardingCodec`](super::ShardingCodec).

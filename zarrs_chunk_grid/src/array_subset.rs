@@ -278,7 +278,7 @@ impl ArraySubset {
         ArraySubsetTraits::indices(self)
     }
 
-    /// Returns an iterator over the linearised indices of elements within the subset.
+    /// Returns an iterator over the (lexicographic-order) linearised indices of elements within the subset.
     ///
     /// # Errors
     /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.

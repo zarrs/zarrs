@@ -4,7 +4,7 @@ use super::IndicesIterator;
 use crate::iterators::indices_iterator::IndicesIntoIterator;
 use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
 
-/// An iterator over the linearised indices in an array subset.
+/// An iterator over the linearised (lexicographic) indices in an array subset.
 ///
 /// Iterates over the last dimension fastest (i.e. C-contiguous order).
 /// For example, consider a 4x3 array with linearised element indices

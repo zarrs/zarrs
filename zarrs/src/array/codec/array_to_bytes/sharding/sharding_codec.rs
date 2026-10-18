@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicUsize;
 
 use bytes::Bytes;
 
+use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
@@ -49,6 +50,57 @@ use zarrs_codec::{
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+
+/// Return the linearirsed (leixcographic) indices according to the requested order.
+fn subchunk_order_iterator(
+    subchunks_write_order: &SubchunkWriteOrder,
+    n_chunks: usize,
+    subchunk_grid: &RegularBoundedChunkGrid,
+) -> Vec<usize> {
+    match subchunks_write_order {
+        SubchunkWriteOrder::C
+        | SubchunkWriteOrder::Lexicographic
+        | SubchunkWriteOrder::Unordered
+        | SubchunkWriteOrder::Random => (0..n_chunks).collect_vec(),
+        SubchunkWriteOrder::Colexicographic => {
+            // Colexicographic: compare indices from the last axis to the first.
+            (0..n_chunks)
+                .sorted_unstable_by(|&a, &b| {
+                    let id_a = unravel_index(a as u64, subchunk_grid.grid_shape())
+                        .expect("inbounds subchunk");
+                    let id_b = unravel_index(b as u64, subchunk_grid.grid_shape())
+                        .expect("inbounds subchunk");
+                    id_a.iter().rev().cmp(id_b.iter().rev())
+                })
+                .collect_vec()
+        }
+        SubchunkWriteOrder::Morton => (0..n_chunks)
+            .map(|i| {
+                let indices =
+                    unravel_index(i as u64, subchunk_grid.grid_shape()).expect("inbounds subchunk");
+                (indices, i)
+            })
+            .sorted_unstable_by(|(a, _), (b, _)| morton_cmp(a, b))
+            .map(|(_, i)| i)
+            .collect_vec(),
+    }
+}
+
+/// Compare two indices in Morton (Z) order, first axis most significant: https://en.wikipedia.org/wiki/Z-order_curve#Efficiently_building_quadtrees_and_octrees
+fn morton_cmp(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
+    // `x < y && x < x ^ y` iff the highest set bit of `x` is below that of `y`.
+    let less_msb = |x: u64, y: u64| x < y && x < (x ^ y);
+    let mut dim = 0;
+    let mut msb = 0;
+    for (d, (&ai, &bi)) in a.iter().zip(b).enumerate() {
+        let diff = ai ^ bi;
+        if less_msb(msb, diff) {
+            msb = diff;
+            dim = d;
+        }
+    }
+    a[dim].cmp(&b[dim])
+}
 
 /// Return the subchunk grid of a sharded `chunk_grid`.
 ///
@@ -831,6 +883,7 @@ impl ShardingCodecBound {
     }
 
     /// Encode an inner chunk from the `decoded_value` or return None.
+    /// The chunk_index is the lexicographic index into the underlying grid.
     fn encode_inner_by_chunk_index(
         &self,
         chunk_index: usize,
@@ -914,7 +967,8 @@ impl ShardingCodecBound {
             .product::<usize>();
         let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
         // Encode the shards and update the shard index
-        let encoded_shard_offset = match self.options.subchunk_write_order() {
+        let subchunks_write_order = self.options.subchunk_write_order();
+        let encoded_shard_offset = match subchunks_write_order {
             SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
                 let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                 let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
@@ -958,9 +1012,12 @@ impl ShardingCodecBound {
                     encoded_shard_offset_atomic.load(std::sync::atomic::Ordering::Relaxed),
                 )
             }
-            SubchunkWriteOrder::C => {
-                // TODO: Replace this chunk order with the desired order i.e., a `Vec` of the ids i.e., for morton order.
-                let chunk_order = 0..n_chunks;
+            SubchunkWriteOrder::C
+            | SubchunkWriteOrder::Lexicographic
+            | SubchunkWriteOrder::Colexicographic
+            | SubchunkWriteOrder::Morton => {
+                let chunk_order =
+                    subchunk_order_iterator(&subchunks_write_order, n_chunks, &subchunk_grid);
                 let encoded_chunk_ids_and_chunks: Vec<(usize, Bytes)> = chunk_order
                     .concurrent_limit(shard_concurrent_limit)
                     .filter_map(|chunk_index: usize| {
@@ -1076,17 +1133,18 @@ impl ShardingCodecBound {
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {
-                (0..n_chunks).into_par_iter()
-            }
-        };
+        let iterator = subchunk_order_iterator(
+            &self.options.subchunk_write_order(),
+            n_chunks,
+            &subchunk_grid,
+        )
+        .into_par_iter();
         #[cfg(target_arch = "wasm32")]
-        let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {
-                0..n_chunks
-            }
-        };
+        let iterator = subchunk_order_iterator(
+            &self.options.subchunk_write_order(),
+            n_chunks,
+            &subchunk_grid,
+        );
 
         let encoded_chunks: Vec<(usize, Bytes)> = iterator
             .concurrent_limit(shard_concurrent_limit)
@@ -1141,7 +1199,10 @@ impl ShardingCodecBound {
                             }
                         });
                 }
-                SubchunkWriteOrder::C => {
+                SubchunkWriteOrder::C
+                | SubchunkWriteOrder::Lexicographic
+                | SubchunkWriteOrder::Colexicographic
+                | SubchunkWriteOrder::Morton => {
                     let mut offset = encoded_shard_offset;
                     for (i, chunk) in &encoded_chunks {
                         let chunk_len_usize = chunk.len();
