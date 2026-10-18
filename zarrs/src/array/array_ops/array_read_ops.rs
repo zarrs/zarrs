@@ -230,7 +230,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
             .ok_or(ArrayError::MissingSubchunkGrid)?;
         let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
             ArrayError::InvalidArraySubset(
-                subchunks.to_array_subset(),
+                Box::new(subchunks.to_array_subset()),
                 subchunk_grid.grid_shape().to_vec(),
             )
         })?;
