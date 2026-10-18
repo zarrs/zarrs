@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use derive_more::{Deref, From};
+use derive_more::Deref;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
@@ -18,12 +18,20 @@ use crate::{
 };
 
 /// A data type implementing [`DataTypeTraits`].
-#[derive(Debug, Clone, Deref, From)]
-pub struct DataType(Arc<dyn DataTypeTraits>);
+///
+/// The [size](DataTypeTraits::size) of the data type and whether it is optional are read on every encode and decode,
+/// so they are cached on creation rather than dispatched dynamically.
+#[derive(Debug, Clone, Deref)]
+pub struct DataType {
+    #[deref]
+    inner: Arc<dyn DataTypeTraits>,
+    size: DataTypeSize,
+    optional: bool,
+}
 
 impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
-        self.0.eq(other.0.as_ref())
+        self.inner.eq(other.inner.as_ref())
     }
 }
 
@@ -42,15 +50,28 @@ impl std::fmt::Display for DataType {
     }
 }
 
+impl From<Arc<dyn DataTypeTraits>> for DataType {
+    fn from(data_type: Arc<dyn DataTypeTraits>) -> Self {
+        let size = data_type.size();
+        let optional = data_type.as_any().is::<OptionalDataType>();
+        Self {
+            inner: data_type,
+            size,
+            optional,
+        }
+    }
+}
+
 impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
     fn from(data_type: Arc<T>) -> Self {
-        Self(data_type)
+        let data_type: Arc<dyn DataTypeTraits> = data_type;
+        data_type.into()
     }
 }
 
 impl ExtensionName for DataType {
     fn name(&self, version: ZarrVersion) -> Option<Cow<'static, str>> {
-        self.0.name(version)
+        self.inner.name(version)
     }
 }
 
@@ -175,6 +196,14 @@ impl DataType {
         self.as_ref().as_any().downcast_ref::<T>()
     }
 
+    /// Returns the size of the data type.
+    ///
+    /// This is [`DataTypeTraits::size`], cached when the data type was created.
+    #[must_use]
+    pub fn size(&self) -> DataTypeSize {
+        self.size
+    }
+
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
@@ -199,7 +228,7 @@ impl DataType {
     /// Returns true if this is an optional data type.
     #[must_use]
     pub fn is_optional(&self) -> bool {
-        self.as_ref().as_any().is::<OptionalDataType>()
+        self.optional
     }
 
     /// Returns the optional type wrapper if this is an optional data type.

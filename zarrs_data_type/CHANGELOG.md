@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
 - Look up the codec support of a data type (e.g. `DataType::codec_bytes()`) without hashing its `TypeId` with SipHash, as a `TypeId` is already a hash
+- `DataType` caches its size and whether it is optional, so `DataType::{size,fixed_size,is_fixed,is_variable,is_optional}()` do not dispatch dynamically
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
