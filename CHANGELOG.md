@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ComputeResources` (re-exported from `zarrs_codec`), the compute target of `Resources`, which is passed to codecs
 
 ### Changed
+- The bound `bytes` codec looks up the `bytes` codec support of its data type once, rather than on each encode and decode
+- Re-export `<Codec>DataTypeSupport` alongside `<Codec>DataTypePlugin` for the `bitround`, `bytes`, `cast_value`, `fixedscaleoffset`, `packbits`, `pcodec` and `zfp` codecs
 - Encode chunk keys in one allocation, rather than allocating per index and growing the key
 - **Breaking**: `ArrayIndices` holds up to four indices inline (see `zarrs_chunk_grid`), so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
   - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension

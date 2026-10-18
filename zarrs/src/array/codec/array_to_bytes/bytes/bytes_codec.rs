@@ -5,7 +5,7 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeSupport, BytesDataTypeTraits,
     Endianness,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
@@ -41,7 +41,9 @@ struct BytesCodecBound {
     endian: Option<Endianness>,
     /// Whether decoding is the identity on the encoded bytes.
     passthrough: bool,
-    data_type: DataType,
+    /// Whether elements are decoded efficiently in place, and the endianness is valid for decoding in place.
+    decode_in_place: bool,
+    support: BytesDataTypeSupport,
     fill_value: FillValue,
 }
 
@@ -118,11 +120,18 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        let passthrough = data_type.codec_bytes()?.is_decode_passthrough(self.endian);
+        let support = BytesDataTypeSupport::new(&data_type)?;
+        let codec = support.get();
+        let passthrough = codec.is_decode_passthrough(self.endian);
+        // `decode_in_place` checks the endianness even for empty bytes
+        let decode_in_place = !passthrough
+            && codec.is_decode_in_place_efficient()
+            && codec.decode_in_place(&mut [], self.endian).is_ok();
         Ok(Arc::new(BytesCodecBound {
             endian: self.endian,
             passthrough,
-            data_type,
+            decode_in_place,
+            support,
             fill_value,
         }))
     }
@@ -130,9 +139,9 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
 
 impl BytesCodecBound {
     fn decoded_size(&self, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
-        let data_type_size = self.data_type.fixed_size().ok_or_else(|| {
+        let data_type_size = self.support.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(
-                self.data_type.clone(),
+                self.support.data_type().clone(),
                 BytesCodec::aliases_v3().default_name.to_string(),
             )
         })?;
@@ -155,22 +164,16 @@ impl BytesCodecBound {
 
     /// How encoded elements are decoded as they are copied into an output.
     ///
-    /// Returns [`None`] if the elements are not decoded efficiently as they are copied.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the data type is unsupported or the endianness is invalid, so the error is returned
-    /// before anything is written to the output.
-    fn in_place(&self) -> Result<Option<InPlace<'_>>, CodecError> {
+    /// Returns [`None`] if the elements are not decoded efficiently as they are copied, or the endianness is invalid
+    /// (so decoding fails before anything is written to the output).
+    fn in_place(&self) -> Option<InPlace<'_>> {
         if self.passthrough {
-            return Ok(Some(InPlace::Copy));
+            Some(InPlace::Copy)
+        } else if self.decode_in_place {
+            Some(InPlace::Decode(self.support.get(), self.endian))
+        } else {
+            None
         }
-        let codec = self.data_type.codec_bytes()?;
-        if !codec.is_decode_in_place_efficient() {
-            return Ok(None);
-        }
-        // `decode_in_place` checks the endianness even for empty bytes
-        codec.decode_in_place(&mut [], self.endian)?;
-        Ok(Some(InPlace::Decode(codec, self.endian)))
     }
 
     /// Plan the decoding of a subset of a chunk in memory into target views, which decodes it as it is copied.
@@ -196,7 +199,7 @@ impl BytesCodecBound {
                 .as_indexer()
                 .as_array_subset()
                 .expect("an array subset");
-            let in_place = self.in_place()?.expect("decoded in place");
+            let in_place = self.in_place().expect("decoded in place");
             let shape = bytemuck::must_cast_slice(&shape);
             views.with_target(|target| {
                 let view = fixed_view(target)?;
@@ -253,7 +256,7 @@ impl ArrayCodecTraits for BytesCodecBound {
     }
 
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.support.data_type()
     }
 
     fn fill_value(&self) -> &FillValue {
@@ -276,10 +279,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = self.decoded_len(shape)?;
-        bytes.validate(num_elements, &self.data_type)?;
+        bytes.validate(num_elements, self.support.data_type())?;
         let bytes = bytes.into_fixed()?;
 
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.support.get().encode(bytes, self.endian)?)
     }
 
     fn decode<'a>(
@@ -293,11 +296,11 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         let bytes = if self.passthrough {
             bytes
         } else {
-            self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+            self.support.get().decode(bytes, self.endian)?
         };
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
-        bytes_decoded.validate(num_elements, &self.data_type)?;
+        bytes_decoded.validate(num_elements, self.support.data_type())?;
 
         Ok(bytes_decoded)
     }
@@ -311,33 +314,28 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         match output_target {
-            ArrayBytesDecodeIntoTarget::Fixed(output) if self.data_type.is_fixed() => {
+            ArrayBytesDecodeIntoTarget::Fixed(output) if self.support.data_type().is_fixed() => {
                 let (num_elements, expected_len) = self.decoded_len(shape)?;
                 if output.num_elements() != num_elements {
                     return Err("the decoded element count does not match the output target".into());
                 }
-                let codec = self.data_type.codec_bytes()?;
-                let passthrough = self.passthrough;
+                let in_place = self.in_place();
                 let input = match input {
                     ArrayBytesDecodeIntoInput::Deferred(source)
                         if source.is_decode_into_efficient()
-                            && (passthrough || codec.is_decode_in_place_efficient())
+                            && in_place.is_some()
                             && source.decoded_representation()
                                 == &BytesRepresentation::FixedSize(expected_len as u64) =>
                     {
                         if let Some(bytes) = output.as_mut_slice()
                             && bytes.len() == expected_len
                         {
-                            if !passthrough {
-                                // Validate endianness before the producer writes anything.
-                                // `decode_in_place` must check it even for empty bytes.
-                                codec.decode_in_place(&mut [], self.endian)?;
-                            }
                             source.decode_into(bytes, options, resources)?;
-                            return if passthrough {
-                                Ok(())
-                            } else {
-                                Ok(codec.decode_in_place(bytes, self.endian)?)
+                            return match in_place {
+                                Some(InPlace::Decode(codec, endian)) => {
+                                    Ok(codec.decode_in_place(bytes, endian)?)
+                                }
+                                _ => Ok(()),
                             };
                         }
                         ArrayBytesDecodeIntoInput::Deferred(source)
@@ -351,15 +349,15 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 if bytes.len() != expected_len {
                     return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
                 }
-                if passthrough {
-                    Ok(output.copy_from_slice(&bytes)?)
-                } else if codec.is_decode_in_place_efficient() {
-                    // Validate endianness before anything is written to the output.
-                    codec.decode_in_place(&mut [], self.endian)?;
-                    output.try_copy_from_slice_with(&bytes, decode_copy(codec, self.endian))
-                } else {
-                    let decoded = codec.decode(bytes, self.endian)?;
-                    Ok(output.copy_from_slice(&decoded)?)
+                match in_place {
+                    Some(InPlace::Copy) => Ok(output.copy_from_slice(&bytes)?),
+                    Some(InPlace::Decode(codec, endian)) => {
+                        output.try_copy_from_slice_with(&bytes, decode_copy(codec, endian))
+                    }
+                    None => {
+                        let decoded = self.support.get().decode(bytes, self.endian)?;
+                        Ok(output.copy_from_slice(&decoded)?)
+                    }
                 }
             }
             target @ (ArrayBytesDecodeIntoTarget::Fixed(_)
@@ -390,7 +388,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
+        let Some(data_type_size) = self.support.data_type().fixed_size() else {
             return plan_decode_whole(self, source, shape, request, options);
         };
         if request.indexer.is_whole(shape) {
@@ -408,7 +406,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         if indexer.as_array_subset().is_some()
             && matches!(request.target, TaskTarget::Views(_))
             && matches!(source.memory_slice(), Some(Ok(_)))
-            && self.in_place()?.is_some()
+            && self.in_place().is_some()
         {
             return self.plan_decode_memory_subset(source, shape, request);
         }
@@ -427,7 +425,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             }
             // Several reads are decoded directly into the target views as they are copied
             if reads.len() > 1
-                && let Some(in_place) = self.in_place()?
+                && let Some(in_place) = self.in_place()
                 && let TaskTarget::Views(views) = request.target
             {
                 let reads = reads.iter().flatten().map(|read| &**read);
@@ -500,13 +498,13 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     ) -> Result<Task<'a>, CodecError> {
         // A partial write is cheaper than a whole read-modify-write even if the storage emulates it, as the bytes
         // codec writes elements in place
-        let Some(data_type_size) = self.data_type.fixed_size() else {
+        let Some(data_type_size) = self.support.data_type().fixed_size() else {
             return Ok(plan_partial_encode_whole(
                 self, key, shape, indexer, bytes, options,
             ));
         };
         indexer.validate(shape)?;
-        bytes.validate(indexer.as_indexer().len(), &self.data_type)?;
+        bytes.validate(indexer.as_indexer().len(), self.support.data_type())?;
         let (_, chunk_size) = self.decoded_len(shape)?;
         let hint = encode_hint(&bytes);
         let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
@@ -516,8 +514,8 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         let update = move |exists: bool, ctx: &ComputeCtx| {
             let op = if exists {
                 let bytes = self
-                    .data_type
-                    .codec_bytes()?
+                    .support
+                    .get()
                     .encode(bytes.into_fixed()?, self.endian)?;
                 let mut offset_in = 0;
                 let offset_values = indexer

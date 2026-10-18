@@ -57,7 +57,7 @@ impl CodecTraitsV3 for PackBitsCodec {
 
 // Re-export extension trait from zarrs_data_type
 pub use zarrs_data_type::codec_traits::packbits::{
-    PackBitsDataTypeExt, PackBitsDataTypePlugin, PackBitsDataTypeTraits,
+    PackBitsDataTypeExt, PackBitsDataTypePlugin, PackBitsDataTypeSupport, PackBitsDataTypeTraits,
     impl_pack_bits_data_type_traits,
 };
 
