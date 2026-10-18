@@ -15,10 +15,7 @@ use zarrs_codec::plan::{
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::{
-    Bytes, ReadableWritableStorage, ReadableWritableStorageTraits, StorageError, StorageHandle,
-    WritableStorageTraits,
-};
+use zarrs_storage::{Bytes, ReadableWritableStorageTraits, StorageError, WritableStorageTraits};
 
 use super::super::codec::CodecChainBound;
 use super::OpStorage;
@@ -229,11 +226,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let storage = if self.storage_transformers().is_empty() {
             OpStorage::Array(&*self.storage)
         } else {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            OpStorage::Transformed(
-                self.storage_transformers()
-                    .create_writable_transformer(storage_handle)?,
-            )
+            OpStorage::Transformed(self.writable_storage()?)
         };
         Ok(ChunkWriteIo { storage, keys })
     }
@@ -306,14 +299,6 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             storage: OpStorage::Transformed(self.readable_writable_storage()?),
             keys,
         })
-    }
-
-    /// The storage of the array, transformed by its storage transformers.
-    fn readable_writable_storage(&self) -> Result<ReadableWritableStorage, StorageError> {
-        self.storage_transformers()
-            .create_readable_writable_transformer(Arc::new(StorageHandle::new(
-                self.storage.clone(),
-            )))
     }
 
     /// Store `encoded` at the subchunk at `subchunk_indices` of the subchunk grid at `level`, or erase the subchunk if
@@ -406,16 +391,13 @@ fn is_shared(bytes: &ArrayBytes<'_>) -> bool {
 #[cfg(feature = "async")]
 pub(super) mod async_planned {
     use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
-    use zarrs_storage::{
-        AsyncReadableWritableStorage, AsyncReadableWritableStorageTraits,
-        AsyncWritableStorageTraits,
-    };
+    use zarrs_storage::{AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits};
 
     use super::super::array_read_ops_planned::async_read_ranges;
     use super::{
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange, Bytes,
         ChunkKeys, ChunkPlanner, CodecOptions, Indexer, OpStorage, PlanIndexer, ReadBytes,
-        Resources, SourceKey, StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks,
+        Resources, SourceKey, StorageError, WriteOp, is_shared, plan_erase_chunks,
         plan_store_subset,
     };
 
@@ -517,12 +499,7 @@ pub(super) mod async_planned {
             let storage = if self.storage_transformers().is_empty() {
                 OpStorage::Array(&*self.storage)
             } else {
-                let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-                OpStorage::Transformed(
-                    self.storage_transformers()
-                        .create_async_writable_transformer(storage_handle)
-                        .await?,
-                )
+                OpStorage::Transformed(self.async_writable_storage().await?)
             };
             Ok(AsyncChunkWriteIo { storage, keys })
         }
@@ -636,16 +613,6 @@ pub(super) mod async_planned {
                 storage: OpStorage::Transformed(self.async_readable_writable_storage().await?),
                 keys,
             })
-        }
-
-        /// The storage of the array, transformed by its storage transformers.
-        async fn async_readable_writable_storage(
-            &self,
-        ) -> Result<AsyncReadableWritableStorage, StorageError> {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            self.storage_transformers()
-                .create_async_readable_writable_transformer(storage_handle)
-                .await
         }
 
         /// Store `encoded` at the subchunk at `subchunk_indices` of the subchunk grid at `level`, or erase the

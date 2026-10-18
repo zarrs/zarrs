@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::{AsyncArrayReadOps, *};
 use zarrs_codec::plan::PlanIndexer;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, CodecError};
-use zarrs_storage::{Bytes, StorageHandle};
+use zarrs_storage::Bytes;
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -90,13 +90,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Bytes>, ArrayError> {
-        let options = self.codec_options();
-        let _ = options;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
 
         Ok(storage_transformer
             .get(&self.chunk_key(chunk_indices)?)

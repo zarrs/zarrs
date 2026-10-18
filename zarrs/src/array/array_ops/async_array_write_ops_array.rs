@@ -1,5 +1,4 @@
 use inherent::inherent;
-use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
 use super::{AsyncArrayWriteOps, *};
@@ -14,11 +13,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     for Array<TStorage>
 {
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_writable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_writable_storage().await?;
 
         // Get the metadata with options applied and store
         let metadata = self.metadata_opt();
@@ -150,11 +145,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     }
 
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_writable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_writable_storage().await?;
         Ok(storage_transformer
             .erase(&self.chunk_key(chunk_indices)?)
             .await?)
@@ -180,11 +171,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_writable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_writable_storage().await?;
         storage_transformer
             .set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)
             .await?;

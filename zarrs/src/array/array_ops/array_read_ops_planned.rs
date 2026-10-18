@@ -24,9 +24,7 @@ use zarrs_codec::{
 };
 use zarrs_data_type::DataType;
 use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::{
-    Bytes, ReadableStorage, ReadableStorageTraits, StorageError, StorageHandle, StoreKey,
-};
+use zarrs_storage::{Bytes, ReadableStorageTraits, StorageError, StoreKey};
 
 use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
@@ -640,12 +638,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         })
     }
 
-    /// The storage of the array, transformed by its storage transformers.
-    fn readable_storage(&self) -> Result<ReadableStorage, StorageError> {
-        self.storage_transformers()
-            .create_readable_transformer(Arc::new(StorageHandle::new(self.storage.clone())))
-    }
-
     /// Retrieve the encoded chunks selected by `chunks` (validated) with a planned read.
     pub(crate) fn retrieve_encoded_chunks_planned(
         &self,
@@ -889,14 +881,14 @@ pub(super) fn subset_chunk_shape(chunk_subset: &ArraySubset) -> Result<&[NonZero
 #[cfg(feature = "async")]
 mod async_planned {
     use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
-    use zarrs_storage::{AsyncReadableStorage, AsyncReadableStorageTraits};
+    use zarrs_storage::AsyncReadableStorageTraits;
 
     use super::{
         Array, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayError, ArraySubset, ArraySubsetTraits,
         ByteRange, Bytes, ChunkKeys, CodecOptions, EncodedSubchunk, Indexer, NonZeroU64, OpStorage,
-        PlanIndexer, ReadBytes, Resources, SmallVec, SourceKey, StorageError, StorageHandle,
-        StoreKey, SubsetPlan, TaskTarget, array_value, check_target_len, chunk_if_exists,
-        encoded_chunks, encoded_subchunk, plan_encoded_chunks, smallvec, whole_views,
+        PlanIndexer, ReadBytes, Resources, SmallVec, SourceKey, StorageError, StoreKey, SubsetPlan,
+        TaskTarget, array_value, check_target_len, chunk_if_exists, encoded_chunks,
+        encoded_subchunk, plan_encoded_chunks, smallvec, whole_views,
     };
 
     /// The asynchronous I/O backend of the chunks of an array.
@@ -992,14 +984,6 @@ mod async_planned {
                 storage: OpStorage::Transformed(self.async_readable_storage().await?),
                 keys,
             })
-        }
-
-        /// The storage of the array, transformed by its storage transformers.
-        async fn async_readable_storage(&self) -> Result<AsyncReadableStorage, StorageError> {
-            let storage_handle = std::sync::Arc::new(StorageHandle::new(self.storage.clone()));
-            self.storage_transformers()
-                .create_async_readable_transformer(storage_handle)
-                .await
         }
 
         /// Retrieve the encoded chunks selected by `chunks` (validated) with a planned read.
