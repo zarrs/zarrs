@@ -348,7 +348,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_shape_u64.to_vec(),
                 ));
             }
-            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
+            if chunk_subset.is_whole(chunk_shape_u64) {
                 return self
                     .async_retrieve_chunk_with_options(chunk_indices, options)
                     .await;
@@ -388,7 +388,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_shape_u64.to_vec(),
                 ));
             }
-            if super::subset_is_whole_chunk(chunk_subset, chunk_shape_u64) {
+            if chunk_subset.is_whole(chunk_shape_u64) {
                 return self
                     .async_retrieve_chunk_into_with_options(chunk_indices, output_target, options)
                     .await;
