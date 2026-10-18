@@ -360,9 +360,8 @@ impl<'a> ArrayBytes<'a> {
                 Ok(array_bytes)
             }
             ArrayBytes::Fixed(bytes) => {
-                let byte_ranges = indexer
-                    .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
+                let bytes =
+                    extract_elements(bytes, indexer, array_shape, data_type.fixed_size().unwrap())?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
             ArrayBytes::Optional(optional_bytes) => {
@@ -381,13 +380,36 @@ impl<'a> ArrayBytes<'a> {
                 )?;
 
                 // Extract subset of the mask (1 byte per element)
-                let byte_ranges = indexer.iter_contiguous_byte_ranges(array_shape, 1)?; // mask is 1 byte per element
-                let subset_mask = extract_byte_ranges_concat(optional_bytes.mask(), byte_ranges)?;
+                let subset_mask = extract_elements(optional_bytes.mask(), indexer, array_shape, 1)?;
 
                 Ok(subset_data.with_optional_mask(subset_mask))
             }
         }
     }
+}
+
+/// The bytes of the elements of `indexer` in `bytes`, an array of `array_shape` with elements of `element_size` bytes.
+fn extract_elements(
+    bytes: &[u8],
+    indexer: &dyn Indexer,
+    array_shape: &[u64],
+    element_size: usize,
+) -> Result<Vec<u8>, CodecError> {
+    let element_size = element_size as u64;
+    let bytes = if let Some(subset) = indexer.as_array_subset() {
+        // The contiguous runs of an array subset are iterated without boxing an iterator
+        let runs = subset.contiguous_linearised_indices(array_shape)?;
+        extract_byte_ranges_concat(
+            bytes,
+            runs.iter()
+                .map(|(index, elements)| index * element_size..(index + elements) * element_size),
+        )?
+    } else {
+        let byte_ranges = indexer
+            .iter_contiguous_byte_ranges(array_shape, usize::try_from(element_size).unwrap())?;
+        extract_byte_ranges_concat(bytes, byte_ranges)?
+    };
+    Ok(bytes)
 }
 
 /// Validate fixed length array bytes for a given array size.
