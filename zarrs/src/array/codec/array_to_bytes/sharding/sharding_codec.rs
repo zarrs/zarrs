@@ -592,6 +592,27 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         self.plan_locate_subchunk_in_shard(source, shape, coordinates, options)
     }
 
+    fn plan_store_encoded_subchunk(
+        self: Arc<Self>,
+        key: zarrs_codec::plan::SourceKey,
+        shape: &[NonZeroU64],
+        level: usize,
+        coordinates: &[u64],
+        encoded: Option<zarrs_storage::Bytes>,
+        set_partial: bool,
+        options: &CodecOptions,
+    ) -> Result<zarrs_codec::plan::Task<'static>, CodecError> {
+        self.plan_store_encoded_subchunk_in_shard(
+            key,
+            shape,
+            level,
+            coordinates,
+            encoded,
+            set_partial,
+            options,
+        )
+    }
+
     fn prepare_decode(
         self: Arc<Self>,
         source: zarrs_codec::plan::ByteSource<'static>,

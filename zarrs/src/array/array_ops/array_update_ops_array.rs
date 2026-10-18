@@ -1,3 +1,4 @@
+use crate::array::CowBytes;
 use inherent::inherent;
 use std::sync::Arc;
 
@@ -109,6 +110,56 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         } else {
             Ok(false)
         }
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.store_encoded_subchunk_planned(
+            0,
+            subchunk_indices,
+            Some(encoded.into_bytes()),
+            resources,
+        )
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.store_encoded_subchunk_planned(
+            level,
+            subchunk_indices,
+            Some(encoded.into_bytes()),
+            resources,
+        )
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.store_encoded_subchunk_planned(0, subchunk_indices, None, resources)
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.store_encoded_subchunk_planned(level, subchunk_indices, None, resources)
     }
 
     pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {

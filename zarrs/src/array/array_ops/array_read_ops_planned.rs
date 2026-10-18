@@ -382,6 +382,26 @@ impl<TStorage: ?Sized> Array<TStorage> {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(Task<'static>, ChunkKeys), ArrayError> {
+        let (chunk_indices, coordinates) =
+            self.encoded_subchunk_address(level, subchunk_indices)?;
+        let task = plan_retrieve_encoded_subchunk(
+            self.codecs_bound().into_dyn(),
+            ByteSource::external(SourceKey(0)),
+            &self.chunk_shape(&chunk_indices)?,
+            level,
+            &coordinates,
+            self.codec_options(),
+        )?;
+        Ok((task, self.one_key(&chunk_indices)?))
+    }
+
+    /// The chunk of the subchunk at `subchunk_indices` of the subchunk grid at `level`, and the coordinates of the
+    /// first element of the subchunk in the chunk.
+    pub(super) fn encoded_subchunk_address(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(ArrayIndices, ArrayIndices), ArrayError> {
         let subchunk_grid = self
             .subchunk_grid_at_level(level)
             .as_chunk_grid()
@@ -403,15 +423,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .chunk_grid()
             .chunk_element_indices(&subchunk_start)?
             .ok_or_else(invalid)?;
-        let task = plan_retrieve_encoded_subchunk(
-            self.codecs_bound().into_dyn(),
-            ByteSource::external(SourceKey(0)),
-            &self.chunk_shape(&chunk_indices)?,
-            level,
-            &coordinates,
-            self.codec_options(),
-        )?;
-        Ok((task, self.one_key(&chunk_indices)?))
+        Ok((chunk_indices, coordinates))
     }
 
     pub(super) fn one_key(&self, chunk_indices: &[u64]) -> Result<ChunkKeys, ArrayError> {

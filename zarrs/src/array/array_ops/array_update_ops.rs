@@ -1,4 +1,5 @@
 use super::*;
+use crate::array::CowBytes;
 use zarrs_codec::ArrayPartialEncoderTraits;
 
 /// Synchronous array read/write update operations.
@@ -69,6 +70,87 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         chunk_indices: &[u64],
         resources: &Resources,
     ) -> Result<bool, ArrayError>;
+
+    /// Store `encoded`, the encoded bytes of the subchunk at `subchunk_indices` of the level zero
+    /// [`subchunk_grid`](ArrayOps::subchunk_grid).
+    ///
+    /// See [`store_encoded_subchunk_at_level`](ArrayUpdateOps::store_encoded_subchunk_at_level).
+    ///
+    /// # Safety
+    /// See [`store_encoded_subchunk_at_level`](ArrayUpdateOps::store_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`store_encoded_subchunk_at_level`](ArrayUpdateOps::store_encoded_subchunk_at_level).
+    unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        // SAFETY: The caller upholds the requirements of `store_encoded_subchunk_at_level`.
+        unsafe { self.store_encoded_subchunk_at_level(0, subchunk_indices, encoded, resources) }
+    }
+
+    /// Store `encoded`, the encoded bytes of the subchunk at `subchunk_indices` of the
+    /// [`subchunk_grid_at_level`](ArrayOps::subchunk_grid_at_level) `level`.
+    ///
+    /// The subchunk is addressed in the decoded domain of the array, like
+    /// [`retrieve_encoded_subchunk_at_level`](ArrayReadOps::retrieve_encoded_subchunk_at_level), and its bytes are
+    /// stored verbatim. The indexes leading to the subchunk are read, and the subchunk is appended to its chunk with
+    /// the index rewritten (e.g. of a shard). The chunk is instead read and written whole if the store does not support
+    /// partial writes or a bytes-to-bytes codec encodes the entire chunk (e.g. a checksum), and a subchunk below level
+    /// zero is stored in its enclosing subchunks, which are read and rewritten.
+    ///
+    /// Concurrent updates of the same chunk require external synchronisation.
+    ///
+    /// # Safety
+    /// `encoded` must be encoded by the subchunk codec at `level` ([`ArrayOps::subchunk_codecs_at_level`]) with the
+    /// encoded shape of the subchunk, data type and fill value (see [`EncodedSubchunk`](zarrs_codec::EncodedSubchunk)),
+    /// such as an encoded subchunk retrieved from an array with the same codecs. The bytes are not validated.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid, the subchunk indices
+    /// are invalid, the codecs do not support storing encoded subchunks at `level`, or there is a codec or underlying
+    /// store error.
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>;
+
+    /// Erase the subchunk at `subchunk_indices` of the level zero [`subchunk_grid`](ArrayOps::subchunk_grid).
+    ///
+    /// See [`erase_subchunk_at_level`](ArrayUpdateOps::erase_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`erase_subchunk_at_level`](ArrayUpdateOps::erase_subchunk_at_level).
+    fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.erase_subchunk_at_level(0, subchunk_indices, resources)
+    }
+
+    /// Erase the subchunk at `subchunk_indices` of the [`subchunk_grid_at_level`](ArrayOps::subchunk_grid_at_level)
+    /// `level`, so its elements are the fill value.
+    ///
+    /// The subchunk is removed from the index of its chunk as in
+    /// [`store_encoded_subchunk_at_level`](ArrayUpdateOps::store_encoded_subchunk_at_level), and a chunk with no
+    /// subchunks left is erased. Erasing a subchunk that is not stored succeeds.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the selected level does not have a globally resolvable grid, the subchunk indices
+    /// are invalid, the codecs do not support storing encoded subchunks at `level`, or there is a codec or underlying
+    /// store error.
+    fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError>;
 
     /// Return a read-only instantiation of the array.
     fn readable(&self) -> Array<dyn ReadableStorageTraits>;

@@ -81,6 +81,42 @@ pub fn partial_encode_memory(
     Ok(())
 }
 
+/// Store `encoded_subchunk`, the encoded subchunk at `level` that contains the element at `coordinates` of the
+/// encoded chunk `encoded` of `shape` with `codec`, or erase the subchunk if [`None`].
+///
+/// If `encoded` is [`None`], the chunk does not exist. After the update, `encoded` is [`None`] if the chunk was erased.
+/// See [`ArrayToBytesCodecTraits::plan_store_encoded_subchunk`].
+///
+/// # Errors
+/// Returns a [`CodecError`] if the codec does not support storing encoded subchunks at `level`, `coordinates` are out
+/// of bounds of the chunk, or the codec fails.
+#[allow(clippy::too_many_arguments)]
+pub fn store_encoded_subchunk_memory(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    encoded: &mut Option<Vec<u8>>,
+    shape: &[NonZeroU64],
+    level: usize,
+    coordinates: &[u64],
+    encoded_subchunk: Option<Bytes>,
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<(), CodecError> {
+    let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
+    let task = codec.plan_store_encoded_subchunk(
+        SourceKey(0),
+        shape,
+        level,
+        coordinates,
+        encoded_subchunk,
+        true,
+        options,
+    )?;
+    let result = super::drive_blocking_one(task, &io, resources);
+    *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
+    result?;
+    Ok(())
+}
+
 /// The backend of a drive with one value at [`SourceKey`] 0 in memory, if it exists.
 #[derive(Default)]
 struct MemoryValueIo(Mutex<Option<Bytes>>);

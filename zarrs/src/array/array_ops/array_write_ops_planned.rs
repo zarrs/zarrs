@@ -16,7 +16,7 @@ use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{
-    ReadableWritableStorage, ReadableWritableStorageTraits, StorageError, StorageHandle,
+    Bytes, ReadableWritableStorage, ReadableWritableStorageTraits, StorageError, StorageHandle,
     WritableStorageTraits,
 };
 
@@ -316,6 +316,31 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             )))
     }
 
+    /// Store `encoded` at the subchunk at `subchunk_indices` of the subchunk grid at `level`, or erase the subchunk if
+    /// [`None`], with a planned write.
+    pub(crate) fn store_encoded_subchunk_planned(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: Option<Bytes>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, coordinates) =
+            self.encoded_subchunk_address(level, subchunk_indices)?;
+        let task = self.codecs_bound().clone().plan_store_encoded_subchunk(
+            SourceKey(0),
+            &self.chunk_shape(&chunk_indices)?,
+            level,
+            &coordinates,
+            encoded,
+            self.storage.supports_set_partial(),
+            self.codec_options(),
+        )?;
+        let io = self.chunk_read_write_io(self.one_key(&chunk_indices)?)?;
+        drive_blocking_one(task, &io, resources)?;
+        Ok(())
+    }
+
     /// Store `subset_bytes` (validated), the elements of `array_subset`, which intersects the chunks of `chunks`, with a
     /// planned write.
     ///
@@ -388,7 +413,7 @@ pub(super) mod async_planned {
 
     use super::super::array_read_ops_planned::async_read_ranges;
     use super::{
-        Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange,
+        Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange, Bytes,
         ChunkKeys, ChunkPlanner, CodecOptions, Indexer, OpStorage, PlanIndexer, ReadBytes,
         Resources, SourceKey, StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks,
         plan_store_subset,
@@ -621,6 +646,33 @@ pub(super) mod async_planned {
             self.storage_transformers()
                 .create_async_readable_writable_transformer(storage_handle)
                 .await
+        }
+
+        /// Store `encoded` at the subchunk at `subchunk_indices` of the subchunk grid at `level`, or erase the
+        /// subchunk if [`None`], with a planned write.
+        pub(crate) async fn async_store_encoded_subchunk_planned(
+            &self,
+            level: usize,
+            subchunk_indices: &[u64],
+            encoded: Option<Bytes>,
+            resources: &Resources,
+        ) -> Result<(), ArrayError> {
+            let (chunk_indices, coordinates) =
+                self.encoded_subchunk_address(level, subchunk_indices)?;
+            let task = self.codecs_bound().clone().plan_store_encoded_subchunk(
+                SourceKey(0),
+                &self.chunk_shape(&chunk_indices)?,
+                level,
+                &coordinates,
+                encoded,
+                self.storage.supports_set_partial(),
+                self.codec_options(),
+            )?;
+            let io = self
+                .async_chunk_read_write_io(self.one_key(&chunk_indices)?)
+                .await?;
+            drive_async_offload_one(task, &io, resources).await?;
+            Ok(())
         }
 
         /// Store `subset_bytes` (validated), the elements of `array_subset`, which intersects the chunks of `chunks`,

@@ -1,3 +1,4 @@
+use crate::array::CowBytes;
 use inherent::inherent;
 use std::sync::Arc;
 
@@ -162,6 +163,69 @@ where
             self.cache().invalidate_chunk(chunk_indices).await;
         }
         Ok(compacted)
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        // SAFETY: The caller upholds the requirements of `store_encoded_subchunk_at_level`.
+        unsafe {
+            self.async_store_encoded_subchunk_at_level(0, subchunk_indices, encoded, resources)
+                .await
+        }
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) = self
+            .array()
+            .encoded_subchunk_address(level, subchunk_indices)?;
+        // SAFETY: The caller upholds the requirements of `store_encoded_subchunk_at_level`.
+        let result = unsafe {
+            self.array()
+                .async_store_encoded_subchunk_at_level(level, subchunk_indices, encoded, resources)
+                .await
+        };
+        self.cache().invalidate_chunk(&chunk_indices).await;
+        result
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.async_erase_subchunk_at_level(0, subchunk_indices, resources)
+            .await
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) = self
+            .array()
+            .encoded_subchunk_address(level, subchunk_indices)?;
+        let result = self
+            .array()
+            .async_erase_subchunk_at_level(level, subchunk_indices, resources)
+            .await;
+        self.cache().invalidate_chunk(&chunk_indices).await;
+        result
     }
 
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {

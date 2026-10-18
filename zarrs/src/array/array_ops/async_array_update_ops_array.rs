@@ -1,3 +1,4 @@
+use crate::array::CowBytes;
 use inherent::inherent;
 use std::sync::Arc;
 
@@ -109,6 +110,58 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             Ok(false)
         }
     }
+    #[allow(clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.async_store_encoded_subchunk_planned(
+            0,
+            subchunk_indices,
+            Some(encoded.into_bytes()),
+            resources,
+        )
+        .await
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.async_store_encoded_subchunk_planned(
+            level,
+            subchunk_indices,
+            Some(encoded.into_bytes()),
+            resources,
+        )
+        .await
+    }
+
+    pub async fn async_erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.async_store_encoded_subchunk_planned(0, subchunk_indices, None, resources)
+            .await
+    }
+
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.async_store_encoded_subchunk_planned(level, subchunk_indices, None, resources)
+            .await
+    }
+
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }

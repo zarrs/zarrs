@@ -29,7 +29,7 @@ use super::{
 use crate::array::array_bytes_internal::{merge_chunks, optional_innermost};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, CodecChainBound, Indexer,
+    ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape, CodecChainBound, Indexer,
     ravel_indices, subset_indices_at,
 };
 use smallvec::SmallVec;
@@ -110,27 +110,11 @@ impl ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<Task<'static>, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
-        let out_of_bounds = || {
-            CodecError::Other(format!(
-                "coordinates {coordinates:?} are out of bounds of a shard with shape {shape:?}"
-            ))
-        };
-        let subchunk_indices = subchunk_grid
-            .chunk_indices(coordinates)?
-            .ok_or_else(out_of_bounds)?;
-        let subchunk_subset = subchunk_grid
-            .subset(&subchunk_indices)?
-            .ok_or_else(out_of_bounds)?;
-        let subchunk_index = ravel_indices(
-            &subchunk_indices,
-            bytemuck::must_cast_slice(&chunks_per_shard),
-        )
-        .ok_or_else(out_of_bounds)?;
-        let subchunk_index = usize::try_from(subchunk_index).unwrap();
-        let coordinates: ArrayIndices = std::iter::zip(coordinates, subchunk_subset.start())
-            .map(|(coordinate, start)| coordinate - start)
-            .collect();
+        let ShardSubchunk {
+            index: subchunk_index,
+            shape: subchunk_shape,
+            coordinates,
+        } = self.subchunk_at(shape, coordinates)?;
         let IndexRead {
             shape: index_shape,
             range: index_byte_range,
@@ -146,7 +130,7 @@ impl ShardingCodecBound {
                         .map(|(offset, size)| {
                             Ok::<_, CodecError>(SubchunkLocation {
                                 source: source.interval(offset, size)?,
-                                shape: subset_shape(&subchunk_subset).to_vec(),
+                                shape: subchunk_shape.clone(),
                                 coordinates: coordinates.clone(),
                             })
                         })
@@ -158,6 +142,39 @@ impl ShardingCodecBound {
             })
             .with_hint(index_hint),
         )
+    }
+
+    /// The subchunk of a shard of `shape` that contains the element at `coordinates`.
+    pub(super) fn subchunk_at(
+        &self,
+        shape: &[NonZeroU64],
+        coordinates: &[u64],
+    ) -> Result<ShardSubchunk, CodecError> {
+        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
+        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let out_of_bounds = || {
+            CodecError::Other(format!(
+                "coordinates {coordinates:?} are out of bounds of a shard with shape {shape:?}"
+            ))
+        };
+        let subchunk_indices = subchunk_grid
+            .chunk_indices(coordinates)?
+            .ok_or_else(out_of_bounds)?;
+        let subchunk_subset = subchunk_grid
+            .subset(&subchunk_indices)?
+            .ok_or_else(out_of_bounds)?;
+        let index = ravel_indices(
+            &subchunk_indices,
+            bytemuck::must_cast_slice(&chunks_per_shard),
+        )
+        .ok_or_else(out_of_bounds)?;
+        Ok(ShardSubchunk {
+            index: usize::try_from(index).unwrap(),
+            shape: subset_shape(&subchunk_subset).to_vec(),
+            coordinates: std::iter::zip(coordinates, subchunk_subset.start())
+                .map(|(coordinate, start)| coordinate - start)
+                .collect(),
+        })
     }
 
     /// Prepare a decoder of the shard `source`, which reads and decodes the shard index once.
@@ -910,6 +927,16 @@ fn decode_index(
         ctx.resources(),
     )
     .map_err(|err| CodecError::Other(format!("the shard index could not be decoded: {err}")))
+}
+
+/// The subchunk of a shard that contains an element.
+pub(super) struct ShardSubchunk {
+    /// The index of the subchunk in the shard (in C order).
+    pub(super) index: usize,
+    /// The shape of the subchunk.
+    pub(super) shape: ChunkShape,
+    /// The coordinates of the element in the subchunk.
+    pub(super) coordinates: ArrayIndices,
 }
 
 /// The shape of a nonempty subchunk with `subchunk_subset`.

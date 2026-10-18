@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `[Async]ArrayReadOps::[async_]retrieve_encoded_subchunk[_at_level]` for low-level encoded subchunk access at any level of the subchunk hierarchy
   - Subchunks are addressed by the subchunk grids of the array, and are returned as an `EncodedSubchunk` with the shape to decode them with
   - Retrieval is codec generic: any array-to-bytes codec with subchunks supports it (`zarrs_codec::ArrayToBytesCodecTraits::plan_locate_subchunk`), through array-to-array codecs and bytes-to-bytes codecs
+- Add `[Async]ArrayUpdateOps::[async_]store_encoded_subchunk[_at_level]` and `[async_]erase_subchunk[_at_level]`, which store encoded subchunks verbatim or erase them at any level of the subchunk hierarchy
+  - The subchunk is appended to its shard and the shard index rewritten. The chunk is read and written whole if the store does not support partial writes or a bytes-to-bytes codec encodes the entire chunk, and enclosing subchunks are read and rewritten for subchunks below level zero
+  - Storing is codec generic (`zarrs_codec::ArrayToBytesCodecTraits::plan_store_encoded_subchunk`), and chunk caches are invalidated
   - Add `ArrayOps::subchunk_codecs[_at_level]`, the codecs that decode encoded subchunks
   - Expose `ShardingCodecBound`
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec

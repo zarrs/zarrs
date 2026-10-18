@@ -36,7 +36,7 @@ pub use encode::{
 #[cfg(feature = "async")]
 pub use io::AsyncIo;
 pub use io::{ReadBytes, SyncIo};
-pub use memory::{partial_decode_memory, partial_encode_memory};
+pub use memory::{partial_decode_memory, partial_encode_memory, store_encoded_subchunk_memory};
 pub use prepare::{
     DecodedDecoder, MissingDecoder, PrepareDecode, PreparedDecoder, SourceDecoder,
     prepare_decode_whole, prepared,

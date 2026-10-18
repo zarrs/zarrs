@@ -1,3 +1,4 @@
+use crate::array::CowBytes;
 use inherent::inherent;
 use std::sync::Arc;
 
@@ -146,6 +147,67 @@ where
             self.cache().invalidate_chunk(chunk_indices);
         }
         Ok(compacted)
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        // SAFETY: The caller upholds the requirements of `store_encoded_subchunk_at_level`.
+        unsafe { self.store_encoded_subchunk_at_level(0, subchunk_indices, encoded, resources) }
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        encoded: CowBytes<'_>,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) = self
+            .array()
+            .encoded_subchunk_address(level, subchunk_indices)?;
+        // SAFETY: The caller upholds the requirements of `store_encoded_subchunk_at_level`.
+        let result = unsafe {
+            self.array().store_encoded_subchunk_at_level(
+                level,
+                subchunk_indices,
+                encoded,
+                resources,
+            )
+        };
+        self.cache().invalidate_chunk(&chunk_indices);
+        result
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.erase_subchunk_at_level(0, subchunk_indices, resources)
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) = self
+            .array()
+            .encoded_subchunk_address(level, subchunk_indices)?;
+        let result = self
+            .array()
+            .erase_subchunk_at_level(level, subchunk_indices, resources);
+        self.cache().invalidate_chunk(&chunk_indices);
+        result
     }
 
     pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {

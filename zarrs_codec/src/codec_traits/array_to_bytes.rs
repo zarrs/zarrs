@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_data_type::{DataType, FillValue};
+use zarrs_storage::Bytes;
 
 use crate::plan::{ByteSource, DecodeRequest, PartialEncodeState, PlanIndexer, SourceKey, Task};
 use crate::{
@@ -333,6 +334,45 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         options: &CodecOptions,
     ) -> Result<Task<'static>, CodecError> {
         let _ = (source, shape, coordinates, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Plan storing the encoded bytes of the subchunk at `level` that contains the element at `coordinates` of the
+    /// chunk `key` of `shape`, or erasing the subchunk if `encoded` is [`None`].
+    ///
+    /// The bytes are stored verbatim, so they must be encoded by the subchunk codec at `level`
+    /// ([`subchunk_codecs_at_level`](ArrayToBytesCodecSubchunkingTraits::subchunk_codecs_at_level)) with the
+    /// encoded shape of the subchunk (see [`EncodedSubchunk`](crate::EncodedSubchunk)). A subchunk below level zero is
+    /// stored in its enclosing level zero subchunk, which is read, updated and stored.
+    ///
+    /// The task reads and writes the chunk `key`. `set_partial` is true if the storage supports [`WriteOp::SetPartial`](crate::plan::WriteOp::SetPartial), and
+    /// otherwise the chunk is read and written whole.
+    ///
+    /// Codecs with [`subchunk_codecs`](ArrayToBytesCodecSubchunkingTraits::subchunk_codecs) implement this.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if the codec does not have subchunks at `level` (the
+    /// default), or a [`CodecError`] if `coordinates` are out of bounds of the chunk.
+    #[allow(clippy::too_many_arguments)]
+    fn plan_store_encoded_subchunk(
+        self: Arc<Self>,
+        key: SourceKey,
+        shape: &[NonZeroU64],
+        level: usize,
+        coordinates: &[u64],
+        encoded: Option<Bytes>,
+        set_partial: bool,
+        options: &CodecOptions,
+    ) -> Result<Task<'static>, CodecError> {
+        let _ = (
+            key,
+            shape,
+            level,
+            coordinates,
+            encoded,
+            set_partial,
+            options,
+        );
         Err(CodecError::UnsupportedEncodedSubchunk)
     }
 

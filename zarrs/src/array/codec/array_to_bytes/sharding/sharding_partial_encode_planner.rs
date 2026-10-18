@@ -11,10 +11,16 @@ use smallvec::smallvec;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, Join, Outcome, PartialEncodeState, PlanIndexer, SourceKey, Task,
     TaskHint, TaskValue, WriteOp, decode_and_update, partial_encode_value,
+    store_encoded_subchunk_memory,
 };
-use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes};
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecOptions, CowBytes,
+};
+use zarrs_storage::Bytes;
 use zarrs_storage::byte_range::ByteRange;
 
+use super::sharding_planner::ShardSubchunk;
 use super::{
     EMPTY, IndexRead, ShardingCodecBound, ShardingIndexLocation, SubchunkUpdate,
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index, index_read,
@@ -79,6 +85,136 @@ impl ShardingCodecBound {
                     None => vec![EMPTY; index_len],
                 };
                 update.plan_subchunks(index, &indexer, &bytes, ctx)
+            },
+        )
+        .with_hint(index_hint))
+    }
+}
+
+impl ShardingCodecBound {
+    /// Plan storing an encoded subchunk in the shard `key`, or erasing it. See
+    /// [`ArrayToBytesCodecTraits::plan_store_encoded_subchunk`].
+    ///
+    /// The shard index is read, and the subchunk is appended to the shard and the index rewritten, as in a partial
+    /// encode. A subchunk below level zero is stored in its enclosing subchunk, which is read and updated in memory.
+    /// Without partial writes, the shard is read, updated in memory and written whole.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn plan_store_encoded_subchunk_in_shard(
+        self: Arc<Self>,
+        key: SourceKey,
+        shape: &[NonZeroU64],
+        level: usize,
+        coordinates: &[u64],
+        encoded: Option<Bytes>,
+        set_partial: bool,
+        options: &CodecOptions,
+    ) -> Result<Task<'static>, CodecError> {
+        if self.inner_codecs.subchunk_codecs().len() < level {
+            return Err(CodecError::UnsupportedEncodedSubchunk);
+        }
+        let ShardSubchunk {
+            index: subchunk_index,
+            shape: subchunk_shape,
+            coordinates: subchunk_coordinates,
+        } = self.subchunk_at(shape, coordinates)?;
+        if !set_partial {
+            let shape = ChunkShape::from(shape.to_vec());
+            let coordinates = coordinates.to_vec();
+            let options = *options;
+            return Ok(Task::read(
+                ByteSource::external(key),
+                [ByteRange::FromStart(0, None)],
+                move |mut reads, ctx| {
+                    let mut shard = reads.pop().flatten().map(|shard| shard.to_vec());
+                    store_encoded_subchunk_memory(
+                        self.into_dyn(),
+                        &mut shard,
+                        &shape,
+                        level,
+                        &coordinates,
+                        encoded,
+                        &options,
+                        ctx.resources(),
+                    )?;
+                    let op = match shard {
+                        Some(shard) => WriteOp::Set(key, CowBytes::from(shard)),
+                        None => WriteOp::Erase(key),
+                    };
+                    Ok(Outcome::Write {
+                        ops: smallvec![op],
+                        then: TaskValue::None,
+                    })
+                },
+            ));
+        }
+
+        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
+        let IndexRead {
+            shape: index_shape,
+            range: index_byte_range,
+            hint: index_hint,
+        } = index_read(&self, &chunks_per_shard)?;
+        let chunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let index_len = num_subchunks(&chunk_grid) * 2;
+        let update = ShardUpdate {
+            codec: self,
+            key,
+            chunk_grid,
+            index_shape,
+            options: *options,
+        };
+        Ok(Task::read(
+            ByteSource::external(key),
+            [index_byte_range],
+            move |mut reads, ctx| {
+                let shard_index = match reads.pop().flatten() {
+                    Some(encoded_index) => decode_shard_index(
+                        &encoded_index,
+                        &update.index_shape,
+                        &update.codec.index_codecs,
+                        &update.options,
+                        ctx.resources(),
+                    )?,
+                    None => vec![EMPTY; index_len],
+                };
+                if level == 0 {
+                    let encoded = TaskValue::Bytes(encoded.map(CowBytes::Shared));
+                    return update.write(shard_index, &[subchunk_index], vec![encoded], ctx);
+                }
+
+                // The enclosing subchunk is read (if it is stored) and updated in memory
+                let inner_codecs = update.codec.inner_codecs.clone();
+                let options = update.options;
+                let store = move |enclosing: Option<CowBytes<'_>>, ctx: &ComputeCtx| {
+                    let mut enclosing = enclosing.map(|enclosing| enclosing.to_vec());
+                    store_encoded_subchunk_memory(
+                        inner_codecs.into_dyn(),
+                        &mut enclosing,
+                        &subchunk_shape,
+                        level - 1,
+                        &subchunk_coordinates,
+                        encoded,
+                        &options,
+                        ctx.resources(),
+                    )?;
+                    Ok(Outcome::Value(TaskValue::Bytes(
+                        enclosing.map(CowBytes::from),
+                    )))
+                };
+                let task = match subchunk_offset_size(&shard_index, subchunk_index) {
+                    Some((offset, size)) => Task::read(
+                        ByteSource::external(update.key),
+                        [ByteRange::FromStart(offset, Some(size))],
+                        move |mut reads, ctx| store(reads.pop().flatten(), ctx),
+                    ),
+                    None => Task::compute(move |ctx| store(None, ctx)),
+                };
+                Ok(Outcome::Fork {
+                    children: vec![task],
+                    join: Join::new(move |values, ctx| {
+                        update.write(shard_index, &[subchunk_index], values, ctx)
+                    }),
+                })
             },
         )
         .with_hint(index_hint))

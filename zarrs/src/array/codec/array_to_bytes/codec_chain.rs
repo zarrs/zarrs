@@ -12,9 +12,10 @@ use crate::array::{
 use zarrs_codec::plan::{
     ArrayToArrayDecodePlan, ByteSource, ComputeCtx, DecodeRequest, Join, MissingDecoder, Outcome,
     PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey, SourceStep, Task,
-    TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, local_subchunk_grids,
+    TaskTarget, TaskValue, WriteOp, decode_whole, encode_hint, encoded_value, local_subchunk_grids,
     local_subchunk_grids_value, place_decoded, plan_decode_whole, plan_encode_whole,
-    plan_partial_encode_whole, subchunk_location_value, whole_chunk_hint,
+    plan_partial_encode_whole, store_encoded_subchunk_memory, subchunk_location_value,
+    whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -25,6 +26,7 @@ use zarrs_codec::{
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_storage::Bytes;
 use zarrs_storage::byte_range::ByteRange;
 
 /// The decoded shape of each array-to-array codec of a chain, outermost first, then the shape they encode.
@@ -975,6 +977,108 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                     .plan_locate_subchunk(source, &shape, &coordinates, &options)?
                     .run_without_io(ctx),
                 None => Ok(Outcome::Value(subchunk_location_value(None))),
+            },
+        ))
+    }
+
+    fn plan_store_encoded_subchunk(
+        self: Arc<Self>,
+        key: SourceKey,
+        shape: &[NonZeroU64],
+        level: usize,
+        coordinates: &[u64],
+        encoded: Option<Bytes>,
+        set_partial: bool,
+        options: &CodecOptions,
+    ) -> Result<Task<'static>, CodecError> {
+        if coordinates.len() != shape.len()
+            || std::iter::zip(coordinates, shape)
+                .any(|(coordinate, length)| *coordinate >= length.get())
+        {
+            return Err(CodecError::Other(format!(
+                "coordinates {coordinates:?} are out of bounds of a chunk with shape {shape:?}"
+            )));
+        }
+        if let Some(bytes_chain) = self.bytes_chain.clone() {
+            // Map the element through the array-to-array codecs, outermost first
+            let mut shape = ChunkShape::from(shape.to_vec());
+            let mut coordinates = crate::array::ArrayIndices::from(coordinates);
+            for codec in &self.array_to_array {
+                coordinates = codec.encoded_coordinates(&shape, &coordinates)?;
+                shape = codec.encoded_shape(&shape)?;
+            }
+            return bytes_chain.plan_store_encoded_subchunk(
+                key,
+                &shape,
+                level,
+                &coordinates,
+                encoded,
+                set_partial,
+                options,
+            );
+        }
+        if self.bytes_to_bytes.is_empty() {
+            return self.array_to_bytes.clone().plan_store_encoded_subchunk(
+                key,
+                shape,
+                level,
+                coordinates,
+                encoded,
+                set_partial,
+                options,
+            );
+        }
+
+        // The bytes-to-bytes codecs encode the entire chunk (e.g. a checksum), so it is read, decoded, updated in
+        // memory, encoded and written whole
+        let shape = ChunkShape::from(shape.to_vec());
+        let coordinates = coordinates.to_vec();
+        let options = *options;
+        Ok(Task::read(
+            ByteSource::external(key),
+            [ByteRange::FromStart(0, None)],
+            move |mut reads, ctx| {
+                let resources = ctx.resources();
+                let mut chunk = match reads.pop().flatten() {
+                    Some(encoded_chunk) => {
+                        let representations = self.bytes_representations(&shape)?;
+                        Some(
+                            self.decode_bytes_to_bytes(
+                                encoded_chunk,
+                                &representations,
+                                0..self.bytes_to_bytes.len(),
+                                &options,
+                                resources,
+                            )?
+                            .to_vec(),
+                        )
+                    }
+                    None => None,
+                };
+                store_encoded_subchunk_memory(
+                    self.array_to_bytes.clone(),
+                    &mut chunk,
+                    &shape,
+                    level,
+                    &coordinates,
+                    encoded,
+                    &options,
+                    resources,
+                )?;
+                let op = match chunk {
+                    Some(chunk) => {
+                        let mut bytes = CowBytes::from(chunk);
+                        for codec in &self.bytes_to_bytes {
+                            bytes = codec.encode(bytes, &options, resources)?;
+                        }
+                        WriteOp::Set(key, bytes.into_static())
+                    }
+                    None => WriteOp::Erase(key),
+                };
+                Ok(Outcome::Write {
+                    ops: smallvec::smallvec![op],
+                    then: TaskValue::None,
+                })
             },
         ))
     }
