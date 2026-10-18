@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
+- Bump `zarrs_chunk_grid` to 0.7.0
 - Make `async-trait` optional and enable it only with the `async` feature.
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
