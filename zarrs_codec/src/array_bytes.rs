@@ -7,7 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
 use zarrs_data_type::{DataTypeFillValueError, OptionalDataType};
 use zarrs_metadata::DataTypeSize;
-use zarrs_storage::byte_range::extract_byte_ranges_concat;
+use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_ranges_concat};
 
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
@@ -397,13 +397,37 @@ fn extract_elements(
 ) -> Result<Vec<u8>, CodecError> {
     let element_size = element_size as u64;
     let bytes = if let Some(subset) = indexer.as_array_subset() {
-        // The contiguous runs of an array subset are iterated without boxing an iterator
+        // The contiguous runs of an array subset are iterated without boxing an iterator, and copied into an output of the known size
         let runs = subset.contiguous_linearised_indices(array_shape)?;
-        extract_byte_ranges_concat(
-            bytes,
-            runs.iter()
-                .map(|(index, elements)| index * element_size..(index + elements) * element_size),
-        )?
+        // Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
+        // Validate it before allocating the output, which may be large even for truncated input.
+        // The offsets are checked so that an overflowing end cannot wrap within `bytes`.
+        if let Some((index, elements)) = runs.iter().next_back() {
+            let end = index
+                .checked_add(elements)
+                .and_then(|end| end.checked_mul(element_size));
+            if end.is_none_or(|end| end > bytes.len() as u64) {
+                let range = index.saturating_mul(element_size)..end.unwrap_or(u64::MAX);
+                return Err(
+                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64).into(),
+                );
+            }
+        }
+        // The selected bytes are within `bytes`, so neither their offsets nor their total size overflow
+        let mut out =
+            Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
+        for (index, elements) in runs.iter() {
+            let range = index * element_size..(index + elements) * element_size;
+            let run = usize::try_from(range.start)
+                .ok()
+                .zip(usize::try_from(range.end).ok())
+                .and_then(|(start, end)| bytes.get(start..end))
+                .ok_or_else(|| {
+                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64)
+                })?;
+            out.extend_from_slice(run);
+        }
+        out
     } else {
         let byte_ranges = indexer
             .iter_contiguous_byte_ranges(array_shape, usize::try_from(element_size).unwrap())?;
@@ -968,6 +992,53 @@ impl<'a, const N: usize> From<&'a [u8; N]> for ArrayBytes<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_elements_validates_bounds_before_allocation() {
+        let shape = [1u64 << 63];
+        let subset = ArraySubset::new_with_shape(shape);
+        assert!(matches!(
+            extract_elements(&[], &subset, &shape, 1),
+            Err(CodecError::InvalidByteRangeError(_))
+        ));
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn extract_elements_rejects_overflowing_offsets() {
+        // The end of the last run is 2 * 2^63 bytes, which wraps to 0 if unchecked
+        let subset = ArraySubset::new_with_shape(vec![2]);
+        assert!(matches!(
+            extract_elements(&[], &subset, &[2], 1 << 63),
+            Err(CodecError::InvalidByteRangeError(_))
+        ));
+    }
+
+    #[test]
+    fn extract_elements_validates_last_run() {
+        let subset = ArraySubset::new_with_ranges(&[0..2, 1..3]);
+        // The first run (bytes 2..6) exists, but the last run (bytes 10..14) is truncated.
+        assert!(matches!(
+            extract_elements(&[0; 12], &subset, &[3, 4], 2),
+            Err(CodecError::InvalidByteRangeError(_))
+        ));
+    }
+
+    #[test]
+    fn extract_elements_only_requires_selected_bytes() {
+        let subset = ArraySubset::new_with_ranges(&[0..2, 1..3]);
+        let bytes: Vec<_> = (0..14).collect();
+        assert_eq!(
+            extract_elements(&bytes, &subset, &[3, 4], 2).unwrap(),
+            [2, 3, 4, 5, 10, 11, 12, 13]
+        );
+        let empty_subset = ArraySubset::new_with_shape(vec![0, 4]);
+        assert!(
+            extract_elements(&[], &empty_subset, &[3, 4], 2)
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn offsets_from_usize_uses_narrowest_width() {
