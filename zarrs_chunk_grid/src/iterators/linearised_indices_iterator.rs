@@ -1,8 +1,7 @@
 use std::iter::FusedIterator;
 
-use super::IndicesIterator;
-use crate::iterators::indices_iterator::IndicesIntoIterator;
-use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
+use super::strided_indices::{StridedIndices, StridedOdometer};
+use crate::{ArraySubset, IndexerError};
 
 /// An iterator over the linearised (lexicographic) indices in an array subset.
 ///
@@ -17,8 +16,7 @@ use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce `[7, 8, 10, 11]`.
 #[derive(Clone)]
 pub struct LinearisedIndices {
-    subset: ArraySubset,
-    array_shape: ArrayShape,
+    indices: StridedIndices,
 }
 
 impl LinearisedIndices {
@@ -28,25 +26,23 @@ impl LinearisedIndices {
     ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
-    pub fn new(subset: ArraySubset, array_shape: ArrayShape) -> Result<Self, IndexerError> {
+    pub fn new(subset: &ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             Err(IndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
                 array_shape.len(),
             ))
-        } else if subset.is_empty() {
+        } else if !subset.is_empty()
+            && std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape)
+        {
             // An empty subset references no elements, so it is always in-bounds.
-            Ok(Self {
-                subset,
-                array_shape,
-            })
-        } else if std::iter::zip(subset.end_exc(), &array_shape).any(|(end, shape)| end > *shape) {
-            Err(IndexerError::new_oob(subset.end_exc(), array_shape))
+            Err(IndexerError::new_oob(
+                subset.end_exc(),
+                array_shape.to_vec(),
+            ))
         } else {
-            Ok(Self {
-                subset,
-                array_shape,
-            })
+            // SAFETY: `array_shape` encapsulates `subset`
+            Ok(unsafe { Self::new_unchecked(subset, array_shape) })
         }
     }
 
@@ -55,21 +51,21 @@ impl LinearisedIndices {
     /// # Safety
     /// `array_shape` must encapsulate `subset`.
     #[must_use]
-    pub unsafe fn new_unchecked(subset: ArraySubset, array_shape: ArrayShape) -> Self {
+    pub unsafe fn new_unchecked(subset: &ArraySubset, array_shape: &[u64]) -> Self {
         debug_assert_eq!(subset.dimensionality(), array_shape.len());
         debug_assert!(
-            std::iter::zip(subset.end_exc(), &array_shape).all(|(end, shape)| end <= *shape)
+            subset.is_empty()
+                || std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape)
         );
         Self {
-            subset,
-            array_shape,
+            indices: StridedIndices::new(subset.start(), subset.shape(), array_shape),
         }
     }
 
     /// Return the number of indices.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.subset.num_elements_usize()
+        self.indices.len()
     }
 
     /// Returns true if the number of indices is zero.
@@ -91,11 +87,8 @@ impl<'a> IntoIterator for &'a LinearisedIndices {
 
     fn into_iter(self) -> Self::IntoIter {
         LinearisedIndicesIterator {
-            inner: IndicesIterator {
-                subset: &self.subset,
-                range: 0..self.subset.num_elements_usize(),
-            },
-            array_shape: &self.array_shape,
+            odometer: StridedOdometer::new(&self.indices),
+            indices: &self.indices,
         }
     }
 }
@@ -105,13 +98,9 @@ impl IntoIterator for LinearisedIndices {
     type IntoIter = LinearisedIndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        let num_elements = self.subset.num_elements_usize();
         LinearisedIndicesIntoIterator {
-            inner: IndicesIntoIterator {
-                subset: self.subset,
-                range: 0..num_elements,
-            },
-            array_shape: self.array_shape,
+            odometer: StridedOdometer::new(&self.indices),
+            indices: self.indices,
         }
     }
 }
@@ -119,42 +108,39 @@ impl IntoIterator for LinearisedIndices {
 /// Serial linearised indices iterator.
 ///
 /// See [`LinearisedIndices`].
+#[derive(Clone)]
 pub struct LinearisedIndicesIterator<'a> {
-    inner: IndicesIterator<'a>,
-    array_shape: &'a [u64],
+    indices: &'a StridedIndices,
+    odometer: StridedOdometer,
 }
 
 /// Serial linearised indices iterator.
 ///
 /// See [`LinearisedIndices`].
+#[derive(Clone)]
 pub struct LinearisedIndicesIntoIterator {
-    inner: IndicesIntoIterator,
-    array_shape: ArrayShape,
+    indices: StridedIndices,
+    odometer: StridedOdometer,
 }
 
 macro_rules! impl_linearised_indices_iterator {
-    (private $iterator_type:ty, $qualifier:tt) => {
+    ($iterator_type:ty) => {
         impl Iterator for $iterator_type {
             type Item = u64;
 
+            #[inline]
             fn next(&mut self) -> Option<Self::Item> {
-                self.inner.next().map(|indices| {
-                    ravel_indices(&indices, $qualifier!(self.array_shape))
-                        .expect("inbounds indices")
-                })
+                self.odometer.next(&self.indices)
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
-                self.inner.size_hint()
+                self.odometer.size_hint()
             }
         }
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                self.inner.next_back().map(|indices| {
-                    ravel_indices(&indices, $qualifier!(self.array_shape))
-                        .expect("inbounds indices")
-                })
+                self.odometer.next_back(&self.indices)
             }
         }
 
@@ -162,26 +148,10 @@ macro_rules! impl_linearised_indices_iterator {
 
         impl FusedIterator for $iterator_type {}
     };
-    ($iterator_type:ty) => {
-        macro_rules! qualifier {
-            ($v:expr) => {
-                $v
-            };
-        }
-        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
-    };
-    (ref $iterator_type:ty) => {
-        macro_rules! qualifier {
-            ($v:expr) => {
-                &$v
-            };
-        }
-        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
-    };
 }
 
 impl_linearised_indices_iterator!(LinearisedIndicesIterator<'_>);
-impl_linearised_indices_iterator!(ref LinearisedIndicesIntoIterator);
+impl_linearised_indices_iterator!(LinearisedIndicesIntoIterator);
 
 #[cfg(test)]
 mod tests {
@@ -190,8 +160,7 @@ mod tests {
     #[test]
     fn linearised_indices_iterator_partial() {
         let indices =
-            LinearisedIndices::new(ArraySubset::new_with_ranges(&[1..3, 5..7]), vec![8, 8])
-                .unwrap();
+            LinearisedIndices::new(&ArraySubset::new_with_ranges(&[1..3, 5..7]), &[8, 8]).unwrap();
         assert_eq!(indices.len(), 4);
         let mut iter = indices.iter();
         assert_eq!(iter.next(), Some(13)); // [1,5]
@@ -204,16 +173,14 @@ mod tests {
     #[test]
     fn linearised_indices_iterator_oob() {
         assert!(
-            LinearisedIndices::new(ArraySubset::new_with_ranges(&[1..3, 5..7]), vec![1, 1])
-                .is_err()
+            LinearisedIndices::new(&ArraySubset::new_with_ranges(&[1..3, 5..7]), &[1, 1]).is_err()
         );
     }
 
     #[test]
     fn linearised_indices_iterator_empty() {
         let indices =
-            LinearisedIndices::new(ArraySubset::new_with_ranges(&[1..1, 5..5]), vec![5, 5])
-                .unwrap();
+            LinearisedIndices::new(&ArraySubset::new_with_ranges(&[1..1, 5..5]), &[5, 5]).unwrap();
         assert_eq!(indices.len(), 0);
         assert!(indices.is_empty());
     }

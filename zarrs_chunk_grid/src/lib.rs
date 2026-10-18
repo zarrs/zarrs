@@ -464,10 +464,7 @@ pub unsafe trait ChunkGridTraits:
         let shape = self.grid_shape().to_vec();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
-        IndicesIntoIterator {
-            subset: ArraySubset::new_with_shape(shape),
-            range: 0..n_chunks,
-        }
+        IndicesIntoIterator::new(ArraySubset::new_with_shape(shape), 0..n_chunks)
     }
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.

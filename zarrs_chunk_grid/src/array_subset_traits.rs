@@ -228,7 +228,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// # Errors
     /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.
     fn linearised_indices(&self, array_shape: &[u64]) -> Result<LinearisedIndices, IndexerError> {
-        LinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+        LinearisedIndices::new(&self.to_array_subset(), array_shape)
     }
 
     /// Returns an iterator over the indices of contiguous elements within the subset.
