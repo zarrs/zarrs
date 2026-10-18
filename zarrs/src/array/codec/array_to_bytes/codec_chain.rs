@@ -672,12 +672,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
 
-        let mut shape = ChunkShape::from(shape.to_vec());
+        let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
 
         // array->array
         for codec in &self.array_to_array {
             bytes = codec.encode(bytes, &shape, options, resources)?;
-            shape = codec.encoded_shape(&shape)?;
+            shape = codec.encoded_shape(&shape)?.into();
         }
 
         // array->bytes
@@ -941,11 +941,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             // Map the element through the array-to-array codecs, outermost first
-            let mut shape = ChunkShape::from(shape.to_vec());
+            let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
             let mut coordinates = crate::array::ArrayIndices::from(coordinates);
             for codec in &self.array_to_array {
                 coordinates = codec.encoded_coordinates(&shape, &coordinates)?;
-                shape = codec.encoded_shape(&shape)?;
+                shape = codec.encoded_shape(&shape)?.into();
             }
             return bytes_chain.plan_locate_subchunk(source, &shape, &coordinates, options);
         }
@@ -962,7 +962,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         // Otherwise, decode the remaining bytes-to-bytes codecs, so the subchunk is located in memory
-        let shape = ChunkShape::from(shape.to_vec());
+        let shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
         let coordinates = coordinates.to_vec();
         let options = *options;
         Ok(self.plan_materialized(
@@ -1001,11 +1001,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             // Map the element through the array-to-array codecs, outermost first
-            let mut shape = ChunkShape::from(shape.to_vec());
+            let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
             let mut coordinates = crate::array::ArrayIndices::from(coordinates);
             for codec in &self.array_to_array {
                 coordinates = codec.encoded_coordinates(&shape, &coordinates)?;
-                shape = codec.encoded_shape(&shape)?;
+                shape = codec.encoded_shape(&shape)?.into();
             }
             return bytes_chain.plan_store_encoded_subchunk(
                 key,
@@ -1031,7 +1031,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
         // The bytes-to-bytes codecs encode the entire chunk (e.g. a checksum), so it is read, decoded, updated in
         // memory, encoded and written whole
-        let shape = ChunkShape::from(shape.to_vec());
+        let shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
         let coordinates = coordinates.to_vec();
         let options = *options;
         Ok(Task::read(
@@ -1101,10 +1101,10 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         // Encode with the array-to-array codecs, then the array-to-bytes codec (which may fork tasks of its own), then
         // the bytes-to-bytes codecs
         let mut bytes = bytes;
-        let mut shape = ChunkShape::from(shape.to_vec());
+        let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
         for codec in &self.array_to_array {
             bytes = codec.encode(bytes, &shape, options, ctx.resources())?;
-            shape = codec.encoded_shape(&shape)?;
+            shape = codec.encoded_shape(&shape)?.into();
         }
         let outcome = self
             .array_to_bytes
@@ -1155,7 +1155,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         // Map the partial encode through the array-to-array codecs, then plan it with the array-to-bytes codec. If a
         // codec does not map it, the whole chunk is updated through that codec and the codecs after it.
         let hint = encode_hint(&bytes);
-        let shape = ChunkShape::from(shape.to_vec());
+        let shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
         let options = *options;
         Ok(Task::compute(move |ctx| {
             let (mut indexer, mut bytes, mut shape) = (indexer, bytes, shape);
@@ -1170,7 +1170,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                     )? {
                         PartialEncodeRequest::Mapped(mapped_indexer, mapped_bytes) => {
                             (indexer, bytes) = (mapped_indexer, mapped_bytes);
-                            shape = codec.encoded_shape(&shape)?;
+                            shape = codec.encoded_shape(&shape)?.into();
                         }
                         PartialEncodeRequest::Unmapped(indexer, bytes) => {
                             let codec: Arc<dyn ArrayToBytesCodecTraits> = if i == 0 {

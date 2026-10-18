@@ -188,7 +188,7 @@ impl BytesCodecBound {
     ) -> Result<Task<'a>, CodecError> {
         let indexer = request.indexer.as_indexer();
         indexer.validate(bytemuck::must_cast_slice(shape))?;
-        let shape = shape.to_vec();
+        let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
         Ok(Task::compute(move |_| {
             let DecodeRequest { indexer, target } = request;
             let TaskTarget::Views(views) = target else {
@@ -417,7 +417,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             .map(ByteRange::new)
             .collect();
         let num_bytes = indexer.len() * data_type_size as u64;
-        let shape = shape.to_vec();
+        let shape: SmallVec<[NonZeroU64; 4]> = shape.into();
         let options = *options;
         Ok(Task::read(source, ranges, move |reads, ctx| {
             if reads.iter().any(Option::is_none) {

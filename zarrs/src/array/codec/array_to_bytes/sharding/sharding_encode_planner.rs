@@ -190,7 +190,11 @@ impl<'a> ShardEncode<'a> {
         if bytes.is_fill_value(inner_codecs.fill_value()) {
             return Ok(None);
         }
-        let shape = subset.chunk_shape().expect("nonempty subchunk");
+        let shape: smallvec::SmallVec<[NonZeroU64; 4]> = subset
+            .shape()
+            .iter()
+            .map(|&size| NonZeroU64::new(size).expect("nonempty subchunk"))
+            .collect();
         Ok(Some(
             inner_codecs
                 .encode(bytes, &shape, &self.options, ctx.resources())?
