@@ -1187,7 +1187,11 @@ mod tests {
                             .into_iter()
                             .map(|indexer| {
                                 let expected = bytes
-                                    .extract_array_subset(indexer.as_ref(), &shard_shape, &data_type)
+                                    .extract_array_subset(
+                                        indexer.as_ref(),
+                                        &shard_shape,
+                                        &data_type,
+                                    )
                                     .unwrap()
                                     .into_owned();
                                 (indexer, expected)

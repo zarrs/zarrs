@@ -62,16 +62,14 @@ fn subchunk_order_iterator(
         | SubchunkWriteOrder::Lexicographic
         | SubchunkWriteOrder::Unordered
         | SubchunkWriteOrder::Random => (0..n_chunks).collect_vec(),
-        SubchunkWriteOrder::Colexicographic => {
-            (0..n_chunks)
-                .sorted_by_cached_key(|&i| {
-                    let mut indices = unravel_index(i as u64, subchunk_grid.grid_shape())
-                        .expect("inbounds subchunk");
-                    indices.reverse();
-                    indices
-                })
-                .collect_vec()
-        }
+        SubchunkWriteOrder::Colexicographic => (0..n_chunks)
+            .sorted_by_cached_key(|&i| {
+                let mut indices =
+                    unravel_index(i as u64, subchunk_grid.grid_shape()).expect("inbounds subchunk");
+                indices.reverse();
+                indices
+            })
+            .collect_vec(),
         SubchunkWriteOrder::Morton => (0..n_chunks)
             .map(|i| {
                 let indices =
