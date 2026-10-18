@@ -114,7 +114,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
             .storage
             .get_partial_many(key, Box::new(byte_ranges.iter().copied()))?;
         let result = if let Some(result) = result {
-            Some(result.collect::<Result<Vec<_>, _>>()?)
+            let mut values = Vec::with_capacity(result.size_hint().0);
+            for value in result {
+                values.push(value?);
+            }
+            Some(values)
         } else {
             None
         };
@@ -309,15 +313,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
-        use futures::{stream, StreamExt, TryStreamExt};
+        use futures::{stream, StreamExt};
 
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
             .get_partial_many(key, Box::new(byte_ranges.iter().copied()))
             .await?;
-        let result = if let Some(result) = result {
-            Some(result.try_collect::<Vec<_>>().await?)
+        let result = if let Some(mut result) = result {
+            let mut values = Vec::with_capacity(result.size_hint().0);
+            while let Some(value) = result.next().await {
+                values.push(value?);
+            }
+            Some(values)
         } else {
             None
         };

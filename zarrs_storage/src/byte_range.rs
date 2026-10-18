@@ -194,18 +194,17 @@ pub fn extract_byte_ranges<R: Into<ByteRange>>(
     byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<Vec<u8>>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
-    byte_ranges
-        .map(|byte_range| {
-            let byte_range: ByteRange = byte_range.into();
-            let valid = is_valid(byte_range, bytes_len);
-            if !valid {
-                return Err(InvalidByteRangeError(byte_range, bytes_len));
-            }
-            let start = usize::try_from(byte_range.start(bytes.len() as u64)).unwrap();
-            let end = usize::try_from(byte_range.end(bytes.len() as u64)).unwrap();
-            Ok(bytes[start..end].to_vec())
-        })
-        .collect::<Result<Vec<Vec<u8>>, InvalidByteRangeError>>()
+    let mut output = Vec::with_capacity(byte_ranges.size_hint().0);
+    for byte_range in byte_ranges {
+        let byte_range: ByteRange = byte_range.into();
+        if !is_valid(byte_range, bytes_len) {
+            return Err(InvalidByteRangeError(byte_range, bytes_len));
+        }
+        let start = usize::try_from(byte_range.start(bytes_len)).unwrap();
+        let end = usize::try_from(byte_range.end(bytes_len)).unwrap();
+        output.push(bytes[start..end].to_vec());
+    }
+    Ok(output)
 }
 
 /// Extract byte ranges from bytes and concatenate.
@@ -220,16 +219,15 @@ pub fn extract_byte_ranges_concat<R: Into<ByteRange>>(
     byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<u8>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
-    let lengths_and_starts = byte_ranges
-        .map(|byte_range| {
-            let byte_range: ByteRange = byte_range.into();
-            let valid = is_valid(byte_range, bytes_len);
-            if !valid {
-                return Err(InvalidByteRangeError(byte_range, bytes_len));
-            }
-            Ok((byte_range.length(bytes_len), byte_range.start(bytes_len)))
-        })
-        .collect::<Result<Vec<(u64, u64)>, InvalidByteRangeError>>()?;
+    // Collecting into a `Result` would not reserve from the size hint
+    let mut lengths_and_starts = Vec::with_capacity(byte_ranges.size_hint().0);
+    for byte_range in byte_ranges {
+        let byte_range: ByteRange = byte_range.into();
+        if !is_valid(byte_range, bytes_len) {
+            return Err(InvalidByteRangeError(byte_range, bytes_len));
+        }
+        lengths_and_starts.push((byte_range.length(bytes_len), byte_range.start(bytes_len)));
+    }
     let out_size = usize::try_from(
         lengths_and_starts
             .iter()
@@ -276,34 +274,34 @@ pub fn extract_byte_ranges_read_seek<T: Read + Seek>(
     byte_ranges: impl Iterator<Item = ByteRange>,
 ) -> std::io::Result<Vec<Vec<u8>>> {
     let len: u64 = bytes.seek(SeekFrom::End(0))?;
-    byte_ranges
-        .map(|byte_range| {
-            let data: Vec<u8> = match byte_range {
-                ByteRange::FromStart(offset, None) => {
-                    bytes.seek(SeekFrom::Start(offset))?;
-                    let length = usize::try_from(len).unwrap();
-                    let mut data = vec![0; length];
-                    bytes.read_exact(&mut data)?;
-                    data
-                }
-                ByteRange::FromStart(offset, Some(length)) => {
-                    bytes.seek(SeekFrom::Start(offset))?;
-                    let length = usize::try_from(length).unwrap();
-                    let mut data = vec![0; length];
-                    bytes.read_exact(&mut data)?;
-                    data
-                }
-                ByteRange::Suffix(length) => {
-                    bytes.seek(SeekFrom::End(-i64::try_from(length).unwrap()))?;
-                    let length = usize::try_from(length).unwrap();
-                    let mut data = vec![0; length];
-                    bytes.read_exact(&mut data)?;
-                    data
-                }
-            };
-            Ok(data)
-        })
-        .collect::<std::io::Result<Vec<Vec<u8>>>>()
+    let mut output = Vec::with_capacity(byte_ranges.size_hint().0);
+    for byte_range in byte_ranges {
+        let data: Vec<u8> = match byte_range {
+            ByteRange::FromStart(offset, None) => {
+                bytes.seek(SeekFrom::Start(offset))?;
+                let length = usize::try_from(len).unwrap();
+                let mut data = vec![0; length];
+                bytes.read_exact(&mut data)?;
+                data
+            }
+            ByteRange::FromStart(offset, Some(length)) => {
+                bytes.seek(SeekFrom::Start(offset))?;
+                let length = usize::try_from(length).unwrap();
+                let mut data = vec![0; length];
+                bytes.read_exact(&mut data)?;
+                data
+            }
+            ByteRange::Suffix(length) => {
+                bytes.seek(SeekFrom::End(-i64::try_from(length).unwrap()))?;
+                let length = usize::try_from(length).unwrap();
+                let mut data = vec![0; length];
+                bytes.read_exact(&mut data)?;
+                data
+            }
+        };
+        output.push(data);
+    }
+    Ok(output)
 }
 
 /// This trait combines [`Iterator<Item = ByteRange>`] and [`MaybeSend`],
@@ -354,6 +352,34 @@ mod tests {
             bytes.unwrap_err().to_string(),
             "invalid byte range 1..5 for bytes of length 3"
         );
+    }
+
+    #[test]
+    fn extraction_empty_and_early_error() {
+        assert_eq!(
+            extract_byte_ranges(&[], std::iter::empty::<ByteRange>()).unwrap(),
+            Vec::<Vec<u8>>::new()
+        );
+        assert_eq!(
+            extract_byte_ranges_read_seek(std::io::Cursor::new([]), std::iter::empty()).unwrap(),
+            Vec::<Vec<u8>>::new()
+        );
+
+        for invalid in [ByteRange::FromStart(2, Some(1)), ByteRange::Suffix(3)] {
+            let ranges = [ByteRange::FromStart(0, Some(1)), invalid];
+            let mut visited = 0;
+            let iter = ranges.into_iter().chain(std::iter::once_with(|| {
+                panic!("must stop at the first invalid range")
+            }));
+            let error = extract_byte_ranges(&[42, 43], iter.inspect(|_| visited += 1)).unwrap_err();
+            assert_eq!(error.0, invalid);
+            assert_eq!(visited, 2);
+
+            let iter = ranges.into_iter().chain(std::iter::once_with(|| {
+                panic!("must stop at the first read/seek error")
+            }));
+            assert!(extract_byte_ranges_read_seek(std::io::Cursor::new([42, 43]), iter).is_err());
+        }
     }
 
     #[test]

@@ -66,8 +66,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let results = self.block_on(self.storage.get_partial_many(key, byte_ranges))?;
-        if let Some(results) = results {
-            let results = self.block_on(results.collect::<Vec<_>>());
+        if let Some(mut results) = results {
+            let results = self.block_on(async {
+                let mut values = Vec::with_capacity(results.size_hint().0);
+                while let Some(value) = results.next().await {
+                    values.push(value);
+                }
+                values
+            });
             Ok(Some(Box::new(results.into_iter())))
         } else {
             Ok(None)

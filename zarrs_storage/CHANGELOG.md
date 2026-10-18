@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
 
 ### Changed
+- Reserve capacity for byte-range extraction, concatenation, and sync/async adapter result collections
 - Use `std::sync::RwLock` in `[Async]MemoryStore` to allow concurrent reads
 - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them
 - **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
