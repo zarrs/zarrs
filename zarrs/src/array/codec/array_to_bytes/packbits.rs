@@ -431,7 +431,23 @@ mod tests {
                 &CodecOptions::default(),
                 &ComputeResources::default(),
             )?;
-            assert!((encoded.len() as u64) <= (40 * 32).div_ceil(&8) + 1);
+            // A padding encoding byte holds the number of padding bits, which is zero
+            let elements = match encoding {
+                PackBitsPaddingEncoding::None => &encoded[..],
+                PackBitsPaddingEncoding::FirstByte => {
+                    assert_eq!(encoded[0], 0);
+                    &encoded[1..]
+                }
+                PackBitsPaddingEncoding::LastByte => {
+                    assert_eq!(encoded[encoded.len() - 1], 0);
+                    &encoded[..encoded.len() - 1]
+                }
+            };
+            assert_eq!(elements.len(), 40 * 4);
+            assert_eq!(
+                codec.encoded_representation(&chunk_shape)?,
+                crate::array::BytesRepresentation::FixedSize(encoded.len() as u64)
+            );
 
             // Decoding
             let decoded = codec
@@ -444,7 +460,7 @@ mod tests {
                 .unwrap();
             assert_eq!(bytes, decoded);
 
-            // Check it matches little endian bytes
+            // Check the elements match little endian bytes
             let decoded = Arc::new(BytesCodec::little())
                 .with_context(
                     data_type.clone(),
@@ -452,7 +468,7 @@ mod tests {
                     &CodecSpecificOptions::default(),
                 )?
                 .decode(
-                    encoded.clone(),
+                    CowBytes::from(elements),
                     &chunk_shape,
                     &CodecOptions::default(),
                     &ComputeResources::default(),

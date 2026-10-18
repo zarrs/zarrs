@@ -89,8 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - For example, a read of a 112 x 112 region straddling four shards of 8 x 8 subchunks made 8 rather than 20 requests to a store hinting object store coalescing
 - Reuse a `zstd` decompression context per thread when decoding
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- Bind whole-byte `packbits` components as the equivalent little endian `bytes` codec instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
-  - Its encoded representation is that of the `bytes` codec, which does not count a padding encoding byte, matching the encoded bytes
+- Bind whole-byte `packbits` components without a padding encoding as the equivalent little endian `bytes` codec instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
@@ -196,6 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove the `async-generic` dependency
 
 ### Fixed
+- **Breaking**: The `packbits` codec writes the padding encoding byte of `first_byte` and `last_byte` when the components are whole bytes that are all packed (e.g. `float32`), as required by the specification
+  - It was omitted, as these were encoded with the `bytes` codec. Such chunks written by `zarrs` 0.20-0.23 are no longer read
 - Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
 - Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
 - The `crc32c`, `adler32`, and `fletcher32` partial decoders return the correct bytes for a `ByteRange::Suffix` request with the checksum at the end

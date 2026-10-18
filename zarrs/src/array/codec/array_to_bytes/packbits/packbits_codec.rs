@@ -166,11 +166,13 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             ));
         }
 
-        if components.component_size_bits.is_multiple_of(8)
+        if self.padding_encoding == PackBitsPaddingEncoding::None
+            && components.component_size_bits.is_multiple_of(8)
             && first_bit == 0
             && last_bit == components.component_size_bits - 1
         {
-            // The components are whole bytes that are all packed, so the codec is the little endian `bytes` codec.
+            // The components are whole bytes that are all packed without a padding encoding byte, so the codec is the
+            // little endian `bytes` codec.
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
             return Arc::new(BytesCodec::new(Some(Endianness::Little)))
                 .with_context(data_type, fill_value, &CodecSpecificOptions::default())
