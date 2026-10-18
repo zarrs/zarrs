@@ -84,7 +84,7 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{BytesToBytesCodecTraits, CodecError, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
@@ -98,44 +98,15 @@ mod tests {
         let codec_configuration: ZlibCodecConfiguration =
             serde_json::from_str(JSON_VALID1).unwrap();
         let codec = ZlibCodec::new_with_configuration(&codec_configuration).unwrap();
-        let options = CodecOptions::default();
-        let decoded = b"decode directly into this buffer".repeat(32);
-        let len = decoded.len();
-        let encoded = codec
-            .encode(
-                CowBytes::from(decoded.as_slice()),
-                &options,
-                &ComputeResources::default(),
-            )
-            .unwrap();
-        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
-            codec.decode_into(
-                encoded,
-                &BytesRepresentation::FixedSize(len as u64),
-                output,
-                &options,
-                &ComputeResources::default(),
-            )
-        };
-
-        let mut output = vec![0; len];
-        decode_into(encoded.clone(), &mut output).unwrap();
-        assert_eq!(output, decoded);
-
-        // An output of the wrong length is reported as an invalid length
-        assert!(matches!(
-            decode_into(encoded.clone(), &mut vec![0; len + 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-        assert!(matches!(
-            decode_into(encoded.clone(), &mut output[..len - 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-
-        // A truncated stream and bytes that are not a zlib stream
-        let truncated = CowBytes::from(encoded[..encoded.len() / 2].to_vec());
-        assert!(decode_into(truncated, &mut output).is_err());
-        assert!(decode_into(CowBytes::from(vec![0u8; 64]), &mut output).is_err());
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &b"decode directly into this buffer".repeat(32),
+            1,
+            |encoded| {
+                // A truncated stream, and bytes that are not a zlib stream
+                vec![encoded[..encoded.len() / 2].to_vec(), vec![0u8; 64]]
+            },
+        );
     }
 
     #[test]

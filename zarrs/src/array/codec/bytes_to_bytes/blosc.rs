@@ -143,45 +143,16 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_decode_into() {
-        let options = CodecOptions::default();
         let codec_configuration: BloscCodecConfiguration =
             serde_json::from_str(JSON_VALID1).unwrap();
         let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
-        let decoded = crate::array::transmute_to_bytes_vec((0..4096u16).collect::<Vec<_>>());
-        let len = decoded.len();
-        let encoded = codec
-            .encode(
-                CowBytes::Borrowed(&decoded),
-                &options,
-                &ComputeResources::default(),
-            )
-            .unwrap();
-        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
-            codec.decode_into(
-                encoded,
-                &BytesRepresentation::FixedSize(len as u64),
-                output,
-                &options,
-                &ComputeResources::default(),
-            )
-        };
-
-        let mut output = vec![0; len];
-        decode_into(encoded.clone(), &mut output).unwrap();
-        assert_eq!(output, decoded);
-
-        // An output of the wrong length is reported as an invalid length
-        assert!(matches!(
-            decode_into(encoded.clone(), &mut vec![0; len + 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-        assert!(matches!(
-            decode_into(encoded, &mut output[..len - 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-
-        // Bytes that are not a blosc buffer
-        assert!(decode_into(CowBytes::from(vec![0u8; 64]), &mut output).is_err());
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &crate::array::transmute_to_bytes_vec((0..4096u16).collect::<Vec<_>>()),
+            1,
+            // Bytes that are not a blosc buffer
+            |_| vec![vec![0u8; 64]],
+        );
     }
 
     /// Retrieving whole chunks decodes blosc directly into the output where the output is

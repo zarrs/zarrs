@@ -471,46 +471,21 @@ mod tests {
     fn codec_gdeflate_decode_into() {
         let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
         let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
-        let options = CodecOptions::default();
         let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
             .map(|i| u8::try_from(i % 251).unwrap())
             .collect();
-        let len = decoded.len();
-        let encoded = codec
-            .encode(
-                CowBytes::from(decoded.as_slice()),
-                &options,
-                &ComputeResources::default(),
-            )
-            .unwrap();
-        let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
-            codec.decode_into(
-                encoded,
-                &BytesRepresentation::FixedSize(len as u64),
-                output,
-                &options,
-                &ComputeResources::default(),
-            )
-        };
-
-        let mut output = vec![0; len];
-        decode_into(encoded.clone(), &mut output).unwrap();
-        assert_eq!(output, decoded);
-        assert!(matches!(
-            decode_into(encoded.clone(), &mut vec![0; len + 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-        assert!(matches!(
-            decode_into(encoded.clone(), &mut output[..len - 1]),
-            Err(CodecError::UnexpectedChunkDecodedSize(_))
-        ));
-
-        let truncated = CowBytes::from(encoded[..encoded.len() - 10].to_vec());
-        assert!(decode_into(truncated, &mut output).is_err());
-        let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
-        let mut corrupt = encoded.to_vec();
-        corrupt[header_length..].fill(0xFF);
-        assert!(decode_into(CowBytes::from(corrupt), &mut output).is_err());
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &decoded,
+            1,
+            |encoded| {
+                // A truncated stream, and pages that are not deflate streams
+                let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+                let mut corrupt = encoded.to_vec();
+                corrupt[header_length..].fill(0xFF);
+                vec![encoded[..encoded.len() - 10].to_vec(), corrupt]
+            },
+        );
     }
 
     /// Headers that are inconsistent with the encoded bytes are an error rather than a panic or a
