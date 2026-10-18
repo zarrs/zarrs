@@ -6,9 +6,9 @@ use super::super::{
 };
 use super::array_ops::maybe_regular_chunk_grid_shape;
 use super::{ArrayOps, *};
+use crate::array::chunk_key_encoding::chunk_store_key_path;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
-use crate::node::data_key;
 use zarrs_codec::ChunkGridDecoded;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
@@ -296,10 +296,11 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
-        Ok(data_key(
+        Ok(StoreKey::new(chunk_store_key_path(
             self.path(),
-            &self.chunk_key_encoding.encode(chunk_indices)?,
-        )?)
+            &self.chunk_key_encoding,
+            chunk_indices,
+        )?)?)
     }
 
     pub fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError> {

@@ -85,6 +85,20 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
             &self.suffix,
         ))
     }
+
+    fn encode_into(
+        &self,
+        chunk_grid_indices: &[u64],
+        key: &mut String,
+    ) -> Result<(), ChunkKeyEncodingError> {
+        key.reserve(super::chunk_key_capacity(
+            "c",
+            chunk_grid_indices,
+            &self.suffix,
+        ));
+        super::push_chunk_key(key, "c", chunk_grid_indices, self.separator, &self.suffix);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

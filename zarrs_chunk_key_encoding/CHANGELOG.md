@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `ChunkKeyEncodingError`
+- Add `ChunkKeyEncodingTraits::encode_into`, which appends a chunk key to a string so a store key can be built in one allocation
 
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
