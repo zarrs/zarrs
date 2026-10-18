@@ -51,7 +51,7 @@ use zarrs_codec::{
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
-/// Return the linearirsed (leixcographic) indices according to the requested order.
+/// Return the linearised (lexicographic) subchunk indices in the requested write order.
 fn subchunk_order_iterator(
     subchunks_write_order: &SubchunkWriteOrder,
     n_chunks: usize,
@@ -63,14 +63,12 @@ fn subchunk_order_iterator(
         | SubchunkWriteOrder::Unordered
         | SubchunkWriteOrder::Random => (0..n_chunks).collect_vec(),
         SubchunkWriteOrder::Colexicographic => {
-            // Colexicographic: compare indices from the last axis to the first.
             (0..n_chunks)
-                .sorted_unstable_by(|&a, &b| {
-                    let id_a = unravel_index(a as u64, subchunk_grid.grid_shape())
+                .sorted_by_cached_key(|&i| {
+                    let mut indices = unravel_index(i as u64, subchunk_grid.grid_shape())
                         .expect("inbounds subchunk");
-                    let id_b = unravel_index(b as u64, subchunk_grid.grid_shape())
-                        .expect("inbounds subchunk");
-                    id_a.iter().rev().cmp(id_b.iter().rev())
+                    indices.reverse();
+                    indices
                 })
                 .collect_vec()
         }

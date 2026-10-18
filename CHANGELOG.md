@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
+- Add `SubchunkWriteOrder::{Lexicographic,Colexicographic,Morton}` for writing subchunks in row-major, column-major, or Morton (Z-order) order
+  - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
 
 ### Changed
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.

@@ -1081,6 +1081,12 @@ mod tests {
     #[test]
     fn array_builder_codec_specific_options_c() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_lexicographic() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_specific_options_impl(SubchunkWriteOrder::Lexicographic);
     }
 
