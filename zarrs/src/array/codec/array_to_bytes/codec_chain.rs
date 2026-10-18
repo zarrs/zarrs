@@ -12,9 +12,9 @@ use crate::array::{
 use zarrs_codec::plan::{
     ArrayToArrayDecodePlan, ByteSource, ComputeCtx, DecodeRequest, Join, MissingDecoder, Outcome,
     PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder, SourceKey, SourceStep, Task,
-    TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, is_whole_chunk,
-    local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
-    plan_encode_whole, plan_partial_encode_whole, subchunk_location_value, whole_chunk_hint,
+    TaskTarget, TaskValue, decode_whole, encode_hint, encoded_value, local_subchunk_grids,
+    local_subchunk_grids_value, place_decoded, plan_decode_whole, plan_encode_whole,
+    plan_partial_encode_whole, subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -787,7 +787,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
         if let Some(bytes_chain) = self.bytes_chain.clone() {
-            if is_whole_chunk(request.indexer.as_indexer(), shape) {
+            if request.indexer.is_whole(shape) {
                 return plan_decode_whole(self, source, shape, request, options);
             }
             return self.plan_decode_array_to_array(
@@ -807,14 +807,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         // Whole chunks are read and decoded directly into the target (or the fill value)
-        if is_whole_chunk(request.indexer.as_indexer(), shape) {
+        if request.indexer.is_whole(shape) {
             return plan_decode_whole(self, source, shape, request, options);
         }
 
-        request
-            .indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
+        request.indexer.validate(shape)?;
 
         // Partial reads pass through codecs whose decoded bytes are a window of their encoded bytes
         let (source, num_materialized) = self.strip_windows(source)?;

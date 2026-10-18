@@ -37,9 +37,7 @@ impl ShardingCodecBound {
         state: Option<PartialEncodeState>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
+        indexer.validate(shape)?;
         bytes.validate(indexer.as_indexer().len(), self.inner_codecs.data_type())?;
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let IndexRead {

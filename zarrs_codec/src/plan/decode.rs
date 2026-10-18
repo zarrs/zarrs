@@ -56,10 +56,7 @@ pub fn plan_decode_whole<'a>(
     request: DecodeRequest<'a>,
     options: &CodecOptions,
 ) -> Result<Task<'a>, CodecError> {
-    request
-        .indexer
-        .as_indexer()
-        .validate(bytemuck::must_cast_slice(shape))?;
+    request.indexer.validate(shape)?;
     let hint = whole_chunk_hint(&*codec, &source, shape);
     let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
     let options = *options;
@@ -99,9 +96,9 @@ pub fn decode_whole<'a>(
     let Some(encoded) = encoded else {
         return place_fill_value(data_type, codec.fill_value(), request);
     };
+    let whole = request.indexer.is_whole(shape);
     let DecodeRequest { indexer, target } = request;
     let indexer = indexer.as_indexer();
-    let whole = is_whole_chunk(indexer, shape);
     match target {
         TaskTarget::Views(views) if whole => {
             views.with_target(|target| {

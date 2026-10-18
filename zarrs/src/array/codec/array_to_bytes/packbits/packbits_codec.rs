@@ -18,7 +18,7 @@ use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValu
 use std::num::NonZeroU64;
 use zarrs_codec::plan::{
     ByteSource, DecodeRequest, PrepareDecode, SourceDecoder, Task, TaskHint, decode_whole,
-    is_whole_chunk, place_decoded, plan_decode_whole,
+    place_decoded, plan_decode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -473,10 +473,10 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 .clone()
                 .plan_decode(source, shape, request, options);
         }
-        let indexer = request.indexer.as_indexer();
-        if is_whole_chunk(indexer, shape) {
+        if request.indexer.is_whole(shape) {
             return plan_decode_whole(self, source, shape, request, options);
         }
+        let indexer = request.indexer.as_indexer();
         indexer.validate(bytemuck::must_cast_slice(shape))?;
 
         // Read only the bytes holding the requested elements

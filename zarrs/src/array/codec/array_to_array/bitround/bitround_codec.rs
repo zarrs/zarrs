@@ -155,10 +155,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         request: DecodeRequest<'a>,
     ) -> Result<ArrayToArrayDecodePlan<'a>, CodecError> {
         // Decoding is the identity
-        request
-            .indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
+        request.indexer.validate(shape)?;
         Ok(ArrayToArrayDecodePlan::Forward(request))
     }
 

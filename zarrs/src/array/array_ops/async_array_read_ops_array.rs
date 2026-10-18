@@ -2,6 +2,7 @@ use inherent::inherent;
 use std::sync::Arc;
 
 use super::{AsyncArrayReadOps, *};
+use zarrs_codec::plan::PlanIndexer;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, CodecError};
 use zarrs_storage::{Bytes, StorageHandle};
 
@@ -244,7 +245,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         self.async_retrieve_partial_chunk_into_planned(
             chunk_indices,
             &chunk_shape,
-            &indexer,
+            indexer.into(),
             output_target,
             options,
             resources,
@@ -306,7 +307,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         self.async_retrieve_partial_chunk_into_planned(
             chunk_indices,
             &chunk_shape,
-            indexer,
+            PlanIndexer::Borrowed(indexer),
             output_target,
             options,
             resources,

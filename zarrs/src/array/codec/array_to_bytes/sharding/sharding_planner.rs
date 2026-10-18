@@ -11,7 +11,7 @@ use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Generator, Join, MissingDecoder, Outcome, PlanIndexer,
     PrepareDecode, PreparedDecoder, SharedOutput, SubchunkLocation, TargetViews, Task, TaskTarget,
-    TaskValue, decode_whole, drive_memory_one, is_whole_chunk, place_decoded, place_fill_value,
+    TaskValue, decode_whole, drive_memory_one, place_decoded, place_fill_value,
     subchunk_location_value, whole_chunk_hint,
 };
 use zarrs_codec::{
@@ -43,10 +43,7 @@ impl ShardingCodecBound {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        request
-            .indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
+        request.indexer.validate(shape)?;
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let IndexRead {
             shape: index_shape,
@@ -56,7 +53,7 @@ impl ShardingCodecBound {
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
         let options = *options;
 
-        if is_whole_chunk(request.indexer.as_indexer(), shape) {
+        if request.indexer.is_whole(shape) {
             // Every subchunk is requested, so read the whole shard in one request and decode its subchunks from memory
             let hint = whole_chunk_hint(&*self, &source, shape);
             return Ok(Task::read(
@@ -820,10 +817,7 @@ impl PreparedDecoder for ShardDecoder {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        request
-            .indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(&self.shape))?;
+        request.indexer.validate(&self.shape)?;
         if let Some(subchunk) = self.single_subchunk(request.indexer.as_indexer()) {
             // The request is within one subchunk, so it is planned as a request of that subchunk
             let subchunk_subset = self
@@ -853,7 +847,7 @@ impl PreparedDecoder for ShardDecoder {
             return Ok(task.unwrap_or_else(|| Task::compute(|_| Ok(Outcome::Done))));
         }
         let options = *options;
-        if is_whole_chunk(request.indexer.as_indexer(), &self.shape) {
+        if request.indexer.is_whole(&self.shape) {
             // Every subchunk is requested, so read the whole shard in one request and decode its subchunks from memory
             let hint = whole_chunk_hint(&*self.codec, &self.source, &self.shape);
             return Ok(Task::read(

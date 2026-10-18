@@ -184,9 +184,7 @@ pub fn partial_encode_request_elementwise<'a>(
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
-    indexer
-        .as_indexer()
-        .validate(bytemuck::must_cast_slice(shape))?;
+    indexer.validate(shape)?;
     let bytes = match NonZeroU64::new(indexer.as_indexer().len()) {
         Some(len) => codec.encode(bytes, &[len], options, resources)?,
         None => {

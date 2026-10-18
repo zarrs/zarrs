@@ -191,10 +191,7 @@ impl PreparedDecoder for MissingDecoder {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        request
-            .indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(&self.shape))?;
+        request.indexer.validate(&self.shape)?;
         let options = *options;
         Ok(Task::compute(move |ctx| {
             decode_whole(

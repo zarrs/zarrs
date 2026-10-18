@@ -12,8 +12,7 @@ use zarrs_chunk_grid::IndexerError;
 use zarrs_codec::plan::{
     ByteSource, ComputeCtx, DecodeRequest, Outcome, PartialEncodeState, PlanIndexer, PrepareDecode,
     SourceDecoder, SourceKey, Task, TaskHint, TaskTarget, TaskValue, WriteOp, decode_and_update,
-    decode_whole, encode_hint, is_whole_chunk, partial_encode_value, plan_decode_whole,
-    plan_partial_encode_whole,
+    decode_whole, encode_hint, partial_encode_value, plan_decode_whole, plan_partial_encode_whole,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -298,13 +297,13 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
-        let indexer = request.indexer.as_indexer();
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return plan_decode_whole(self, source, shape, request, options);
         };
-        if is_whole_chunk(indexer, shape) {
+        if request.indexer.is_whole(shape) {
             return plan_decode_whole(self, source, shape, request, options);
         }
+        let indexer = request.indexer.as_indexer();
         if indexer.dimensionality() != shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
@@ -437,9 +436,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 self, key, shape, indexer, bytes, options,
             ));
         };
-        indexer
-            .as_indexer()
-            .validate(bytemuck::must_cast_slice(shape))?;
+        indexer.validate(shape)?;
         bytes.validate(indexer.as_indexer().len(), &self.data_type)?;
         let (_, chunk_size) = self.decoded_len(shape)?;
         let hint = encode_hint(&bytes);

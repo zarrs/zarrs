@@ -669,7 +669,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let bytes = self.retrieve_partial_chunk_planned(
             chunk_indices,
             &shape,
-            &indexer,
+            indexer.into(),
             options,
             resources,
         )?;
@@ -688,7 +688,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         self.retrieve_partial_chunk_into_planned(
             chunk_indices,
             &chunk_shape,
-            &indexer,
+            indexer.into(),
             output_target,
             options,
             resources,
@@ -730,20 +730,21 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         chunk_shape: &[NonZeroU64],
-        indexer: &dyn Indexer,
+        indexer: PlanIndexer<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'static>, ArrayError> {
+        let num_elements = indexer.as_indexer().len();
         let (task, keys) = self.plan_partial_chunk(
             chunk_indices,
             chunk_shape,
-            PlanIndexer::Borrowed(indexer),
+            indexer,
             TaskTarget::Value,
             options,
         )?;
         let bytes =
             array_value(drive_blocking_one(task, &self.chunk_io(keys)?, resources)?)?.into_owned();
-        bytes.validate(indexer.len(), self.data_type())?;
+        bytes.validate(num_elements, self.data_type())?;
         Ok(bytes)
     }
 
@@ -752,17 +753,17 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         chunk_shape: &[NonZeroU64],
-        indexer: &dyn Indexer,
+        indexer: PlanIndexer<'_>,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        check_target_len(indexer, &output_target)?;
+        check_target_len(indexer.as_indexer(), &output_target)?;
         let views = whole_views(&output_target)?;
         let (task, keys) = self.plan_partial_chunk(
             chunk_indices,
             chunk_shape,
-            PlanIndexer::Borrowed(indexer),
+            indexer,
             TaskTarget::Views(views),
             options,
         )?;
@@ -1080,17 +1081,17 @@ mod async_planned {
             &self,
             chunk_indices: &[u64],
             chunk_shape: &[NonZeroU64],
-            indexer: &dyn Indexer,
+            indexer: PlanIndexer<'_>,
             output_target: ArrayBytesDecodeIntoTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError> {
-            check_target_len(indexer, &output_target)?;
+            check_target_len(indexer.as_indexer(), &output_target)?;
             let views = whole_views(&output_target)?;
             let (task, keys) = self.plan_partial_chunk(
                 chunk_indices,
                 chunk_shape,
-                PlanIndexer::Borrowed(indexer),
+                indexer,
                 TaskTarget::Views(views),
                 options,
             )?;

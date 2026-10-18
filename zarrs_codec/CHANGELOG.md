@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `plan` module for planned (sans-I/O) operations, whose I/O and compute run with separate concurrency limits
   - `ByteSource` and its window algebra, `Task`, `Outcome`, `Join`, `TaskValue`, `WriteOp`, `TaskHint` and `ComputeCtx`
   - `TargetViews`, `SharedOutput` (and `SharedOutput::for_data_type`), `TaskTarget`, `DecodeRequest` and `PlanIndexer`
+    - `PlanIndexer::{is_whole,validate}` check an owned array subset against a chunk shape without dynamic dispatch
   - The `SyncIo` and `AsyncIo` backends, and the `drive_serial`, `drive_sync`, `drive_async` and `drive_async_offload` drivers
     - `drive_async_offload` is `drive_async` on `wasm32`
   - `IoPool`, a scoped thread pool for blocking I/O

@@ -153,6 +153,7 @@ fn array(
 /// reads allocate 86-98% less often, many-chunk reads and writes 40-74% less and sharded writes 39% less, with about
 /// the same peak memory. A read or write of a single chunk allocates about half as often, but plans a task, which
 /// allocates a few hundred bytes more.
+#[rustfmt::skip]
 const BASELINE: &[(&str, usize, usize, usize)] = &[
     // Zero-copy from the store: only planning and metadata-sized allocations
     ("retrieve_chunk_uncompressed", 6, 558, 549),
