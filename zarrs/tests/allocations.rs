@@ -156,25 +156,25 @@ fn array(
 #[rustfmt::skip]
 const BASELINE: &[(&str, usize, usize, usize)] = &[
     // Zero-copy from the store: only planning and metadata-sized allocations
-    ("retrieve_chunk_uncompressed", 6, 558, 549),
+    ("retrieve_chunk_uncompressed", 4, 530, 530),
     // One decompressed output
-    ("retrieve_chunk_zstd", 6, 131_606, 131_597),
+    ("retrieve_chunk_zstd", 4, 131_578, 131_578),
     // The output plus one decoded intermediate per 64 x 64 chunk
-    ("retrieve_array_subset_many_chunks_zstd", 82, 273_481, 142_865),
-    ("retrieve_sharded_all_zstd", 105, 271_382, 138_133),
-    ("retrieve_sharded_partial_zstd", 123, 74_086, 26_229),
-    ("partial_decoder_sharded_zstd", 111, 52_182, 16_517),
+    ("retrieve_array_subset_many_chunks_zstd", 66, 273_529, 142_977),
+    ("retrieve_sharded_all_zstd", 103, 271_354, 138_114),
+    ("retrieve_sharded_partial_zstd", 121, 74_058, 26_210),
+    ("partial_decoder_sharded_zstd", 110, 52_074, 16_418),
     // The output only: the borrowed shard is not copied
     ("sharding_decode_borrowed_shard", 34, 139_240, 136_000),
     // The memory store copies the value once
-    ("store_chunk_uncompressed_borrowed", 9, 131_326, 131_133),
-    ("store_chunk_zstd", 10, 131_862, 131_837),
-    ("store_array_subset_sharded", 623, 461_862, 143_272),
-    ("async_retrieve_chunk_zstd", 10, 131_902, 131_629),
-    ("store_array_subset_many_chunks_zstd", 191, 289_993, 19_341),
-    ("store_array_subset_partial_chunks_zstd", 227, 328_177, 23_533),
-    ("store_chunks_sharded", 622, 461_798, 143_272),
-    ("async_store_array_subset_many_chunks_zstd", 308, 321_361, 20_645),
+    ("store_chunk_uncompressed_borrowed", 7, 131_298, 131_114),
+    ("store_chunk_zstd", 8, 131_834, 131_818),
+    ("store_array_subset_sharded", 493, 448_010, 143_253),
+    ("async_retrieve_chunk_zstd", 7, 131_834, 131_610),
+    ("store_array_subset_many_chunks_zstd", 143, 286_585, 19_453),
+    ("store_array_subset_partial_chunks_zstd", 167, 324_721, 23_645),
+    ("store_chunks_sharded", 492, 447_946, 143_253),
+    ("async_store_array_subset_many_chunks_zstd", 244, 316_801, 20_757),
 ];
 
 /// The baseline of `name`.
