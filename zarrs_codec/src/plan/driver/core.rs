@@ -449,13 +449,13 @@ fn run_indexed<'a, 's>(
     let outcome = if !task.needs_io() {
         task.run_without_io(ctx)?
     } else if let Some(inline) = inline.filter(admitted) {
-        match SingleTask::new(task)? {
-            SingleTask::Read(task, request) => {
-                let result = inline.read(&request);
-                task.run(&request, result, ctx)?
-            }
-            SingleTask::Compute(task) => task.run_without_io(ctx)?,
-        }
+        let (source, ranges, step) = single_read(task)?;
+        let request = IoRequest {
+            key: external_key(&source),
+            ranges,
+        };
+        let result = inline.read(&request);
+        step.run(finish_reads(&source, &request.ranges, result)?, ctx)?
     } else {
         return Ok(Some(IndexedRun::Deferred(task)));
     };
@@ -614,7 +614,7 @@ impl<'a> IoWork<'a> {
 }
 
 /// The key of the external source of a read.
-fn external_key(source: &ByteSource<'_>) -> SourceKey {
+pub(crate) fn external_key(source: &ByteSource<'_>) -> SourceKey {
     let SourceRoot::External(key) = source.root() else {
         unreachable!("a read has an external source")
     };
@@ -622,7 +622,7 @@ fn external_key(source: &ByteSource<'_>) -> SourceKey {
 }
 
 /// The bytes of the `result` of a read of `ranges` (resolved) of `source`.
-fn finish_reads<'a>(
+pub(crate) fn finish_reads<'a>(
     source: &ByteSource<'a>,
     ranges: &[ByteRange],
     result: Result<Option<ReadBytes>, StorageError>,
@@ -652,76 +652,17 @@ fn finish_reads<'a>(
     }
 }
 
-/// A single task, split into its read request (if it needs I/O) and the rest of the task.
-pub(crate) enum SingleTask<'a> {
-    /// The task needs a read.
-    Read(SingleRead<'a>, IoRequest),
-    /// The task needs no I/O.
-    Compute(Task<'a>),
-}
-
-/// The part of a task that runs after its read.
-pub(crate) struct SingleRead<'a> {
-    source: ByteSource<'a>,
-    step: ComputeStep<'a>,
-}
-
-impl<'a> SingleTask<'a> {
-    /// Split `task` into its read request and the rest.
-    pub(crate) fn new(task: Task<'a>) -> Result<Self, CodecError> {
-        if !task.needs_io() {
-            return Ok(Self::Compute(task));
-        }
-        let (source, mut ranges, step) = task.into_parts();
-        let source = source.expect("a task with I/O has a source");
-        let key = external_key(&source);
-        source.resolve_in_place(&mut ranges)?;
-        Ok(Self::Read(
-            SingleRead { source, step },
-            IoRequest { key, ranges },
-        ))
-    }
-}
-
-impl<'a> SingleRead<'a> {
-    /// Run the compute step on the `result` of the read of `request`.
-    pub(crate) fn run(
-        self,
-        request: &IoRequest,
-        result: Result<Option<ReadBytes>, StorageError>,
-        ctx: &ComputeCtx,
-    ) -> Result<Outcome<'a>, CodecError> {
-        let reads = finish_reads(&self.source, &request.ranges, result)?;
-        self.step.run(reads, ctx)
-    }
-}
-
-impl<'a> Outcome<'a> {
-    /// The write operation and value of an [`Outcome::Write`] of one operation, which a single root task performs
-    /// without a scheduler, or the outcome otherwise.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn into_single_write(self) -> Result<(WriteOp<'a>, TaskValue<'a>), Self> {
-        match self {
-            Outcome::Write { mut ops, then } if ops.len() == 1 => {
-                Ok((ops.pop().expect("one write"), then))
-            }
-            outcome => Err(outcome),
-        }
-    }
-}
-
-/// The value of a single root task that completed with `outcome`, or a scheduler to continue it.
-// The scheduler is moved once per drive, which is cheaper than boxing it
-#[allow(clippy::result_large_err)]
-pub(crate) fn single_outcome(outcome: Outcome<'_>) -> Result<TaskValue<'_>, Scheduler<'_>> {
-    match outcome {
-        Outcome::Done => Ok(TaskValue::None),
-        Outcome::Value(value) => Ok(value),
-        outcome @ (Outcome::Spawn(_)
-        | Outcome::Fork { .. }
-        | Outcome::Generate { .. }
-        | Outcome::Write { .. }) => Err(Scheduler::from_root_outcome(outcome)),
-    }
+/// The source, resolved byte ranges and compute step of a single task that needs I/O.
+///
+/// # Errors
+/// Returns a [`CodecError`] if a byte range is invalid for the source.
+pub(crate) fn single_read(
+    task: Task<'_>,
+) -> Result<(ByteSource<'_>, SmallVec<[ByteRange; 1]>, ComputeStep<'_>), CodecError> {
+    let (source, mut ranges, step) = task.into_parts();
+    let source = source.expect("a task with I/O has a source");
+    source.resolve_in_place(&mut ranges)?;
+    Ok((source, ranges, step))
 }
 
 /// The key and byte ranges of a read, resolved to the root of the source.

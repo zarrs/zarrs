@@ -11,11 +11,11 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use zarrs_storage::StorageError;
 
-use super::super::{AsyncIo, ComputeCtx, Task, TaskValue};
+use super::super::{AsyncIo, ComputeCtx, Outcome, Task, TaskValue};
 use super::coalesce::ReadGroup;
 use super::core::{
-    ByteBudget, Completed, NodeId, Scheduler, SingleTask, Work, WriteWork, generation_window,
-    read_coalescing, single_outcome,
+    ByteBudget, Completed, NodeId, Scheduler, Work, WriteWork, external_key, finish_reads,
+    generation_window, read_coalescing, single_read,
 };
 use crate::{CodecError, Resources};
 use smallvec::SmallVec;
@@ -226,25 +226,26 @@ async fn drive_single<'a>(
     resources: &Resources,
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
     let ctx = ComputeCtx::new_inline(resources.clone());
-    let outcome = match SingleTask::new(task)? {
-        SingleTask::Compute(task) => task.run_without_io(&ctx)?,
-        SingleTask::Read(read, request) => {
-            let result = {
-                let _permit = resources.io_permit().await;
-                io.read(request.key, &request.ranges).await
-            };
-            read.run(&request, result, &ctx)?
-        }
-    };
-    let outcome = match outcome.into_single_write() {
-        Ok((op, then)) => {
+    let outcome = if task.needs_io() {
+        let (source, ranges, step) = single_read(task)?;
+        let result = {
             let _permit = resources.io_permit().await;
-            io.write(op).await?;
-            return Ok(Ok(then));
-        }
-        Err(outcome) => outcome,
+            io.read(external_key(&source), &ranges).await
+        };
+        step.run(finish_reads(&source, &ranges, result)?, &ctx)?
+    } else {
+        task.run_without_io(&ctx)?
     };
-    Ok(single_outcome(outcome))
+    match outcome {
+        Outcome::Done => Ok(Ok(TaskValue::None)),
+        Outcome::Value(value) => Ok(Ok(value)),
+        Outcome::Write { mut ops, then } if ops.len() == 1 => {
+            let _permit = resources.io_permit().await;
+            io.write(ops.pop().expect("one write")).await?;
+            Ok(Ok(then))
+        }
+        outcome => Ok(Err(Scheduler::from_root_outcome(outcome))),
+    }
 }
 
 #[allow(clippy::too_many_lines)]

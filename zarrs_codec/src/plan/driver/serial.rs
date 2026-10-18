@@ -1,10 +1,12 @@
 //! The serial driver.
 
-use super::super::{ComputeCtx, SyncIo, Task, TaskValue, WriteOp};
+use super::super::{ComputeCtx, Outcome, SyncIo, Task, TaskValue, WriteOp};
 use zarrs_storage::StorageError;
 
 use super::super::ReadBytes;
-use super::core::{InlineIo, IoRequest, IoSlot, Scheduler, SingleTask, single_outcome};
+use super::core::{
+    InlineIo, IoRequest, IoSlot, Scheduler, external_key, finish_reads, single_read,
+};
 use crate::{CodecError, Resources};
 
 /// Execute `tasks` serially on the calling thread.
@@ -60,25 +62,26 @@ pub(super) fn drive_single<'a>(
     resources: &Resources,
     ctx: &ComputeCtx,
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
-    let outcome = match SingleTask::new(task)? {
-        SingleTask::Compute(task) => task.run_without_io(ctx)?,
-        SingleTask::Read(read, request) => {
-            let result = {
-                let _permit = resources.io_permit_blocking();
-                io.read(request.key, &request.ranges)
-            };
-            read.run(&request, result, ctx)?
-        }
-    };
-    let outcome = match outcome.into_single_write() {
-        Ok((op, then)) => {
+    let outcome = if task.needs_io() {
+        let (source, ranges, step) = single_read(task)?;
+        let result = {
             let _permit = resources.io_permit_blocking();
-            io.write(op)?;
-            return Ok(Ok(then));
-        }
-        Err(outcome) => outcome,
+            io.read(external_key(&source), &ranges)
+        };
+        step.run(finish_reads(&source, &ranges, result)?, ctx)?
+    } else {
+        task.run_without_io(ctx)?
     };
-    Ok(single_outcome(outcome))
+    match outcome {
+        Outcome::Done => Ok(Ok(TaskValue::None)),
+        Outcome::Value(value) => Ok(Ok(value)),
+        Outcome::Write { mut ops, then } if ops.len() == 1 => {
+            let _permit = resources.io_permit_blocking();
+            io.write(ops.pop().expect("one write"))?;
+            Ok(Ok(then))
+        }
+        outcome => Ok(Err(Scheduler::from_root_outcome(outcome))),
+    }
 }
 
 fn drive_scheduler<'a>(
