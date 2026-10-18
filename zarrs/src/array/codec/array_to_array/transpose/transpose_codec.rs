@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PartialEncodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
@@ -248,23 +248,25 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         let _ = (options, resources);
         let indexer = indexer.as_indexer();
         if let Some(subset) = indexer.as_array_subset() {
             // Transpose the region, which updates the transposed region
             let transposed = super::get_transposed_array_subset(&self.order.0, shape, subset)?;
             let bytes = apply_permutation(&bytes, &subset.shape(), &self.order.0, &self.data_type)?;
-            Ok(Some((PlanIndexer::Subset(transposed), bytes)))
+            Ok(PartialEncodeRequest::Mapped(
+                PlanIndexer::Subset(transposed),
+                bytes,
+            ))
         } else {
             // The transposed indices select the same elements in the same order
             let transposed = super::get_transposed_indexer(&self.order.0, shape, indexer)?;
-            Ok(Some((PlanIndexer::Shared(Arc::new(transposed)), bytes)))
+            Ok(PartialEncodeRequest::Mapped(
+                PlanIndexer::Shared(Arc::new(transposed)),
+                bytes,
+            ))
         }
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
     }
 
     fn plan_decode_request<'a>(

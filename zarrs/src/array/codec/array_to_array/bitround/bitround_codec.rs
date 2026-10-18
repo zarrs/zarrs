@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use zarrs_codec::plan::{
-    ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer, partial_encode_request_elementwise,
+    ArrayToArrayDecodePlan, DecodeRequest, PartialEncodeRequest, PlanIndexer,
+    partial_encode_request_elementwise,
 };
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
@@ -141,12 +142,8 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
     }
 
     fn plan_decode_request<'a>(

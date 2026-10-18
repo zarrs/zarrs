@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PartialEncodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
@@ -291,7 +291,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         let _ = (options, resources);
         // The squeezed indexer selects the same elements in the same order
         let indexer = indexer.as_indexer();
@@ -300,11 +300,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         } else {
             PlanIndexer::Shared(Arc::new(super::get_squeezed_indexer(indexer, shape)?))
         };
-        Ok(Some((indexer, bytes)))
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
+        Ok(PartialEncodeRequest::Mapped(indexer, bytes))
     }
 
     fn plan_decode_request<'a>(

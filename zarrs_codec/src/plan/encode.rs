@@ -183,7 +183,7 @@ pub fn partial_encode_request_elementwise<'a>(
     bytes: ArrayBytes<'a>,
     options: &CodecOptions,
     resources: &ComputeResources,
-) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+) -> Result<PartialEncodeRequest<'a>, CodecError> {
     indexer.validate(shape)?;
     let bytes = match NonZeroU64::new(indexer.as_indexer().len()) {
         Some(len) => codec.encode(bytes, &[len], options, resources)?,
@@ -192,7 +192,20 @@ pub fn partial_encode_request_elementwise<'a>(
             ArrayBytes::new_fill_value(codec.encoded_data_type(), 0, codec.encoded_fill_value())?
         }
     };
-    Ok(Some((indexer, bytes)))
+    Ok(PartialEncodeRequest::Mapped(indexer, bytes))
+}
+
+/// A partial encode of the elements `indexer` of a chunk to `bytes`, mapped through an array-to-array codec or not.
+///
+/// See [`ArrayToArrayCodecTraits::partial_encode_request`].
+#[derive(Debug)]
+pub enum PartialEncodeRequest<'a> {
+    /// The indexer of the encoded elements to update in the encoded chunk and their encoded bytes.
+    Mapped(PlanIndexer<'a>, ArrayBytes<'a>),
+    /// The unchanged request, as the codec does not map partial encodes.
+    ///
+    /// The chunk is decoded, updated and encoded in full by this codec and the codecs after it instead.
+    Unmapped(PlanIndexer<'a>, ArrayBytes<'a>),
 }
 
 /// The state of an encoded chunk kept between partial encodes (e.g. a decoded shard index).

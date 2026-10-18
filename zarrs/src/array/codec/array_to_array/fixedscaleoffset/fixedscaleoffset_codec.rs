@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
+use zarrs_codec::plan::{PartialEncodeRequest, PlanIndexer, partial_encode_request_elementwise};
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -395,12 +395,8 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
     }
 
     fn encoded_data_type(&self) -> &DataType {

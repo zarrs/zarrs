@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `plan::encode_and_write`, which encodes and writes (or erases) a chunk
   - `plan::ComputeCtx::runs_inline`, which is true for compute steps on the polling task of an asynchronous drive
 - Add `plan::{encode_hint,encoded_value,decode_and_update}`
-- Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec, and `plan::partial_encode_request_elementwise`
+- Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec or returns it unmapped (`plan::PartialEncodeRequest`), and `plan::partial_encode_request_elementwise`
 - Add planned resolution of chunk-local subchunk grids
   - `ArrayToBytesCodecTraits::plan_local_subchunk_grids`, which plans the resolution of the subchunk grids of a chunk from its encoded bytes
   - `ArrayToArrayCodecTraits::decoded_local_subchunk_grid`, which maps a subchunk grid through an array-to-array codec

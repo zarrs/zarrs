@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_codec::plan::{PlanIndexer, partial_encode_request_elementwise};
+use zarrs_codec::plan::{PartialEncodeRequest, PlanIndexer, partial_encode_request_elementwise};
 
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
@@ -200,12 +200,8 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         partial_encode_request_elementwise(self, shape, indexer, bytes, options, resources)
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
     }
 
     fn encoded_data_type(&self) -> &DataType {

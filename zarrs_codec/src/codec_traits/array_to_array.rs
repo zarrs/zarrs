@@ -183,9 +183,9 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
 
     /// Map a partial encode of the elements `indexer` of a chunk of `shape` to `bytes` through this codec.
     ///
-    /// Returns the indexer of the encoded elements to update in the encoded chunk and their encoded bytes, or [`None`]
-    /// if the codec does not map partial encodes ([`plans_partial_encode`](Self::plans_partial_encode) is false), so a
-    /// chunk is decoded, updated and encoded in full instead. This is the default.
+    /// Returns the indexer of the encoded elements to update in the encoded chunk and their encoded bytes, or the
+    /// unchanged request if the codec does not map partial encodes, so the chunk is decoded, updated and encoded in full
+    /// by this codec and the codecs after it instead. The default returns the unchanged request.
     ///
     /// Elementwise codecs can implement this with [`partial_encode_request_elementwise`](crate::plan::partial_encode_request_elementwise).
     ///
@@ -198,17 +198,9 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(crate::plan::PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
-        let _ = (shape, indexer, bytes, options, resources);
-        Ok(None)
-    }
-
-    /// Returns true if [`partial_encode_request`](Self::partial_encode_request) maps partial encodes (rather than
-    /// returning [`None`]).
-    ///
-    /// A codec chain checks this before mapping a partial encode, as mapping consumes the indexer and bytes.
-    fn plans_partial_encode(&self) -> bool {
-        false
+    ) -> Result<crate::plan::PartialEncodeRequest<'a>, CodecError> {
+        let _ = (shape, options, resources);
+        Ok(crate::plan::PartialEncodeRequest::Unmapped(indexer, bytes))
     }
 
     /// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `shape`.

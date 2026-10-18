@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PlanIndexer};
+use zarrs_codec::plan::{ArrayToArrayDecodePlan, DecodeRequest, PartialEncodeRequest, PlanIndexer};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
@@ -163,16 +163,12 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         bytes: ArrayBytes<'a>,
         options: &CodecOptions,
         resources: &ComputeResources,
-    ) -> Result<Option<(PlanIndexer<'a>, ArrayBytes<'a>)>, CodecError> {
+    ) -> Result<PartialEncodeRequest<'a>, CodecError> {
         let _ = (options, resources);
         // The reshaped indices select the same elements in the same order
         let encoded_shape = self.encoded_shape(shape)?;
         let indexer = super::get_reshaped_indexer(indexer.as_indexer(), shape, &encoded_shape)?;
-        Ok(Some((indexer, bytes)))
-    }
-
-    fn plans_partial_encode(&self) -> bool {
-        true
+        Ok(PartialEncodeRequest::Mapped(indexer, bytes))
     }
 
     fn plan_decode_request<'a>(
