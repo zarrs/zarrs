@@ -30,6 +30,7 @@ use zarrs_storage::{
 
 use super::super::array_bytes_internal::merge_chunks;
 use super::super::codec::CodecChainBound;
+use super::OpStorage;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape,
     Indexer, subset_indices_at,
@@ -102,28 +103,42 @@ impl ChunkKeys {
 }
 
 /// The synchronous I/O backend of the chunks of an array.
-struct ChunkIo {
-    storage: ReadableStorage,
+struct ChunkIo<'s, TStorage: ?Sized> {
+    storage: OpStorage<'s, TStorage, dyn ReadableStorageTraits>,
     keys: ChunkKeys,
 }
 
-impl SyncIo for ChunkIo {
+/// The synchronous I/O backend for reading chunks that owns its storage.
+type OwnedChunkIo = ChunkIo<'static, dyn ReadableStorageTraits>;
+
+impl<TStorage: ?Sized + ReadableStorageTraits> ChunkIo<'_, TStorage> {
+    /// Returns true if the chunk with source `key` exists.
+    fn exists(&self, key: SourceKey) -> Result<bool, StorageError> {
+        let key = self.keys.store_key(key)?;
+        with_op_storage!(self.storage, |storage| Ok(storage
+            .size_key(&key)?
+            .is_some()))
+    }
+}
+
+impl<TStorage: ?Sized + ReadableStorageTraits> SyncIo for ChunkIo<'_, TStorage> {
     fn read(
         &self,
         key: SourceKey,
         ranges: &[ByteRange],
     ) -> Result<Option<ReadBytes>, StorageError> {
-        read_ranges(&*self.storage, &*self.keys.store_key(key)?, ranges)
+        let key = self.keys.store_key(key)?;
+        with_op_storage!(self.storage, |storage| read_ranges(storage, &key, ranges))
     }
 
     fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
-        self.storage.read_coalescing()
+        with_op_storage!(self.storage, |storage| storage.read_coalescing())
     }
 }
 
 /// Read `ranges` of the value of `key` in `storage`.
 pub(super) fn read_ranges(
-    storage: &dyn ReadableStorageTraits,
+    storage: &(impl ReadableStorageTraits + ?Sized),
     key: &StoreKey,
     ranges: &[ByteRange],
 ) -> Result<Option<ReadBytes>, StorageError> {
@@ -601,14 +616,27 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// The I/O backend of the chunks of `keys`.
-    fn chunk_io(&self, keys: ChunkKeys) -> Result<ChunkIo, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+    fn chunk_io(&self, keys: ChunkKeys) -> Result<ChunkIo<'_, TStorage>, ArrayError> {
+        let storage = if self.storage_transformers().is_empty() {
+            OpStorage::Array(&*self.storage)
+        } else {
+            OpStorage::Transformed(self.readable_storage()?)
+        };
+        Ok(ChunkIo { storage, keys })
+    }
+
+    /// The I/O backend of the chunks of `keys`, which owns its storage.
+    fn owned_chunk_io(&self, keys: ChunkKeys) -> Result<OwnedChunkIo, ArrayError> {
         Ok(ChunkIo {
-            storage: self
-                .storage_transformers()
-                .create_readable_transformer(storage_handle)?,
+            storage: OpStorage::Transformed(self.readable_storage()?),
             keys,
         })
+    }
+
+    /// The storage of the array, transformed by its storage transformers.
+    fn readable_storage(&self) -> Result<ReadableStorage, StorageError> {
+        self.storage_transformers()
+            .create_readable_transformer(Arc::new(StorageHandle::new(self.storage.clone())))
     }
 
     /// Retrieve the encoded chunks selected by `chunks` (validated) with a planned read.
@@ -858,37 +886,54 @@ mod async_planned {
 
     use super::{
         Array, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayError, ArraySubset, ArraySubsetTraits,
-        ByteRange, Bytes, ChunkKeys, CodecOptions, EncodedSubchunk, Indexer, NonZeroU64,
+        ByteRange, Bytes, ChunkKeys, CodecOptions, EncodedSubchunk, Indexer, NonZeroU64, OpStorage,
         PlanIndexer, ReadBytes, Resources, SmallVec, SourceKey, StorageError, StorageHandle,
         StoreKey, SubsetPlan, TaskTarget, array_value, check_target_len, chunk_if_exists,
         encoded_chunks, encoded_subchunk, plan_encoded_chunks, smallvec, whole_views,
     };
 
     /// The asynchronous I/O backend of the chunks of an array.
-    pub(super) struct AsyncChunkIo {
-        pub(super) storage: AsyncReadableStorage,
-        pub(super) keys: ChunkKeys,
+    pub(super) struct AsyncChunkIo<'s, TStorage: ?Sized> {
+        storage: OpStorage<'s, TStorage, dyn AsyncReadableStorageTraits>,
+        keys: ChunkKeys,
+    }
+
+    /// The asynchronous I/O backend for reading chunks that owns its storage.
+    pub(super) type OwnedAsyncChunkIo = AsyncChunkIo<'static, dyn AsyncReadableStorageTraits>;
+
+    impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncChunkIo<'_, TStorage> {
+        /// Returns true if the chunk with source `key` exists.
+        pub(super) async fn exists(&self, key: SourceKey) -> Result<bool, StorageError> {
+            let key = self.keys.store_key(key)?;
+            with_op_storage!(self.storage, |storage| Ok(storage
+                .size_key(&key)
+                .await?
+                .is_some()))
+        }
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
     #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-    impl AsyncIo for AsyncChunkIo {
+    impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncIo for AsyncChunkIo<'_, TStorage> {
         async fn read(
             &self,
             key: SourceKey,
             ranges: &[ByteRange],
         ) -> Result<Option<ReadBytes>, StorageError> {
-            async_read_ranges(&*self.storage, &*self.keys.store_key(key)?, ranges).await
+            let key = self.keys.store_key(key)?;
+            with_op_storage!(self.storage, |storage| {
+                async_read_ranges(storage, &key, ranges).await
+            })
         }
 
         fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
-            self.storage.read_coalescing()
+            with_op_storage!(self.storage, |storage| storage.read_coalescing())
         }
     }
 
     /// Read `ranges` of the value of `key` in `storage`.
     pub(in super::super) async fn async_read_ranges(
-        storage: &dyn AsyncReadableStorageTraits,
+        storage: &(impl AsyncReadableStorageTraits + ?Sized),
         key: &StoreKey,
         ranges: &[ByteRange],
     ) -> Result<Option<ReadBytes>, StorageError> {
@@ -922,15 +967,32 @@ mod async_planned {
         pub(super) async fn async_chunk_io(
             &self,
             keys: ChunkKeys,
-        ) -> Result<AsyncChunkIo, ArrayError> {
-            let storage_handle = std::sync::Arc::new(StorageHandle::new(self.storage.clone()));
+        ) -> Result<AsyncChunkIo<'_, TStorage>, ArrayError> {
+            let storage = if self.storage_transformers().is_empty() {
+                OpStorage::Array(&*self.storage)
+            } else {
+                OpStorage::Transformed(self.async_readable_storage().await?)
+            };
+            Ok(AsyncChunkIo { storage, keys })
+        }
+
+        /// The I/O backend of the chunks of `keys`, which owns its storage.
+        pub(super) async fn async_owned_chunk_io(
+            &self,
+            keys: ChunkKeys,
+        ) -> Result<OwnedAsyncChunkIo, ArrayError> {
             Ok(AsyncChunkIo {
-                storage: self
-                    .storage_transformers()
-                    .create_async_readable_transformer(storage_handle)
-                    .await?,
+                storage: OpStorage::Transformed(self.async_readable_storage().await?),
                 keys,
             })
+        }
+
+        /// The storage of the array, transformed by its storage transformers.
+        async fn async_readable_storage(&self) -> Result<AsyncReadableStorage, StorageError> {
+            let storage_handle = std::sync::Arc::new(StorageHandle::new(self.storage.clone()));
+            self.storage_transformers()
+                .create_async_readable_transformer(storage_handle)
+                .await
         }
 
         /// Retrieve the encoded chunks selected by `chunks` (validated) with a planned read.

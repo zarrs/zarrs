@@ -17,7 +17,7 @@ use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{Bytes, ReadableStorageTraits, StorageError};
 
 use super::{
-    Array, ArrayBytes, ArrayError, ChunkIo, ChunkKeys, CodecChainBound, Indexer, array_value,
+    Array, ArrayBytes, ArrayError, ChunkKeys, CodecChainBound, Indexer, OwnedChunkIo, array_value,
     check_target_len, drive_blocking_one, whole_views,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
@@ -126,7 +126,7 @@ impl PlannedChunk {
 /// drives it with the synchronous driver.
 pub(crate) struct PlannedArrayPartialDecoder {
     chunk: PlannedChunk,
-    io: ChunkIo,
+    io: OwnedChunkIo,
 }
 
 impl ArrayPartialDecoderSubchunkingTraits for PlannedArrayPartialDecoder {
@@ -152,11 +152,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialDecoder {
     fn exists(&self) -> Result<bool, StorageError> {
         match self.chunk.decoder.exists() {
             Some(exists) => Ok(exists),
-            None => Ok(self
-                .io
-                .storage
-                .size_key(&*self.io.keys.store_key(SourceKey(0))?)?
-                .is_some()),
+            None => self.io.exists(SourceKey(0)),
         }
     }
 
@@ -250,7 +246,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
         let (prepare, codecs, shape, keys) = self.prepare_chunk(chunk_indices, options)?;
-        let io = self.chunk_io(keys)?;
+        let io = self.owned_chunk_io(keys)?;
         let decoder = match prepare {
             PrepareDecode::Ready(decoder) => decoder,
             PrepareDecode::Plan(task) => prepared(drive_blocking_one(task, &io, resources)?)?,
@@ -401,7 +397,7 @@ mod async_partial_decoder {
 
     use zarrs_codec::plan::drive_async_offload_one;
 
-    use super::super::async_planned::AsyncChunkIo;
+    use super::super::async_planned::OwnedAsyncChunkIo;
     use super::{
         Array, ArrayBytes, ArrayError, Indexer, PlannedChunk, SourceKey, array_to_codec_error,
         array_value, check_target_len, whole_views,
@@ -412,7 +408,7 @@ mod async_partial_decoder {
     /// and drives it with the asynchronous driver.
     pub(crate) struct AsyncPlannedArrayPartialDecoder {
         chunk: PlannedChunk,
-        io: AsyncChunkIo,
+        io: OwnedAsyncChunkIo,
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -443,12 +439,7 @@ mod async_partial_decoder {
         async fn exists(&self) -> Result<bool, StorageError> {
             match self.chunk.decoder.exists() {
                 Some(exists) => Ok(exists),
-                None => Ok(self
-                    .io
-                    .storage
-                    .size_key(&*self.io.keys.store_key(SourceKey(0))?)
-                    .await?
-                    .is_some()),
+                None => self.io.exists(SourceKey(0)).await,
             }
         }
 
@@ -519,7 +510,7 @@ mod async_partial_decoder {
             resources: &Resources,
         ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
             let (prepare, codecs, shape, keys) = self.prepare_chunk(chunk_indices, options)?;
-            let io = self.async_chunk_io(keys).await?;
+            let io = self.async_owned_chunk_io(keys).await?;
             let decoder = match prepare {
                 PrepareDecode::Ready(decoder) => decoder,
                 PrepareDecode::Plan(task) => {

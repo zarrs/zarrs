@@ -70,6 +70,11 @@ impl StorageTransformerChain {
 }
 
 impl StorageTransformerChain {
+    /// Returns true if there are no storage transformers.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Create a readable storage transformer.
     ///
     /// # Errors

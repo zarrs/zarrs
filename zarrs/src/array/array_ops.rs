@@ -80,6 +80,32 @@ use zarrs_storage::{
     WritableStorageTraits,
 };
 
+/// The storage of the chunks of an operation.
+///
+/// The storage of an array without storage transformers is borrowed, rather than wrapped for each operation.
+enum OpStorage<'s, TStorage: ?Sized, TTransformed: ?Sized> {
+    /// The storage of the array.
+    Array(&'s TStorage),
+    /// The storage created by the storage transformers of the array.
+    Transformed(Arc<TTransformed>),
+}
+
+/// Evaluate `$body` with `$storage` bound to a reference to the storage of the [`OpStorage`] `$op_storage`.
+macro_rules! with_op_storage {
+    ($op_storage:expr, |$storage:ident| $body:expr) => {
+        match &$op_storage {
+            $crate::array::array_ops::OpStorage::Array($storage) => {
+                let $storage = &**$storage;
+                $body
+            }
+            $crate::array::array_ops::OpStorage::Transformed($storage) => {
+                let $storage = &**$storage;
+                $body
+            }
+        }
+    };
+}
+
 mod array_mut_ops;
 mod array_mut_ops_array;
 #[allow(clippy::module_inception)]

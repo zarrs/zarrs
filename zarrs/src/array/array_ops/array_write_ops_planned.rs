@@ -17,10 +17,11 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{
     ReadableWritableStorage, ReadableWritableStorageTraits, StorageError, StorageHandle,
-    WritableStorage, WritableStorageTraits,
+    WritableStorageTraits,
 };
 
 use super::super::codec::CodecChainBound;
+use super::OpStorage;
 use super::array_read_ops_planned::{
     ChunkKeys, ChunkPlanner, drive_blocking_one, plan_error, read_ranges, subset_chunk_shape,
 };
@@ -32,7 +33,7 @@ use crate::array::{
 
 /// Perform the write `op` to the chunks of `keys` in `storage`.
 fn write_op(
-    storage: &dyn WritableStorageTraits,
+    storage: &(impl WritableStorageTraits + ?Sized),
     keys: &ChunkKeys,
     op: WriteOp<'_>,
 ) -> Result<(), StorageError> {
@@ -46,12 +47,12 @@ fn write_op(
 }
 
 /// The synchronous I/O backend for writing the chunks of an array.
-struct ChunkWriteIo {
-    storage: WritableStorage,
+struct ChunkWriteIo<'s, TStorage: ?Sized> {
+    storage: OpStorage<'s, TStorage, dyn WritableStorageTraits>,
     keys: ChunkKeys,
 }
 
-impl SyncIo for ChunkWriteIo {
+impl<TStorage: ?Sized + WritableStorageTraits> SyncIo for ChunkWriteIo<'_, TStorage> {
     fn read(
         &self,
         _key: SourceKey,
@@ -63,31 +64,45 @@ impl SyncIo for ChunkWriteIo {
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-        write_op(&*self.storage, &self.keys, op)
+        with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op))
     }
 }
 
 /// The synchronous I/O backend for reading and writing the chunks of an array.
-struct ChunkReadWriteIo {
-    storage: ReadableWritableStorage,
+struct ChunkReadWriteIo<'s, TStorage: ?Sized> {
+    storage: OpStorage<'s, TStorage, dyn ReadableWritableStorageTraits>,
     keys: ChunkKeys,
 }
 
-impl SyncIo for ChunkReadWriteIo {
+/// The synchronous I/O backend for reading and writing chunks that owns its storage.
+type OwnedChunkReadWriteIo = ChunkReadWriteIo<'static, dyn ReadableWritableStorageTraits>;
+
+impl<TStorage: ?Sized + ReadableWritableStorageTraits> ChunkReadWriteIo<'_, TStorage> {
+    /// Returns true if the chunk with source `key` exists.
+    fn exists(&self, key: SourceKey) -> Result<bool, StorageError> {
+        let key = self.keys.store_key(key)?;
+        with_op_storage!(self.storage, |storage| Ok(storage
+            .size_key(&key)?
+            .is_some()))
+    }
+}
+
+impl<TStorage: ?Sized + ReadableWritableStorageTraits> SyncIo for ChunkReadWriteIo<'_, TStorage> {
     fn read(
         &self,
         key: SourceKey,
         ranges: &[ByteRange],
     ) -> Result<Option<ReadBytes>, StorageError> {
-        read_ranges(&*self.storage, &*self.keys.store_key(key)?, ranges)
+        let key = self.keys.store_key(key)?;
+        with_op_storage!(self.storage, |storage| read_ranges(storage, &key, ranges))
     }
 
     fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
-        self.storage.read_coalescing()
+        with_op_storage!(self.storage, |storage| storage.read_coalescing())
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-        write_op(&*self.storage, &self.keys, op)
+        with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op))
     }
 }
 
@@ -210,14 +225,17 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// The I/O backend for writing the chunks of `keys`.
-    fn chunk_write_io(&self, keys: ChunkKeys) -> Result<ChunkWriteIo, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        Ok(ChunkWriteIo {
-            storage: self
-                .storage_transformers()
-                .create_writable_transformer(storage_handle)?,
-            keys,
-        })
+    fn chunk_write_io(&self, keys: ChunkKeys) -> Result<ChunkWriteIo<'_, TStorage>, ArrayError> {
+        let storage = if self.storage_transformers().is_empty() {
+            OpStorage::Array(&*self.storage)
+        } else {
+            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+            OpStorage::Transformed(
+                self.storage_transformers()
+                    .create_writable_transformer(storage_handle)?,
+            )
+        };
+        Ok(ChunkWriteIo { storage, keys })
     }
 
     /// Store `chunk_bytes` (validated) at `chunk_indices` with a planned write.
@@ -267,14 +285,35 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
     /// The I/O backend for reading and writing the chunks of `keys`.
-    fn chunk_read_write_io(&self, keys: ChunkKeys) -> Result<ChunkReadWriteIo, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+    fn chunk_read_write_io(
+        &self,
+        keys: ChunkKeys,
+    ) -> Result<ChunkReadWriteIo<'_, TStorage>, ArrayError> {
+        let storage = if self.storage_transformers().is_empty() {
+            OpStorage::Array(&*self.storage)
+        } else {
+            OpStorage::Transformed(self.readable_writable_storage()?)
+        };
+        Ok(ChunkReadWriteIo { storage, keys })
+    }
+
+    /// The I/O backend for reading and writing the chunks of `keys`, which owns its storage.
+    fn owned_chunk_read_write_io(
+        &self,
+        keys: ChunkKeys,
+    ) -> Result<OwnedChunkReadWriteIo, ArrayError> {
         Ok(ChunkReadWriteIo {
-            storage: self
-                .storage_transformers()
-                .create_readable_writable_transformer(storage_handle)?,
+            storage: OpStorage::Transformed(self.readable_writable_storage()?),
             keys,
         })
+    }
+
+    /// The storage of the array, transformed by its storage transformers.
+    fn readable_writable_storage(&self) -> Result<ReadableWritableStorage, StorageError> {
+        self.storage_transformers()
+            .create_readable_writable_transformer(Arc::new(StorageHandle::new(
+                self.storage.clone(),
+            )))
     }
 
     /// Store `subset_bytes` (validated), the elements of `array_subset`, which intersects the chunks of `chunks`, with a
@@ -343,21 +382,21 @@ fn is_shared(bytes: &ArrayBytes<'_>) -> bool {
 pub(super) mod async_planned {
     use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
     use zarrs_storage::{
-        AsyncReadableWritableStorage, AsyncReadableWritableStorageTraits, AsyncWritableStorage,
+        AsyncReadableWritableStorage, AsyncReadableWritableStorageTraits,
         AsyncWritableStorageTraits,
     };
 
     use super::super::array_read_ops_planned::async_read_ranges;
     use super::{
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange,
-        ChunkKeys, ChunkPlanner, CodecOptions, Indexer, PlanIndexer, ReadBytes, Resources,
-        SourceKey, StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks,
+        ChunkKeys, ChunkPlanner, CodecOptions, Indexer, OpStorage, PlanIndexer, ReadBytes,
+        Resources, SourceKey, StorageError, StorageHandle, WriteOp, is_shared, plan_erase_chunks,
         plan_store_subset,
     };
 
     /// Perform the write `op` to the chunks of `keys` in `storage`.
     async fn write_op(
-        storage: &dyn AsyncWritableStorageTraits,
+        storage: &(impl AsyncWritableStorageTraits + ?Sized),
         keys: &ChunkKeys,
         op: WriteOp<'_>,
     ) -> Result<(), StorageError> {
@@ -373,14 +412,14 @@ pub(super) mod async_planned {
     }
 
     /// The asynchronous I/O backend for writing the chunks of an array.
-    struct AsyncChunkWriteIo {
-        storage: AsyncWritableStorage,
+    struct AsyncChunkWriteIo<'s, TStorage: ?Sized> {
+        storage: OpStorage<'s, TStorage, dyn AsyncWritableStorageTraits>,
         keys: ChunkKeys,
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
     #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-    impl AsyncIo for AsyncChunkWriteIo {
+    impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncIo for AsyncChunkWriteIo<'_, TStorage> {
         async fn read(
             &self,
             _key: SourceKey,
@@ -392,33 +431,55 @@ pub(super) mod async_planned {
         }
 
         async fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-            write_op(&*self.storage, &self.keys, op).await
+            with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op)
+                .await)
         }
     }
 
     /// The asynchronous I/O backend for reading and writing the chunks of an array.
-    pub(super) struct AsyncChunkReadWriteIo {
-        pub(super) storage: AsyncReadableWritableStorage,
-        pub(super) keys: ChunkKeys,
+    pub(super) struct AsyncChunkReadWriteIo<'s, TStorage: ?Sized> {
+        storage: OpStorage<'s, TStorage, dyn AsyncReadableWritableStorageTraits>,
+        keys: ChunkKeys,
+    }
+
+    /// The asynchronous I/O backend for reading and writing chunks that owns its storage.
+    pub(super) type OwnedAsyncChunkReadWriteIo =
+        AsyncChunkReadWriteIo<'static, dyn AsyncReadableWritableStorageTraits>;
+
+    impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits> AsyncChunkReadWriteIo<'_, TStorage> {
+        /// Returns true if the chunk with source `key` exists.
+        pub(super) async fn exists(&self, key: SourceKey) -> Result<bool, StorageError> {
+            let key = self.keys.store_key(key)?;
+            with_op_storage!(self.storage, |storage| Ok(storage
+                .size_key(&key)
+                .await?
+                .is_some()))
+        }
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
     #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-    impl AsyncIo for AsyncChunkReadWriteIo {
+    impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits> AsyncIo
+        for AsyncChunkReadWriteIo<'_, TStorage>
+    {
         async fn read(
             &self,
             key: SourceKey,
             ranges: &[ByteRange],
         ) -> Result<Option<ReadBytes>, StorageError> {
-            async_read_ranges(&*self.storage, &*self.keys.store_key(key)?, ranges).await
+            let key = self.keys.store_key(key)?;
+            with_op_storage!(self.storage, |storage| {
+                async_read_ranges(storage, &key, ranges).await
+            })
         }
 
         fn read_coalescing(&self) -> Option<zarrs_storage::ReadCoalescing> {
-            self.storage.read_coalescing()
+            with_op_storage!(self.storage, |storage| storage.read_coalescing())
         }
 
         async fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-            write_op(&*self.storage, &self.keys, op).await
+            with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op)
+                .await)
         }
     }
 
@@ -427,15 +488,18 @@ pub(super) mod async_planned {
         async fn async_chunk_write_io(
             &self,
             keys: ChunkKeys,
-        ) -> Result<AsyncChunkWriteIo, ArrayError> {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            Ok(AsyncChunkWriteIo {
-                storage: self
-                    .storage_transformers()
-                    .create_async_writable_transformer(storage_handle)
-                    .await?,
-                keys,
-            })
+        ) -> Result<AsyncChunkWriteIo<'_, TStorage>, ArrayError> {
+            let storage = if self.storage_transformers().is_empty() {
+                OpStorage::Array(&*self.storage)
+            } else {
+                let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+                OpStorage::Transformed(
+                    self.storage_transformers()
+                        .create_async_writable_transformer(storage_handle)
+                        .await?,
+                )
+            };
+            Ok(AsyncChunkWriteIo { storage, keys })
         }
 
         /// Erase the chunks selected by `chunks` (validated) with a planned write.
@@ -529,15 +593,34 @@ pub(super) mod async_planned {
         pub(super) async fn async_chunk_read_write_io(
             &self,
             keys: ChunkKeys,
-        ) -> Result<AsyncChunkReadWriteIo, ArrayError> {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        ) -> Result<AsyncChunkReadWriteIo<'_, TStorage>, ArrayError> {
+            let storage = if self.storage_transformers().is_empty() {
+                OpStorage::Array(&*self.storage)
+            } else {
+                OpStorage::Transformed(self.async_readable_writable_storage().await?)
+            };
+            Ok(AsyncChunkReadWriteIo { storage, keys })
+        }
+
+        /// The I/O backend for reading and writing the chunks of `keys`, which owns its storage.
+        pub(super) async fn async_owned_chunk_read_write_io(
+            &self,
+            keys: ChunkKeys,
+        ) -> Result<OwnedAsyncChunkReadWriteIo, ArrayError> {
             Ok(AsyncChunkReadWriteIo {
-                storage: self
-                    .storage_transformers()
-                    .create_async_readable_writable_transformer(storage_handle)
-                    .await?,
+                storage: OpStorage::Transformed(self.async_readable_writable_storage().await?),
                 keys,
             })
+        }
+
+        /// The storage of the array, transformed by its storage transformers.
+        async fn async_readable_writable_storage(
+            &self,
+        ) -> Result<AsyncReadableWritableStorage, StorageError> {
+            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+            self.storage_transformers()
+                .create_async_readable_writable_transformer(storage_handle)
+                .await
         }
 
         /// Store `subset_bytes` (validated), the elements of `array_subset`, which intersects the chunks of `chunks`,

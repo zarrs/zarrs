@@ -22,7 +22,7 @@ use super::super::array_read_ops_planned::{
     array_to_codec_error, array_value, check_target_len, drive_blocking_one,
     static_local_subchunk_grids, whole_views,
 };
-use super::ChunkReadWriteIo;
+use super::OwnedChunkReadWriteIo;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ChunkGrid, ChunkShape, CodecChainBound, Indexer,
 };
@@ -91,7 +91,7 @@ impl PartialChunk {
 /// Partial decodes read the current chunk (they do not use the state of the partial encoder).
 pub(crate) struct PlannedArrayPartialEncoder {
     chunk: PartialChunk,
-    io: ChunkReadWriteIo,
+    io: OwnedChunkReadWriteIo,
     /// The state of the chunk after the last partial encode, or [`None`] if it is unknown.
     ///
     /// The lock is held during a partial encode, so partial encodes of the chunk are serialised.
@@ -118,11 +118,7 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialEncoder {
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
-        Ok(self
-            .io
-            .storage
-            .size_key(&*self.io.keys.store_key(SourceKey(0))?)?
-            .is_some())
+        self.io.exists(SourceKey(0))
     }
 
     fn size_held(&self) -> usize {
@@ -204,7 +200,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 shape: self.chunk_shape(chunk_indices)?,
                 set_partial: self.storage.supports_set_partial(),
             },
-            io: self.chunk_read_write_io(self.one_key(chunk_indices)?)?,
+            io: self.owned_chunk_read_write_io(self.one_key(chunk_indices)?)?,
             state: Mutex::new(None),
         }))
     }
@@ -230,7 +226,7 @@ mod async_planned {
         array_to_codec_error, array_value, check_target_len, static_local_subchunk_grids,
         whole_views,
     };
-    use super::super::async_planned::AsyncChunkReadWriteIo;
+    use super::super::async_planned::OwnedAsyncChunkReadWriteIo;
     use super::PartialChunk;
     use crate::array::{Array, ArrayBytes, ArrayError, ChunkGrid, Indexer};
 
@@ -239,7 +235,7 @@ mod async_planned {
     /// Compute runs on the polling task, since the tasks borrow the indexer and elements of a partial encode.
     pub(crate) struct AsyncPlannedArrayPartialEncoder {
         chunk: PartialChunk,
-        io: AsyncChunkReadWriteIo,
+        io: OwnedAsyncChunkReadWriteIo,
         /// The state of the chunk after the last partial encode, or [`None`] if it is unknown.
         ///
         /// The lock is held during a partial encode, so partial encodes of the chunk are serialised.
@@ -271,12 +267,7 @@ mod async_planned {
         }
 
         async fn exists(&self) -> Result<bool, StorageError> {
-            Ok(self
-                .io
-                .storage
-                .size_key(&*self.io.keys.store_key(SourceKey(0))?)
-                .await?
-                .is_some())
+            self.io.exists(SourceKey(0)).await
         }
 
         fn size_held(&self) -> usize {
@@ -362,7 +353,7 @@ mod async_planned {
                     set_partial: self.storage.supports_set_partial(),
                 },
                 io: self
-                    .async_chunk_read_write_io(self.one_key(chunk_indices)?)
+                    .async_owned_chunk_read_write_io(self.one_key(chunk_indices)?)
                     .await?,
                 state: async_lock::Mutex::new(None),
             }))
