@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
 - Look up the codec support of a data type (e.g. `DataType::codec_bytes()`) without hashing its `TypeId` with SipHash, as a `TypeId` is already a hash
+- `FillValue::equals_all` does not allocate for fill values of 2, 4 or 8 bytes
 - `DataType` caches its size and whether it is optional, so `DataType::{size,fixed_size,is_fixed,is_variable,is_optional}()` do not dispatch dynamically
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
