@@ -1118,21 +1118,23 @@ mod tests {
                 crate::array::Element::into_array_bytes(&data_type::string(), elements).unwrap();
             for index_at_end in [true, false] {
                 for unbounded in [true, false] {
-                    let options = CodecOptions::default();
-                    let codec = sharding_codec(
-                        to_nonzero(&subchunk_shape),
-                        data_type::string(),
-                        FillValue::from(""),
-                        index_at_end,
-                        SubchunkWriteOrder::Lexicographic,
-                        vec![],
-                        unbounded,
-                    );
-                    let encoded = codec
-                        .encode(bytes.clone(), &shard_shape_nz, &options)
-                        .unwrap();
-                    let decoded = codec.decode(encoded, &shard_shape_nz, &options).unwrap();
-                    assert_eq!(bytes, decoded);
+                    for order in subchunk_write_orders() {
+                        let options = CodecOptions::default();
+                        let codec = sharding_codec(
+                            to_nonzero(&subchunk_shape),
+                            data_type::string(),
+                            FillValue::from(""),
+                            index_at_end,
+                            order,
+                            vec![],
+                            unbounded,
+                        );
+                        let encoded = codec
+                            .encode(bytes.clone(), &shard_shape_nz, &options)
+                            .unwrap();
+                        let decoded = codec.decode(encoded, &shard_shape_nz, &options).unwrap();
+                        assert_eq!(bytes, decoded);
+                    }
                 }
             }
         }
@@ -1153,49 +1155,51 @@ mod tests {
             for (shard_shape, subchunk_shape) in nondivisible_shapes() {
                 let bytes = nondivisible_data(&shard_shape, &subchunk_shape, &data_type);
                 for index_at_end in [true, false] {
-                    let codec = sharding_codec(
-                        to_nonzero(&subchunk_shape),
-                        data_type.clone(),
-                        fill_value(&data_type),
-                        index_at_end,
-                        SubchunkWriteOrder::Lexicographic,
-                        vec![],
-                        false,
-                    );
-                    let encoded = codec
-                        .encode(
-                            bytes.clone(),
-                            &to_nonzero(&shard_shape),
-                            &CodecOptions::default(),
-                        )
-                        .unwrap();
-                    let indexers: Vec<Box<dyn Indexer>> = vec![
-                        Box::new(ArraySubset::new_with_shape(shard_shape.clone())),
-                        Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s - 1)..s))),
-                        Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s / 2)..s))),
-                        Box::new(vec![
-                            shard_shape.iter().map(|&s| s - 1).collect::<ArrayIndices>(),
-                            vec![0; shard_shape.len()],
-                            shard_shape.iter().map(|&s| s / 2).collect(),
-                            shard_shape.iter().map(|&s| s - 1).collect(),
-                        ]),
-                    ];
-                    let expected = indexers
-                        .into_iter()
-                        .map(|indexer| {
-                            let expected = bytes
-                                .extract_array_subset(indexer.as_ref(), &shard_shape, &data_type)
-                                .unwrap()
-                                .into_owned();
-                            (indexer, expected)
-                        })
-                        .collect();
-                    cases.push(NondivisiblePartialDecodeCase {
-                        shard_shape: to_nonzero(&shard_shape),
-                        codec,
-                        encoded,
-                        expected,
-                    });
+                    for order in subchunk_write_orders() {
+                        let codec = sharding_codec(
+                            to_nonzero(&subchunk_shape),
+                            data_type.clone(),
+                            fill_value(&data_type),
+                            index_at_end,
+                            order,
+                            vec![],
+                            false,
+                        );
+                        let encoded = codec
+                            .encode(
+                                bytes.clone(),
+                                &to_nonzero(&shard_shape),
+                                &CodecOptions::default(),
+                            )
+                            .unwrap();
+                        let indexers: Vec<Box<dyn Indexer>> = vec![
+                            Box::new(ArraySubset::new_with_shape(shard_shape.clone())),
+                            Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s - 1)..s))),
+                            Box::new(ArraySubset::from(shard_shape.iter().map(|&s| (s / 2)..s))),
+                            Box::new(vec![
+                                shard_shape.iter().map(|&s| s - 1).collect::<ArrayIndices>(),
+                                vec![0; shard_shape.len()],
+                                shard_shape.iter().map(|&s| s / 2).collect(),
+                                shard_shape.iter().map(|&s| s - 1).collect(),
+                            ]),
+                        ];
+                        let expected = indexers
+                            .into_iter()
+                            .map(|indexer| {
+                                let expected = bytes
+                                    .extract_array_subset(indexer.as_ref(), &shard_shape, &data_type)
+                                    .unwrap()
+                                    .into_owned();
+                                (indexer, expected)
+                            })
+                            .collect();
+                        cases.push(NondivisiblePartialDecodeCase {
+                            shard_shape: to_nonzero(&shard_shape),
+                            codec,
+                            encoded,
+                            expected,
+                        });
+                    }
                 }
             }
         }
