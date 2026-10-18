@@ -50,13 +50,10 @@ impl ReadableStorageTraits for MemoryStore {
         if let Some(data) = data {
             let data = data.clone();
             let out = Box::new(byte_ranges.map(move |byte_range| {
-                let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
-                let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
-                if end > data.len() {
-                    Err(InvalidByteRangeError::new(byte_range, data.len() as u64).into())
-                } else {
-                    Ok(data.slice(start..end))
-                }
+                let range = byte_range
+                    .checked_range_usize(data.len())
+                    .ok_or_else(|| InvalidByteRangeError::new(byte_range, data.len() as u64))?;
+                Ok(data.slice(range))
             }));
             Ok(Some(out))
         } else {
@@ -198,6 +195,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::byte_range::ByteRange;
     use crate::ReadableWritableListableStorageTraits;
 
     #[test]
@@ -207,6 +205,21 @@ mod tests {
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
         crate::store_test::store_list_size(&store)?;
+        Ok(())
+    }
+
+    #[test]
+    fn memory_get_partial_out_of_range() -> Result<(), Box<dyn Error>> {
+        let store = MemoryStore::new();
+        let key: StoreKey = "a/b".try_into()?;
+        store.set(&key, vec![0, 1, 2].into())?;
+        for byte_range in [
+            ByteRange::Suffix(4),
+            ByteRange::FromStart(4, None),
+            ByteRange::FromStart(u64::MAX, Some(2)),
+        ] {
+            assert!(store.get_partial(&key, byte_range).is_err());
+        }
         Ok(())
     }
 

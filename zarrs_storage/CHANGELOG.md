@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
 - Add `ReadCoalescing` and `[Async]ReadableStorageTraits::read_coalescing`, a hint of how reads of nearby byte ranges of a value should be coalesced into one request (default none)
   - The storage adapters and `StorageHandle` forward the hint of their storage
+- Add `ByteRange::{checked_range,checked_range_usize}`, the range of a byte range within bytes of a given length, or `None` if it is out of bounds or overflows
 
 ### Changed
 - `MemoryStore` guards its values with a `RwLock` rather than a `Mutex`, so concurrent reads do not block each other
@@ -28,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make test utilities available to unit tests without the `tests` feature, and require `async` and `tests` for the adapter integration tests so default all-targets checks compile
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
 - Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
+- `MemoryStore::get_partial_many` returns an `InvalidByteRangeError` rather than panicking for a suffix longer than the value, a start beyond its end, or an end that overflows
+- `extract_byte_ranges` and `extract_byte_ranges_concat` return an `InvalidByteRangeError` rather than panicking for a byte range whose end overflows
 - Count async erase operations in `PerformanceMetricsStorageAdapter`
 - Make sync and async `UsageLogStorageAdapter` output consistent and fix malformed sync `erase_many` log messages
 - Clamp `StorageValueIO` reads at the end of a value instead of requesting an out-of-bounds byte range
