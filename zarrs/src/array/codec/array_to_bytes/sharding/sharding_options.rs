@@ -1,6 +1,8 @@
 //! Runtime options for the sharding codec.
 
 /// Write order for subchunks within a shard
+///
+/// The write order is only applied when encoding a whole shard; partial encoding does not respect it.
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum SubchunkWriteOrder {
@@ -9,14 +11,22 @@ pub enum SubchunkWriteOrder {
     /// `Random` is a misnomer and this variant will be removed in a future release.
     // TODO: Remove in 0.24
     Random,
-    /// C order i.e., row-major
+    /// An alias for `Lexicographic`. Soft deprecated.
+    ///
+    /// `C` is numpy-specific terminology, zarr-python uses "lexicographic" to refer to row-major order.
+    // TODO: Remove in 0.25
     C,
+    /// Row-major order (last axis is fastest varying).
+    Lexicographic,
+    /// Column-major order (first axis is fastest varying).
+    Colexicographic,
     /// No order guarantee.
     ///
     /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
     /// For example in the degenerate case of one thread, you may observe (mostly) ordered chunks.
     Unordered,
-    // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
+    /// Morton (Z-order) ordering, first axis most significant.
+    Morton,
 }
 
 /// Runtime options for the [`ShardingCodec`](super::ShardingCodec).

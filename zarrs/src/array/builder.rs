@@ -1085,6 +1085,24 @@ mod tests {
     }
 
     #[test]
+    fn array_builder_codec_specific_options_lexicographic() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Lexicographic);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_morton() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Morton);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_colexicographic() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Colexicographic);
+    }
+
+    #[test]
     fn array_builder_from_array_retains_codec_specific_options() {
         use crate::array::codec::array_to_bytes::sharding::{
             ShardingCodecOptions, SubchunkWriteOrder,
@@ -1094,7 +1112,8 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8], [4], data_type::int8(), 0i8);
         builder.subchunk_shape(vec![2]).codec_specific_options(
             CodecSpecificOptions::default().with_option(
-                ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+                ShardingCodecOptions::default()
+                    .with_subchunk_write_order(SubchunkWriteOrder::Lexicographic),
             ),
         );
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
@@ -1106,7 +1125,7 @@ mod tests {
                 .codec_specific_options()
                 .get_option::<ShardingCodecOptions>()
                 .map(ShardingCodecOptions::subchunk_write_order),
-            Some(SubchunkWriteOrder::C)
+            Some(SubchunkWriteOrder::Lexicographic)
         ));
     }
 
@@ -1130,9 +1149,12 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8, 8], [4, 4], data_type::int8(), 0i8);
         builder
             .array_to_bytes_codec(codec_chain)
-            .codec_specific_options(CodecSpecificOptions::default().with_option(
-                ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
-            ));
+            .codec_specific_options(
+                CodecSpecificOptions::default().with_option(
+                    ShardingCodecOptions::default()
+                        .with_subchunk_write_order(SubchunkWriteOrder::Lexicographic),
+                ),
+            );
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
 
         let codecs = array.codecs_bound();
@@ -1154,7 +1176,7 @@ mod tests {
         for sharding in [outer, inner] {
             assert!(matches!(
                 sharding.options.subchunk_write_order(),
-                SubchunkWriteOrder::C
+                SubchunkWriteOrder::Lexicographic
             ));
         }
     }
@@ -1230,8 +1252,10 @@ mod tests {
 
     #[test]
     #[cfg(feature = "zstd")]
-    fn array_builder_codec_options_preserved_from_codec_object_c() {
+    fn array_builder_codec_options_preserved_from_codec_object_lexicographic() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::C);
+        array_builder_codec_options_preserved_from_codec_object_impl(
+            SubchunkWriteOrder::Lexicographic,
+        );
     }
 }
