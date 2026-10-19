@@ -14,13 +14,15 @@ use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, Invali
 use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
     MaybeBytesIterator, OffsetBytesIterator, ReadCoalescing, ReadableStorageTraits, StorageError,
-    StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, StoreWriter,
     WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
 mod direct_io;
+mod multipart;
 use lru::LruCache;
+use multipart::{is_staging_file, FilesystemStoreWriter};
 use positioned_io::{RandomAccessFile, ReadAt, WriteAt};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -586,6 +588,26 @@ impl WritableStorageTraits for FilesystemStore {
     fn supports_set_partial(&self) -> bool {
         true
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        if self.options.direct_io {
+            // Direct I/O needs aligned buffers and lengths, so the value is set whole.
+            return Ok(Box::new(zarrs_storage::BufferedStoreWriter::new(
+                self,
+                key.clone(),
+            )));
+        }
+        let _ = size_hint;
+        Ok(Box::new(FilesystemStoreWriter::new(self, key)?))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        !self.options.direct_io
+    }
 }
 
 impl AtomicRenameStorageTraits for FilesystemStore {
@@ -614,7 +636,7 @@ impl ListableStorageTraits for FilesystemStore {
             .sort_by_file_name()
             .into_iter()
             .filter_map(std::result::Result::ok)
-            .filter(|v| v.path().is_file())
+            .filter(is_value_file)
             .filter_map(|v| self.fspath_to_key(v.path()).ok())
             .collect())
     }
@@ -624,7 +646,7 @@ impl ListableStorageTraits for FilesystemStore {
             .sort_by_file_name()
             .into_iter()
             .filter_map(std::result::Result::ok)
-            .filter(|v| v.path().is_file())
+            .filter(is_value_file)
             .filter_map(|v| self.fspath_to_key(v.path()).ok())
             .collect())
     }
@@ -643,7 +665,7 @@ impl ListableStorageTraits for FilesystemStore {
                     prefixes.push(StorePrefix::new(
                         prefix.as_str().to_string() + path.to_str().unwrap() + "/",
                     )?);
-                } else {
+                } else if !is_staging_file(path) {
                     keys.push(StoreKey::new(
                         prefix.as_str().to_owned() + path.to_str().unwrap(),
                     )?);
@@ -663,7 +685,7 @@ impl ListableStorageTraits for FilesystemStore {
             .into_iter()
             .filter_map(std::result::Result::ok)
             .filter_map(|v| {
-                if v.path().is_file() {
+                if is_value_file(&v) {
                     Some(std::fs::metadata(v.path()).unwrap().len())
                 } else {
                     None
@@ -681,6 +703,12 @@ impl ListableStorageTraits for FilesystemStore {
         }
         Ok(size)
     }
+}
+
+/// Returns true if the directory entry `entry` is the file of a value, rather than a directory or the staging file
+/// of a multipart write.
+fn is_value_file(entry: &walkdir::DirEntry) -> bool {
+    entry.path().is_file() && !is_staging_file(entry.file_name())
 }
 
 /// A filesystem store creation error.

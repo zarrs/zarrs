@@ -496,3 +496,119 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
     });
     Ok(())
 }
+
+/// The names of the files in `dir` and its subdirectories.
+fn files_on_disk(dir: &std::path::Path) -> Vec<String> {
+    let mut files: Vec<_> = walkdir_files(dir)
+        .into_iter()
+        .map(|path| {
+            path.strip_prefix(dir)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+fn walkdir_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = vec![];
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files.extend(walkdir_files(&path));
+        } else {
+            files.push(path);
+        }
+    }
+    files
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_multipart() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = FilesystemStore::new(path.path())?.sorted();
+    assert!(store.supports_multipart());
+    zarrs_storage::store_test::store_multipart(&store)?;
+    assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_multipart_staging_file() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let mut options = FilesystemStoreOptions::default();
+    options.file_handle_cache_size(4);
+    let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
+    let key: StoreKey = "a/b".try_into()?;
+    store.set(&key, Bytes::from_static(b"old").into())?;
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
+
+    // Many parts, more than one vectored write, including empty parts
+    let parts: Vec<Vec<u8>> = (0..200u8).map(|i| vec![i; usize::from(i % 3)]).collect();
+    let expected: Vec<u8> = parts.concat();
+    let mut writer = store.set_multipart(&key, None)?;
+    writer.write_many(parts.iter().map(Into::into).collect())?;
+    writer.write(Bytes::from_static(b"end").into())?;
+
+    // The staging file is hidden from listing, and the old value is intact
+    let files = files_on_disk(path.path());
+    assert_eq!(files.len(), 2);
+    assert!(files
+        .iter()
+        .any(|file| file.starts_with("a/.b.") && file.ends_with(".zarrs-part")));
+    assert_eq!(store.list()?, vec![key.clone()]);
+    assert_eq!(store.list_prefix(&"a/".try_into()?)?, vec![key.clone()]);
+    assert_eq!(
+        store.list_dir(&"a/".try_into()?)?.keys(),
+        &vec![key.clone()]
+    );
+    assert_eq!(store.size()?, 3);
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
+
+    writer.finish()?;
+    assert_eq!(files_on_disk(path.path()), vec!["a/b".to_string()]);
+    assert_eq!(
+        store.get(&key)?,
+        Some(Bytes::from([expected, b"end".to_vec()].concat()))
+    );
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_multipart_finish_failure_removes_the_staging_file() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = FilesystemStore::new(path.path())?.sorted();
+    let key: StoreKey = "a/b".try_into()?;
+    std::fs::create_dir_all(store.key_to_fspath(&key).join("c"))?;
+    let mut writer = store.set_multipart(&key, None)?;
+    writer.write(Bytes::from_static(b"value").into())?;
+    assert!(writer.finish().is_err());
+    assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn direct_io_multipart() -> Result<(), Box<dyn Error>> {
+    let store = create_direct_io_fs()?;
+    assert!(!store.supports_multipart());
+    zarrs_storage::store_test::store_multipart(&store)?;
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn atomic_write_adapter_multipart() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
+    let store = AtomicWriteStorageAdapter::new(store);
+    zarrs_storage::store_test::store_multipart(&store)?;
+    assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    Ok(())
+}
