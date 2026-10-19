@@ -119,6 +119,18 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
     fn supports_set_partial(&self) -> bool {
         self.0.supports_set_partial()
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn crate::StoreWriter + 's>, StorageError> {
+        self.0.set_multipart(key, size_hint)
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.0.supports_multipart()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -218,6 +230,18 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.0.supports_set_partial()
     }
+
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn crate::AsyncStoreWriter + 's>, StorageError> {
+        self.0.set_multipart(key, size_hint).await
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.0.supports_multipart()
+    }
 }
 
 #[cfg(test)]
@@ -236,6 +260,7 @@ mod tests {
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
         crate::store_test::store_list_size(&store)?;
+        crate::store_test::store_multipart(&store)?;
         Ok(())
     }
 }

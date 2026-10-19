@@ -10,10 +10,10 @@ use futures::StreamExt;
 
 use crate::byte_range::ByteRangeIterator;
 use crate::{
-    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
-    ListableStorageTraits, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncStoreWriter,
+    AsyncWritableStorageTraits, CowBytes, ListableStorageTraits, MaybeBytesIterator, MaybeSend,
+    MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StoreWriter, WritableStorageTraits,
 };
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -136,5 +136,45 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
+    }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        let writer = self.block_on(self.storage.set_multipart(key, size_hint))?;
+        Ok(Box::new(AsyncToSyncStoreWriter {
+            writer,
+            block_on: &self.block_on,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+/// A multipart writer that blocks on each call of an asynchronous writer.
+struct AsyncToSyncStoreWriter<'s, TBlockOn> {
+    writer: Box<dyn AsyncStoreWriter + 's>,
+    block_on: &'s TBlockOn,
+}
+
+impl<TBlockOn: AsyncToSyncBlockOn> StoreWriter for AsyncToSyncStoreWriter<'_, TBlockOn> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.block_on.block_on(self.writer.write(part))
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.block_on.block_on(self.writer.write_many(parts))
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.block_on.block_on(self.writer.finish())
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        self.block_on.block_on(self.writer.abort())
     }
 }

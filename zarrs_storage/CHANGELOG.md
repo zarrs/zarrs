@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The default writer, `[Async]BufferedStoreWriter`, collects the parts and sets the value on finish, so `supports_multipart` defaults to `false`
   - `MemoryStore` and `AsyncMemoryStore` append the parts into one buffer reserved from the size hint
   - Add `store_test::{store_multipart,async_store_multipart}`
+  - `StorageHandle` and the storage adapters forward multipart writes to their storage: `PerformanceMetricsStorageAdapter` counts each part as a write, `UsageLogStorageAdapter` logs each call of the writer, `AtomicWriteStorageAdapter` writes to the temporary key and renames it on finish, and `SyncToAsyncStorageAdapter`/`AsyncToSyncStorageAdapter` run each call of the writer on a blocking thread/with `block_on`
 
 ### Changed
 - `MemoryStore` guards its values with a `RwLock` rather than a `Mutex`, so concurrent reads do not block each other

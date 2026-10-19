@@ -9,12 +9,12 @@ use crate::byte_range::{ByteOffset, ByteRange, ByteRangeIterator};
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits,
+    AsyncStoreWriter, AsyncWritableStorageTraits,
 };
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    StoreKeysPrefixes, StorePrefix, StoreWriter, WritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -289,6 +289,144 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        let result = self.storage.set_multipart(key, size_hint);
+        self.log_set_multipart(key, size_hint, result.as_ref().map(|_| ()))?;
+        Ok(Box::new(UsageLogStoreWriter {
+            writer: result?,
+            log: MultipartLog {
+                adapter: self,
+                key: key.clone(),
+            },
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
+    fn log_set_multipart(
+        &self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+        result: Result<(), &StorageError>,
+    ) -> Result<(), StorageError> {
+        writeln!(
+            self.handle.lock().unwrap(),
+            "{}set_multipart({key}, size_hint={size_hint:?}) -> {result:?}",
+            (self.prefix_func)()
+        )?;
+        Ok(())
+    }
+}
+
+/// The log of the method calls of a multipart writer.
+struct MultipartLog<'s, TStorage: ?Sized> {
+    adapter: &'s UsageLogStorageAdapter<TStorage>,
+    key: StoreKey,
+}
+
+impl<TStorage: ?Sized> MultipartLog<'_, TStorage> {
+    fn log(&self, method: &str, result: &Result<(), StorageError>) -> Result<(), StorageError> {
+        writeln!(
+            self.adapter.handle.lock().unwrap(),
+            "{}{method}({}) -> {result:?}",
+            (self.adapter.prefix_func)(),
+            self.key
+        )?;
+        Ok(())
+    }
+
+    fn log_parts(
+        &self,
+        lens: &[usize],
+        result: &Result<(), StorageError>,
+    ) -> Result<(), StorageError> {
+        writeln!(
+            self.adapter.handle.lock().unwrap(),
+            "{}multipart_write({}, len=[{}]) -> {result:?}",
+            (self.adapter.prefix_func)(),
+            self.key,
+            lens.iter().format(", ")
+        )?;
+        Ok(())
+    }
+}
+
+/// A multipart writer that logs its method calls.
+struct UsageLogStoreWriter<'s, TStorage: ?Sized, TWriter: ?Sized> {
+    writer: Box<TWriter>,
+    log: MultipartLog<'s, TStorage>,
+}
+
+impl<TStorage: ?Sized + MaybeSend + MaybeSync, TWriter: ?Sized + StoreWriter> StoreWriter
+    for UsageLogStoreWriter<'_, TStorage, TWriter>
+{
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        let len = part.len();
+        let result = self.writer.write(part);
+        self.log.log_parts(&[len], &result)?;
+        result
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        let lens: Vec<_> = parts.iter().map(CowBytes::len).collect();
+        let result = self.writer.write_many(parts);
+        self.log.log_parts(&lens, &result)?;
+        result
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        let result = self.writer.finish();
+        self.log.log("multipart_finish", &result)?;
+        result
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        let result = self.writer.abort();
+        self.log.log("multipart_abort", &result)?;
+        result
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TStorage: ?Sized + MaybeSend + MaybeSync, TWriter: ?Sized + AsyncStoreWriter> AsyncStoreWriter
+    for UsageLogStoreWriter<'_, TStorage, TWriter>
+{
+    async fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        let len = part.len();
+        let result = self.writer.write(part).await;
+        self.log.log_parts(&[len], &result)?;
+        result
+    }
+
+    async fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        let lens: Vec<_> = parts.iter().map(CowBytes::len).collect();
+        let result = self.writer.write_many(parts).await;
+        self.log.log_parts(&lens, &result)?;
+        result
+    }
+
+    async fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        let result = self.writer.finish().await;
+        self.log.log("multipart_finish", &result)?;
+        result
+    }
+
+    async fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        let result = self.writer.abort().await;
+        self.log.log("multipart_abort", &result)?;
+        result
+    }
 }
 
 #[cfg(feature = "async")]
@@ -503,6 +641,26 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn AsyncStoreWriter + 's>, StorageError> {
+        let result = self.storage.set_multipart(key, size_hint).await;
+        self.log_set_multipart(key, size_hint, result.as_ref().map(|_| ()))?;
+        Ok(Box::new(UsageLogStoreWriter {
+            writer: result?,
+            log: MultipartLog {
+                adapter: self,
+                key: key.clone(),
+            },
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
 }
 
 #[cfg(test)]
@@ -528,5 +686,32 @@ mod tests {
         store_test::store_read(&store).unwrap();
         store_test::store_list(&store).unwrap();
         store_test::store_list_size(&store).unwrap();
+        store_test::store_multipart(&store).unwrap();
+    }
+
+    #[test]
+    fn usage_log_multipart() {
+        let store = Arc::new(MemoryStore::new());
+        let log_writer = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let store = UsageLogStorageAdapter::new(store, log_writer.clone(), String::new);
+        let key = StoreKey::new("a").unwrap();
+        let mut writer = store.set_multipart(&key, Some(5)).unwrap();
+        writer.write(vec![0; 2].into()).unwrap();
+        writer
+            .write_many(vec![vec![0; 1].into(), vec![0; 2].into()])
+            .unwrap();
+        writer.finish().unwrap();
+        store.set_multipart(&key, None).unwrap().abort().unwrap();
+        let log = String::from_utf8(log_writer.lock().unwrap().clone()).unwrap();
+        assert_eq!(
+            log,
+            "set_multipart(a, size_hint=Some(5)) -> Ok(())
+multipart_write(a, len=[2]) -> Ok(())
+multipart_write(a, len=[1, 2]) -> Ok(())
+multipart_finish(a) -> Ok(())
+set_multipart(a, size_hint=None) -> Ok(())
+multipart_abort(a) -> Ok(())
+"
+        );
     }
 }

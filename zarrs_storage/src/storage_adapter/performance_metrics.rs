@@ -7,12 +7,12 @@ use crate::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits,
+    AsyncStoreWriter, AsyncWritableStorageTraits,
 };
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    StoreWriter, WritableStorageTraits,
 };
 
 /// The performance metrics storage transformer. Accumulates metrics, such as bytes read and written.
@@ -212,6 +212,83 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        Ok(Box::new(PerformanceMetricsStoreWriter {
+            writer: self.storage.set_multipart(key, size_hint)?,
+            bytes_written: &self.bytes_written,
+            writes: &self.writes,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+/// A multipart writer that counts each part as a write.
+struct PerformanceMetricsStoreWriter<'s, TWriter: ?Sized> {
+    writer: Box<TWriter>,
+    bytes_written: &'s AtomicUsize,
+    writes: &'s AtomicUsize,
+}
+
+impl<TWriter: ?Sized> PerformanceMetricsStoreWriter<'_, TWriter> {
+    fn record(&self, parts: &[CowBytes<'_>]) {
+        let bytes_written = parts.iter().map(CowBytes::len).sum::<usize>();
+        self.bytes_written
+            .fetch_add(bytes_written, Ordering::Relaxed);
+        self.writes.fetch_add(parts.len(), Ordering::Relaxed);
+    }
+}
+
+impl<TWriter: ?Sized + StoreWriter> StoreWriter for PerformanceMetricsStoreWriter<'_, TWriter> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.record(std::slice::from_ref(&part));
+        self.writer.write(part)
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.record(&parts);
+        self.writer.write_many(parts)
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.finish()
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.abort()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<TWriter: ?Sized + AsyncStoreWriter> AsyncStoreWriter
+    for PerformanceMetricsStoreWriter<'_, TWriter>
+{
+    async fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.record(std::slice::from_ref(&part));
+        self.writer.write(part).await
+    }
+
+    async fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.record(&parts);
+        self.writer.write_many(parts).await
+    }
+
+    async fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.finish().await
+    }
+
+    async fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.abort().await
+    }
 }
 
 #[cfg(feature = "async")]
@@ -344,6 +421,22 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
     }
+
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn AsyncStoreWriter + 's>, StorageError> {
+        Ok(Box::new(PerformanceMetricsStoreWriter {
+            writer: self.storage.set_multipart(key, size_hint).await?,
+            bytes_written: &self.bytes_written,
+            writes: &self.writes,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
 }
 
 #[cfg(test)]
@@ -387,6 +480,22 @@ mod tests {
         assert!(store.keys_erased() >= 4);
         store.reset();
         assert_eq!(store.bytes_read(), 0);
+    }
+
+    #[test]
+    fn performance_metrics_multipart() {
+        let store = Arc::new(MemoryStore::new());
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
+        let key = StoreKey::new("key").unwrap();
+        let mut writer = store.set_multipart(&key, None).unwrap();
+        writer.write(vec![0; 3].into()).unwrap();
+        writer
+            .write_many(vec![vec![0; 2].into(), vec![0; 4].into()])
+            .unwrap();
+        writer.finish().unwrap();
+        assert_eq!(store.bytes_written(), 9);
+        assert_eq!(store.writes(), 3);
+        store_test::store_multipart(&store).unwrap();
     }
 
     #[cfg(feature = "async")]

@@ -9,9 +9,9 @@ use futures::stream;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    AsyncStoreWriter, AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits,
+    MaybeSend, MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, StoreWriter, WritableStorageTraits,
 };
 
 /// Trait for spawning synchronous work onto an asynchronous runtime.
@@ -210,5 +210,134 @@ impl<
 
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
+    }
+
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn AsyncStoreWriter + 's>, StorageError> {
+        let key = key.clone();
+        let storage = self.storage.clone();
+        let writer = self
+            .spawn_blocking(move || OwnedStoreWriter::new(storage, &key, size_hint))
+            .await?;
+        Ok(Box::new(SyncToAsyncStoreWriter {
+            writer: Some(writer),
+            spawn_blocking: &self.spawn_blocking,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+/// A synchronous multipart writer that owns the storage it borrows, so it can cross onto a blocking thread.
+struct OwnedStoreWriter<TStorage: ?Sized> {
+    // Declared before `storage`, so it is dropped first.
+    writer: Box<dyn StoreWriter + 'static>,
+    storage: Arc<TStorage>,
+}
+
+impl<TStorage: ?Sized + WritableStorageTraits + 'static> OwnedStoreWriter<TStorage> {
+    fn new(
+        storage: Arc<TStorage>,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Self, StorageError> {
+        let writer = storage.set_multipart(key, size_hint)?;
+        // SAFETY: The writer borrows the storage behind the `Arc`, which does not move while `storage` holds it.
+        // The writer never leaves this struct except to be consumed by `finish` or `abort`, before `storage` is
+        // dropped, and the `writer` field is dropped before the `storage` field.
+        let writer = unsafe {
+            std::mem::transmute::<Box<dyn StoreWriter + '_>, Box<dyn StoreWriter + 'static>>(writer)
+        };
+        Ok(Self { writer, storage })
+    }
+
+    fn finish(self) -> Result<(), StorageError> {
+        let Self { writer, storage } = self;
+        let result = writer.finish();
+        drop(storage);
+        result
+    }
+
+    fn abort(self) -> Result<(), StorageError> {
+        let Self { writer, storage } = self;
+        let result = writer.abort();
+        drop(storage);
+        result
+    }
+}
+
+/// An asynchronous multipart writer that runs each call of a synchronous writer on a blocking thread.
+struct SyncToAsyncStoreWriter<'s, TStorage: ?Sized, TSpawnBlocking> {
+    /// The writer, or [`None`] if a call was cancelled while the writer was on a blocking thread.
+    writer: Option<OwnedStoreWriter<TStorage>>,
+    spawn_blocking: &'s TSpawnBlocking,
+}
+
+impl<
+        TStorage: ?Sized + WritableStorageTraits + 'static,
+        TSpawnBlocking: SyncToAsyncSpawnBlocking,
+    > SyncToAsyncStoreWriter<'_, TStorage, TSpawnBlocking>
+{
+    fn take(&mut self) -> Result<OwnedStoreWriter<TStorage>, StorageError> {
+        self.writer.take().ok_or_else(|| {
+            StorageError::Other("a previous call of the multipart writer was cancelled".to_string())
+        })
+    }
+
+    /// Run `f` with the writer on a blocking thread.
+    async fn with_writer(
+        &mut self,
+        f: impl FnOnce(&mut dyn StoreWriter) -> Result<(), StorageError> + MaybeSend + 'static,
+    ) -> Result<(), StorageError> {
+        let mut writer = self.take()?;
+        let (writer, result) = self
+            .spawn_blocking
+            .spawn_blocking(move || {
+                let result = f(writer.writer.as_mut());
+                (writer, result)
+            })
+            .await;
+        self.writer = Some(writer);
+        result
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<
+        TStorage: ?Sized + WritableStorageTraits + 'static,
+        TSpawnBlocking: SyncToAsyncSpawnBlocking,
+    > AsyncStoreWriter for SyncToAsyncStoreWriter<'_, TStorage, TSpawnBlocking>
+{
+    async fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        // The part must outlive this method to cross onto the blocking thread.
+        let part = part.into_static();
+        self.with_writer(move |writer| writer.write(part)).await
+    }
+
+    async fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        // The parts must outlive this method to cross onto the blocking thread.
+        let parts: Vec<_> = parts.into_iter().map(CowBytes::into_static).collect();
+        self.with_writer(move |writer| writer.write_many(parts))
+            .await
+    }
+
+    async fn finish(mut self: Box<Self>) -> Result<(), StorageError> {
+        let writer = self.take()?;
+        self.spawn_blocking
+            .spawn_blocking(move || writer.finish())
+            .await
+    }
+
+    async fn abort(mut self: Box<Self>) -> Result<(), StorageError> {
+        let writer = self.take()?;
+        self.spawn_blocking
+            .spawn_blocking(move || writer.abort())
+            .await
     }
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{
     AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, MaybeBytesIterator,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    StoreKeysPrefixes, StorePrefix, StoreWriter, WritableStorageTraits,
 };
 
 /// A storage adapter that writes complete values to a temporary key before atomically renaming
@@ -153,6 +153,57 @@ impl<
     fn supports_set_partial(&self) -> bool {
         false
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        let temporary_key = Self::temporary_key(key)?;
+        if self.storage.size_key(&temporary_key)?.is_some() {
+            return Err(StorageError::Other(format!(
+                "temporary key {temporary_key} already exists"
+            )));
+        }
+        let writer = self.storage.set_multipart(&temporary_key, size_hint)?;
+        Ok(Box::new(AtomicStoreWriter {
+            writer,
+            storage: &*self.storage,
+            key: key.clone(),
+            temporary_key,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+/// A multipart writer to a temporary key, which is renamed to its destination on finish.
+struct AtomicStoreWriter<'s, TStorage: ?Sized> {
+    writer: Box<dyn StoreWriter + 's>,
+    storage: &'s TStorage,
+    key: StoreKey,
+    temporary_key: StoreKey,
+}
+
+impl<TStorage: ?Sized + AtomicRenameStorageTraits> StoreWriter for AtomicStoreWriter<'_, TStorage> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.writer.write(part)
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.writer.write_many(parts)
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.finish()?;
+        self.storage.rename(&self.temporary_key, &self.key)
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.abort()
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +263,24 @@ mod tests {
         }
     }
 
+    impl ListableStorageTraits for RenameStore {
+        fn list(&self) -> Result<StoreKeys, StorageError> {
+            self.inner.list()
+        }
+
+        fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
+            self.inner.list_prefix(prefix)
+        }
+
+        fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
+            self.inner.list_dir(prefix)
+        }
+
+        fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
+            self.inner.size_prefix(prefix)
+        }
+    }
+
     impl AtomicRenameStorageTraits for RenameStore {
         fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
             let value: MaybeBytes = self.inner.get(source)?;
@@ -231,6 +300,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(adapter.get(&key).unwrap(), Some(Bytes::from_static(b"0B")));
+    }
+
+    #[test]
+    fn multipart() {
+        let adapter = AtomicWriteStorageAdapter::new(Arc::new(RenameStore::default()));
+        crate::store_test::store_multipart(&adapter).unwrap();
+    }
+
+    #[test]
+    fn multipart_writes_to_the_temporary_key() {
+        let storage = Arc::new(RenameStore::default());
+        let adapter = AtomicWriteStorageAdapter::new(storage.clone());
+        let key = StoreKey::new("key").unwrap();
+        let temporary_key = AtomicWriteStorageAdapter::<RenameStore>::temporary_key(&key).unwrap();
+        let mut writer = adapter.set_multipart(&key, None).unwrap();
+        writer.write(Bytes::from_static(b"ab").into()).unwrap();
+        writer.write(Bytes::from_static(b"c").into()).unwrap();
+        writer.finish().unwrap();
+        assert_eq!(adapter.get(&key).unwrap(), Some(Bytes::from_static(b"abc")));
+        assert_eq!(storage.get(&temporary_key).unwrap(), None);
+
+        storage
+            .set(&temporary_key, Bytes::from_static(b"incomplete").into())
+            .unwrap();
+        assert_eq!(
+            adapter.set_multipart(&key, None).err().unwrap().to_string(),
+            "temporary key key.tmp already exists"
+        );
     }
 
     #[test]
