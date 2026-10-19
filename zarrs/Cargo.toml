@@ -177,11 +177,6 @@ name = "codecs"
 harness = false
 
 [[bench]]
-name = "zstd_context"
-harness = false
-required-features = ["zstd"]
-
-[[bench]]
 name = "fill_value"
 harness = false
 
