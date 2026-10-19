@@ -12,10 +12,10 @@ use crate::array::{
 use zarrs_codec::plan::{
     ArrayToArrayDecodePlan, ByteSource, ComputeCtx, DecodeRequest, Join, MissingDecoder, Outcome,
     PartialEncodeRequest, PartialEncodeState, PlanIndexer, PrepareDecode, PreparedDecoder,
-    SourceKey, SourceStep, Task, TaskTarget, TaskValue, WriteOp, decode_whole, encode_hint,
-    local_subchunk_grids, local_subchunk_grids_value, place_decoded, plan_decode_whole,
-    plan_partial_encode_whole, store_encoded_subchunk_memory, subchunk_location_value,
-    then_encoded, whole_chunk_hint,
+    SourceKey, SourceStep, Task, TaskTarget, TaskValue, WriteOp, decode_whole, encode_and_set,
+    encode_hint, local_subchunk_grids, local_subchunk_grids_value, place_decoded,
+    plan_decode_whole, plan_partial_encode_whole, store_encoded_subchunk_memory,
+    subchunk_location_value, then_encoded, whole_chunk_hint,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
@@ -1121,6 +1121,39 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             },
             ctx,
         )
+    }
+
+    fn encode_write_step<'a>(
+        self: Arc<Self>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        key: SourceKey,
+        options: &CodecOptions,
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
+        if !self.bytes_to_bytes.is_empty() {
+            // The encoded chunk is only known once the bytes-to-bytes codecs encode all of it
+            return encode_and_set(self, bytes, shape, key, options, ctx);
+        }
+        bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
+        if !options.store_empty_chunks() && bytes.is_fill_value(self.fill_value()) {
+            return Ok(Outcome::Write {
+                ops: smallvec::smallvec![WriteOp::Erase(key)],
+                then: TaskValue::None,
+            });
+        }
+        // Encode with the array-to-array codecs, then encode and write with the array-to-bytes codec, which need not
+        // check for the fill value again
+        let mut bytes = bytes;
+        let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
+        for codec in &self.array_to_array {
+            bytes = codec.encode(bytes, &shape, options, ctx.resources())?;
+            shape = codec.encoded_shape(&shape)?.into();
+        }
+        let options = options.with_store_empty_chunks(true);
+        self.array_to_bytes
+            .clone()
+            .encode_write_step(bytes, &shape, key, &options, ctx)
     }
 
     fn plan_partial_encode<'a>(

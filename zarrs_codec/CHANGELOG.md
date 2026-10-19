@@ -56,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `plan::plan_encode`, a task that encodes a chunk with `encode_step`, and `plan::then_encoded`, which continues an outcome whose value is an encoded chunk
   - `ArrayToBytesCodecTraits::plan_partial_encode`, with `plan::{PartialEncodeState,partial_encode_value,partial_encode_state}`
     - By default, the whole chunk is read, decoded, updated, encoded and written (`plan::plan_partial_encode_whole`)
-  - `plan::encode_and_write`, which encodes and writes (or erases) a chunk
+  - `plan::encode_and_write`, which encodes and writes (or erases) a chunk with `ArrayToBytesCodecTraits::encode_write_step`
+  - `ArrayToBytesCodecTraits::encode_write_step`, which encodes and writes a chunk, by default with `plan::encode_and_set` (`encode_step` and one write); codecs that write a chunk as it is encoded override it
   - `plan::ComputeCtx::runs_inline`, which is true for compute steps on the polling task of an asynchronous drive
 - Add `plan::{encode_hint,encoded_value,decode_and_update}`
 - Add `ArrayToArrayCodecTraits::partial_encode_request`, which maps a partial encode through an array-to-array codec or returns it unmapped (`plan::PartialEncodeRequest`), and `plan::partial_encode_request_elementwise`

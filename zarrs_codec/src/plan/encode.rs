@@ -114,8 +114,8 @@ pub fn then_encoded<'a>(
 /// Encode the chunk `bytes` of `shape` with `codec` and write it to `key`, or erase `key` if the chunk is the fill value
 /// and empty chunks are not stored.
 ///
-/// The chunk is encoded in the compute step `ctx` ([`ArrayToBytesCodecTraits::encode_step`]), which may fork tasks of
-/// the codec.
+/// The chunk is encoded and written in the compute step `ctx` ([`ArrayToBytesCodecTraits::encode_write_step`]), which
+/// may fork tasks of the codec.
 ///
 /// # Errors
 /// Returns a [`CodecError`] if the codec fails.
@@ -124,6 +124,25 @@ pub fn encode_and_write<'a>(
     key: SourceKey,
     shape: &[NonZeroU64],
     bytes: ArrayBytes<'a>,
+    options: &CodecOptions,
+    ctx: &ComputeCtx,
+) -> Result<Outcome<'a>, CodecError> {
+    codec.encode_write_step(bytes, shape, key, options, ctx)
+}
+
+/// Encode the chunk `bytes` of `shape` with `codec` and set it at `key` with one write, or erase `key` if the chunk is
+/// the fill value and empty chunks are not stored.
+///
+/// The chunk is encoded in the compute step `ctx` ([`ArrayToBytesCodecTraits::encode_step`]), which may fork tasks of
+/// the codec. This is the default of [`ArrayToBytesCodecTraits::encode_write_step`].
+///
+/// # Errors
+/// Returns a [`CodecError`] if the codec fails.
+pub fn encode_and_set<'a>(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    bytes: ArrayBytes<'a>,
+    shape: &[NonZeroU64],
+    key: SourceKey,
     options: &CodecOptions,
     ctx: &ComputeCtx,
 ) -> Result<Outcome<'a>, CodecError> {

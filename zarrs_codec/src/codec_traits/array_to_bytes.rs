@@ -237,6 +237,27 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         )))
     }
 
+    /// Encode `bytes`, a chunk of `shape`, and write it to `key` in the compute step `ctx`, or erase `key` if the chunk
+    /// is the fill value and empty chunks are not stored.
+    ///
+    /// The outcome performs the writes, with the value [`TaskValue::None`](crate::plan::TaskValue::None).
+    /// The default implementation encodes with [`encode_step`](Self::encode_step) and sets the encoded chunk
+    /// ([`encode_and_set`](crate::plan::encode_and_set)).
+    /// Codecs that can write a chunk as it is encoded (e.g. `sharding_indexed`, with a multipart write) override this.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the shape is invalid for the codec or the codec fails.
+    fn encode_write_step<'a>(
+        self: Arc<Self>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        key: SourceKey,
+        options: &CodecOptions,
+        ctx: &crate::plan::ComputeCtx,
+    ) -> Result<crate::plan::Outcome<'a>, CodecError> {
+        crate::plan::encode_and_set(self.into_dyn(), bytes, shape, key, options, ctx)
+    }
+
     /// Plan a partial encode: update the elements of `indexer` of the encoded chunk `key` of `shape` to `bytes`.
     ///
     /// `state` is the state of the chunk after a previous partial encode (e.g. its decoded shard index), which saves

@@ -30,9 +30,9 @@ pub use driver::{IoPool, IoScope, drive_sync, drive_sync_one};
 pub use driver::{drive_async, drive_async_offload, drive_async_offload_one, drive_async_one};
 pub use driver::{drive_blocking_one, drive_memory_one, drive_serial, drive_serial_one};
 pub use encode::{
-    PartialEncodeRequest, PartialEncodeState, decode_and_update, encode_and_write, encode_hint,
-    encoded_value, partial_encode_request_elementwise, partial_encode_state, partial_encode_value,
-    plan_encode, plan_partial_encode_whole, then_encoded,
+    PartialEncodeRequest, PartialEncodeState, decode_and_update, encode_and_set, encode_and_write,
+    encode_hint, encoded_value, partial_encode_request_elementwise, partial_encode_state,
+    partial_encode_value, plan_encode, plan_partial_encode_whole, then_encoded,
 };
 #[cfg(feature = "async")]
 pub use io::AsyncIo;
