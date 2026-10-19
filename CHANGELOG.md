@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
-- Add `ZstdCodecOptions` to configure the uncompressed input-size threshold for compression context reuse, directly or through `CodecSpecificOptions`
 - Add allocation regression checks for general array operations against main baselines, without scheduler allowances, and verify async borrowed-slice zero-copy writes
 - Add in-memory sharding encode/decode benchmarks with uncompressed and feature-gated zstd subchunks
 - Add array-operation benchmarks for small chunks, single chunks, partial writes/encoding, nested sharding, whole-shard reads, partial decoders, and empty/filled caches; populate data before timing reads
@@ -50,9 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 
 ### Changed
-- The `zstd` codec reuses a compression context per thread for values of up to 1 MiB, rather than creating one per value
+- Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- Reuse a `zstd` decompression context per thread for bulk decoding, with a fresh context when decoding reenters on the same thread
 - Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
