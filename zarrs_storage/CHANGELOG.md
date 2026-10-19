@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ReadCoalescing` and `[Async]ReadableStorageTraits::read_coalescing`, a hint of how reads of nearby byte ranges of a value should be coalesced into one request (default none)
   - The storage adapters and `StorageHandle` forward the hint of their storage
 - Add `ByteRange::{checked_range,checked_range_usize}`, the range of a byte range within bytes of a given length, or `None` if it is out of bounds or overflows
+- Add multipart (streaming) writes of a value: `[Async]WritableStorageTraits::{set_multipart,supports_multipart}` and the `[Async]StoreWriter` traits in the new `multipart` module
+  - The default writer, `[Async]BufferedStoreWriter`, collects the parts and sets the value on finish, so `supports_multipart` defaults to `false`
+  - `MemoryStore` and `AsyncMemoryStore` append the parts into one buffer reserved from the size hint
+  - Add `store_test::{store_multipart,async_store_multipart}`
 
 ### Changed
 - `MemoryStore` guards its values with a `RwLock` rather than a `Mutex`, so concurrent reads do not block each other

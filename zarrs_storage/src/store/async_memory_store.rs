@@ -7,6 +7,7 @@ use bytes::BytesMut;
 use futures::{stream, StreamExt};
 
 use crate::byte_range::{ByteRangeIterator, InvalidByteRangeError};
+use crate::multipart::{AppendBuffer, AsyncStoreWriter};
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError,
@@ -127,6 +128,48 @@ impl AsyncWritableStorageTraits for AsyncMemoryStore {
     fn supports_set_partial(&self) -> bool {
         true
     }
+
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn AsyncStoreWriter + 's>, StorageError> {
+        Ok(Box::new(AsyncMemoryStoreWriter {
+            store: self,
+            key: key.clone(),
+            buffer: AppendBuffer::new(size_hint),
+        }))
+    }
+}
+
+/// The multipart writer of an [`AsyncMemoryStore`], which appends the parts into one buffer reserved from the size
+/// hint.
+struct AsyncMemoryStoreWriter<'s> {
+    store: &'s AsyncMemoryStore,
+    key: StoreKey,
+    buffer: AppendBuffer,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncStoreWriter for AsyncMemoryStoreWriter<'_> {
+    async fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.buffer.push(&part);
+        Ok(())
+    }
+
+    async fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.buffer.extend(&parts);
+        Ok(())
+    }
+
+    async fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.store.set(&self.key, self.buffer.into_value()).await
+    }
+
+    async fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        Ok(())
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -196,6 +239,7 @@ mod tests {
             crate::store_test::async_store_read(&store).await?;
             crate::store_test::async_store_list(&store).await?;
             crate::store_test::async_store_list_size(&store).await?;
+            crate::store_test::async_store_multipart(&store).await?;
             Ok(())
         })
     }

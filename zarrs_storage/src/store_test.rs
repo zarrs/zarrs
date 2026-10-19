@@ -3,7 +3,9 @@ use std::error::Error;
 use crate::byte_range::ByteRange;
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
-use crate::{ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableStorageTraits};
+use crate::{
+    ListableStorageTraits, ReadableStorageTraits, StoreKey, StorePrefix, WritableStorageTraits,
+};
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Create a store with the following data
@@ -369,5 +371,165 @@ pub async fn async_store_list_size<T: AsyncListableStorageTraits>(
     assert_eq!(store.size_prefix(&"a/".try_into()?).await?, 5);
     assert_eq!(store.size_prefix(&"i/".try_into()?).await?, 2);
     assert_eq!(store.size_prefix(&"notfound/".try_into()?).await?, 0);
+    Ok(())
+}
+
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+/// Check multipart writes with [`WritableStorageTraits::set_multipart`] under the prefix `multipart/`.
+///
+/// Checks that:
+/// - a value written in parts reads back as their concatenation, including no parts and borrowed parts,
+/// - a value replaced by a multipart write is unchanged until the writer is finished,
+/// - an aborted or dropped writer leaves no value, and an existing value unchanged,
+/// - nothing else is listed under the prefix.
+pub fn store_multipart<T: ReadableStorageTraits + WritableStorageTraits + ListableStorageTraits>(
+    store: &T,
+) -> Result<(), Box<dyn Error>> {
+    let prefix: StorePrefix = "multipart/".try_into()?;
+    store.erase_prefix(&prefix)?;
+    let key = |name: &str| StoreKey::new(format!("multipart/{name}"));
+
+    // Parts, including empty and borrowed parts
+    let borrowed = [6u8, 7];
+    let mut writer = store.set_multipart(&key("a")?, Some(16))?;
+    writer.write(vec![0, 1, 2].into())?;
+    writer.write(vec![].into())?;
+    writer.write_many(vec![
+        vec![3].into(),
+        vec![4, 5].into(),
+        (&borrowed[..]).into(),
+    ])?;
+    writer.write_many(vec![])?;
+    writer.finish()?;
+    assert_eq!(
+        store.get(&key("a")?)?,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7].into())
+    );
+
+    // No parts
+    store.set_multipart(&key("empty")?, None)?.finish()?;
+    assert_eq!(store.get(&key("empty")?)?, Some(vec![].into()));
+
+    // A single part, larger than the size hint
+    let mut writer = store.set_multipart(&key("single")?, Some(1))?;
+    writer.write(vec![1, 2, 3].into())?;
+    writer.finish()?;
+    assert_eq!(store.get(&key("single")?)?, Some(vec![1, 2, 3].into()));
+
+    // Replacing a value
+    let mut writer = store.set_multipart(&key("a")?, None)?;
+    writer.write(vec![9; 3].into())?;
+    assert_eq!(
+        store.get(&key("a")?)?,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7].into())
+    );
+    writer.finish()?;
+    assert_eq!(store.get(&key("a")?)?, Some(vec![9; 3].into()));
+
+    // Abort and drop
+    let mut writer = store.set_multipart(&key("a")?, None)?;
+    writer.write(vec![1].into())?;
+    writer.abort()?;
+    let mut writer = store.set_multipart(&key("aborted")?, None)?;
+    writer.write(vec![1].into())?;
+    writer.abort()?;
+    let mut writer = store.set_multipart(&key("dropped")?, None)?;
+    writer.write(vec![1].into())?;
+    drop(writer);
+    assert_eq!(store.get(&key("a")?)?, Some(vec![9; 3].into()));
+    assert!(store.get(&key("aborted")?)?.is_none());
+    assert!(store.get(&key("dropped")?)?.is_none());
+
+    assert_eq!(
+        store.list_prefix(&prefix)?,
+        vec![key("a")?, key("empty")?, key("single")?]
+    );
+    assert_eq!(store.list_dir(&prefix)?.keys().len(), 3);
+    store.erase_prefix(&prefix)?;
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+/// Check multipart writes with
+/// [`AsyncWritableStorageTraits::set_multipart`](crate::AsyncWritableStorageTraits::set_multipart) under the prefix
+/// `multipart/`.
+///
+/// The asynchronous equivalent of [`store_multipart`].
+pub async fn async_store_multipart<
+    T: AsyncReadableStorageTraits + AsyncWritableStorageTraits + AsyncListableStorageTraits,
+>(
+    store: &T,
+) -> Result<(), Box<dyn Error>> {
+    let prefix: StorePrefix = "multipart/".try_into()?;
+    store.erase_prefix(&prefix).await?;
+    let key = |name: &str| StoreKey::new(format!("multipart/{name}"));
+
+    // Parts, including empty and borrowed parts
+    let borrowed = [6u8, 7];
+    let mut writer = store.set_multipart(&key("a")?, Some(16)).await?;
+    writer.write(vec![0, 1, 2].into()).await?;
+    writer.write(vec![].into()).await?;
+    writer
+        .write_many(vec![
+            vec![3].into(),
+            vec![4, 5].into(),
+            (&borrowed[..]).into(),
+        ])
+        .await?;
+    writer.write_many(vec![]).await?;
+    writer.finish().await?;
+    assert_eq!(
+        store.get(&key("a")?).await?,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7].into())
+    );
+
+    // No parts
+    store
+        .set_multipart(&key("empty")?, None)
+        .await?
+        .finish()
+        .await?;
+    assert_eq!(store.get(&key("empty")?).await?, Some(vec![].into()));
+
+    // A single part, larger than the size hint
+    let mut writer = store.set_multipart(&key("single")?, Some(1)).await?;
+    writer.write(vec![1, 2, 3].into()).await?;
+    writer.finish().await?;
+    assert_eq!(
+        store.get(&key("single")?).await?,
+        Some(vec![1, 2, 3].into())
+    );
+
+    // Replacing a value
+    let mut writer = store.set_multipart(&key("a")?, None).await?;
+    writer.write(vec![9; 3].into()).await?;
+    assert_eq!(
+        store.get(&key("a")?).await?,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7].into())
+    );
+    writer.finish().await?;
+    assert_eq!(store.get(&key("a")?).await?, Some(vec![9; 3].into()));
+
+    // Abort and drop
+    let mut writer = store.set_multipart(&key("a")?, None).await?;
+    writer.write(vec![1].into()).await?;
+    writer.abort().await?;
+    let mut writer = store.set_multipart(&key("aborted")?, None).await?;
+    writer.write(vec![1].into()).await?;
+    writer.abort().await?;
+    let mut writer = store.set_multipart(&key("dropped")?, None).await?;
+    writer.write(vec![1].into()).await?;
+    drop(writer);
+    assert_eq!(store.get(&key("a")?).await?, Some(vec![9; 3].into()));
+    assert!(store.get(&key("aborted")?).await?.is_none());
+    assert!(store.get(&key("dropped")?).await?.is_none());
+
+    assert_eq!(
+        store.list_prefix(&prefix).await?,
+        vec![key("a")?, key("empty")?, key("single")?]
+    );
+    assert_eq!(store.list_dir(&prefix).await?.keys().len(), 3);
+    store.erase_prefix(&prefix).await?;
     Ok(())
 }

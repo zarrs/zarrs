@@ -10,6 +10,7 @@ use super::{
     StorePrefixes,
 };
 use crate::byte_range::ByteRange;
+use crate::multipart::{AsyncBufferedStoreWriter, AsyncStoreWriter};
 use crate::{AsyncMaybeBytesIterator, CowBytes, MaybeBytes, OffsetBytesIterator, ReadCoalescing};
 
 /// Async readable storage traits.
@@ -240,6 +241,34 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// If this returns `true`, the store can efficiently handle `set_partial` and `set_partial_many` operations.
     /// If this returns `false`, partial sets will fall back to a full read and write operation.
     fn supports_set_partial(&self) -> bool;
+
+    /// Begin a multipart write of the value at `key`, returning a writer that appends its parts.
+    ///
+    /// `size_hint` is an upper bound on the size of the value, if known, which a store may use to reserve space.
+    /// The value is visible only once the writer is finished.
+    ///
+    /// The default implementation returns an [`AsyncBufferedStoreWriter`], which collects the parts and calls
+    /// [`set`](AsyncWritableStorageTraits::set) on finish.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if the write cannot be started.
+    async fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn AsyncStoreWriter + 's>, StorageError> {
+        let _ = size_hint;
+        Ok(Box::new(AsyncBufferedStoreWriter::new(self, key.clone())))
+    }
+
+    /// Returns whether this store writes a value in parts with
+    /// [`set_multipart`](AsyncWritableStorageTraits::set_multipart).
+    ///
+    /// If this returns `false`, a multipart write collects the parts and sets the value whole, so streaming a value
+    /// gains nothing over [`set`](AsyncWritableStorageTraits::set).
+    fn supports_multipart(&self) -> bool {
+        false
+    }
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].

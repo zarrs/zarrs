@@ -6,6 +6,7 @@ use std::sync::RwLock;
 use bytes::BytesMut;
 
 use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use crate::multipart::{AppendBuffer, StoreWriter};
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
@@ -151,6 +152,45 @@ impl WritableStorageTraits for MemoryStore {
     fn supports_set_partial(&self) -> bool {
         true
     }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        Ok(Box::new(MemoryStoreWriter {
+            store: self,
+            key: key.clone(),
+            buffer: AppendBuffer::new(size_hint),
+        }))
+    }
+}
+
+/// The multipart writer of a [`MemoryStore`], which appends the parts into one buffer reserved from the size hint.
+struct MemoryStoreWriter<'s> {
+    store: &'s MemoryStore,
+    key: StoreKey,
+    buffer: AppendBuffer,
+}
+
+impl StoreWriter for MemoryStoreWriter<'_> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.buffer.push(&part);
+        Ok(())
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.buffer.extend(&parts);
+        Ok(())
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.store.set(&self.key, self.buffer.into_value())
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        Ok(())
+    }
 }
 
 impl ListableStorageTraits for MemoryStore {
@@ -220,6 +260,7 @@ mod tests {
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
         crate::store_test::store_list_size(&store)?;
+        crate::store_test::store_multipart(&store)?;
         Ok(())
     }
 
