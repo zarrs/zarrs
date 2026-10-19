@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Add `ZstdCodecOptions` to configure the uncompressed input-size threshold for compression context reuse, directly or through `CodecSpecificOptions`
 - Add allocation regression checks for general array operations against main baselines, without scheduler allowances, and verify async borrowed-slice zero-copy writes
 - Add in-memory sharding encode/decode benchmarks with uncompressed and feature-gated zstd subchunks
 - Add array-operation benchmarks for small chunks, single chunks, partial writes/encoding, nested sharding, whole-shard reads, partial decoders, and empty/filled caches; populate data before timing reads
