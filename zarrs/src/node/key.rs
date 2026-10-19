@@ -58,7 +58,11 @@ pub fn data_key(path: &NodePath, chunk_key: &str) -> Result<StoreKey, StoreKeyEr
     let key_path = if path.is_empty() {
         chunk_key.to_string()
     } else {
-        format!("{path}/{chunk_key}")
+        let mut key_path = String::with_capacity(path.len() + 1 + chunk_key.len());
+        key_path.push_str(path);
+        key_path.push('/');
+        key_path.push_str(chunk_key);
+        key_path
     };
     StoreKey::new(key_path)
 }

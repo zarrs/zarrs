@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
 
 ### Changed
+- Build chunk store keys directly with `ChunkKeyEncodingTraits::encode_into`
+- Encode chunk keys in one allocation, rather than allocating per index and growing the key
 - Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
 - Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
