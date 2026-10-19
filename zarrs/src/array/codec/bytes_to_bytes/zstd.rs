@@ -29,14 +29,33 @@
 //! # "#;
 //! # use zarrs::metadata_ext::codec::zstd::ZstdCodecConfiguration;
 //! # serde_json::from_str::<ZstdCodecConfiguration>(JSON).unwrap();
+//! ```
+//!
+//! ### Runtime Options
+//!
+//! [`ZstdCodecOptions`] controls compression context reuse independently of the
+//! compression level and checksum settings stored in metadata.
+//!
+//! ```rust
+//! use zarrs::array::{CodecSpecificOptions, codec::ZstdCodecOptions};
+//!
+//! // Reuse compression contexts for inputs of up to 256 KiB.
+//! let options = CodecSpecificOptions::default().with_option(
+//!     ZstdCodecOptions::default().with_compression_context_reuse_threshold(256 * 1024),
+//! );
+//! // Pass `options` to ArrayBuilder::codec_specific_options or
+//! // Array::with_codec_specific_options.
+//! ```
 
 mod zstd_codec;
+mod zstd_options;
 
 use std::sync::Arc;
 
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 pub use zstd_codec::ZstdCodec;
+pub use zstd_options::ZstdCodecOptions;
 
 use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zstd::{
@@ -268,5 +287,32 @@ mod tests {
         })
         .unwrap();
         assert_eq!(nested, second);
+    }
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn encode_reuses_context_with_each_configuration() {
+        // Encodes on one thread with different configurations, and a value larger than the reused context's limit,
+        // match a new context
+        let small = b"compress with the context of the thread".repeat(64);
+        let large: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i % 251) as u8).collect();
+        for (level, checksum, data) in [
+            (1, false, &small),
+            (19, true, &small),
+            (3, false, &large),
+            (1, true, &small),
+            (19, false, &small),
+        ] {
+            let encoded = ZstdCodec::new(level, checksum)
+                .encode(CowBytes::from(data.as_slice()), &CodecOptions::default())
+                .unwrap();
+            let mut compressor = zstd::bulk::Compressor::new(level).unwrap();
+            compressor.include_checksum(checksum).unwrap();
+            let expected = compressor.compress(data).unwrap();
+            assert_eq!(
+                &*encoded,
+                expected.as_slice(),
+                "level {level}, checksum {checksum}"
+            );
+        }
     }
 }
