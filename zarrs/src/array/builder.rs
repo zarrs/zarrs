@@ -1237,7 +1237,6 @@ mod tests {
         assert_eq!(data, read_data);
     }
 
-
     #[test]
     #[cfg(feature = "zstd")]
     fn array_builder_codec_options_preserved_from_codec_object_lexicographic() {
