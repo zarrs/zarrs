@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
+- `FillValue::equals_all` does not allocate for fill values of 2, 4 or 8 bytes
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
