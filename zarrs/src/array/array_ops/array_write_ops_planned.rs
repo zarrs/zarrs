@@ -522,6 +522,19 @@ pub(super) mod async_planned {
             .await
     }
 
+    /// Return `result`, the result of a drive with the multipart writes `multipart`, aborting the writes in progress if it
+    /// failed (an object store may otherwise keep the parts of an unfinished upload).
+    async fn abort_on_error<T>(
+        multipart: &MultipartWriters<dyn AsyncStoreWriter + '_>,
+        result: Result<T, zarrs_codec::CodecError>,
+    ) -> Result<T, zarrs_codec::CodecError> {
+        if result.is_err() {
+            // The error of the drive is reported rather than that of aborting
+            let _ = multipart.abort_all_async().await;
+        }
+        result
+    }
+
     /// The asynchronous I/O backend for writing the chunks of an array.
     pub(super) struct AsyncChunkWriteIo<'s, TStorage: ?Sized> {
         storage: OpStorage<'s, TStorage, dyn AsyncWritableStorageTraits>,
@@ -672,7 +685,11 @@ pub(super) mod async_planned {
                     &shape,
                     chunk_bytes.into_owned(),
                 );
-                drive_async_offload_one(task, &io, resources).await?;
+                abort_on_error(
+                    &io.multipart,
+                    drive_async_offload_one(task, &io, resources).await,
+                )
+                .await?;
             } else {
                 let task = ChunkPlanner::plan_store_with(
                     self.codecs_bound(),
@@ -681,7 +698,7 @@ pub(super) mod async_planned {
                     &shape,
                     chunk_bytes,
                 );
-                drive_async_one(task, &io, resources).await?;
+                abort_on_error(&io.multipart, drive_async_one(task, &io, resources).await).await?;
             }
             Ok(())
         }
@@ -706,7 +723,11 @@ pub(super) mod async_planned {
                 let bytes = Arc::new(chunks_bytes.into_owned());
                 let task =
                     plan_store_subset(planner, chunks.clone(), array_subset.clone(), bytes, false);
-                drive_async_offload_one(task, &io, resources).await?;
+                abort_on_error(
+                    &io.multipart,
+                    drive_async_offload_one(task, &io, resources).await,
+                )
+                .await?;
                 Ok(())
             } else {
                 let task = plan_store_subset(
@@ -716,7 +737,7 @@ pub(super) mod async_planned {
                     &chunks_bytes,
                     false,
                 );
-                drive_async_one(task, &io, resources).await?;
+                abort_on_error(&io.multipart, drive_async_one(task, &io, resources).await).await?;
                 Ok(())
             }
         }
@@ -805,7 +826,11 @@ pub(super) mod async_planned {
                     bytes,
                     set_partial,
                 );
-                drive_async_offload_one(task, &io, resources).await?;
+                abort_on_error(
+                    &io.multipart,
+                    drive_async_offload_one(task, &io, resources).await,
+                )
+                .await?;
                 Ok(())
             } else {
                 let task = plan_store_subset(
@@ -815,7 +840,7 @@ pub(super) mod async_planned {
                     &subset_bytes,
                     set_partial,
                 );
-                drive_async_one(task, &io, resources).await?;
+                abort_on_error(&io.multipart, drive_async_one(task, &io, resources).await).await?;
                 Ok(())
             }
         }
@@ -915,6 +940,102 @@ mod tests {
         // A writer borrows the storage, so a backend that owns its storage does not support multipart writes
         let io = array.owned_chunk_read_write_io(array.one_key(&[1])?)?;
         assert!(drive_blocking_one(multipart_task(), &io, &resources).is_err());
+        Ok(())
+    }
+
+    /// An asynchronous store whose multipart writes fail, counting the writers aborted.
+    #[cfg(feature = "async")]
+    #[derive(Default)]
+    struct FailingMultipartStore {
+        inner: zarrs_storage::store::AsyncMemoryStore,
+        aborted: std::sync::atomic::AtomicUsize,
+    }
+
+    #[cfg(feature = "async")]
+    struct FailingWriter<'s>(&'s std::sync::atomic::AtomicUsize);
+
+    #[cfg(feature = "async")]
+    #[async_trait::async_trait]
+    impl zarrs_storage::AsyncStoreWriter for FailingWriter<'_> {
+        async fn write(&mut self, _part: zarrs_codec::CowBytes<'_>) -> Result<(), StorageError> {
+            Err(StorageError::Other("write failed".to_string()))
+        }
+
+        async fn finish(self: Box<Self>) -> Result<(), StorageError> {
+            Ok(())
+        }
+
+        async fn abort(self: Box<Self>) -> Result<(), StorageError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[async_trait::async_trait]
+    impl zarrs_storage::AsyncWritableStorageTraits for FailingMultipartStore {
+        async fn set(
+            &self,
+            key: &zarrs_storage::StoreKey,
+            value: zarrs_codec::CowBytes<'_>,
+        ) -> Result<(), StorageError> {
+            self.inner.set(key, value).await
+        }
+
+        async fn set_partial_many<'a>(
+            &'a self,
+            key: &zarrs_storage::StoreKey,
+            offset_values: zarrs_storage::OffsetBytesIterator<'a>,
+        ) -> Result<(), StorageError> {
+            self.inner.set_partial_many(key, offset_values).await
+        }
+
+        async fn erase(&self, key: &zarrs_storage::StoreKey) -> Result<(), StorageError> {
+            self.inner.erase(key).await
+        }
+
+        async fn erase_prefix(
+            &self,
+            prefix: &zarrs_storage::StorePrefix,
+        ) -> Result<(), StorageError> {
+            self.inner.erase_prefix(prefix).await
+        }
+
+        fn supports_set_partial(&self) -> bool {
+            false
+        }
+
+        async fn set_multipart<'s>(
+            &'s self,
+            _key: &zarrs_storage::StoreKey,
+            _size_hint: Option<u64>,
+        ) -> Result<Box<dyn zarrs_storage::AsyncStoreWriter + 's>, StorageError> {
+            Ok(Box::new(FailingWriter(&self.aborted)))
+        }
+
+        fn supports_multipart(&self) -> bool {
+            true
+        }
+    }
+
+    /// The multipart writes of a failed drive are aborted.
+    #[cfg(feature = "async")]
+    #[test]
+    fn async_failed_multipart_writes_are_aborted() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(FailingMultipartStore::default());
+        let mut builder = ArrayBuilder::new(vec![64, 64], vec![64, 64], data_type::uint16(), 0u16);
+        builder.subchunk_shape(vec![8, 8]);
+        let array = builder
+            .build_arc(store.clone(), "/array")?
+            .with_codec_options(CodecOptions::default().with_multipart_part_size(1024));
+        let data: Vec<u16> = (0..64 * 64).collect();
+        let result = futures::executor::block_on(array.async_store_chunk(
+            &[0, 0],
+            data,
+            &Resources::default(),
+        ));
+        assert!(result.is_err());
+        assert_eq!(store.aborted.load(std::sync::atomic::Ordering::SeqCst), 1);
         Ok(())
     }
 

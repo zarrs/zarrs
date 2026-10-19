@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A write then holds a window of encoded blocks of subchunks and a few parts (`CodecOptions::multipart_part_size`), rather than the whole shard
   - Shards whose decoded size is at most the part size, with bytes-to-bytes codecs after sharding, or through storage transformers, are encoded whole
   - A shard with its index at the start is streamed if the storage supports patching multipart writes (`supports_multipart_patch`, e.g. `FilesystemStore`): a placeholder is written first and overwritten with the index before the write finishes
+  - An asynchronous write that fails aborts its multipart writes in progress (e.g. unfinished object store uploads)
   - Re-export `MultipartWrite`
 - Add the `shard_write` benchmark of shards encoded whole versus written as they are encoded
 - Implement `Default` for `MetadataRetrieveVersion`
