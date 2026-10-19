@@ -1127,7 +1127,6 @@ impl ShardingCodecBound {
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
         #[cfg(not(target_arch = "wasm32"))]
-<<<<<<< Updated upstream
         let iterator = subchunk_order_iterator(
             &self.options.subchunk_write_order(),
             n_chunks,
@@ -1140,19 +1139,6 @@ impl ShardingCodecBound {
             n_chunks,
             &subchunk_grid,
         );
-=======
-        let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::C => {
-                (0..n_chunks).into_par_iter()
-            }
-        };
-        #[cfg(target_arch = "wasm32")]
-        let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::C => {
-                0..n_chunks
-            }
-        };
->>>>>>> Stashed changes
 
         let encoded_chunks: Vec<(usize, Bytes)> = iterator
             .concurrent_limit(shard_concurrent_limit)
