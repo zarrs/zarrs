@@ -22,8 +22,7 @@ use super::{
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, fill_target,
-    merge_chunks,
+    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
 };
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::chunk_grid::{
@@ -40,7 +39,7 @@ use zarrs_codec::{
     BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -649,7 +648,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             let offset = shard_index[chunk_index * 2];
             let size = shard_index[chunk_index * 2 + 1];
             if offset == u64::MAX && size == u64::MAX {
-                fill_target(output_target_subchunk, data_type, fill_value)?;
+                copy_fill_value_into(data_type, fill_value, output_target_subchunk)?;
             } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
                 return Err(CodecError::Other(
                     "The shard index references out-of-bounds bytes. The chunk may be corrupted."

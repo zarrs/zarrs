@@ -164,19 +164,42 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             ));
         }
 
-        let fill_value_contiguous = fill_value.repeat(self.num_contiguous_elements());
         let length = self.contiguous_bytes_len();
-        debug_assert_eq!(fill_value_contiguous.len(), length);
-        self.contiguous_linearised_indices()
-            .iter()
-            .for_each(|(index, _contiguous_elements)| {
-                let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
-                unsafe {
-                    self.bytes
-                        .index_mut(offset..offset + length)
-                        .copy_from_slice(&fill_value_contiguous);
-                }
-            });
+        if length == 0 {
+            return Ok(());
+        }
+
+        let uniform = fill_value.iter().all(|&byte| byte == fill_value[0]);
+        let mut regions = self.contiguous_linearised_indices().iter();
+        let (first_index, _) = regions.next().expect("a nonempty view has a region");
+        let first_offset = usize::try_from(first_index * self.data_type_size as u64).unwrap();
+        // SAFETY: this region belongs to the disjoint view and is only accessed here.
+        let first = unsafe { self.bytes.index_mut(first_offset..first_offset + length) };
+        if uniform {
+            first.fill(fill_value[0]);
+        } else {
+            // Seed one element, then double the initialised prefix in place.
+            first[..fill_value.len()].copy_from_slice(fill_value);
+            let mut written = fill_value.len();
+            while written < length {
+                let count = written.min(length - written);
+                let (prefix, remaining) = first.split_at_mut(written);
+                remaining[..count].copy_from_slice(&prefix[..count]);
+                written += count;
+            }
+        }
+
+        // Reuse the first filled region rather than constructing a temporary row.
+        for (index, _) in regions {
+            let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
+            // SAFETY: the regions of an array subset are disjoint, including from `first`.
+            let target = unsafe { self.bytes.index_mut(offset..offset + length) };
+            if uniform {
+                target.fill(fill_value[0]);
+            } else {
+                target.copy_from_slice(first);
+            }
+        }
         Ok(())
     }
 
@@ -403,6 +426,56 @@ mod tests {
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
         assert_eq!(&bytes, &[0, 11, 12, 3, 24, 25, 6, 255, 255]);
+    }
+
+    #[test]
+    fn fill_patterns_and_strides() {
+        for size in [0usize, 1, 2, 3, 4, 8, 16, 17] {
+            for width in [0usize, 1, 2, 3, 7, 8, 9, 33, 1024] {
+                for uniform in [false, true] {
+                    let pattern: Vec<u8> = (0..size)
+                        .map(|i| {
+                            if uniform {
+                                0x7b
+                            } else {
+                                u8::try_from(i).unwrap()
+                            }
+                        })
+                        .collect();
+                    let shape = [3, u64::try_from(width + 2).unwrap()];
+                    for rows in [0..3, 1..2] {
+                        let subset = ArraySubset::new_with_ranges(&[
+                            rows.clone(),
+                            1..u64::try_from(width + 1).unwrap(),
+                        ]);
+                        let mut bytes = vec![0xa5; 3 * (width + 2) * size];
+                        let mut expected = bytes.clone();
+                        for row in rows {
+                            for col in 1..=width {
+                                let offset =
+                                    (usize::try_from(row).unwrap() * (width + 2) + col) * size;
+                                expected[offset..offset + size].copy_from_slice(&pattern);
+                            }
+                        }
+                        {
+                            // SAFETY: this is the only view of bytes.
+                            let mut view = unsafe {
+                                ArrayBytesFixedDisjointView::new(
+                                    UnsafeCellSlice::new(&mut bytes),
+                                    size,
+                                    &shape,
+                                    subset,
+                                )
+                                .unwrap()
+                            };
+                            assert!(view.fill(&vec![0; size + 1]).is_err());
+                            view.fill(&pattern).unwrap();
+                        }
+                        assert_eq!(bytes, expected, "{size} {width} {uniform}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

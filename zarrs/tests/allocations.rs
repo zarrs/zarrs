@@ -8,7 +8,9 @@
 //! Operations run on a single-thread Rayon pool with a concurrency target of 1.
 //! All scenarios run in one test so other test-harness threads cannot pollute the counters.
 //!
-//! Each operation is checked against [`BASELINE`], measured on main at c7f5590f. A copy of the 128 KiB data exceeds the byte tolerances, so they detect added copies.
+//! Fill-value equality checks must allocate nothing. Other operations are checked against
+//! [`BASELINE`]. A copy of the 128 KiB data exceeds the byte tolerances, so they detect
+//! added copies.
 //! Update a baseline only when an operation allocates less.
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -17,7 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zarrs::array::codec::ZstdCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, data_type};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
@@ -140,7 +142,7 @@ fn array(
     array
 }
 
-/// Allocation counts measured on main at c7f5590f: `(name, allocations, allocated bytes, peak bytes)`.
+/// Allocation baselines: `(name, allocations, allocated bytes, peak bytes)`.
 const BASELINE: &[(&str, usize, usize, usize)] = &[
     ("async_retrieve_chunk_zstd", 14, 131433, 131258),
     (
@@ -389,8 +391,32 @@ fn async_store_array_subset_many_chunks_zstd() {
     check("async_store_array_subset_many_chunks_zstd", stats);
 }
 
+fn optional_fill_value_checks() {
+    for depth in 1..=3 {
+        let mut fill_value = FillValue::from(0x1234u16);
+        let mut bytes = ArrayBytes::new_flen(0x1234u16.to_ne_bytes().repeat(32));
+        for _ in 0..depth {
+            fill_value = fill_value.into_optional();
+            bytes = bytes.with_optional_mask(vec![1; 32]);
+        }
+        let (inner, _) = bytes.clone().into_optional().unwrap().into_parts();
+        let mismatched = (*inner).with_optional_mask(vec![0; 32]);
+        for (name, bytes, expected) in [
+            ("optional_fill_matches", bytes, true),
+            ("optional_fill_mask_mismatch", mismatched, false),
+        ] {
+            let (matches, stats) = measure(name, || {
+                std::hint::black_box(&bytes).is_fill_value(std::hint::black_box(&fill_value))
+            });
+            assert_eq!(matches, expected);
+            assert_eq!(stats.allocations, 0, "{name}, depth {depth}: {stats:?}");
+        }
+    }
+}
+
 #[test]
 fn allocation_regressions() {
+    optional_fill_value_checks();
     retrieve_chunk_uncompressed();
     retrieve_chunk_zstd();
     retrieve_array_subset_many_chunks_zstd();
