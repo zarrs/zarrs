@@ -191,6 +191,7 @@ const BASELINE: &[(&str, usize, usize, usize)] = &[
     // queued behind it, and the index, rather than the shard, for about 5 more allocations per block
     ("store_chunk_sharded_peak_buffered", 321, 285_106, 147_046),
     ("store_chunk_sharded_peak_streamed", 471, 184_926, 62_026),
+    ("store_chunk_sharded_peak_streamed_start", 474, 189_706, 66_462),
 ];
 
 /// The baseline of `name`.
@@ -475,7 +476,7 @@ fn store_chunk_sharded() {
             index_location,
             multipart_write,
         );
-        let (_, stats) = measure(name, || {
+        let ((), stats) = measure(name, || {
             array
                 .store_chunk(&[0, 0], data.as_slice(), &resources())
                 .unwrap();
@@ -534,6 +535,10 @@ impl WritableStorageTraits for SinkStore {
     fn supports_multipart(&self) -> bool {
         true
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        true
+    }
 }
 
 /// The multipart writer of a [`SinkStore`].
@@ -542,6 +547,10 @@ struct SinkWriter<'s>(&'s AtomicUsize);
 impl StoreWriter for SinkWriter<'_> {
     fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
         self.0.fetch_add(part.len(), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn patch(&mut self, _offset: u64, _bytes: CowBytes<'_>) -> Result<(), StorageError> {
         Ok(())
     }
 
@@ -562,20 +571,34 @@ fn store_chunk_sharded_peak() {
     let resources = resources().with_io_target(1);
     let data = data();
     let mut peaks = vec![];
-    for (name, multipart_write) in [
+    for (name, multipart_write, index_location) in [
         // The sink store supports multipart writes, so `Auto` streams
-        ("store_chunk_sharded_peak_streamed", MultipartWrite::Auto),
-        ("store_chunk_sharded_peak_buffered", MultipartWrite::Never),
+        (
+            "store_chunk_sharded_peak_streamed",
+            MultipartWrite::Auto,
+            ShardingIndexLocation::End,
+        ),
+        (
+            "store_chunk_sharded_peak_buffered",
+            MultipartWrite::Never,
+            ShardingIndexLocation::End,
+        ),
+        // The index at the start is written over a placeholder
+        (
+            "store_chunk_sharded_peak_streamed_start",
+            MultipartWrite::Auto,
+            ShardingIndexLocation::Start,
+        ),
     ] {
         let store = Arc::new(SinkStore::default());
         let array = sharded_array(
             store.clone(),
             false,
             &[16, 16],
-            ShardingIndexLocation::End,
+            index_location,
             multipart_write,
         );
-        let (_, stats) = measure(name, || {
+        let ((), stats) = measure(name, || {
             array
                 .store_chunk(&[0, 0], data.as_slice(), &resources)
                 .unwrap();
@@ -590,6 +613,7 @@ fn store_chunk_sharded_peak() {
     }
     // The streamed write holds the window and a few parts, rather than the whole shard
     assert!(peaks[0] * 2 < peaks[1], "{peaks:?}");
+    assert!(peaks[2] * 2 < peaks[1], "{peaks:?}");
 }
 
 #[cfg(feature = "async")]

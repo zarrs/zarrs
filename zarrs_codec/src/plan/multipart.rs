@@ -132,6 +132,12 @@ impl<'s> MultipartWriters<dyn StoreWriter + 's> {
                 self.restore(id, writer);
                 result
             }
+            MultipartOp::Patch(offset, bytes) => {
+                let mut writer = self.take(id)?;
+                let result = writer.patch(offset, bytes);
+                self.restore(id, writer);
+                result
+            }
             MultipartOp::Finish => self.remove(id)?.finish(),
             MultipartOp::Abort => self.remove(id)?.abort(),
         }
@@ -169,6 +175,12 @@ impl<'s> MultipartWriters<dyn zarrs_storage::AsyncStoreWriter + 's> {
             MultipartOp::Parts(parts) => {
                 let mut writer = self.take(id)?;
                 let result = writer.write_many(parts).await;
+                self.restore(id, writer);
+                result
+            }
+            MultipartOp::Patch(offset, bytes) => {
+                let mut writer = self.take(id)?;
+                let result = writer.patch(offset, bytes).await;
                 self.restore(id, writer);
                 result
             }
@@ -233,6 +245,21 @@ impl MultipartBuffers {
                 for part in parts {
                     buffer.extend_from_slice(&part);
                 }
+                Ok(None)
+            }
+            (MultipartOp::Patch(offset, bytes), Some(index)) => {
+                let buffer = &mut buffers[index].2;
+                let range = usize::try_from(offset)
+                    .ok()
+                    .and_then(|start| Some(start..start.checked_add(bytes.len())?))
+                    .filter(|range| range.end <= buffer.len())
+                    .ok_or_else(|| {
+                        StorageError::Other(format!(
+                            "a patch of {} bytes at offset {offset} is beyond the bytes written",
+                            bytes.len()
+                        ))
+                    })?;
+                buffer[range].copy_from_slice(&bytes);
                 Ok(None)
             }
             (MultipartOp::Finish, Some(index)) => {
@@ -333,9 +360,17 @@ mod tests {
         buffers
             .write(
                 a,
-                MultipartOp::Parts(vec![vec![1].into(), vec![2, 3].into()]),
+                MultipartOp::Parts(vec![vec![1].into(), vec![9, 3].into()]),
             )
             .unwrap();
+        buffers
+            .write(a, MultipartOp::Patch(1, vec![2].into()))
+            .unwrap();
+        assert!(
+            buffers
+                .write(a, MultipartOp::Patch(2, vec![0, 0].into()))
+                .is_err()
+        );
         assert!(buffers.write(b, MultipartOp::Abort).unwrap().is_none());
         assert_eq!(
             buffers.write(a, MultipartOp::Finish).unwrap(),

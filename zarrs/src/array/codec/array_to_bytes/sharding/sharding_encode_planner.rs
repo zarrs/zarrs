@@ -57,9 +57,8 @@ impl ShardingCodecBound {
     /// multipart write, in the compute step `ctx`. See [`ArrayToBytesCodecTraits::encode_write_step`].
     ///
     /// The encoded subchunks are written in C order, or in the order they are encoded with an unordered subchunk write
-    /// order, followed by the index. A shard of one block of subchunks is encoded whole and set.
-    ///
-    /// The index must be at the end of the shard.
+    /// order, followed by the index. An index at the start is written last, over a placeholder (patching the write).
+    /// A shard of one block of subchunks is encoded whole and set.
     pub(super) fn encode_shard_write_step<'a>(
         self: Arc<Self>,
         bytes: ArrayBytes<'a>,
@@ -68,7 +67,6 @@ impl ShardingCodecBound {
         options: &CodecOptions,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        debug_assert_eq!(self.index_location, ShardingIndexLocation::End);
         ShardEncode::new(self, bytes, shape, options)?.plan_write(key, ctx)
     }
 }
@@ -188,7 +186,7 @@ impl<'a> ShardEncode<'a> {
             .map(|size| size as u64);
         let children = self.encoded_blocks(block_len, num_blocks);
         let order = self.codec.options.subchunk_write_order();
-        let write = ShardWrite {
+        let mut write = ShardWrite {
             key,
             size_hint,
             part_size: self.options.multipart_part_size(),
@@ -196,8 +194,18 @@ impl<'a> ShardEncode<'a> {
             parts: Vec::new(),
             parts_len: 0,
             offset: 0,
+            data_start: 0,
             shard_index: vec![EMPTY; self.num_subchunks * 2],
         };
+        if self.codec.index_location == ShardingIndexLocation::Start {
+            // A placeholder for the index, which is written last
+            write
+                .parts
+                .push(CowBytes::from(vec![0u8; self.index_encoded_size]));
+            write.parts_len = self.index_encoded_size;
+            write.offset = self.index_encoded_size as u64;
+            write.data_start = write.offset;
+        }
         let fold = Fold::new(
             write,
             |write: &mut ShardWrite<'a>, value, _ctx| {
@@ -221,20 +229,34 @@ impl<'a> ShardEncode<'a> {
         mut write: ShardWrite<'a>,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        if write.id.is_none() && write.parts.is_empty() {
-            let op = if self.options.store_empty_chunks() {
+        if write.offset == write.data_start {
+            // No subchunks: abandon a write begun with the placeholder of the index
+            let mut ops = smallvec::SmallVec::new();
+            if let Some(id) = write.id {
+                ops.push(WriteOp::Multipart(id, MultipartOp::Abort));
+            }
+            ops.push(if self.options.store_empty_chunks() {
                 WriteOp::Set(write.key, self.encode_index(write.shard_index, ctx)?)
             } else {
                 WriteOp::Erase(write.key)
-            };
+            });
             return Ok(Outcome::Write {
-                ops: smallvec::smallvec![op],
+                ops,
                 then: TaskValue::None,
             });
         }
         let encoded_index = self.encode_index(std::mem::take(&mut write.shard_index), ctx)?;
-        write.parts.push(encoded_index);
-        let (mut ops, id) = write.take_parts();
+        let (mut ops, id) = match self.codec.index_location {
+            ShardingIndexLocation::End => {
+                write.parts.push(encoded_index);
+                write.take_parts()
+            }
+            ShardingIndexLocation::Start => {
+                let (mut ops, id) = write.take_parts();
+                ops.push(WriteOp::Multipart(id, MultipartOp::Patch(0, encoded_index)));
+                (ops, id)
+            }
+        };
         ops.push(WriteOp::Multipart(id, MultipartOp::Finish));
         Ok(Outcome::Write {
             ops,
@@ -463,6 +485,8 @@ struct ShardWrite<'a> {
     parts_len: usize,
     /// The offset of the next encoded subchunk.
     offset: u64,
+    /// The offset of the first encoded subchunk (after an index at the start).
+    data_start: u64,
     /// The decoded shard index.
     shard_index: Vec<u64>,
 }
@@ -512,10 +536,12 @@ impl<'a> ShardWrite<'a> {
             id
         });
         self.parts_len = 0;
-        ops.push(WriteOp::Multipart(
-            id,
-            MultipartOp::Parts(std::mem::take(&mut self.parts)),
-        ));
+        if !self.parts.is_empty() {
+            ops.push(WriteOp::Multipart(
+                id,
+                MultipartOp::Parts(std::mem::take(&mut self.parts)),
+            ));
+        }
         (ops, id)
     }
 }

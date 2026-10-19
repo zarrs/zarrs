@@ -231,6 +231,10 @@ impl<
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 /// A synchronous multipart writer that owns the storage it borrows, so it can cross onto a blocking thread.
@@ -324,6 +328,13 @@ impl<
         // The parts must outlive this method to cross onto the blocking thread.
         let parts: Vec<_> = parts.into_iter().map(CowBytes::into_static).collect();
         self.with_writer(move |writer| writer.write_many(parts))
+            .await
+    }
+
+    async fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        // The bytes must outlive this method to cross onto the blocking thread.
+        let bytes = bytes.into_static();
+        self.with_writer(move |writer| writer.patch(offset, bytes))
             .await
     }
 

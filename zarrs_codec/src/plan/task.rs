@@ -651,6 +651,9 @@ pub enum MultipartOp<'a> {
     Begin(SourceKey, Option<u64>),
     /// Append parts of the value, in order.
     Parts(Vec<CowBytes<'a>>),
+    /// Overwrite bytes already written at an offset (see
+    /// [`StoreWriter::patch`](zarrs_storage::StoreWriter::patch)).
+    Patch(u64, CowBytes<'a>),
     /// Complete the value.
     Finish,
     /// Abandon the value, leaving any existing value in place.

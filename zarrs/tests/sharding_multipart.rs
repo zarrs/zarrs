@@ -17,7 +17,9 @@ use zarrs::array::{
 use zarrs_filesystem::FilesystemStore;
 use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs_storage::store::MemoryStore;
-use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StorePrefix};
+use zarrs_storage::{
+    ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableStorageTraits,
+};
 
 fn nz(value: u64) -> NonZeroU64 {
     NonZeroU64::new(value).unwrap()
@@ -230,42 +232,53 @@ fn sharding_multipart_store_array_subset() {
     }
 }
 
-/// A filesystem store streams shards by default.
+/// A filesystem store streams shards by default, with the index at the end or (patching the write) at the start.
 #[test]
 fn sharding_multipart_filesystem() {
-    let path = tempfile::TempDir::new().unwrap();
-    let store = Arc::new(FilesystemStore::new(path.path()).unwrap());
-    let config = Config {
-        index_location: ShardingIndexLocation::End,
-        order: SubchunkWriteOrder::C,
-        inner_crc32c: true,
-        outer_crc32c: false,
-        store_empty_chunks: false,
-        part_size: 100,
-    };
-    let resources = Resources::default().with_compute_target(8);
-    let filesystem = array(store.clone(), config, MultipartWrite::Auto);
-    let memory_store = Arc::new(MemoryStore::new());
-    let memory = array(memory_store.clone(), config, MultipartWrite::Never);
     let data = data();
-    filesystem
-        .store_array_subset(&filesystem.subset_all(), &data, &resources)
-        .unwrap();
-    memory
-        .store_array_subset(&memory.subset_all(), &data, &resources)
-        .unwrap();
-    for (key, value) in values(&memory_store) {
-        let key = key.as_str().try_into().unwrap();
-        assert_eq!(store.get(&key).unwrap().unwrap().to_vec(), value);
+    let resources = Resources::default().with_compute_target(8);
+    for config in configs() {
+        let path = tempfile::TempDir::new().unwrap();
+        let store = Arc::new(FilesystemStore::new(path.path()).unwrap());
+        let metrics = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
+        assert!(metrics.supports_multipart_patch());
+        let filesystem = array(metrics.clone(), config, MultipartWrite::Auto);
+        let memory_store = Arc::new(MemoryStore::new());
+        let memory = array(memory_store.clone(), config, MultipartWrite::Never);
+        filesystem
+            .store_array_subset(&filesystem.subset_all(), &data, &resources)
+            .unwrap();
+        memory
+            .store_array_subset(&memory.subset_all(), &data, &resources)
+            .unwrap();
+        assert_eq!(
+            filesystem
+                .retrieve_array_subset::<Vec<u16>>(&filesystem.subset_all(), &resources)
+                .unwrap(),
+            data,
+            "{config:?}"
+        );
+        let expected = values(&memory_store);
+        for (key, value) in &expected {
+            let key = key.as_str().try_into().unwrap();
+            let stored = store.get(&key).unwrap().unwrap().to_vec();
+            if matches!(config.order, SubchunkWriteOrder::C) {
+                assert_eq!(&stored, value, "{config:?}");
+            } else {
+                assert_eq!(stored.len(), value.len(), "{config:?}");
+            }
+        }
+        if !config.outer_crc32c {
+            assert!(metrics.writes() > expected.len(), "{config:?}");
+        }
+        // Only the shards, and no staging files
+        let files = walk(path.path());
+        assert!(
+            files.iter().all(|file| !file.ends_with(".zarrs-part")),
+            "{files:?}"
+        );
+        assert_eq!(files.len(), expected.len(), "{config:?}");
     }
-    // No staging files are left
-    let mut files = 0;
-    for entry in walk(path.path()) {
-        assert!(!entry.ends_with(".zarrs-part"), "{entry}");
-        files += 1;
-    }
-    // The 5 shards that are not the fill value
-    assert_eq!(files, 5);
 }
 
 fn walk(dir: &std::path::Path) -> Vec<String> {

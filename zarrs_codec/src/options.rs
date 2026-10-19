@@ -17,6 +17,7 @@ pub struct CodecOptions {
     store_empty_chunks: bool,
     multipart_write: MultipartWrite,
     multipart_part_size: usize,
+    multipart_patch: bool,
 }
 
 impl Default for CodecOptions {
@@ -26,6 +27,7 @@ impl Default for CodecOptions {
             store_empty_chunks: false,
             multipart_write: MultipartWrite::Auto,
             multipart_part_size: 1024 * 1024,
+            multipart_patch: false,
         }
     }
 }
@@ -130,6 +132,32 @@ impl CodecOptions {
     #[must_use]
     pub fn with_multipart_part_size(mut self, multipart_part_size: usize) -> Self {
         self.multipart_part_size = multipart_part_size;
+        self
+    }
+
+    /// Returns true if multipart writes can overwrite bytes already written (e.g. a header written last).
+    ///
+    /// An array sets this for a write from its storage
+    /// ([`WritableStorageTraits::supports_multipart_patch`](zarrs_storage::WritableStorageTraits::supports_multipart_patch)).
+    /// For example, the `sharding_indexed` codec only writes a shard with its index at the start as it is encoded if
+    /// so.
+    #[must_use]
+    pub fn multipart_patch(&self) -> bool {
+        self.multipart_patch
+    }
+
+    /// Set whether multipart writes can overwrite bytes already written (see
+    /// [`multipart_patch`](Self::multipart_patch)).
+    pub fn set_multipart_patch(&mut self, multipart_patch: bool) -> &mut Self {
+        self.multipart_patch = multipart_patch;
+        self
+    }
+
+    /// Set whether multipart writes can overwrite bytes already written (see
+    /// [`multipart_patch`](Self::multipart_patch)).
+    #[must_use]
+    pub fn with_multipart_patch(mut self, multipart_patch: bool) -> Self {
+        self.multipart_patch = multipart_patch;
         self
     }
 }

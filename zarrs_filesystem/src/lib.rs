@@ -608,6 +608,10 @@ impl WritableStorageTraits for FilesystemStore {
     fn supports_multipart(&self) -> bool {
         !self.options.direct_io
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        !self.options.direct_io
+    }
 }
 
 impl AtomicRenameStorageTraits for FilesystemStore {

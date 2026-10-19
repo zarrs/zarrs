@@ -228,6 +228,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 /// A multipart writer that counts each part as a write.
@@ -257,6 +261,11 @@ impl<TWriter: ?Sized + StoreWriter> StoreWriter for PerformanceMetricsStoreWrite
         self.writer.write_many(parts)
     }
 
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        self.record(std::slice::from_ref(&bytes));
+        self.writer.patch(offset, bytes)
+    }
+
     fn finish(self: Box<Self>) -> Result<(), StorageError> {
         self.writer.finish()
     }
@@ -280,6 +289,11 @@ impl<TWriter: ?Sized + AsyncStoreWriter> AsyncStoreWriter
     async fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
         self.record(&parts);
         self.writer.write_many(parts).await
+    }
+
+    async fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        self.record(std::slice::from_ref(&bytes));
+        self.writer.patch(offset, bytes).await
     }
 
     async fn finish(self: Box<Self>) -> Result<(), StorageError> {
@@ -436,6 +450,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
+    }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
     }
 }
 

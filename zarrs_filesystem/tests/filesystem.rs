@@ -532,6 +532,7 @@ fn filesystem_multipart() -> Result<(), Box<dyn Error>> {
     let store = FilesystemStore::new(path.path())?.sorted();
     assert!(store.supports_multipart());
     zarrs_storage::store_test::store_multipart(&store)?;
+    zarrs_storage::store_test::store_multipart_patch(&store)?;
     assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
     Ok(())
 }
@@ -608,7 +609,31 @@ fn atomic_write_adapter_multipart() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
     let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
     let store = AtomicWriteStorageAdapter::new(store);
+    assert!(store.supports_multipart_patch());
     zarrs_storage::store_test::store_multipart(&store)?;
+    zarrs_storage::store_test::store_multipart_patch(&store)?;
     assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_multipart_patch() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    let store = FilesystemStore::new(path.path())?.sorted();
+    assert!(store.supports_multipart_patch());
+    let key: StoreKey = "a".try_into()?;
+    let mut writer = store.set_multipart(&key, None)?;
+    // A header written last
+    writer.write(Bytes::from_static(&[0, 0]).into())?;
+    writer.write_many(vec![
+        Bytes::from_static(b"bc").into(),
+        Bytes::from_static(b"d").into(),
+    ])?;
+    writer.patch(0, Bytes::from_static(b"HH").into())?;
+    writer.patch(3, Bytes::from_static(b"C").into())?;
+    assert!(writer.patch(4, Bytes::from_static(b"XX").into()).is_err());
+    writer.finish()?;
+    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"HHbCd")));
     Ok(())
 }

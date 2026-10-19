@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FilesystemStore` implements multipart writes (`WritableStorageTraits::set_multipart`), except with direct I/O
   - The parts are appended (with vectored writes) to a staging file, `.{name}.{n}.zarrs-part`, next to the file of the key, which is synchronised and renamed into place on finish
   - Aborting or dropping the writer removes the staging file, and listing skips staging files
+  - The writer supports `StoreWriter::patch`, overwriting bytes of the staging file
 
 ### Changed
 - `FilesystemStore` hints that reads of byte ranges with gaps of up to 4 KiB should be coalesced, up to 1 MiB (`ReadableStorageTraits::read_coalescing`)

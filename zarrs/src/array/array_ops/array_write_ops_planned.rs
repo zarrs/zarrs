@@ -274,11 +274,14 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
 
     /// `options` with the multipart write setting resolved for the storage of the array (see [`MultipartWrite`]).
     fn write_options(&self, options: &CodecOptions) -> CodecOptions {
-        options.with_multipart_write(resolve_multipart_write(
-            options.multipart_write(),
-            self.storage_transformers().is_empty(),
-            self.storage.supports_multipart(),
-        ))
+        let without_transformers = self.storage_transformers().is_empty();
+        options
+            .with_multipart_write(resolve_multipart_write(
+                options.multipart_write(),
+                without_transformers,
+                self.storage.supports_multipart(),
+            ))
+            .with_multipart_patch(without_transformers && self.storage.supports_multipart_patch())
     }
 
     /// The I/O backend for writing the chunks of `keys`.
@@ -603,11 +606,16 @@ pub(super) mod async_planned {
         /// `options` with the multipart write setting resolved for the storage of the array (see
         /// [`MultipartWrite`](zarrs_codec::MultipartWrite)).
         fn async_write_options(&self, options: &CodecOptions) -> CodecOptions {
-            options.with_multipart_write(resolve_multipart_write(
-                options.multipart_write(),
-                self.storage_transformers().is_empty(),
-                self.storage.supports_multipart(),
-            ))
+            let without_transformers = self.storage_transformers().is_empty();
+            options
+                .with_multipart_write(resolve_multipart_write(
+                    options.multipart_write(),
+                    without_transformers,
+                    self.storage.supports_multipart(),
+                ))
+                .with_multipart_patch(
+                    without_transformers && self.storage.supports_multipart_patch(),
+                )
         }
 
         /// The I/O backend for writing the chunks of `keys`.

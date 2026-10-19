@@ -33,6 +33,18 @@ pub trait StoreWriter: MaybeSend {
         parts.into_iter().try_for_each(|part| self.write(part))
     }
 
+    /// Overwrite the bytes already written at `offset` with `bytes`, before the value is finished.
+    ///
+    /// Supported if the store [`supports_multipart_patch`](WritableStorageTraits::supports_multipart_patch).
+    ///
+    /// # Errors
+    /// Returns [`StorageError::Unsupported`] by default, or a [`StorageError`] if the bytes were not written yet or
+    /// there is an underlying storage error.
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let _ = (offset, bytes);
+        Err(patch_unsupported())
+    }
+
     /// Complete the value, making it visible in the store.
     ///
     /// # Errors
@@ -76,6 +88,19 @@ pub trait AsyncStoreWriter: MaybeSend {
         Ok(())
     }
 
+    /// Overwrite the bytes already written at `offset` with `bytes`, before the value is finished.
+    ///
+    /// Supported if the store
+    /// [`supports_multipart_patch`](crate::AsyncWritableStorageTraits::supports_multipart_patch).
+    ///
+    /// # Errors
+    /// Returns [`StorageError::Unsupported`] by default, or a [`StorageError`] if the bytes were not written yet or
+    /// there is an underlying storage error.
+    async fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let _ = (offset, bytes);
+        Err(patch_unsupported())
+    }
+
     /// Complete the value, making it visible in the store.
     ///
     /// # Errors
@@ -89,6 +114,11 @@ pub trait AsyncStoreWriter: MaybeSend {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn abort(self: Box<Self>) -> Result<(), StorageError>;
+}
+
+/// The error of a multipart writer that does not support [`StoreWriter::patch`].
+fn patch_unsupported() -> StorageError {
+    StorageError::Unsupported("the multipart writer does not support patching".to_string())
 }
 
 /// The parts of a value collected by a buffered writer.

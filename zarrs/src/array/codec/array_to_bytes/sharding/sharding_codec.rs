@@ -577,13 +577,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
         ctx: &zarrs_codec::plan::ComputeCtx,
     ) -> Result<zarrs_codec::plan::Outcome<'a>, CodecError> {
-        // A shard is written as it is encoded with a multipart write, unless its tasks would run serially, it would be
-        // written in one part, or the index is at the start (where its offsets are not known until every subchunk is
-        // encoded)
+        // A shard is written as it is encoded with a multipart write, unless its tasks would run serially or it would
+        // be written in one part. An index at the start is written last, over a placeholder, so the storage must
+        // support patching multipart writes.
         if ctx.runs_inline()
             || options.multipart_write() != MultipartWrite::Always
             || bytes.size() <= options.multipart_part_size()
-            || self.index_location != ShardingIndexLocation::End
+            || (self.index_location == ShardingIndexLocation::Start && !options.multipart_patch())
         {
             return zarrs_codec::plan::encode_and_set(self, bytes, shape, key, options, ctx);
         }

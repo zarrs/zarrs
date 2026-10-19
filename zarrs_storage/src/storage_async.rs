@@ -269,6 +269,12 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     fn supports_multipart(&self) -> bool {
         false
     }
+
+    /// Returns whether the writers of [`set_multipart`](AsyncWritableStorageTraits::set_multipart) support
+    /// [`AsyncStoreWriter::patch`], overwriting bytes already written (e.g. a header written last).
+    fn supports_multipart_patch(&self) -> bool {
+        false
+    }
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].

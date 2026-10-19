@@ -2,6 +2,8 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, IoSlice, Write};
+
+use positioned_io::WriteAt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -36,6 +38,8 @@ pub(crate) struct FilesystemStoreWriter<'s> {
     staging_path: PathBuf,
     /// The staging file, or [`None`] once the writer is finished or aborted.
     file: Option<File>,
+    /// The number of bytes written.
+    len: u64,
 }
 
 impl<'s> FilesystemStoreWriter<'s> {
@@ -64,6 +68,7 @@ impl<'s> FilesystemStoreWriter<'s> {
                         key: key.clone(),
                         staging_path,
                         file: Some(file),
+                        len: 0,
                     });
                 }
                 // Left by another process, or an interrupted write
@@ -105,10 +110,12 @@ fn write_all_vectored(file: &mut File, mut slices: &mut [IoSlice<'_>]) -> std::i
 impl StoreWriter for FilesystemStoreWriter<'_> {
     fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
         self.file().write_all(&part)?;
+        self.len += part.len() as u64;
         Ok(())
     }
 
     fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        self.len += parts.iter().map(|part| part.len() as u64).sum::<u64>();
         let file = self.file();
         let mut slices = [IoSlice::new(&[]); MAX_SLICES];
         let mut parts = parts.iter().filter(|part| !part.is_empty()).peekable();
@@ -120,6 +127,22 @@ impl StoreWriter for FilesystemStoreWriter<'_> {
             }
             write_all_vectored(file, &mut slices[..len])?;
         }
+        Ok(())
+    }
+
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let len = self.len;
+        let file = self.file();
+        if offset
+            .checked_add(bytes.len() as u64)
+            .is_none_or(|end| end > len)
+        {
+            return Err(StorageError::Other(format!(
+                "a patch of {} bytes at offset {offset} is beyond the {len} bytes written",
+                bytes.len()
+            )));
+        }
+        file.write_all_at(offset, &bytes)?;
         Ok(())
     }
 

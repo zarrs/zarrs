@@ -533,3 +533,24 @@ pub async fn async_store_multipart<
     store.erase_prefix(&prefix).await?;
     Ok(())
 }
+
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+/// Check [`StoreWriter::patch`](crate::StoreWriter::patch) of multipart writes under the prefix `multipart_patch/`, if
+/// the store [`supports_multipart_patch`](WritableStorageTraits::supports_multipart_patch).
+pub fn store_multipart_patch<T: ReadableStorageTraits + WritableStorageTraits>(
+    store: &T,
+) -> Result<(), Box<dyn Error>> {
+    if !store.supports_multipart_patch() {
+        return Ok(());
+    }
+    let key = StoreKey::new("multipart_patch/a")?;
+    let mut writer = store.set_multipart(&key, None)?;
+    writer.write(vec![0, 0].into())?;
+    writer.write_many(vec![vec![1, 2].into(), vec![3].into()])?;
+    writer.patch(0, vec![9, 8].into())?;
+    writer.patch(3, vec![7].into())?;
+    writer.finish()?;
+    assert_eq!(store.get(&key)?, Some(vec![9, 8, 1, 7, 3].into()));
+    store.erase(&key)?;
+    Ok(())
+}

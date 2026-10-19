@@ -153,6 +153,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 /// A multipart writer that blocks on each call of an asynchronous writer.
@@ -168,6 +172,10 @@ impl<TBlockOn: AsyncToSyncBlockOn> StoreWriter for AsyncToSyncStoreWriter<'_, TB
 
     fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
         self.block_on.block_on(self.writer.write_many(parts))
+    }
+
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        self.block_on.block_on(self.writer.patch(offset, bytes))
     }
 
     fn finish(self: Box<Self>) -> Result<(), StorageError> {

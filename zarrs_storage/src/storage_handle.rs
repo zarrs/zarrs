@@ -131,6 +131,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
     fn supports_multipart(&self) -> bool {
         self.0.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.0.supports_multipart_patch()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -241,6 +245,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
     fn supports_multipart(&self) -> bool {
         self.0.supports_multipart()
+    }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.0.supports_multipart_patch()
     }
 }
 

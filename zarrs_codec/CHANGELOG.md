@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `plan::Outcome::Stream` and `plan::Fold`, which fold the values of generated children one at a time as they complete (in generation order, or in completion order if unordered), with the children not yet folded bounded by the generation window
   - Values ready together are folded in one step with their multipart writes merged, fold steps run on the thread driving the tasks, and the multipart writes of a stream are queued and performed in order while the fold continues (with one step of writes queued behind the write in progress)
 - Add `CodecOptions::{multipart_write,multipart_part_size}` and `MultipartWrite`, which control whether codecs write chunks as they are encoded with multipart writes, and the size of the parts (default 1 MiB)
+- Add `plan::MultipartOp::Patch` and `CodecOptions::multipart_patch`, set by an array when its storage supports patching multipart writes
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`

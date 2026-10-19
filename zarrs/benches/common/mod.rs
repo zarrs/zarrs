@@ -184,6 +184,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Latency
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 /// A multipart writer of a [`LatencyStore`], where each call that writes parts, and finishing, is a request.
@@ -201,6 +205,11 @@ impl<TStorage: ?Sized + Send + Sync> StoreWriter for LatencyStoreWriter<'_, TSto
     fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
         let _guard = self.store.wait_sync();
         self.writer.write_many(parts)
+    }
+
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let _guard = self.store.wait_sync();
+        self.writer.patch(offset, bytes)
     }
 
     fn finish(self: Box<Self>) -> Result<(), StorageError> {

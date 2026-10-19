@@ -177,6 +177,10 @@ impl<
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 /// A multipart writer to a temporary key, which is renamed to its destination on finish.
@@ -194,6 +198,10 @@ impl<TStorage: ?Sized + AtomicRenameStorageTraits> StoreWriter for AtomicStoreWr
 
     fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
         self.writer.write_many(parts)
+    }
+
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        self.writer.patch(offset, bytes)
     }
 
     fn finish(self: Box<Self>) -> Result<(), StorageError> {

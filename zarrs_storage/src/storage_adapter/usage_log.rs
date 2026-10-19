@@ -309,6 +309,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
     }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
+    }
 }
 
 impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
@@ -340,6 +344,21 @@ impl<TStorage: ?Sized> MultipartLog<'_, TStorage> {
             "{}{method}({}) -> {result:?}",
             (self.adapter.prefix_func)(),
             self.key
+        )?;
+        Ok(())
+    }
+
+    fn log_patch(
+        &self,
+        offset: u64,
+        len: usize,
+        result: &Result<(), StorageError>,
+    ) -> Result<(), StorageError> {
+        writeln!(
+            self.adapter.handle.lock().unwrap(),
+            "{}multipart_patch({}, offset={offset}, len={len}) -> {result:?}",
+            (self.adapter.prefix_func)(),
+            self.key,
         )?;
         Ok(())
     }
@@ -383,6 +402,13 @@ impl<TStorage: ?Sized + MaybeSend + MaybeSync, TWriter: ?Sized + StoreWriter> St
         result
     }
 
+    fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let len = bytes.len();
+        let result = self.writer.patch(offset, bytes);
+        self.log.log_patch(offset, len, &result)?;
+        result
+    }
+
     fn finish(self: Box<Self>) -> Result<(), StorageError> {
         let result = self.writer.finish();
         self.log.log("multipart_finish", &result)?;
@@ -413,6 +439,13 @@ impl<TStorage: ?Sized + MaybeSend + MaybeSync, TWriter: ?Sized + AsyncStoreWrite
         let lens: Vec<_> = parts.iter().map(CowBytes::len).collect();
         let result = self.writer.write_many(parts).await;
         self.log.log_parts(&lens, &result)?;
+        result
+    }
+
+    async fn patch(&mut self, offset: u64, bytes: CowBytes<'_>) -> Result<(), StorageError> {
+        let len = bytes.len();
+        let result = self.writer.patch(offset, bytes).await;
+        self.log.log_patch(offset, len, &result)?;
         result
     }
 
@@ -660,6 +693,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
     fn supports_multipart(&self) -> bool {
         self.storage.supports_multipart()
+    }
+
+    fn supports_multipart_patch(&self) -> bool {
+        self.storage.supports_multipart_patch()
     }
 }
 
