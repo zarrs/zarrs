@@ -357,6 +357,103 @@ impl std::fmt::Debug for Generator<'_> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+type FoldBox<'a> = Box<dyn FoldState<'a> + Send + 'a>;
+#[cfg(target_arch = "wasm32")]
+type FoldBox<'a> = Box<dyn FoldState<'a> + 'a>;
+
+/// The state and steps of a [`Fold`].
+trait FoldState<'a> {
+    fn step(&mut self, value: TaskValue<'a>, ctx: &ComputeCtx) -> Result<Outcome<'a>, CodecError>;
+
+    fn finish(self: Box<Self>, ctx: &ComputeCtx) -> Result<Outcome<'a>, CodecError>;
+}
+
+struct FoldFns<S, F, G> {
+    state: S,
+    fold: F,
+    finish: G,
+}
+
+impl<'a, S, F, G> FoldState<'a> for FoldFns<S, F, G>
+where
+    F: FnMut(&mut S, TaskValue<'a>, &ComputeCtx) -> Result<Outcome<'a>, CodecError>,
+    G: FnOnce(S, &ComputeCtx) -> Result<Outcome<'a>, CodecError>,
+{
+    fn step(&mut self, value: TaskValue<'a>, ctx: &ComputeCtx) -> Result<Outcome<'a>, CodecError> {
+        (self.fold)(&mut self.state, value, ctx)
+    }
+
+    fn finish(self: Box<Self>, ctx: &ComputeCtx) -> Result<Outcome<'a>, CodecError> {
+        (self.finish)(self.state, ctx)
+    }
+}
+
+/// The step that folds the values of the children of an [`Outcome::Stream`] into a state, one value at a time.
+pub struct Fold<'a> {
+    state: FoldBox<'a>,
+    ordered: bool,
+}
+
+impl<'a> Fold<'a> {
+    /// Create a fold of the values of the children of a stream into `state`.
+    ///
+    /// `fold` is called with each value, in the order the children were generated (see
+    /// [`unordered`](Fold::unordered)). The outcome of a call is run as a task (e.g. a write of the value) before
+    /// `fold` is called with the next value, and its value is discarded.
+    /// Once every value is folded, `finish` produces the outcome of the stream.
+    pub fn new<S: zarrs_plugin::MaybeSend + 'a>(
+        state: S,
+        fold: impl FnMut(&mut S, TaskValue<'a>, &ComputeCtx) -> Result<Outcome<'a>, CodecError>
+        + zarrs_plugin::MaybeSend
+        + 'a,
+        finish: impl FnOnce(S, &ComputeCtx) -> Result<Outcome<'a>, CodecError>
+        + zarrs_plugin::MaybeSend
+        + 'a,
+    ) -> Self {
+        Self {
+            state: Box::new(FoldFns {
+                state,
+                fold,
+                finish,
+            }),
+            ordered: true,
+        }
+    }
+
+    /// Fold the values in the order the children complete, rather than the order they were generated.
+    #[must_use]
+    pub fn unordered(mut self) -> Self {
+        self.ordered = false;
+        self
+    }
+
+    /// Returns true if the values are folded in the order the children were generated.
+    pub(crate) fn is_ordered(&self) -> bool {
+        self.ordered
+    }
+
+    pub(crate) fn step(
+        &mut self,
+        value: TaskValue<'a>,
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
+        self.state.step(value, ctx)
+    }
+
+    pub(crate) fn finish(self, ctx: &ComputeCtx) -> Result<Outcome<'a>, CodecError> {
+        self.state.finish(ctx)
+    }
+}
+
+impl std::fmt::Debug for Fold<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fold")
+            .field("ordered", &self.ordered)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The result of the compute step of a task.
 ///
 /// A task completes once its outcome and all of its descendants have completed.
@@ -385,6 +482,19 @@ pub enum Outcome<'a> {
         children: Generator<'a>,
         /// The join step, if any.
         join: Option<Join<'a>>,
+    },
+    /// Run child tasks generated on demand, and fold their values one at a time as they complete.
+    ///
+    /// Unlike [`Outcome::Generate`] with a join, the values need not all be held at once: each is folded as soon as
+    /// the values before it (in generation order, unless the fold is [unordered](Fold::unordered)) are folded, and
+    /// the outcome of each fold step (e.g. a write) completes before the next. A value waiting for an earlier one is
+    /// held, and the children generated but not yet folded are bounded by the generation window of the drive.
+    /// The task completes with the outcome of [`Fold`]'s finish step.
+    Stream {
+        /// The generator of child tasks.
+        children: Generator<'a>,
+        /// The fold of the values of the children.
+        fold: Fold<'a>,
     },
     /// Perform writes, then complete with the value `then`.
     Write {

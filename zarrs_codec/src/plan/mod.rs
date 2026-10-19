@@ -51,7 +51,7 @@ pub use subchunk::{
 };
 pub use target::{DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget};
 pub use task::{
-    AnyValue, ComputeCtx, Generator, Join, MultipartId, MultipartOp, Outcome, Reads, Task,
+    AnyValue, ComputeCtx, Fold, Generator, Join, MultipartId, MultipartOp, Outcome, Reads, Task,
     TaskHint, TaskValue, WriteOp,
 };
 pub(crate) use task::{ComputeStep, read_memory};

@@ -9,8 +9,8 @@ use zarrs_storage::byte_range::{ByteRange, extract_byte_ranges};
 use zarrs_storage::{Bytes, ReadCoalescing, StorageError};
 
 use super::super::{
-    ByteSource, Generator, Join, MultipartBuffers, MultipartId, MultipartOp, Outcome, ReadBytes,
-    SourceKey, SyncIo, Task, TaskValue, WriteOp,
+    ByteSource, Fold, Generator, Join, MultipartBuffers, MultipartId, MultipartOp, Outcome,
+    ReadBytes, SourceKey, SyncIo, Task, TaskValue, WriteOp,
 };
 use crate::{CodecError, CowBytes, Resources};
 
@@ -357,6 +357,201 @@ pub(super) fn multipart_write_errors_fail(drive: Driver) {
     assert!(drive(vec![task], &io, &Resources::default()).is_err());
     // The writes after the failed step are not performed
     assert_eq!(io.get(0), None);
+}
+
+/// A child of a stream with the value `[i]`, which completes after a delay that scrambles the order of completion.
+fn stream_child<'a>(i: usize, live: &'a AtomicUsize, max_live: &'a AtomicUsize) -> Task<'a> {
+    Task::compute(move |_| {
+        let now = live.fetch_add(1, Ordering::SeqCst) + 1;
+        max_live.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_micros(((i * 7) % 5) as u64 * 50));
+        Ok(Outcome::Value(TaskValue::Bytes(Some(CowBytes::from(
+            vec![u8::try_from(i).unwrap()],
+        )))))
+    })
+}
+
+/// A stream of `len` children (from an indexed generator if `indexed`, skipping multiples of 5) whose values are
+/// folded into a vector, which is the value of the stream.
+fn stream_task<'a>(
+    len: usize,
+    indexed: bool,
+    ordered: bool,
+    live: &'a AtomicUsize,
+    max_live: &'a AtomicUsize,
+) -> Task<'a> {
+    Task::compute(move |_| {
+        let children = if indexed {
+            Generator::indexed(len, move |i| {
+                Ok((i % 5 != 0).then(|| stream_child(i, live, max_live)))
+            })
+        } else {
+            Generator::new((0..len).map(move |i| Ok(stream_child(i, live, max_live))))
+        };
+        let fold = Fold::new(
+            Vec::new(),
+            move |values: &mut Vec<u8>, value, _ctx| {
+                live.fetch_sub(1, Ordering::SeqCst);
+                values.extend(bytes_value(&value).unwrap());
+                Ok(Outcome::Done)
+            },
+            |values, _ctx| Ok(Outcome::Value(TaskValue::Bytes(Some(values.into())))),
+        );
+        let fold = if ordered { fold } else { fold.unordered() };
+        Ok(Outcome::Stream { children, fold })
+    })
+}
+
+/// The values of a stream are folded in the order they were generated, or as they complete if unordered.
+pub(super) fn stream_folds_values(drive: Driver) {
+    let (live, max_live) = (AtomicUsize::new(0), AtomicUsize::new(0));
+    let expected =
+        |indexed: bool| -> Vec<u8> { (0..40u8).filter(|i| !indexed || i % 5 != 0).collect() };
+    for ordered in [true, false] {
+        let io = MemoryIo::default();
+        let tasks = vec![
+            stream_task(40, false, ordered, &live, &max_live),
+            stream_task(40, true, ordered, &live, &max_live),
+        ];
+        let values = drive(tasks, &io, &Resources::default()).unwrap();
+        for (value, indexed) in values.iter().zip([false, true]) {
+            let mut value = bytes_value(value).unwrap();
+            if !ordered {
+                value.sort_unstable();
+            }
+            assert_eq!(
+                value,
+                expected(indexed),
+                "ordered: {ordered}, indexed: {indexed}"
+            );
+        }
+    }
+    assert_eq!(live.load(Ordering::SeqCst), 0);
+
+    // A stream with no children, or only skipped children
+    let io = MemoryIo::default();
+    for indexed in [false, true] {
+        let len = if indexed { 1 } else { 0 };
+        let values = drive(
+            vec![stream_task(len, indexed, true, &live, &max_live)],
+            &io,
+            &Resources::default(),
+        )
+        .unwrap();
+        assert_eq!(bytes_value(&values[0]), Some(vec![]));
+    }
+}
+
+/// The children of a stream generated and not yet folded are bounded by the generation window.
+pub(super) fn stream_window_bounds_children(drive: Driver) {
+    // A generation window of 4
+    let resources = Resources::default()
+        .with_compute_target(1)
+        .with_io_target(1);
+    for indexed in [false, true] {
+        let (live, max_live) = (AtomicUsize::new(0), AtomicUsize::new(0));
+        let io = MemoryIo::default();
+        let values = drive(
+            vec![stream_task(64, indexed, true, &live, &max_live)],
+            &io,
+            &resources,
+        )
+        .unwrap();
+        assert_eq!(
+            bytes_value(&values[0]).unwrap().len(),
+            if indexed { 51 } else { 64 }
+        );
+        // An indexed generator claims indices in blocks of up to the window
+        let max_live = max_live.load(Ordering::SeqCst);
+        assert!(max_live <= 8, "indexed: {indexed}, max live: {max_live}");
+    }
+}
+
+/// The outcome of a fold step completes before the next step: here, the parts of a multipart write.
+pub(super) fn stream_fold_writes(drive: Driver) {
+    let (live, max_live) = (AtomicUsize::new(0), AtomicUsize::new(0));
+    let (live, max_live) = (&live, &max_live);
+    for indexed in [false, true] {
+        let io = MemoryIo::default();
+        let task = Task::compute(move |_| {
+            let children = if indexed {
+                Generator::indexed(32, move |i| Ok(Some(stream_child(i, live, max_live))))
+            } else {
+                Generator::new((0..32).map(move |i| Ok(stream_child(i, live, max_live))))
+            };
+            let fold = Fold::new(
+                None,
+                |id: &mut Option<MultipartId>, value, _ctx| {
+                    let mut ops = smallvec![];
+                    let id = *id.get_or_insert_with(|| {
+                        let id = MultipartId::unique();
+                        ops.push(WriteOp::Multipart(
+                            id,
+                            MultipartOp::Begin(SourceKey(0), None),
+                        ));
+                        id
+                    });
+                    let part = value.into_bytes().unwrap().unwrap();
+                    ops.push(WriteOp::Multipart(id, MultipartOp::Parts(vec![part])));
+                    Ok(Outcome::Write {
+                        ops,
+                        then: TaskValue::None,
+                    })
+                },
+                |id, _ctx| {
+                    let id = id.unwrap();
+                    Ok(Outcome::Write {
+                        ops: smallvec![
+                            WriteOp::Multipart(id, MultipartOp::Parts(vec![vec![255].into()])),
+                            WriteOp::Multipart(id, MultipartOp::Finish),
+                        ],
+                        then: TaskValue::Bytes(None),
+                    })
+                },
+            );
+            Ok(Outcome::Stream { children, fold })
+        });
+        let values = drive(vec![task], &io, &Resources::default()).unwrap();
+        assert!(matches!(values[0], TaskValue::Bytes(None)));
+        let expected: Vec<u8> = (0..32).chain([255]).collect();
+        assert_eq!(io.get(0), Some(expected), "indexed: {indexed}");
+    }
+}
+
+/// An error of a child, a fold step, or a finish step of a stream fails the drive.
+pub(super) fn stream_errors_fail(drive: Driver) {
+    for failing in 0..3 {
+        let io = MemoryIo::default();
+        let task = Task::compute(move |_| {
+            let children = Generator::new((0..8).map(move |i| {
+                Ok(Task::compute(move |_| {
+                    if failing == 0 && i == 5 {
+                        return Err(CodecError::Other("child".to_string()));
+                    }
+                    Ok(Outcome::Value(TaskValue::None))
+                }))
+            }));
+            let fold = Fold::new(
+                0usize,
+                move |count: &mut usize, _value, _ctx| {
+                    *count += 1;
+                    if failing == 1 && *count == 3 {
+                        return Err(CodecError::Other("fold".to_string()));
+                    }
+                    Ok(Outcome::Done)
+                },
+                move |_count, _ctx| {
+                    if failing == 2 {
+                        return Err(CodecError::Other("finish".to_string()));
+                    }
+                    Ok(Outcome::Done)
+                },
+            );
+            Ok(Outcome::Stream { children, fold })
+        });
+        let err = drive(vec![task], &io, &Resources::default()).unwrap_err();
+        assert_eq!(err.to_string(), ["child", "fold", "finish"][failing]);
+    }
 }
 
 /// A single root task that writes once, which a drive performs without a scheduler, then completes with its value.
@@ -842,6 +1037,22 @@ macro_rules! driver_tests {
         #[test]
         fn multipart_write_errors_fail() {
             crate::plan::driver::tests::multipart_write_errors_fail($drive);
+        }
+        #[test]
+        fn stream_folds_values() {
+            crate::plan::driver::tests::stream_folds_values($drive);
+        }
+        #[test]
+        fn stream_window_bounds_children() {
+            crate::plan::driver::tests::stream_window_bounds_children($drive);
+        }
+        #[test]
+        fn stream_fold_writes() {
+            crate::plan::driver::tests::stream_fold_writes($drive);
+        }
+        #[test]
+        fn stream_errors_fail() {
+            crate::plan::driver::tests::stream_errors_fail($drive);
         }
     };
 }

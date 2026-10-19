@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add multipart writes to the plan: `plan::WriteOp::Multipart`, `plan::{MultipartId,MultipartOp}`
   - The writes of a `plan::Outcome::Write` with a multipart step are performed in sequence
   - `plan::MultipartWriters`, the writers of the multipart writes in progress of an I/O backend of a store, and `plan::MultipartBuffers` for a backend that sets values whole
+- Add `plan::Outcome::Stream` and `plan::Fold`, which fold the values of generated children one at a time as they complete (in generation order, or in completion order if unordered), with the children not yet folded bounded by the generation window
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`

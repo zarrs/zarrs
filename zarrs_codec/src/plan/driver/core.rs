@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use super::super::task::{GeneratorKind, PlanFn};
 use super::super::{
-    ByteSource, ComputeCtx, ComputeStep, Join, Outcome, Reads, SourceKey, SourceRoot, Task,
+    ByteSource, ComputeCtx, ComputeStep, Fold, Join, Outcome, Reads, SourceKey, SourceRoot, Task,
     TaskHint, TaskValue, WriteOp, read_memory,
 };
 use crate::{CodecError, CowBytes};
@@ -38,6 +38,10 @@ enum Parent {
     Join(NodeId, usize),
     /// A spawned child, whose value is discarded.
     Spawn(NodeId),
+    /// A child of a stream, at the given position of the stream's children.
+    Stream(NodeId, usize),
+    /// The outcome of a fold step of a stream, whose value is discarded.
+    FoldStep(NodeId),
 }
 
 struct Node<'a> {
@@ -50,8 +54,164 @@ struct Node<'a> {
     join: Option<Join<'a>>,
     values: Vec<TaskValue<'a>>,
     value: TaskValue<'a>,
+    /// The state of a node that writes in sequence or streams, boxed since few nodes have it.
+    extra: Option<Box<Extra<'a>>>,
+}
+
+/// The state of a node that few nodes have.
+enum Extra<'a> {
     /// Writes performed in sequence, after the queued write of the node completes (last first).
-    sequence: Vec<WriteOp<'a>>,
+    Sequence(Vec<WriteOp<'a>>),
+    /// The state of the fold of a stream.
+    Stream(StreamState<'a>),
+}
+
+impl<'a> Node<'a> {
+    fn stream(&self) -> Option<&StreamState<'a>> {
+        match self.extra.as_deref() {
+            Some(Extra::Stream(stream)) => Some(stream),
+            _ => None,
+        }
+    }
+
+    fn stream_mut(&mut self) -> Option<&mut StreamState<'a>> {
+        match self.extra.as_deref_mut() {
+            Some(Extra::Stream(stream)) => Some(stream),
+            _ => None,
+        }
+    }
+
+    fn take_stream(&mut self) -> Option<StreamState<'a>> {
+        self.stream()?;
+        match *self.extra.take().expect("a stream") {
+            Extra::Stream(stream) => Some(stream),
+            Extra::Sequence(_) => unreachable!("checked"),
+        }
+    }
+
+    /// The next write performed in sequence, if any.
+    fn pop_sequence(&mut self) -> Option<WriteOp<'a>> {
+        match self.extra.as_deref_mut() {
+            Some(Extra::Sequence(ops)) => ops.pop(),
+            _ => None,
+        }
+    }
+}
+
+/// A position of the children of a stream, in the reorder buffer of its fold.
+enum Ready<'a> {
+    /// The child has not completed.
+    Pending,
+    /// The value of the child.
+    Value(TaskValue<'a>),
+    /// The position of an indexed generator without a task.
+    Skipped,
+}
+
+/// The next item of the children of a stream to fold.
+enum FoldItem<'a> {
+    /// A position without a task, which is folded (skipped) straight away.
+    Skipped,
+    /// A value, and the fold to fold it.
+    Value(Fold<'a>, TaskValue<'a>),
+}
+
+/// The state of an [`Outcome::Stream`].
+///
+/// The children of a stream count towards the pending items of its node until their value is folded.
+struct StreamState<'a> {
+    /// The fold, or [`None`] while a fold step runs.
+    fold: Option<Fold<'a>>,
+    /// Whether the values are folded in the order the children were generated.
+    ordered: bool,
+    /// Whether the outcome of a fold step is in progress (from the start of the step until its outcome completes).
+    busy: bool,
+    /// The values of the children that completed and are not yet folded.
+    ///
+    /// If the fold is ordered, the entry at position `i` is that of the child `next + i`.
+    ready: VecDeque<Ready<'a>>,
+    /// The position of the next child whose value is folded, if the fold is ordered.
+    next: usize,
+    /// The number of values folded.
+    folded: usize,
+    /// The number of children generated.
+    generated: usize,
+    /// The indexed generator of the children, whose claims are limited to the window of the stream.
+    indexed: Option<Arc<IndexedState<'a>>>,
+    /// The maximum number of children generated and not yet folded.
+    window: usize,
+}
+
+impl<'a> StreamState<'a> {
+    fn new(fold: Fold<'a>, window: usize) -> Self {
+        Self {
+            ordered: fold.is_ordered(),
+            fold: Some(fold),
+            busy: false,
+            ready: VecDeque::new(),
+            next: 0,
+            folded: 0,
+            generated: 0,
+            indexed: None,
+            window: window.max(1),
+        }
+    }
+
+    /// Record the value of the child at position `slot` ([`Ready::Skipped`] if the position has no task).
+    fn deliver(&mut self, slot: usize, ready: Ready<'a>) {
+        if self.ordered {
+            let position = slot - self.next;
+            if self.ready.len() <= position {
+                self.ready.resize_with(position + 1, || Ready::Pending);
+            }
+            self.ready[position] = ready;
+        } else {
+            self.ready.push_back(ready);
+        }
+    }
+
+    /// Take the next item to fold if the fold is idle and the item has completed.
+    fn next_step(&mut self) -> Option<FoldItem<'a>> {
+        if self.busy || matches!(self.ready.front(), None | Some(Ready::Pending)) {
+            return None;
+        }
+        self.next += 1;
+        match self.ready.pop_front().expect("checked") {
+            Ready::Value(value) => {
+                self.busy = true;
+                Some(FoldItem::Value(
+                    self.fold.take().expect("the fold is idle"),
+                    value,
+                ))
+            }
+            Ready::Skipped => {
+                self.advance();
+                Some(FoldItem::Skipped)
+            }
+            Ready::Pending => unreachable!("checked"),
+        }
+    }
+
+    /// Count a folded (or skipped) child, and widen the window of an indexed generator.
+    fn advance(&mut self) {
+        self.folded += 1;
+        if let Some(indexed) = &self.indexed {
+            indexed
+                .limit
+                .store(self.folded.saturating_add(self.window), Ordering::SeqCst);
+        }
+    }
+
+    /// The fold step of a value returned the fold.
+    fn folded(&mut self, fold: Fold<'a>) {
+        self.fold = Some(fold);
+        self.advance();
+    }
+
+    /// Returns true if the window admits another child.
+    fn admits(&self) -> bool {
+        self.generated - self.folded < self.window
+    }
 }
 
 impl Node<'_> {
@@ -65,7 +225,7 @@ impl Node<'_> {
             join: None,
             values: Vec::new(),
             value: TaskValue::None,
-            sequence: Vec::new(),
+            extra: None,
         }
     }
 }
@@ -89,6 +249,12 @@ pub(crate) enum Work<'a> {
         node: NodeId,
         join: Join<'a>,
         values: Vec<TaskValue<'a>>,
+    },
+    /// A fold step of a stream.
+    Fold {
+        node: NodeId,
+        fold: Fold<'a>,
+        value: TaskValue<'a>,
     },
     /// Plan and run the tasks of a range of indices of an indexed generator.
     Range(RangeWork<'a>),
@@ -138,6 +304,10 @@ pub(crate) struct IndexedState<'a> {
     block: usize,
     /// Whether a job has run a task of the generator (rather than returning it for a read).
     runs_tasks: std::sync::atomic::AtomicBool,
+    /// Indices at or after the limit are not claimed (yet), e.g. beyond the window of a stream.
+    limit: AtomicUsize,
+    /// Whether the children are those of a stream, which records indices without a task.
+    stream: std::sync::atomic::AtomicBool,
 }
 
 impl<'a> IndexedState<'a> {
@@ -152,6 +322,38 @@ impl<'a> IndexedState<'a> {
             collect,
             block,
             runs_tasks: std::sync::atomic::AtomicBool::new(false),
+            limit: AtomicUsize::new(usize::MAX),
+            stream: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// The end of the indices that can be claimed now.
+    fn claimable_end(&self) -> usize {
+        self.len.min(self.limit.load(Ordering::SeqCst))
+    }
+
+    /// The number of indices that can be claimed now.
+    fn claimable(&self) -> usize {
+        self.claimable_end()
+            .saturating_sub(self.cursor.load(Ordering::SeqCst))
+    }
+
+    /// Claim the next block of indices, if any can be claimed now.
+    fn claim(&self) -> Option<std::ops::Range<usize>> {
+        let mut start = self.cursor.load(Ordering::SeqCst);
+        loop {
+            if start >= self.claimable_end() {
+                return None;
+            }
+            match self.cursor.compare_exchange_weak(
+                start,
+                start + self.block,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => return Some(start..(start + self.block).min(self.len)),
+                Err(current) => start = current,
+            }
         }
     }
 
@@ -163,13 +365,13 @@ impl<'a> IndexedState<'a> {
 
     /// Register a job with the generator if it has tasks left.
     fn try_join(&self) -> bool {
-        // The cursor only advances, so an exhausted generator is skipped without registering
-        if self.cursor.load(Ordering::Relaxed) >= self.len {
+        // The cursor only advances, so an exhausted (or paused) generator is skipped without registering
+        if self.cursor.load(Ordering::Relaxed) >= self.claimable_end() {
             return false;
         }
         // Registering before checking the cursor ensures the scheduler cannot complete the generator in between
         self.unreported.fetch_add(1, Ordering::SeqCst);
-        if self.cursor.load(Ordering::SeqCst) < self.len {
+        if self.cursor.load(Ordering::SeqCst) < self.claimable_end() {
             true
         } else {
             self.unreported.fetch_sub(1, Ordering::SeqCst);
@@ -262,8 +464,17 @@ fn write_inline<'a>(
 pub(crate) enum Completed<'a> {
     /// A compute or join step of a node completed.
     Step(NodeId, Result<Outcome<'a>, CodecError>),
+    /// A fold step of the stream of a node completed, returning the fold (boxed, so the other results stay small).
+    Fold(Box<FoldCompleted<'a>>),
     /// A job of indexed generators completed, with the tasks it ran of each generator.
     Range(Result<RangeResults<'a>, CodecError>),
+}
+
+/// A fold step of the stream of a node that completed, and the fold it returned.
+pub(crate) struct FoldCompleted<'a> {
+    node: NodeId,
+    fold: Fold<'a>,
+    result: Result<Outcome<'a>, CodecError>,
 }
 
 /// The tasks a job ran of each generator it worked on.
@@ -277,6 +488,8 @@ pub(crate) struct RangeOutput<'a> {
     outcomes: Vec<(usize, Outcome<'a>)>,
     /// Tasks that need a read that could not be performed while running the range.
     tasks: Vec<(usize, Task<'a>)>,
+    /// Indices without a task, of the generator of a stream.
+    skipped: Vec<usize>,
 }
 
 /// The generator a job is working on, and the tasks it ran.
@@ -293,6 +506,7 @@ impl<'a> Current<'a> {
                 values: Vec::new(),
                 outcomes: Vec::new(),
                 tasks: Vec::new(),
+                skipped: Vec::new(),
             },
         }
     }
@@ -313,6 +527,7 @@ impl<'a> RangeWork<'a> {
     /// the most recently created first.
     /// The job completes when no generator has tasks left, or after the block of indices in which a
     /// task produces other work (so it is scheduled depth-first) or `max_deferred` tasks need a read.
+    #[allow(clippy::too_many_lines)]
     fn run(
         self,
         ctx: &ComputeCtx,
@@ -343,15 +558,14 @@ impl<'a> RangeWork<'a> {
                 }
                 // Claim indices in blocks, so jobs rarely contend for the cursor
                 let state = &current.state;
-                let start = state.cursor.fetch_add(state.block, Ordering::SeqCst);
-                if start >= state.len {
+                let Some(claimed) = state.claim() else {
                     let Some(other) = steal(&self.registry, state) else {
                         break;
                     };
                     results.push(std::mem::replace(&mut current, Current::new(other)).finish());
                     continue;
-                }
-                indices = start..(start + state.block).min(state.len);
+                };
+                indices = claimed;
                 indices.next().expect("a nonempty block")
             };
             let outcome = match run_indexed(
@@ -382,7 +596,12 @@ impl<'a> RangeWork<'a> {
                     current.output.tasks.push((index, task));
                     continue;
                 }
-                Ok(None) => continue,
+                Ok(None) => {
+                    if current.state.stream.load(Ordering::Relaxed) {
+                        current.output.skipped.push(index);
+                    }
+                    continue;
+                }
                 Err(err) => return Err(err),
             };
             match outcome {
@@ -417,6 +636,7 @@ impl<'a> RangeWork<'a> {
                 outcome @ (Outcome::Spawn(_)
                 | Outcome::Fork { .. }
                 | Outcome::Generate { .. }
+                | Outcome::Stream { .. }
                 | Outcome::Write { .. }) => current.output.outcomes.push((index, outcome)),
             }
         }
@@ -496,7 +716,7 @@ impl<'a> Work<'a> {
     pub(crate) fn fetched(&self) -> u64 {
         match self {
             Self::Compute { fetched, .. } => *fetched,
-            Self::Join { .. } | Self::Range(_) => 0,
+            Self::Join { .. } | Self::Fold { .. } | Self::Range(_) => 0,
         }
     }
 
@@ -505,7 +725,7 @@ impl<'a> Work<'a> {
     pub(crate) fn is_computing_range(&self) -> bool {
         match self {
             Self::Range(range) => range.state.runs_tasks.load(Ordering::Relaxed),
-            Self::Compute { .. } | Self::Join { .. } => false,
+            Self::Compute { .. } | Self::Join { .. } | Self::Fold { .. } => false,
         }
     }
 
@@ -514,7 +734,7 @@ impl<'a> Work<'a> {
     pub(crate) fn is_planning_range(&self) -> bool {
         match self {
             Self::Range(range) => !range.state.runs_tasks.load(Ordering::Relaxed),
-            Self::Compute { .. } | Self::Join { .. } => false,
+            Self::Compute { .. } | Self::Join { .. } | Self::Fold { .. } => false,
         }
     }
 
@@ -561,6 +781,18 @@ impl<'a> Work<'a> {
                 (node, reads.and_then(|reads| step.run(reads, ctx)))
             }
             Self::Join { node, join, values } => (node, join.run(values, ctx)),
+            Self::Fold {
+                node,
+                mut fold,
+                value,
+            } => {
+                let result = fold.step(value, ctx);
+                return Completed::Fold(Box::new(FoldCompleted {
+                    node,
+                    fold,
+                    result: result.and_then(|outcome| write_inline(outcome, inline)),
+                }));
+            }
         };
         Completed::Step(
             node,
@@ -572,7 +804,7 @@ impl<'a> Work<'a> {
     pub(crate) fn hint(&self) -> TaskHint {
         match self {
             Self::Compute { hint, .. } => *hint,
-            Self::Join { .. } | Self::Range(_) => TaskHint::default(),
+            Self::Join { .. } | Self::Fold { .. } | Self::Range(_) => TaskHint::default(),
         }
     }
 }
@@ -809,6 +1041,8 @@ struct ActiveGenerator<'a> {
     generator: Generating<'a>,
     /// Whether the children deliver values to a join of the node.
     join: bool,
+    /// Whether the children deliver values to the stream of the node.
+    stream: bool,
     next_slot: usize,
     depth: usize,
 }
@@ -857,6 +1091,15 @@ impl<T> DepthQueue<T> {
             self.levels.resize_with(depth + 1, VecDeque::new);
         }
         self.levels[depth].push_back(item);
+        self.len += 1;
+    }
+
+    /// Push an item ahead of the other items of its depth.
+    fn push_front(&mut self, depth: usize, item: T) {
+        if self.levels.len() <= depth {
+            self.levels.resize_with(depth + 1, VecDeque::new);
+        }
+        self.levels[depth].push_front(item);
         self.len += 1;
     }
 
@@ -935,6 +1178,8 @@ pub(crate) struct Scheduler<'a> {
     registry: Arc<Registry<'a>>,
     /// The number of jobs of indexed generators queued or running.
     indexed_jobs: usize,
+    /// The generation window of the drive (the last of [`Scheduler::refill`]), which bounds streams.
+    window: usize,
 }
 
 impl<'a> Scheduler<'a> {
@@ -958,6 +1203,7 @@ impl<'a> Scheduler<'a> {
             max_deferred: 64,
             registry: Arc::default(),
             indexed_jobs: 0,
+            window: 64,
         }
     }
 
@@ -971,9 +1217,11 @@ impl<'a> Scheduler<'a> {
         self.max_deferred = max_deferred.max(1);
     }
 
-    /// Create a scheduler for a single root task whose compute step produced `outcome`.
-    pub(crate) fn from_root_outcome(outcome: Outcome<'a>) -> Self {
+    /// Create a scheduler for a single root task whose compute step produced `outcome`, for a drive with the
+    /// generation `window` (see [`Scheduler::refill`]).
+    pub(crate) fn from_root_outcome(outcome: Outcome<'a>, window: usize) -> Self {
         let mut scheduler = Self::new(Vec::new());
+        scheduler.window = window;
         scheduler.roots.push(TaskValue::None);
         let root = scheduler.insert(Node::new(Parent::Root(0), 0));
         scheduler.complete(root, Ok(outcome));
@@ -1217,7 +1465,9 @@ impl<'a> Scheduler<'a> {
     pub(crate) fn ready(&mut self, work: Work<'a>) {
         if self.error.is_none() {
             let node = match &work {
-                Work::Compute { node, .. } | Work::Join { node, .. } => *node,
+                Work::Compute { node, .. } | Work::Join { node, .. } | Work::Fold { node, .. } => {
+                    *node
+                }
                 Work::Range(range) => range.state.node(),
             };
             let depth = self.node(node).depth;
@@ -1232,7 +1482,7 @@ impl<'a> Scheduler<'a> {
                 if self.error.is_none() {
                     let state = self.node(node);
                     state.pending -= 1;
-                    if let Some(op) = state.sequence.pop() {
+                    if let Some(op) = state.pop_sequence() {
                         self.writes.push(WriteWork { node, op });
                     } else {
                         self.try_finish(node);
@@ -1247,6 +1497,10 @@ impl<'a> Scheduler<'a> {
     pub(crate) fn complete_work(&mut self, completed: Completed<'a>) {
         match completed {
             Completed::Step(node, result) => self.complete(node, result),
+            Completed::Fold(completed) => {
+                let FoldCompleted { node, fold, result } = *completed;
+                self.complete_fold(node, fold, result);
+            }
             Completed::Range(result) => self.complete_range(result),
         }
     }
@@ -1278,20 +1532,35 @@ impl<'a> Scheduler<'a> {
             values,
             outcomes,
             tasks,
+            skipped,
         } = output;
+        let node = self.node(id);
+        let depth = node.depth + 1;
+        let stream = node.stream().is_some();
         let parent = |index: usize| {
-            if collect {
+            if stream {
+                Parent::Stream(id, index)
+            } else if collect {
                 Parent::Join(id, index)
             } else {
                 Parent::Spawn(id)
             }
         };
-        let node = self.node(id);
-        let depth = node.depth + 1;
-        // Tasks with more work remain pending until it completes
-        node.pending += outcomes.len() + tasks.len();
-        for (index, value) in values {
-            node.values[index] = value;
+        if let Some(stream) = node.stream_mut() {
+            // Every index of the generator of a stream is pending until it is folded
+            for (index, value) in values {
+                stream.deliver(index, Ready::Value(value));
+            }
+            for index in skipped {
+                stream.deliver(index, Ready::Skipped);
+            }
+            self.fold_next(id);
+        } else {
+            // Tasks with more work remain pending until it completes
+            node.pending += outcomes.len() + tasks.len();
+            for (index, value) in values {
+                node.values[index] = value;
+            }
         }
         for (index, outcome) in outcomes {
             let child = self.insert(Node::new(parent(index), depth));
@@ -1336,7 +1605,7 @@ impl<'a> Scheduler<'a> {
             join,
             values,
             value: TaskValue::None,
-            sequence: Vec::new(),
+            extra: None,
         });
         self.add_indexed(id, depth + 1, state, false);
     }
@@ -1358,9 +1627,11 @@ impl<'a> Scheduler<'a> {
                 .expect("the registry lock is not poisoned")
                 .push(state.clone());
         }
+        let stream = self.node(id).stream().is_some();
         self.generators.push(ActiveGenerator {
             node: id,
-            join: state.collect,
+            join: state.collect && !stream,
+            stream,
             generator: Generating::Indexed(state),
             next_slot: 0,
             depth,
@@ -1424,20 +1695,18 @@ impl<'a> Scheduler<'a> {
                         node: id,
                         generator: Generating::Iter(iter),
                         join: has_join,
+                        stream: false,
                         next_slot: 0,
                         depth: depth + 1,
                     }),
                 }
             }
+            Outcome::Stream { children, fold } => self.start_stream(id, children, fold),
             Outcome::Write { ops, then } => {
                 node.value = then;
                 node.pending += ops.len();
                 if ops.iter().any(WriteOp::is_multipart) {
-                    // The steps of a multipart write are ordered, so the writes are queued one at a time
-                    let mut ops = ops.into_iter().rev().collect::<Vec<_>>();
-                    let op = ops.pop().expect("a write");
-                    node.sequence = ops;
-                    self.writes.push(WriteWork { node: id, op });
+                    self.queue_sequence(id, ops);
                 } else {
                     self.writes
                         .extend(ops.into_iter().map(|op| WriteWork { node: id, op }));
@@ -1447,8 +1716,59 @@ impl<'a> Scheduler<'a> {
         self.try_finish(id);
     }
 
+    /// Start the stream of the node `id`, with the generator `children` and `fold`.
+    // Not inlined, so the common outcomes of `complete` stay small
+    #[inline(never)]
+    fn start_stream(&mut self, id: NodeId, children: super::super::Generator<'a>, fold: Fold<'a>) {
+        let (window, parallelism) = (self.window, self.parallelism);
+        let node = self.node(id);
+        let depth = node.depth;
+        // The generator is pending until it completes
+        node.pending += 1;
+        let mut stream = StreamState::new(fold, window);
+        match children.0 {
+            GeneratorKind::Indexed { len, plan } => {
+                let block = block_size(len, parallelism).min(stream.window);
+                let state = Arc::new(IndexedState::new(len, plan, true, block, 0));
+                state.limit.store(stream.window, Ordering::SeqCst);
+                state.stream.store(true, Ordering::Relaxed);
+                // Every index is a child, whether or not it has a task
+                stream.generated = len;
+                node.pending += len;
+                stream.indexed = Some(state.clone());
+                node.extra = Some(Box::new(Extra::Stream(stream)));
+                self.add_indexed(id, depth + 1, state, true);
+            }
+            GeneratorKind::Iter(iter) => {
+                node.extra = Some(Box::new(Extra::Stream(stream)));
+                self.generators.push(ActiveGenerator {
+                    node: id,
+                    generator: Generating::Iter(iter),
+                    join: false,
+                    stream: true,
+                    next_slot: 0,
+                    depth: depth + 1,
+                });
+            }
+        }
+    }
+
+    /// Queue the writes `ops` of the node `id` (counted as pending), one at a time, in order.
+    ///
+    /// The steps of a multipart write are ordered.
+    #[inline(never)]
+    fn queue_sequence(&mut self, id: NodeId, ops: SmallVec<[WriteOp<'a>; 1]>) {
+        let mut ops = ops.into_iter().rev().collect::<Vec<_>>();
+        let op = ops.pop().expect("a write");
+        self.node(id).extra = Some(Box::new(Extra::Sequence(ops)));
+        self.writes.push(WriteWork { node: id, op });
+    }
+
     /// Generate tasks from active generators, deepest first, then submit root tasks, until `window` items are queued or there are no more tasks.
+    ///
+    /// The children of a stream generated and not yet folded are also limited to `window`.
     pub(crate) fn refill(&mut self, window: usize) {
+        self.window = window;
         // Indexed generators with enough jobs, skipped so that other generators can use free compute threads
         let mut saturated = Vec::new();
         while self.error.is_none() && self.queued() < window {
@@ -1476,9 +1796,7 @@ impl<'a> Scheduler<'a> {
                         saturated.push(active);
                         continue;
                     }
-                    let unclaimed = state
-                        .len
-                        .saturating_sub(state.cursor.load(Ordering::SeqCst));
+                    let unclaimed = state.claimable();
                     if self.indexed_jobs >= self.parallelism
                         || state.queued.load(Ordering::SeqCst) >= unclaimed
                     {
@@ -1504,11 +1822,24 @@ impl<'a> Scheduler<'a> {
                 }
                 Generating::Iter(generator) => generator,
             };
+            if active.stream
+                && !self.nodes[active.node]
+                    .as_ref()
+                    .and_then(Node::stream)
+                    .is_some_and(StreamState::admits)
+            {
+                // The children of the stream fill its window
+                saturated.push(active);
+                continue;
+            }
             match generator.next() {
                 Some(Ok(task)) => {
                     let node = self.node(active.node);
                     node.pending += 1;
-                    let parent = if active.join {
+                    let parent = if active.stream {
+                        node.stream_mut().expect("a stream").generated += 1;
+                        Parent::Stream(active.node, active.next_slot)
+                    } else if active.join {
                         node.values.push(TaskValue::None);
                         Parent::Join(active.node, active.next_slot)
                     } else {
@@ -1536,6 +1867,21 @@ impl<'a> Scheduler<'a> {
         loop {
             let node = self.node(id);
             if node.computing || node.pending > 0 {
+                return;
+            }
+            if let Some(stream) = node.take_stream() {
+                // Every value is folded, so the stream completes with the outcome of the finish step
+                let fold = stream.fold.expect("the fold is idle");
+                node.computing = true;
+                let depth = node.depth;
+                self.compute.push(
+                    depth,
+                    Work::Join {
+                        node: id,
+                        join: Join::after(move |ctx| fold.finish(ctx)),
+                        values: Vec::new(),
+                    },
+                );
                 return;
             }
             if let Some(join) = node.join.take() {
@@ -1569,8 +1915,84 @@ impl<'a> Scheduler<'a> {
                     self.node(parent).pending -= 1;
                     id = parent;
                 }
+                Parent::Stream(parent, slot) => {
+                    // The child remains pending until its value is folded
+                    let stream = self.node(parent).stream_mut().expect("a stream");
+                    stream.deliver(slot, Ready::Value(node.value));
+                    self.fold_next(parent);
+                    return;
+                }
+                Parent::FoldStep(parent) => {
+                    let parent_node = self.node(parent);
+                    parent_node.stream_mut().expect("a stream").busy = false;
+                    parent_node.pending -= 1;
+                    self.fold_next(parent);
+                    id = parent;
+                }
             }
         }
+    }
+
+    /// Queue the next fold step of the stream of the node `id`, if its fold is idle and the next value has completed.
+    ///
+    /// Positions without a task are folded (skipped) straight away.
+    fn fold_next(&mut self, id: NodeId) {
+        if self.error.is_some() {
+            return;
+        }
+        let node = self.node(id);
+        let depth = node.depth + 1;
+        let mut skipped = 0;
+        let Some(stream) = node.stream_mut() else {
+            return;
+        };
+        let step = loop {
+            match stream.next_step() {
+                Some(FoldItem::Value(fold, value)) => break Some((fold, value)),
+                Some(FoldItem::Skipped) => skipped += 1,
+                None => break None,
+            }
+        };
+        node.pending -= skipped;
+        if let Some((fold, value)) = step {
+            // Fold steps go first, so values are released and written as soon as possible
+            self.compute.push_front(
+                depth,
+                Work::Fold {
+                    node: id,
+                    fold,
+                    value,
+                },
+            );
+        } else if node.pending == 0 {
+            // A skipped position was the last
+            self.try_finish(id);
+        }
+    }
+
+    /// Record the result of a fold step of the stream of the node `id`.
+    fn complete_fold(
+        &mut self,
+        id: NodeId,
+        fold: Fold<'a>,
+        result: Result<Outcome<'a>, CodecError>,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        let outcome = match result {
+            Ok(outcome) => outcome,
+            Err(err) => {
+                self.fail(err);
+                return;
+            }
+        };
+        let node = self.node(id);
+        node.stream_mut().expect("a stream").folded(fold);
+        let depth = node.depth + 1;
+        // The outcome of the step runs as a child, and the fold is busy until it completes
+        let child = self.insert(Node::new(Parent::FoldStep(id), depth));
+        self.complete(child, Ok(outcome));
     }
 
     /// Fail the drive with `err`, unless it has already failed, and drop all queued work.

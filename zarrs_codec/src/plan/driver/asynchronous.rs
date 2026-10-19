@@ -247,7 +247,10 @@ async fn drive_single<'a>(
             io.write(ops.pop().expect("one write")).await?;
             Ok(Ok(then))
         }
-        outcome => Ok(Err(Scheduler::from_root_outcome(outcome))),
+        outcome => Ok(Err(Scheduler::from_root_outcome(
+            outcome,
+            generation_window(resources),
+        ))),
     }
 }
 

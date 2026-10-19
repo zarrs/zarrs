@@ -455,6 +455,7 @@ impl ShardingCodecBound {
                 | Outcome::Spawn(_)
                 | Outcome::Fork { .. }
                 | Outcome::Generate { .. }
+                | Outcome::Stream { .. }
                 | Outcome::Write { .. }) => Ok(Some(Task::compute(move |_| Ok(outcome)))),
             }
         }
@@ -733,6 +734,7 @@ impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
                     outcome @ (Outcome::Spawn(_)
                     | Outcome::Fork { .. }
                     | Outcome::Generate { .. }
+                    | Outcome::Stream { .. }
                     | Outcome::Write { .. }) => {
                         // A partial decode planned tasks (e.g. a transpose of the decoded region), which only read memory
                         match drive_memory_one(

@@ -53,7 +53,7 @@ pub fn drive_sync<'a>(
     let ctx = ComputeCtx::new(resources.compute().clone());
     let scheduler = if let [_] = tasks.as_slice() {
         let task = tasks.pop().expect("one task");
-        match drive_single(task, io, resources, &ctx)? {
+        match drive_single(task, io, resources, &ctx, generation_window(resources))? {
             Ok(value) => return Ok(vec![value]),
             Err(scheduler) => scheduler,
         }
@@ -76,7 +76,7 @@ pub fn drive_sync_one<'a>(
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
     let ctx = ComputeCtx::new(resources.compute().clone());
-    match drive_single(task, io, resources, &ctx)? {
+    match drive_single(task, io, resources, &ctx, generation_window(resources))? {
         Ok(value) => Ok(value),
         Err(scheduler) => Ok(drive_scheduler(scheduler, io, resources, &ctx)?
             .pop()
