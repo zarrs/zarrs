@@ -478,6 +478,83 @@ mod tests {
     }
 
     #[test]
+    fn optional_fill_value_representations() {
+        let cases = [
+            (
+                data_type::uint16(),
+                FillValue::from(None::<Option<u16>>),
+                vec![0, 0],
+                vec![0, 0],
+            ),
+            (
+                data_type::uint16(),
+                FillValue::from(Some(None::<u16>)),
+                vec![0, 0],
+                vec![1, 0],
+            ),
+            (
+                data_type::uint16(),
+                FillValue::from(Some(Some(0x1234u16))),
+                0x1234u16.to_ne_bytes().to_vec(),
+                vec![1, 1],
+            ),
+            (
+                data_type::raw_bits(0),
+                FillValue::from(None::<Option<()>>),
+                vec![],
+                vec![0, 1],
+            ),
+            (
+                data_type::string(),
+                FillValue::from(None::<Option<&str>>),
+                vec![],
+                vec![0, 1],
+            ),
+            (
+                data_type::string(),
+                FillValue::from(Some(None::<&str>)),
+                vec![],
+                vec![1, 0],
+            ),
+            (
+                data_type::string(),
+                FillValue::from(Some(Some("abc"))),
+                b"abc".to_vec(),
+                vec![1, 1],
+            ),
+        ];
+        for (inner_type, fill_value, element_bytes, masks) in cases {
+            let data_type = inner_type.to_optional().to_optional();
+            for count in [0usize, 1, 3] {
+                let bytes =
+                    ArrayBytes::new_fill_value(&data_type, count as u64, &fill_value).unwrap();
+                let mut data = &bytes;
+                for &mask in &masks {
+                    let ArrayBytes::Optional(optional) = data else {
+                        panic!("expected optional bytes")
+                    };
+                    assert_eq!(optional.mask().as_ref(), vec![mask; count]);
+                    data = optional.data();
+                }
+                let expected = element_bytes.repeat(count);
+                match data {
+                    ArrayBytes::Fixed(bytes) => assert_eq!(bytes.as_ref(), expected),
+                    ArrayBytes::Variable(bytes) => {
+                        assert_eq!(bytes.bytes().as_ref(), expected);
+                        assert_eq!(
+                            bytes.offsets().iter().collect::<Vec<_>>(),
+                            (0..=count)
+                                .map(|i| i * element_bytes.len())
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                    ArrayBytes::Optional(_) => panic!("unexpected optional layer"),
+                }
+            }
+        }
+    }
+
+    #[test]
     fn copy_fill_value_into_rejects_incompatible_values_and_targets() {
         for (data_type, fill_value) in [
             (data_type::uint16(), FillValue::from(1u8)),

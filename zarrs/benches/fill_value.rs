@@ -8,7 +8,7 @@ use criterion::{
 use std::hint::black_box;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, FillValue,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, FillValue,
     copy_fill_value_into, data_type,
 };
 
@@ -65,6 +65,49 @@ fn fill_view(c: &mut Criterion) {
             group.throughput(Throughput::Bytes(view.num_elements() * element_size as u64));
             group.bench_function(name, |b| {
                 b.iter(|| black_box(&mut view).fill(black_box(&pattern)).unwrap());
+            });
+        }
+    }
+}
+
+fn optional_fill_value(c: &mut Criterion) {
+    for depth in [1, 3] {
+        let mut group = c.benchmark_group(format!("optional_fill_{depth}"));
+        let mut fill_value = FillValue::from(0x1234_5678u32);
+        let mut data_type = data_type::uint32();
+        for _ in 0..depth {
+            fill_value = fill_value.into_optional();
+            data_type = data_type.to_optional();
+        }
+        for num_elements in [1usize, 1024] {
+            for mismatch in [false, true] {
+                let mut bytes =
+                    ArrayBytes::new_flen(0x1234_5678u32.to_ne_bytes().repeat(num_elements));
+                for level in 0..depth {
+                    let mut mask = vec![1u8; num_elements];
+                    if mismatch && level == depth - 1 {
+                        mask[0] = 0;
+                    }
+                    bytes = bytes.with_optional_mask(mask);
+                }
+                let name = if mismatch {
+                    "mask_mismatch"
+                } else {
+                    "equals_all"
+                };
+                group.bench_function(BenchmarkId::new(name, num_elements), |b| {
+                    b.iter(|| black_box(&bytes).is_fill_value(black_box(&fill_value)));
+                });
+            }
+            group.bench_function(BenchmarkId::new("construct", num_elements), |b| {
+                b.iter(|| {
+                    ArrayBytes::new_fill_value(
+                        black_box(&data_type),
+                        num_elements as u64,
+                        black_box(&fill_value),
+                    )
+                    .unwrap()
+                });
             });
         }
     }
@@ -152,5 +195,11 @@ fn fill_output(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, fill_value, fill_view, fill_output);
+criterion_group!(
+    benches,
+    fill_value,
+    fill_view,
+    optional_fill_value,
+    fill_output
+);
 criterion_main!(benches);

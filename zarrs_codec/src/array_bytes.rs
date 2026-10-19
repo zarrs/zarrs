@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::ops::IndexMut;
 
 use derive_more::derive::Display;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
-use zarrs_data_type::DataTypeFillValueError;
+use zarrs_data_type::{DataTypeFillValueError, OptionalDataType};
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::extract_byte_ranges_concat;
 
@@ -40,6 +41,25 @@ fn offsets_from_usize(
             .map(|offset| u64::try_from(offset).unwrap())
             .collect::<Vec<_>>();
         ArrayBytesOffsets::new(offsets)
+    }
+}
+
+/// Borrow the inner pattern for non-null values; null values use zero/empty placeholders.
+fn optional_fill_value_parts<'a>(
+    data_type: &OptionalDataType,
+    fill_value_bytes: &'a [u8],
+) -> (Cow<'a, [u8]>, u8) {
+    if fill_value_bytes.last() == Some(&0) {
+        (Cow::Owned(vec![0; data_type.fixed_size().unwrap_or(0)]), 0)
+    } else {
+        (
+            Cow::Borrowed(
+                fill_value_bytes
+                    .split_last()
+                    .map_or(&[][..], |(_, inner)| inner),
+            ),
+            1,
+        )
     }
 }
 
@@ -149,42 +169,29 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
+        Self::new_fill_value_bytes(data_type, num_elements, fill_value.as_ne_bytes())
+    }
+
+    fn new_fill_value_bytes(
+        data_type: &DataType,
+        num_elements: u64,
+        fill_value_bytes: &[u8],
+    ) -> Result<Self, DataTypeFillValueError> {
         if let Some(opt) = data_type.as_optional() {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
-            if opt.is_fill_value_null(fill_value) {
-                // Null fill value for optional type: create mask of all zeros
-                let inner_fill_value = if opt.is_fixed() {
-                    FillValue::from(vec![0u8; opt.fixed_size().unwrap()])
-                } else {
-                    FillValue::from(&[])
-                };
-                let mask = vec![0u8; num_elements_usize];
-                return Ok(ArrayBytes::new_fill_value(
-                    opt.data_type(),
-                    num_elements,
-                    &inner_fill_value,
-                )?
-                .with_optional_mask(mask));
-            }
-            // Non-null fill value for optional type: strip suffix and use inner bytes
-            let inner_bytes = opt.fill_value_inner_bytes(fill_value);
-            let inner_fill_value = FillValue::new(inner_bytes.to_vec());
-            let mask = vec![1u8; num_elements_usize]; // all non-null
-            return Ok(ArrayBytes::new_fill_value(
-                opt.data_type(),
-                num_elements,
-                &inner_fill_value,
-            )?
-            .with_optional_mask(mask));
+            let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
+            let mask = vec![mask_value; num_elements_usize];
+            return Ok(
+                Self::new_fill_value_bytes(opt.data_type(), num_elements, &inner_bytes)?
+                    .with_optional_mask(mask),
+            );
         }
 
         match data_type.size() {
             DataTypeSize::Fixed(data_type_size) => {
                 let num_elements = usize::try_from(num_elements).unwrap();
-                if fill_value.size() == data_type_size {
-                    Ok(Self::new_flen(
-                        fill_value.as_ne_bytes().repeat(num_elements),
-                    ))
+                if fill_value_bytes.len() == data_type_size {
+                    Ok(Self::new_flen(fill_value_bytes.repeat(num_elements)))
                 } else {
                     Err(DataTypeFillValueError)
                 }
@@ -193,12 +200,12 @@ impl<'a> ArrayBytes<'a> {
                 let num_elements = usize::try_from(num_elements).unwrap();
                 let mut offsets = Vec::with_capacity(num_elements + 1);
                 for i in 0..=num_elements {
-                    offsets.push(i * fill_value.size());
+                    offsets.push(i * fill_value_bytes.len());
                 }
                 let offsets = offsets_from_usize(offsets).unwrap();
                 Ok(unsafe {
                     // SAFETY: The last offset is equal to the length of the bytes
-                    Self::new_vlen_unchecked(fill_value.as_ne_bytes().repeat(num_elements), offsets)
+                    Self::new_vlen_unchecked(fill_value_bytes.repeat(num_elements), offsets)
                 })
             }
         }
@@ -291,28 +298,25 @@ impl<'a> ArrayBytes<'a> {
     /// Returns [`true`] if the array is empty for the given fill value.
     #[must_use]
     pub fn is_fill_value(&self, fill_value: &FillValue) -> bool {
+        self.is_fill_value_bytes(fill_value.as_ne_bytes())
+    }
+
+    fn is_fill_value_bytes(&self, fill_value_bytes: &[u8]) -> bool {
         match self {
-            Self::Fixed(bytes) => fill_value.equals_all(bytes),
+            Self::Fixed(bytes) => FillValue::equals_all_bytes(fill_value_bytes, bytes),
             Self::Variable(ArrayBytesVariableLength { bytes, offsets: _ }) => {
-                fill_value.equals_all(bytes)
+                FillValue::equals_all_bytes(fill_value_bytes, bytes)
             }
             Self::Optional(optional_bytes) => {
-                let bytes = fill_value.as_ne_bytes();
-                // For optional types, check the suffix byte (last byte)
-                let is_null = bytes.last() == Some(&0);
-                if is_null {
-                    // For optional arrays with null fill value, check if mask is all zeros
+                if fill_value_bytes.last() == Some(&0) {
                     optional_bytes.mask().iter().all(|&b| b == 0)
                 } else {
-                    // For optional arrays with non-null fill value, check if mask is all ones
-                    // and data matches inner fill value (fill value without suffix)
-                    let inner_fill_value = if bytes.is_empty() {
-                        FillValue::new(vec![])
-                    } else {
-                        FillValue::new(bytes[..bytes.len() - 1].to_vec())
-                    };
                     optional_bytes.mask().iter().all(|&b| b == 1)
-                        && optional_bytes.data().is_fill_value(&inner_fill_value)
+                        && optional_bytes.data().is_fill_value_bytes(
+                            fill_value_bytes
+                                .split_last()
+                                .map_or(&[], |(_, inner)| inner),
+                        )
                 }
             }
         }
@@ -803,6 +807,14 @@ pub fn copy_fill_value_into(
     fill_value: &FillValue,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
+    copy_fill_value_bytes_into(data_type, fill_value.as_ne_bytes(), output_target)
+}
+
+fn copy_fill_value_bytes_into(
+    data_type: &DataType,
+    fill_value_bytes: &[u8],
+    output_target: ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
         (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target)) => {
             let num_elements = data_target.num_elements();
@@ -813,14 +825,9 @@ pub fn copy_fill_value_into(
                 )
                 .into());
             }
-            let is_null = opt.is_fill_value_null(fill_value);
-            let inner_fill_value = if is_null {
-                FillValue::new(vec![0; opt.fixed_size().unwrap_or(0)])
-            } else {
-                FillValue::from(opt.fill_value_inner_bytes(fill_value))
-            };
-            copy_fill_value_into(opt.data_type(), &inner_fill_value, *data_target)?;
-            mask_target.fill(&[u8::from(!is_null)])?;
+            let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
+            copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, *data_target)?;
+            mask_target.fill(&[mask_value])?;
             Ok(())
         }
         (Some(_), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
@@ -837,10 +844,10 @@ pub fn copy_fill_value_into(
             let DataTypeSize::Fixed(size) = data_type.size() else {
                 return Err(ExpectedFixedLengthBytesError.into());
             };
-            if fill_value.size() != size {
+            if fill_value_bytes.len() != size {
                 return Err(DataTypeFillValueError.into());
             }
-            view.fill(fill_value.as_ne_bytes())?;
+            view.fill(fill_value_bytes)?;
             Ok(())
         }
     }
@@ -958,6 +965,63 @@ mod tests {
             assert!(offsets.is_u64());
             assert_eq!(offsets.as_u64().unwrap().as_ptr(), input_ptr);
         }
+    }
+
+    #[test]
+    fn optional_is_fill_value() {
+        for depth in 1..=3 {
+            let mut fill_value = FillValue::from(0x1234u16);
+            let mut bytes = ArrayBytes::new_flen(0x1234u16.to_ne_bytes().repeat(3));
+            let mut different_bytes = ArrayBytes::new_flen(0x1235u16.to_ne_bytes().repeat(3));
+            let mut inner_null = ArrayBytes::new_flen(vec![0xff; 6]).with_optional_mask(vec![0; 3]);
+            let mut inner_null_fill = FillValue::new_optional_null();
+            for level in 0..depth {
+                fill_value = fill_value.into_optional();
+                different_bytes = different_bytes.with_optional_mask(vec![1; 3]);
+                if level != 0 {
+                    bytes = bytes.with_optional_mask(vec![1; 3]);
+                    inner_null = inner_null.with_optional_mask(vec![1; 3]);
+                    inner_null_fill = inner_null_fill.into_optional();
+                }
+            }
+            assert!(
+                bytes
+                    .clone()
+                    .with_optional_mask(vec![1; 3])
+                    .is_fill_value(&fill_value)
+            );
+            assert!(
+                !bytes
+                    .with_optional_mask(vec![1, 0, 1])
+                    .is_fill_value(&fill_value)
+            );
+            assert!(!different_bytes.is_fill_value(&fill_value));
+            assert!(inner_null.is_fill_value(&inner_null_fill));
+        }
+
+        let null_fill = FillValue::new_optional_null();
+        assert!(
+            ArrayBytes::new_flen(vec![0xff; 6])
+                .with_optional_mask(vec![0; 3])
+                .is_fill_value(&null_fill)
+        );
+        assert!(
+            !ArrayBytes::new_flen(vec![0xff; 6])
+                .with_optional_mask(vec![0, 1, 0])
+                .is_fill_value(&null_fill)
+        );
+        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(vec![]);
+        assert!(empty.is_fill_value(&null_fill));
+        assert!(!empty.is_fill_value(&FillValue::from(Some(1u16))));
+        assert!(empty.is_fill_value(&FillValue::from(Some(""))));
+        let strings = ArrayBytes::new_vlen(
+            b"abcabc".as_slice(),
+            ArrayBytesOffsets::new(vec![0u32, 3, 6]).unwrap(),
+        )
+        .unwrap()
+        .with_optional_mask(vec![1; 2]);
+        assert!(strings.is_fill_value(&FillValue::from(Some("abc"))));
+        assert!(!strings.is_fill_value(&FillValue::from(Some("abd"))));
     }
 
     #[test]

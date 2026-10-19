@@ -227,8 +227,16 @@ impl FillValue {
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn equals_all(&self, bytes: &[u8]) -> bool {
-        let fill_value_bytes = &self.0;
+        Self::equals_all_bytes(self.as_ne_bytes(), bytes)
+    }
 
+    /// Check if `bytes` are equal to repetitions of a borrowed fill-value byte pattern.
+    ///
+    /// An empty pattern matches only empty bytes. A nonempty pattern requires at least
+    /// one complete element, and partial elements do not match.
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn equals_all_bytes(fill_value_bytes: &[u8], bytes: &[u8]) -> bool {
         // Special cases for variable length data
         if !num::Integer::is_multiple_of(&bytes.len(), &fill_value_bytes.len())
             || bytes.len() < fill_value_bytes.len()
@@ -256,11 +264,11 @@ impl FillValue {
                     .all(|block| u128::from_ne_bytes(*block) == fill_value_128)
                     && tail
                         .chunks_exact(fill_value_bytes.len())
-                        .all(|element| element == fill_value_bytes.as_slice())
+                        .all(|element| element == fill_value_bytes)
             }
             _ => bytes
                 .chunks_exact(fill_value_bytes.len())
-                .all(|element| element == fill_value_bytes.as_slice()),
+                .all(|element| element == fill_value_bytes),
         }
     }
 
