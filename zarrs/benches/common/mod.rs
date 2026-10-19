@@ -14,7 +14,7 @@ use zarrs::storage::{
 use zarrs::storage::{
     ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    StoreWriter, WritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
 
@@ -168,6 +168,48 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Latency
 
     fn supports_set_partial(&self) -> bool {
         self.storage.supports_set_partial()
+    }
+
+    fn set_multipart<'s>(
+        &'s self,
+        key: &StoreKey,
+        size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        Ok(Box::new(LatencyStoreWriter {
+            store: self,
+            writer: self.storage.set_multipart(key, size_hint)?,
+        }))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        self.storage.supports_multipart()
+    }
+}
+
+/// A multipart writer of a [`LatencyStore`], where each call that writes parts, and finishing, is a request.
+struct LatencyStoreWriter<'s, TStorage: ?Sized> {
+    store: &'s LatencyStore<TStorage>,
+    writer: Box<dyn StoreWriter + 's>,
+}
+
+impl<TStorage: ?Sized + Send + Sync> StoreWriter for LatencyStoreWriter<'_, TStorage> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        let _guard = self.store.wait_sync();
+        self.writer.write(part)
+    }
+
+    fn write_many(&mut self, parts: Vec<CowBytes<'_>>) -> Result<(), StorageError> {
+        let _guard = self.store.wait_sync();
+        self.writer.write_many(parts)
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        let _guard = self.store.wait_sync();
+        self.writer.finish()
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        self.writer.abort()
     }
 }
 

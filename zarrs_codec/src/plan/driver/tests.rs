@@ -431,7 +431,7 @@ pub(super) fn stream_folds_values(drive: Driver) {
     // A stream with no children, or only skipped children
     let io = MemoryIo::default();
     for indexed in [false, true] {
-        let len = if indexed { 1 } else { 0 };
+        let len = usize::from(indexed);
         let values = drive(
             vec![stream_task(len, indexed, true, &live, &max_live)],
             &io,
@@ -515,6 +515,72 @@ pub(super) fn stream_fold_writes(drive: Driver) {
         assert!(matches!(values[0], TaskValue::Bytes(None)));
         let expected: Vec<u8> = (0..32).chain([255]).collect();
         assert_eq!(io.get(0), Some(expected), "indexed: {indexed}");
+    }
+}
+
+/// Fold steps are batched: the multipart writes of consecutive values are merged, and a value whose outcome has other
+/// work (here, spawned children) runs it after the merged writes and before later values are folded.
+pub(super) fn stream_fold_batches(drive: Driver) {
+    for indexed in [false, true] {
+        let io = MemoryIo::default();
+        let spawned = Mutex::new(Vec::new());
+        let spawned = &spawned;
+        let task = Task::compute(move |_| {
+            let child = |i: usize| {
+                Task::compute(move |_| {
+                    Ok(Outcome::Value(TaskValue::Bytes(Some(CowBytes::from(
+                        vec![u8::try_from(i).unwrap()],
+                    )))))
+                })
+            };
+            let children = if indexed {
+                Generator::indexed(30, move |i| Ok(Some(child(i))))
+            } else {
+                Generator::new((0..30).map(move |i| Ok(child(i))))
+            };
+            let fold = Fold::new(
+                (None, Vec::new()),
+                move |(id, folded): &mut (Option<MultipartId>, Vec<u8>), value, _ctx| {
+                    let value = bytes_value(&value).unwrap()[0];
+                    folded.push(value);
+                    if value % 7 == 3 {
+                        return Ok(Outcome::Spawn(vec![Task::compute(move |_| {
+                            spawned.lock().unwrap().push(value);
+                            Ok(Outcome::Done)
+                        })]));
+                    }
+                    let mut ops = smallvec![];
+                    let id = *id.get_or_insert_with(|| {
+                        let id = MultipartId::unique();
+                        ops.push(WriteOp::Multipart(
+                            id,
+                            MultipartOp::Begin(SourceKey(0), None),
+                        ));
+                        id
+                    });
+                    ops.push(WriteOp::Multipart(
+                        id,
+                        MultipartOp::Parts(vec![vec![value].into()]),
+                    ));
+                    Ok(Outcome::Write {
+                        ops,
+                        then: TaskValue::None,
+                    })
+                },
+                |(id, folded), _ctx| {
+                    assert_eq!(folded, (0..30).collect::<Vec<u8>>());
+                    Ok(Outcome::Write {
+                        ops: smallvec![WriteOp::Multipart(id.unwrap(), MultipartOp::Finish)],
+                        then: TaskValue::None,
+                    })
+                },
+            );
+            Ok(Outcome::Stream { children, fold })
+        });
+        drive(vec![task], &io, &Resources::default()).unwrap();
+        let written: Vec<u8> = (0..30).filter(|value| value % 7 != 3).collect();
+        assert_eq!(io.get(0), Some(written), "indexed: {indexed}");
+        assert_eq!(*spawned.lock().unwrap(), vec![3, 10, 17, 24]);
     }
 }
 
@@ -1049,6 +1115,10 @@ macro_rules! driver_tests {
         #[test]
         fn stream_fold_writes() {
             crate::plan::driver::tests::stream_fold_writes($drive);
+        }
+        #[test]
+        fn stream_fold_batches() {
+            crate::plan::driver::tests::stream_fold_batches($drive);
         }
         #[test]
         fn stream_errors_fail() {

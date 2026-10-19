@@ -60,7 +60,7 @@ pub use array_bytes::{
 };
 
 use derive_more::derive::Display;
-pub use options::{CodecMetadataOptions, CodecOptions};
+pub use options::{CodecMetadataOptions, CodecOptions, MultipartWrite};
 pub use plan::EncodedSubchunk;
 pub use resources::{ComputeResources, IoLimiter, IoPermit, ReadDispatch, Resources};
 use thiserror::Error;

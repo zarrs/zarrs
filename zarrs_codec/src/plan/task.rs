@@ -399,9 +399,18 @@ impl<'a> Fold<'a> {
     /// Create a fold of the values of the children of a stream into `state`.
     ///
     /// `fold` is called with each value, in the order the children were generated (see
-    /// [`unordered`](Fold::unordered)). The outcome of a call is run as a task (e.g. a write of the value) before
-    /// `fold` is called with the next value, and its value is discarded.
+    /// [`unordered`](Fold::unordered)). The outcomes of the calls are run as tasks (e.g. writes of the values), in
+    /// order: an outcome completes before the outcome of a later call starts, and their values are discarded.
+    /// Values that are ready together are folded in one step, with their outcomes merged: writes with a multipart step
+    /// (performed in sequence) are combined into one outcome, and a call whose outcome has other work ends the step.
+    /// So `fold` may be called with a value before the outcome of the previous call completes: the multipart writes of
+    /// a stream are queued and performed in order while the fold continues, with at most the writes of one step
+    /// waiting behind the write in progress.
     /// Once every value is folded, `finish` produces the outcome of the stream.
+    ///
+    /// `fold` runs on the thread driving the tasks, rather than a compute thread, so it should be cheap (e.g. record
+    /// where a value goes and return its writes), with the work of a value done by its child task. `finish` runs on a
+    /// compute thread.
     pub fn new<S: zarrs_plugin::MaybeSend + 'a>(
         state: S,
         fold: impl FnMut(&mut S, TaskValue<'a>, &ComputeCtx) -> Result<Outcome<'a>, CodecError>
@@ -487,8 +496,8 @@ pub enum Outcome<'a> {
     ///
     /// Unlike [`Outcome::Generate`] with a join, the values need not all be held at once: each is folded as soon as
     /// the values before it (in generation order, unless the fold is [unordered](Fold::unordered)) are folded, and
-    /// the outcome of each fold step (e.g. a write) completes before the next. A value waiting for an earlier one is
-    /// held, and the children generated but not yet folded are bounded by the generation window of the drive.
+    /// the outcomes of the fold (e.g. writes) run in order. A value waiting for an earlier one is held, and the
+    /// children generated but not yet folded are bounded by the generation window of the drive.
     /// The task completes with the outcome of [`Fold`]'s finish step.
     Stream {
         /// The generator of child tasks.

@@ -19,8 +19,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serial_test::serial;
 use zarrs::array::codec::ZstdCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, Resources, data_type};
+use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBuilder, ShardingIndexLocation};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, MultipartWrite, Resources, data_type,
+};
 use zarrs::storage::store::MemoryStore;
+use zarrs::storage::{
+    OffsetBytesIterator, StorageError, StoreKey, StorePrefix, StoreWriter, WritableStorageTraits,
+};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
 struct CountingAllocator;
@@ -175,6 +181,16 @@ const BASELINE: &[(&str, usize, usize, usize)] = &[
     ("store_array_subset_partial_chunks_zstd", 167, 324_721, 23_645),
     ("store_chunks_sharded", 492, 447_946, 143_253),
     ("async_store_array_subset_many_chunks_zstd", 244, 316_801, 20_757),
+    // One shard of 64 zstd subchunks in 8 blocks to a memory store, encoded whole or streamed in parts of 16 KiB. Streamed, the encoded
+    // subchunks are held until they are appended to the value, which is reserved for their bound, so the memory store
+    // does not stream by default
+    ("store_chunk_sharded_buffered", 236, 411_847, 143_253),
+    ("store_chunk_sharded_streamed_end", 289, 425_964, 281_003),
+    // One shard of 256 uncompressed subchunks in 32 blocks to a store that keeps nothing, with a window of 4 blocks and
+    // parts of 16 KiB. Streamed, the peak is the window, the part being collected, a part being written and a part
+    // queued behind it, and the index, rather than the shard, for about 5 more allocations per block
+    ("store_chunk_sharded_peak_buffered", 321, 285_106, 147_046),
+    ("store_chunk_sharded_peak_streamed", 471, 184_926, 62_026),
 ];
 
 /// The baseline of `name`.
@@ -403,6 +419,177 @@ fn store_chunks_sharded() {
             )
             .unwrap();
     });
+}
+
+/// A sharded array of one 256 x 256 shard of subchunks of `subchunk_shape` in `store`, writing shards as they are
+/// encoded with `multipart_write`.
+fn sharded_array<TStorage: ?Sized>(
+    store: Arc<TStorage>,
+    compressed: bool,
+    subchunk_shape: &[u64],
+    index_location: ShardingIndexLocation,
+    multipart_write: MultipartWrite,
+) -> Array<TStorage> {
+    let mut builder = ArrayBuilder::new(SHAPE.to_vec(), SHAPE.to_vec(), data_type::uint16(), 0u16);
+    let mut sharding = ShardingCodecBuilder::new(
+        subchunk_shape
+            .iter()
+            .map(|&size| NonZeroU64::new(size).unwrap())
+            .collect(),
+        &data_type::uint16(),
+    );
+    sharding.index_location(index_location);
+    if compressed {
+        sharding.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))]);
+    }
+    builder.array_to_bytes_codec(Arc::new(sharding.build()));
+    let array = builder.build_arc(store, "/").unwrap();
+    // Parts of a few blocks, so the shard is written in several parts
+    array.with_codec_options(
+        CodecOptions::default()
+            .with_multipart_write(multipart_write)
+            .with_multipart_part_size(16 * 1024),
+    )
+}
+
+#[test]
+#[serial]
+fn store_chunk_sharded() {
+    let data = data();
+    for (name, index_location, multipart_write) in [
+        (
+            "store_chunk_sharded_buffered",
+            ShardingIndexLocation::End,
+            MultipartWrite::Never,
+        ),
+        (
+            "store_chunk_sharded_streamed_end",
+            ShardingIndexLocation::End,
+            MultipartWrite::Always,
+        ),
+    ] {
+        let array = sharded_array(
+            Arc::new(MemoryStore::new()),
+            true,
+            &[32, 32],
+            index_location,
+            multipart_write,
+        );
+        let (_, stats) = measure(name, || {
+            array
+                .store_chunk(&[0, 0], data.as_slice(), &resources())
+                .unwrap();
+        });
+        check(name, stats);
+        assert_eq!(
+            array
+                .retrieve_chunk::<Vec<u16>>(&[0, 0], &resources())
+                .unwrap(),
+            data
+        );
+    }
+}
+
+/// A store that counts the bytes written to it and keeps nothing, so the peak memory of a write is that of the write
+/// alone.
+#[derive(Default)]
+struct SinkStore {
+    bytes_written: AtomicUsize,
+}
+
+impl WritableStorageTraits for SinkStore {
+    fn set(&self, _key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
+        self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn set_partial_many<'a>(
+        &'a self,
+        _key: &StoreKey,
+        _offset_values: OffsetBytesIterator<'a>,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported("partial writes".to_string()))
+    }
+
+    fn erase(&self, _key: &StoreKey) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    fn erase_prefix(&self, _prefix: &StorePrefix) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        false
+    }
+
+    fn set_multipart<'s>(
+        &'s self,
+        _key: &StoreKey,
+        _size_hint: Option<u64>,
+    ) -> Result<Box<dyn StoreWriter + 's>, StorageError> {
+        Ok(Box::new(SinkWriter(&self.bytes_written)))
+    }
+
+    fn supports_multipart(&self) -> bool {
+        true
+    }
+}
+
+/// The multipart writer of a [`SinkStore`].
+struct SinkWriter<'s>(&'s AtomicUsize);
+
+impl StoreWriter for SinkWriter<'_> {
+    fn write(&mut self, part: CowBytes<'_>) -> Result<(), StorageError> {
+        self.0.fetch_add(part.len(), Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    fn abort(self: Box<Self>) -> Result<(), StorageError> {
+        Ok(())
+    }
+}
+
+/// A streamed write of a shard holds a window of encoded blocks of subchunks, rather than the whole shard.
+#[test]
+#[serial]
+fn store_chunk_sharded_peak() {
+    // A window of 4 blocks of 8 subchunks of 16 x 16 elements (512 bytes), of 32 blocks
+    let resources = resources().with_io_target(1);
+    let data = data();
+    let mut peaks = vec![];
+    for (name, multipart_write) in [
+        // The sink store supports multipart writes, so `Auto` streams
+        ("store_chunk_sharded_peak_streamed", MultipartWrite::Auto),
+        ("store_chunk_sharded_peak_buffered", MultipartWrite::Never),
+    ] {
+        let store = Arc::new(SinkStore::default());
+        let array = sharded_array(
+            store.clone(),
+            false,
+            &[16, 16],
+            ShardingIndexLocation::End,
+            multipart_write,
+        );
+        let (_, stats) = measure(name, || {
+            array
+                .store_chunk(&[0, 0], data.as_slice(), &resources)
+                .unwrap();
+        });
+        check(name, stats);
+        // The subchunks and the index (of 256 subchunks, with a checksum)
+        assert_eq!(
+            store.bytes_written.load(Ordering::Relaxed),
+            DECODED_BYTES + 256 * 16 + 4
+        );
+        peaks.push(stats.peak_bytes);
+    }
+    // The streamed write holds the window and a few parts, rather than the whole shard
+    assert!(peaks[0] * 2 < peaks[1], "{peaks:?}");
 }
 
 #[cfg(feature = "async")]

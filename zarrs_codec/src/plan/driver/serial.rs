@@ -25,7 +25,7 @@ pub fn drive_serial<'a>(
     let ctx = ComputeCtx::new(resources.compute().clone());
     let scheduler = if let [_] = tasks.as_slice() {
         let task = tasks.pop().expect("one task");
-        match drive_single(task, io, resources, &ctx, 1)? {
+        match drive_single(task, io, resources, &ctx, (1, 1))? {
             Ok(value) => return Ok(vec![value]),
             Err(scheduler) => scheduler,
         }
@@ -45,7 +45,7 @@ pub fn drive_serial_one<'a>(
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
     let ctx = ComputeCtx::new(resources.compute().clone());
-    match drive_single(task, io, resources, &ctx, 1)? {
+    match drive_single(task, io, resources, &ctx, (1, 1))? {
         Ok(value) => Ok(value),
         Err(scheduler) => Ok(drive_scheduler(scheduler, io, resources, &ctx)?
             .pop()
@@ -53,8 +53,8 @@ pub fn drive_serial_one<'a>(
     }
 }
 
-/// Run a single root task on the calling thread, returning its value, or a scheduler with the generation `window` to
-/// continue it if it fans out.
+/// Run a single root task on the calling thread, returning its value, or a scheduler with the generation `window` and
+/// `parallelism` to continue it if it fans out.
 // The scheduler is moved once per drive, which is cheaper than boxing it
 #[allow(clippy::result_large_err)]
 pub(super) fn drive_single<'a>(
@@ -62,7 +62,7 @@ pub(super) fn drive_single<'a>(
     io: &dyn SyncIo,
     resources: &Resources,
     ctx: &ComputeCtx,
-    window: usize,
+    (window, parallelism): (usize, usize),
 ) -> Result<Result<TaskValue<'a>, Scheduler<'a>>, CodecError> {
     let outcome = if task.needs_io() {
         let (source, ranges, step) = single_read(task)?;
@@ -82,7 +82,11 @@ pub(super) fn drive_single<'a>(
             io.write(ops.pop().expect("one write"))?;
             Ok(Ok(then))
         }
-        outcome => Ok(Err(Scheduler::from_root_outcome(outcome, window))),
+        outcome => Ok(Err(Scheduler::from_root_outcome(
+            outcome,
+            window,
+            parallelism,
+        ))),
     }
 }
 
@@ -93,6 +97,8 @@ fn drive_scheduler<'a>(
     ctx: &ComputeCtx,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
     let io = SerialIo { io, resources };
+    // One child of a stream at a time, as one task is queued at a time
+    scheduler.set_stream_window(1);
     loop {
         scheduler.refill(1);
         if !scheduler.run_one(&io, ctx) {

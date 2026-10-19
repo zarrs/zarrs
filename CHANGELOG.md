@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
   - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
 - Add the `cast_value` array-to-array codec
+- The `sharding_indexed` codec writes a shard (with its index at the end) as it is encoded, with a multipart write, when storage writes values in parts (e.g. `FilesystemStore`) or `CodecOptions::multipart_write` is `MultipartWrite::Always`
+  - A write then holds a window of encoded blocks of subchunks and a few parts (`CodecOptions::multipart_part_size`), rather than the whole shard
+  - Shards whose decoded size is at most the part size, with bytes-to-bytes codecs after sharding, or through storage transformers, are encoded whole
+  - Re-export `MultipartWrite`
+- Add the `shard_write` benchmark of shards encoded whole versus written as they are encoded
 - Implement `Default` for `MetadataRetrieveVersion`
 - Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
 - Implement `Copy` for `GroupMetadataOptions`

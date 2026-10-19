@@ -82,6 +82,7 @@ cargo bench -p zarrs --features async --bench driver_overhead -- --test
 | `array_blosc` | Whole-array compressed reads/writes | `blosc` |
 | `array_ops` | Tiny chunks, whole/subset/into reads, partial encoding versus read-modify-write, partial writes, nested sharding, partial decoders, empty/filled caches | `zstd`, `crc32c`; `filesystem` adds partial-write comparisons |
 | `driver_overhead` | Closure baseline, serial/sync compute/read/fork, async inline/offload | `async` adds executor cases |
+| `shard_write` | Shards encoded whole versus written as they are encoded (multipart), to memory/filesystem/latency stores, index at the end/start, many/few parts | `filesystem`, `zstd` |
 | `io_latency` | Zero/delayed reads, subsets, sharding, coalescing, sync/async and owned/borrowed writes | `zstd`; `async` adds executor cases |
 | `sharded_partial_read_memory` | Full, shard-aligned and unaligned reads from a shared 32 MiB fixture | None |
 | `sharded_partial_read` | Large filesystem full/aligned/unaligned reads | `filesystem`; explicit target only |

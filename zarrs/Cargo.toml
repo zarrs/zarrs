@@ -211,5 +211,10 @@ name = "driver_overhead"
 harness = false
 
 [[bench]]
+name = "shard_write"
+harness = false
+required-features = ["filesystem", "zstd"]
+
+[[bench]]
 name = "sharded_partial_read_memory"
 harness = false

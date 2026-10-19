@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 use zarrs_storage::ReadCoalescing;
 
 use super::core::{
-    ByteBudget, Completed, InlineIo, IoRequest, IoSlot, IoWork, Joined, NodeId, Scheduler, Work,
+    ByteBudget, Completed, InlineIo, IoRequest, IoSlot, IoWork, NodeId, Report, Scheduler, Work,
     WriteWork, generation_window, read_coalescing,
 };
 use super::serial::drive_single;
@@ -53,7 +53,7 @@ pub fn drive_sync<'a>(
     let ctx = ComputeCtx::new(resources.compute().clone());
     let scheduler = if let [_] = tasks.as_slice() {
         let task = tasks.pop().expect("one task");
-        match drive_single(task, io, resources, &ctx, generation_window(resources))? {
+        match drive_single(task, io, resources, &ctx, drive_shape(resources))? {
             Ok(value) => return Ok(vec![value]),
             Err(scheduler) => scheduler,
         }
@@ -76,12 +76,22 @@ pub fn drive_sync_one<'a>(
     resources: &Resources,
 ) -> Result<TaskValue<'a>, CodecError> {
     let ctx = ComputeCtx::new(resources.compute().clone());
-    match drive_single(task, io, resources, &ctx, generation_window(resources))? {
+    match drive_single(task, io, resources, &ctx, drive_shape(resources))? {
         Ok(value) => Ok(value),
         Err(scheduler) => Ok(drive_scheduler(scheduler, io, resources, &ctx)?
             .pop()
             .expect("one root value")),
     }
+}
+
+/// The generation window and parallelism of a drive with `resources`.
+fn drive_shape(resources: &Resources) -> (usize, usize) {
+    (generation_window(resources), parallelism(resources))
+}
+
+/// The number of compute steps of a drive with `resources` that run in parallel.
+fn parallelism(resources: &Resources) -> usize {
+    resources.compute_limit().min(rayon::current_num_threads())
 }
 
 fn drive_scheduler<'a>(
@@ -91,8 +101,9 @@ fn drive_scheduler<'a>(
     ctx: &ComputeCtx,
 ) -> Result<Vec<TaskValue<'a>>, CodecError> {
     let reads = DriveIo::new(io, resources);
-    let parallelism = resources.compute_limit().min(rayon::current_num_threads());
+    let parallelism = parallelism(resources);
     scheduler.set_parallelism(parallelism);
+    scheduler.set_stream_window(generation_window(resources));
     scheduler.set_max_deferred(resources.io_limit().min(1024));
 
     // Run on the calling thread while there is at most one thing to do.
@@ -291,7 +302,7 @@ enum Event<'a> {
         results: SmallVec<[Result<Work<'a>, CodecError>; 1]>,
     },
     /// A running job created and joined an indexed generator.
-    Joined(Joined<'a>),
+    Report(Report<'a>),
     /// A write completed.
     Written(NodeId, Result<(), StorageError>),
     /// Work panicked.
@@ -354,6 +365,7 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
         ComputeCtx::new(self.resources.compute().with_compute_share(busy))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn dispatch<'scope>(
         &mut self,
         rayon_scope: &rayon::Scope<'scope>,
@@ -362,6 +374,8 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
     ) where
         'd: 'scope,
     {
+        let ctx = self.compute_ctx();
+        self.scheduler.run_folds(&ctx);
         self.scheduler.refill(self.window);
 
         // Compute first, so the bytes of completed reads are consumed before more are read
@@ -388,10 +402,10 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
                         .into_iter()
                         .map(|work| {
                             let fetched = work.fetched();
-                            let on_join = |joined| {
-                                let _ = sender.send(Event::Joined(joined));
+                            let on_report = |report| {
+                                let _ = sender.send(Event::Report(report));
                             };
-                            let completed = work.run(&ctx, Some(reads), Some(&on_join));
+                            let completed = work.run(&ctx, Some(reads), Some(&on_report));
                             Computed {
                                 completed,
                                 fetched,
@@ -577,7 +591,7 @@ impl<'d, 'a: 'd> Driver<'d, 'a> {
                 self.scheduler
                     .complete_read_group(&mut self.budget, reserved, results);
             }
-            Event::Joined(joined) => self.scheduler.joined(joined),
+            Event::Report(report) => self.scheduler.report(report),
             Event::Written(node, result) => {
                 self.io_in_flight -= 1;
                 self.reads.release();

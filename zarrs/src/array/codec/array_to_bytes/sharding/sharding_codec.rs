@@ -25,7 +25,8 @@ use zarrs_codec::plan::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, MultipartWrite,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
@@ -566,6 +567,33 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             ));
         }
         self.encode_shard_step(bytes, shape, options, ctx)
+    }
+
+    fn encode_write_step<'a>(
+        self: Arc<Self>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        key: zarrs_codec::plan::SourceKey,
+        options: &CodecOptions,
+        ctx: &zarrs_codec::plan::ComputeCtx,
+    ) -> Result<zarrs_codec::plan::Outcome<'a>, CodecError> {
+        // A shard is written as it is encoded with a multipart write, unless its tasks would run serially, it would be
+        // written in one part, or the index is at the start (where its offsets are not known until every subchunk is
+        // encoded)
+        if ctx.runs_inline()
+            || options.multipart_write() != MultipartWrite::Always
+            || bytes.size() <= options.multipart_part_size()
+            || self.index_location != ShardingIndexLocation::End
+        {
+            return zarrs_codec::plan::encode_and_set(self, bytes, shape, key, options, ctx);
+        }
+        if !options.store_empty_chunks() && bytes.is_fill_value(self.inner_codecs.fill_value()) {
+            return Ok(zarrs_codec::plan::Outcome::Write {
+                ops: smallvec::smallvec![zarrs_codec::plan::WriteOp::Erase(key)],
+                then: zarrs_codec::plan::TaskValue::None,
+            });
+        }
+        self.encode_shard_write_step(bytes, shape, key, options, ctx)
     }
 
     fn plan_partial_encode<'a>(

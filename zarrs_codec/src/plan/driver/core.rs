@@ -59,6 +59,8 @@ struct Node<'a> {
 }
 
 /// The state of a node that few nodes have.
+// Boxed in the node, so the size of the stream variant is not a cost of other nodes
+#[allow(clippy::large_enum_variant)]
 enum Extra<'a> {
     /// Writes performed in sequence, after the queued write of the node completes (last first).
     Sequence(Vec<WriteOp<'a>>),
@@ -93,7 +95,12 @@ impl<'a> Node<'a> {
     fn pop_sequence(&mut self) -> Option<WriteOp<'a>> {
         match self.extra.as_deref_mut() {
             Some(Extra::Sequence(ops)) => ops.pop(),
-            _ => None,
+            Some(Extra::Stream(stream)) => {
+                let op = stream.writes.pop_front();
+                stream.writing = op.is_some();
+                op
+            }
+            None => None,
         }
     }
 }
@@ -108,24 +115,29 @@ enum Ready<'a> {
     Skipped,
 }
 
-/// The next item of the children of a stream to fold.
-enum FoldItem<'a> {
-    /// A position without a task, which is folded (skipped) straight away.
-    Skipped,
-    /// A value, and the fold to fold it.
-    Value(Fold<'a>, TaskValue<'a>),
-}
-
 /// The state of an [`Outcome::Stream`].
 ///
 /// The children of a stream count towards the pending items of its node until their value is folded.
+#[allow(clippy::struct_excessive_bools)]
 struct StreamState<'a> {
     /// The fold, or [`None`] while a fold step runs.
     fold: Option<Fold<'a>>,
     /// Whether the values are folded in the order the children were generated.
     ordered: bool,
-    /// Whether the outcome of a fold step is in progress (from the start of the step until its outcome completes).
+    /// Whether a fold step is in progress (from the start of the step until its outcome completes).
     busy: bool,
+    /// The number of values folded by the fold step in progress, pending until its outcome completes.
+    stepping: usize,
+    /// The values of the next fold step, in reverse order (an allocation reused by fold steps).
+    batch: Vec<TaskValue<'a>>,
+    /// Multipart writes of fold steps, performed in order, one at a time, while the fold continues.
+    writes: VecDeque<WriteOp<'a>>,
+    /// Whether a write of `writes` is in progress.
+    writing: bool,
+    /// Whether the fold waits for queued writes, which bounds the bytes queued to be written.
+    throttled: bool,
+    /// The outcome of a fold step with other work, which runs once the writes complete.
+    deferred: Option<Outcome<'a>>,
     /// The values of the children that completed and are not yet folded.
     ///
     /// If the fold is ordered, the entry at position `i` is that of the child `next + i`.
@@ -148,6 +160,12 @@ impl<'a> StreamState<'a> {
             ordered: fold.is_ordered(),
             fold: Some(fold),
             busy: false,
+            stepping: 0,
+            batch: Vec::new(),
+            writes: VecDeque::new(),
+            writing: false,
+            throttled: false,
+            deferred: None,
             ready: VecDeque::new(),
             next: 0,
             folded: 0,
@@ -170,31 +188,41 @@ impl<'a> StreamState<'a> {
         }
     }
 
-    /// Take the next item to fold if the fold is idle and the item has completed.
-    fn next_step(&mut self) -> Option<FoldItem<'a>> {
-        if self.busy || matches!(self.ready.front(), None | Some(Ready::Pending)) {
-            return None;
+    /// Take the values of the next fold step (in reverse order), and the fold, if the fold is idle and values have
+    /// completed, returning the number of skipped positions taken with them (or before them).
+    fn next_step(&mut self) -> (usize, Option<(Fold<'a>, Vec<TaskValue<'a>>)>) {
+        if self.busy || self.throttled {
+            return (0, None);
         }
-        self.next += 1;
-        match self.ready.pop_front().expect("checked") {
-            Ready::Value(value) => {
-                self.busy = true;
-                Some(FoldItem::Value(
-                    self.fold.take().expect("the fold is idle"),
-                    value,
-                ))
+        let mut skipped = 0;
+        let mut batch = std::mem::take(&mut self.batch);
+        while let Some(Ready::Value(_) | Ready::Skipped) = self.ready.front() {
+            self.next += 1;
+            match self.ready.pop_front() {
+                Some(Ready::Value(value)) => batch.push(value),
+                _ => skipped += 1,
             }
-            Ready::Skipped => {
-                self.advance();
-                Some(FoldItem::Skipped)
-            }
-            Ready::Pending => unreachable!("checked"),
         }
+        self.advance(skipped);
+        if batch.is_empty() {
+            self.batch = batch;
+            return (skipped, None);
+        }
+        batch.reverse();
+        self.busy = true;
+        self.stepping = batch.len();
+        (
+            skipped,
+            Some((self.fold.take().expect("the fold is idle"), batch)),
+        )
     }
 
-    /// Count a folded (or skipped) child, and widen the window of an indexed generator.
-    fn advance(&mut self) {
-        self.folded += 1;
+    /// Count `count` folded (or skipped) children, and widen the window of an indexed generator.
+    fn advance(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        self.folded += count;
         if let Some(indexed) = &self.indexed {
             indexed
                 .limit
@@ -202,10 +230,18 @@ impl<'a> StreamState<'a> {
         }
     }
 
-    /// The fold step of a value returned the fold.
-    fn folded(&mut self, fold: Fold<'a>) {
+    /// The fold step returned the fold, and `leftover` values (in reverse order) it did not fold.
+    fn folded(&mut self, fold: Fold<'a>, mut leftover: Vec<TaskValue<'a>>) {
         self.fold = Some(fold);
-        self.advance();
+        let unfolded = leftover.len();
+        self.stepping -= unfolded;
+        self.next -= unfolded;
+        for value in leftover.drain(..) {
+            self.ready.push_front(Ready::Value(value));
+        }
+        self.batch = leftover;
+        let stepping = self.stepping;
+        self.advance(stepping);
     }
 
     /// Returns true if the window admits another child.
@@ -250,11 +286,11 @@ pub(crate) enum Work<'a> {
         join: Join<'a>,
         values: Vec<TaskValue<'a>>,
     },
-    /// A fold step of a stream.
+    /// A fold step of a stream, of values in reverse order.
     Fold {
         node: NodeId,
         fold: Fold<'a>,
-        value: TaskValue<'a>,
+        values: Vec<TaskValue<'a>>,
     },
     /// Plan and run the tasks of a range of indices of an indexed generator.
     Range(RangeWork<'a>),
@@ -402,12 +438,20 @@ pub(crate) struct Joined<'a> {
     state: Arc<IndexedState<'a>>,
 }
 
-/// A function that reports a [`Joined`] generator to the scheduler.
+/// A report of a running job to the scheduler.
+pub(crate) enum Report<'a> {
+    /// An indexed generator created and joined by the job.
+    Joined(Joined<'a>),
+    /// Tasks the job ran of the generator of a stream, reported so their values are folded while the job continues.
+    Ran(Arc<IndexedState<'a>>, RangeOutput<'a>),
+}
+
+/// A function that reports to the scheduler while a job runs.
 #[cfg(not(target_family = "wasm"))]
-pub(crate) type OnJoin<'r, 'a> = dyn Fn(Joined<'a>) + Sync + 'r;
-/// A function that reports a [`Joined`] generator to the scheduler.
+pub(crate) type OnReport<'r, 'a> = dyn Fn(Report<'a>) + Sync + 'r;
+/// A function that reports to the scheduler while a job runs.
 #[cfg(target_family = "wasm")]
-pub(crate) type OnJoin<'r, 'a> = dyn Fn(Joined<'a>) + 'r;
+pub(crate) type OnReport<'r, 'a> = dyn Fn(Report<'a>) + 'r;
 
 /// Storage requests performed on the thread running compute work.
 pub(crate) trait InlineIo: zarrs_plugin::MaybeSync {
@@ -474,7 +518,67 @@ pub(crate) enum Completed<'a> {
 pub(crate) struct FoldCompleted<'a> {
     node: NodeId,
     fold: Fold<'a>,
+    /// The values the step did not fold, in reverse order.
+    leftover: Vec<TaskValue<'a>>,
     result: Result<Outcome<'a>, CodecError>,
+}
+
+/// Fold `values` (in reverse order) with `fold`, merging the outcomes of consecutive values into one.
+///
+/// Writes with a multipart step (which are performed in sequence) are merged, as are outcomes without work. The step
+/// stops at an outcome with other work, which runs after the merged writes. The values not folded are left in `values`.
+///
+/// The writes are not performed inline, since they are ordered after the queued writes of the stream.
+// Not inlined, so the common work of `Work::run` stays small
+#[inline(never)]
+fn run_fold<'a>(
+    node: NodeId,
+    mut fold: Fold<'a>,
+    mut values: Vec<TaskValue<'a>>,
+    ctx: &ComputeCtx,
+) -> Completed<'a> {
+    let result = fold_values(&mut fold, &mut values, ctx);
+    Completed::Fold(Box::new(FoldCompleted {
+        node,
+        fold,
+        leftover: values,
+        result,
+    }))
+}
+
+/// Fold `values` (in reverse order) with `fold`, merging their outcomes. See [`run_fold`].
+fn fold_values<'a>(
+    fold: &mut Fold<'a>,
+    values: &mut Vec<TaskValue<'a>>,
+    ctx: &ComputeCtx,
+) -> Result<Outcome<'a>, CodecError> {
+    let mut ops: SmallVec<[WriteOp<'a>; 1]> = SmallVec::new();
+    let mut last = None;
+    while let Some(value) = values.pop() {
+        match fold.step(value, ctx)? {
+            Outcome::Done | Outcome::Value(_) => {}
+            Outcome::Write { ops: step_ops, .. } if step_ops.iter().any(WriteOp::is_multipart) => {
+                ops.extend(step_ops);
+            }
+            outcome => {
+                last = Some(outcome);
+                break;
+            }
+        }
+    }
+    let write = (!ops.is_empty()).then(|| Outcome::Write {
+        ops,
+        then: TaskValue::None,
+    });
+    Ok(match (write, last) {
+        (None, None) => Outcome::Done,
+        (Some(outcome), None) | (None, Some(outcome)) => outcome,
+        // The merged writes complete before the last outcome runs
+        (Some(write), Some(last)) => Outcome::Fork {
+            children: vec![Task::compute(move |_| Ok(write))],
+            join: Join::after(move |_| Ok(last)),
+        },
+    })
 }
 
 /// The tasks a job ran of each generator it worked on.
@@ -490,6 +594,25 @@ pub(crate) struct RangeOutput<'a> {
     tasks: Vec<(usize, Task<'a>)>,
     /// Indices without a task, of the generator of a stream.
     skipped: Vec<usize>,
+}
+
+impl RangeOutput<'_> {
+    fn is_empty(&self) -> bool {
+        self.values.is_empty()
+            && self.outcomes.is_empty()
+            && self.tasks.is_empty()
+            && self.skipped.is_empty()
+    }
+
+    /// Take the tasks run so far.
+    fn take(&mut self) -> Self {
+        Self {
+            values: std::mem::take(&mut self.values),
+            outcomes: std::mem::take(&mut self.outcomes),
+            tasks: std::mem::take(&mut self.tasks),
+            skipped: std::mem::take(&mut self.skipped),
+        }
+    }
 }
 
 /// The generator a job is working on, and the tasks it ran.
@@ -520,7 +643,7 @@ impl<'a> RangeWork<'a> {
     /// Claim, plan and run tasks of indexed generators, reading with `inline` if given.
     ///
     /// Tasks that need a read are returned to the scheduler if there is no `inline` read.
-    /// A task that produces an indexed generator is reported with `on_join` (if given), and the
+    /// A task that produces an indexed generator is reported with `on_report` (if given), and the
     /// job works on that generator once it finishes its block of indices, so its tasks start
     /// without waiting for the scheduler.
     /// When its generator is exhausted, the job takes tasks from other generators of the drive,
@@ -532,7 +655,7 @@ impl<'a> RangeWork<'a> {
         self,
         ctx: &ComputeCtx,
         inline: Option<&dyn InlineIo>,
-        on_join: Option<&OnJoin<'_, 'a>>,
+        on_report: Option<&OnReport<'_, 'a>>,
     ) -> Result<RangeResults<'a>, CodecError> {
         self.state.queued.fetch_sub(1, Ordering::SeqCst);
         let mut results = RangeResults::new();
@@ -550,7 +673,18 @@ impl<'a> RangeWork<'a> {
                 if let Some(joined) = next.take() {
                     results.push(std::mem::replace(&mut current, joined).finish());
                 }
-                if !current.output.outcomes.is_empty()
+                let reports = on_report
+                    .filter(|_| current.state.stream.load(Ordering::Relaxed))
+                    .filter(|_| {
+                        current.output.outcomes.is_empty()
+                            && current.output.tasks.len() < self.max_deferred
+                    });
+                if let Some(on_report) = reports {
+                    // The values of the children of a stream are folded as they are reported, and the job continues
+                    if !current.output.is_empty() {
+                        on_report(Report::Ran(current.state.clone(), current.output.take()));
+                    }
+                } else if !current.output.outcomes.is_empty()
                     || current.output.tasks.len() >= self.max_deferred
                     || (self.brief && ran)
                 {
@@ -614,17 +748,17 @@ impl<'a> RangeWork<'a> {
                 Outcome::Generate {
                     children: super::super::Generator(GeneratorKind::Indexed { len, plan }),
                     join,
-                } if next.is_none() && on_join.is_some() => {
-                    let on_join = on_join.expect("checked");
+                } if next.is_none() && on_report.is_some() => {
+                    let on_report = on_report.expect("checked");
                     let collect = join.as_ref().is_some_and(Join::collects);
                     let block = block_size(len, self.parallelism);
                     let state = Arc::new(IndexedState::new(len, plan, collect, block, 1));
-                    on_join(Joined {
+                    on_report(Report::Joined(Joined {
                         parent: current.state.clone(),
                         index,
                         join,
                         state: state.clone(),
-                    });
+                    }));
                     // Other jobs can take its tasks straight away. The scheduler receives the
                     // generator before the results of any job that takes its tasks.
                     self.registry
@@ -760,10 +894,10 @@ impl<'a> Work<'a> {
         self,
         ctx: &ComputeCtx,
         inline: Option<&dyn InlineIo>,
-        on_join: Option<&OnJoin<'_, 'a>>,
+        on_report: Option<&OnReport<'_, 'a>>,
     ) -> Completed<'a> {
         let (node, result) = match self {
-            Self::Range(range) => return Completed::Range(range.run(ctx, inline, on_join)),
+            Self::Range(range) => return Completed::Range(range.run(ctx, inline, on_report)),
             Self::Compute {
                 node,
                 source,
@@ -781,18 +915,7 @@ impl<'a> Work<'a> {
                 (node, reads.and_then(|reads| step.run(reads, ctx)))
             }
             Self::Join { node, join, values } => (node, join.run(values, ctx)),
-            Self::Fold {
-                node,
-                mut fold,
-                value,
-            } => {
-                let result = fold.step(value, ctx);
-                return Completed::Fold(Box::new(FoldCompleted {
-                    node,
-                    fold,
-                    result: result.and_then(|outcome| write_inline(outcome, inline)),
-                }));
-            }
+            Self::Fold { node, fold, values } => return run_fold(node, fold, values, ctx),
         };
         Completed::Step(
             node,
@@ -1094,15 +1217,6 @@ impl<T> DepthQueue<T> {
         self.len += 1;
     }
 
-    /// Push an item ahead of the other items of its depth.
-    fn push_front(&mut self, depth: usize, item: T) {
-        if self.levels.len() <= depth {
-            self.levels.resize_with(depth + 1, VecDeque::new);
-        }
-        self.levels[depth].push_front(item);
-        self.len += 1;
-    }
-
     fn pop(&mut self) -> Option<T> {
         let item = self.levels.iter_mut().rev().find_map(VecDeque::pop_front)?;
         self.len -= 1;
@@ -1166,6 +1280,8 @@ pub(crate) struct Scheduler<'a> {
     /// Root tasks that have not been submitted, with their index.
     pending_roots: std::iter::Enumerate<std::vec::IntoIter<Task<'a>>>,
     compute: DepthQueue<Work<'a>>,
+    /// Fold steps of streams, which drivers run on the thread driving the tasks (see [`Scheduler::run_folds`]).
+    folds: VecDeque<Work<'a>>,
     io: DepthQueue<IoWork<'a>>,
     writes: Vec<WriteWork<'a>>,
     generators: Vec<ActiveGenerator<'a>>,
@@ -1178,7 +1294,8 @@ pub(crate) struct Scheduler<'a> {
     registry: Arc<Registry<'a>>,
     /// The number of jobs of indexed generators queued or running.
     indexed_jobs: usize,
-    /// The generation window of the drive (the last of [`Scheduler::refill`]), which bounds streams.
+    /// The maximum number of children of a stream generated and not yet folded (see
+    /// [`Scheduler::set_stream_window`]).
     window: usize,
 }
 
@@ -1195,6 +1312,7 @@ impl<'a> Scheduler<'a> {
             roots,
             pending_roots: tasks.into_iter().enumerate(),
             compute: DepthQueue::new(),
+            folds: VecDeque::new(),
             io: DepthQueue::new(),
             writes: Vec::new(),
             generators: Vec::new(),
@@ -1217,11 +1335,16 @@ impl<'a> Scheduler<'a> {
         self.max_deferred = max_deferred.max(1);
     }
 
-    /// Create a scheduler for a single root task whose compute step produced `outcome`, for a drive with the
-    /// generation `window` (see [`Scheduler::refill`]).
-    pub(crate) fn from_root_outcome(outcome: Outcome<'a>, window: usize) -> Self {
+    /// Create a scheduler for a single root task whose compute step produced `outcome`, for a drive with the stream
+    /// `window` (see [`Scheduler::set_stream_window`]) and `parallelism` (see [`Scheduler::set_parallelism`]).
+    pub(crate) fn from_root_outcome(
+        outcome: Outcome<'a>,
+        window: usize,
+        parallelism: usize,
+    ) -> Self {
         let mut scheduler = Self::new(Vec::new());
-        scheduler.window = window;
+        scheduler.set_stream_window(window);
+        scheduler.set_parallelism(parallelism);
         scheduler.roots.push(TaskValue::None);
         let root = scheduler.insert(Node::new(Parent::Root(0), 0));
         scheduler.complete(root, Ok(outcome));
@@ -1281,7 +1404,7 @@ impl<'a> Scheduler<'a> {
 
     /// The number of queued compute steps, reads, and writes.
     pub(crate) fn queued(&self) -> usize {
-        self.compute.len() + self.io.len() + self.writes.len()
+        self.compute.len() + self.folds.len() + self.io.len() + self.writes.len()
     }
 
     /// The number of queued compute steps.
@@ -1298,7 +1421,7 @@ impl<'a> Scheduler<'a> {
     ///
     /// Returns false if nothing is queued.
     pub(crate) fn run_one(&mut self, io: &dyn InlineIo, ctx: &ComputeCtx) -> bool {
-        if let Some(work) = self.pop_compute() {
+        if let Some(work) = self.folds.pop_front().or_else(|| self.pop_compute()) {
             self.complete_work(work.run(ctx, Some(io), None));
         } else if let Some(write) = self.pop_write() {
             let result = io.write(write.op);
@@ -1315,6 +1438,17 @@ impl<'a> Scheduler<'a> {
             return false;
         }
         true
+    }
+
+    /// Run the queued fold steps of streams on the calling thread.
+    ///
+    /// Fold steps are cheap, and run in sequence for each stream, so a driver runs them as they are queued rather than
+    /// waiting for a compute thread (which may be busy with the children of the stream). Their writes are queued.
+    pub(crate) fn run_folds(&mut self, ctx: &ComputeCtx) {
+        while let Some(work) = self.folds.pop_front() {
+            let completed = work.run(ctx, None, None);
+            self.complete_work(completed);
+        }
     }
 
     /// Take the next compute step to run.
@@ -1483,8 +1617,23 @@ impl<'a> Scheduler<'a> {
                     let state = self.node(node);
                     state.pending -= 1;
                     if let Some(op) = state.pop_sequence() {
+                        let resume = state.stream_mut().is_some_and(|stream| {
+                            // The queued writes are in progress, so the fold continues
+                            let resume = stream.throttled && stream.writes.is_empty();
+                            stream.throttled &= !resume;
+                            resume
+                        });
                         self.writes.push(WriteWork { node, op });
+                        if resume {
+                            self.fold_next(node);
+                        }
                     } else {
+                        if let Some(deferred) =
+                            state.stream_mut().and_then(|stream| stream.deferred.take())
+                        {
+                            // The writes of the stream before a fold step with other work are complete
+                            self.run_fold_step(node, deferred);
+                        }
                         self.try_finish(node);
                     }
                 }
@@ -1498,8 +1647,13 @@ impl<'a> Scheduler<'a> {
         match completed {
             Completed::Step(node, result) => self.complete(node, result),
             Completed::Fold(completed) => {
-                let FoldCompleted { node, fold, result } = *completed;
-                self.complete_fold(node, fold, result);
+                let FoldCompleted {
+                    node,
+                    fold,
+                    leftover,
+                    result,
+                } = *completed;
+                self.complete_fold(node, fold, leftover, result);
             }
             Completed::Range(result) => self.complete_range(result),
         }
@@ -1571,8 +1725,20 @@ impl<'a> Scheduler<'a> {
         }
     }
 
+    /// Record a report of a running job.
+    pub(crate) fn report(&mut self, report: Report<'a>) {
+        match report {
+            Report::Joined(joined) => self.joined(joined),
+            Report::Ran(state, output) => {
+                if self.error.is_none() {
+                    self.complete_range_output(state.node(), state.collect, output);
+                }
+            }
+        }
+    }
+
     /// Record an indexed generator created and joined by a running job.
-    pub(crate) fn joined(&mut self, joined: Joined<'a>) {
+    fn joined(&mut self, joined: Joined<'a>) {
         if self.error.is_some() {
             return;
         }
@@ -1705,7 +1871,7 @@ impl<'a> Scheduler<'a> {
             Outcome::Write { ops, then } => {
                 node.value = then;
                 node.pending += ops.len();
-                if ops.iter().any(WriteOp::is_multipart) {
+                if ops.len() > 1 && ops.iter().any(WriteOp::is_multipart) {
                     self.queue_sequence(id, ops);
                 } else {
                     self.writes
@@ -1764,11 +1930,14 @@ impl<'a> Scheduler<'a> {
         self.writes.push(WriteWork { node: id, op });
     }
 
+    /// Set the maximum number of children of a stream generated and not yet folded (default 64), usually the generation
+    /// window of the drive.
+    pub(crate) fn set_stream_window(&mut self, window: usize) {
+        self.window = window.max(1);
+    }
+
     /// Generate tasks from active generators, deepest first, then submit root tasks, until `window` items are queued or there are no more tasks.
-    ///
-    /// The children of a stream generated and not yet folded are also limited to `window`.
     pub(crate) fn refill(&mut self, window: usize) {
-        self.window = window;
         // Indexed generators with enough jobs, skipped so that other generators can use free compute threads
         let mut saturated = Vec::new();
         while self.error.is_none() && self.queued() < window {
@@ -1812,7 +1981,8 @@ impl<'a> Scheduler<'a> {
                         registry: self.registry.clone(),
                         max_deferred: self.max_deferred,
                         parallelism: self.parallelism,
-                        brief: false,
+                        // The values of the children of a stream are folded as they arrive
+                        brief: state.stream.load(Ordering::Relaxed),
                         defer_compute_from: u64::MAX,
                     });
                     let depth = active.depth;
@@ -1924,8 +2094,11 @@ impl<'a> Scheduler<'a> {
                 }
                 Parent::FoldStep(parent) => {
                     let parent_node = self.node(parent);
-                    parent_node.stream_mut().expect("a stream").busy = false;
-                    parent_node.pending -= 1;
+                    let stream = parent_node.stream_mut().expect("a stream");
+                    stream.busy = false;
+                    // The values of the step are no longer pending
+                    let folded = std::mem::take(&mut stream.stepping);
+                    parent_node.pending -= folded;
                     self.fold_next(parent);
                     id = parent;
                 }
@@ -1936,34 +2109,23 @@ impl<'a> Scheduler<'a> {
     /// Queue the next fold step of the stream of the node `id`, if its fold is idle and the next value has completed.
     ///
     /// Positions without a task are folded (skipped) straight away.
+    #[inline(never)]
     fn fold_next(&mut self, id: NodeId) {
         if self.error.is_some() {
             return;
         }
         let node = self.node(id);
-        let depth = node.depth + 1;
-        let mut skipped = 0;
         let Some(stream) = node.stream_mut() else {
             return;
         };
-        let step = loop {
-            match stream.next_step() {
-                Some(FoldItem::Value(fold, value)) => break Some((fold, value)),
-                Some(FoldItem::Skipped) => skipped += 1,
-                None => break None,
-            }
-        };
+        let (skipped, step) = stream.next_step();
         node.pending -= skipped;
-        if let Some((fold, value)) = step {
-            // Fold steps go first, so values are released and written as soon as possible
-            self.compute.push_front(
-                depth,
-                Work::Fold {
-                    node: id,
-                    fold,
-                    value,
-                },
-            );
+        if let Some((fold, values)) = step {
+            self.folds.push_back(Work::Fold {
+                node: id,
+                fold,
+                values,
+            });
         } else if node.pending == 0 {
             // A skipped position was the last
             self.try_finish(id);
@@ -1971,10 +2133,12 @@ impl<'a> Scheduler<'a> {
     }
 
     /// Record the result of a fold step of the stream of the node `id`.
+    #[inline(never)]
     fn complete_fold(
         &mut self,
         id: NodeId,
         fold: Fold<'a>,
+        leftover: Vec<TaskValue<'a>>,
         result: Result<Outcome<'a>, CodecError>,
     ) {
         if self.error.is_some() {
@@ -1988,9 +2152,48 @@ impl<'a> Scheduler<'a> {
             }
         };
         let node = self.node(id);
-        node.stream_mut().expect("a stream").folded(fold);
-        let depth = node.depth + 1;
-        // The outcome of the step runs as a child, and the fold is busy until it completes
+        let stream = node.stream_mut().expect("a stream");
+        stream.folded(fold, leftover);
+        match outcome {
+            Outcome::Done | Outcome::Value(_) => {
+                stream.busy = false;
+                let folded = std::mem::take(&mut stream.stepping);
+                node.pending -= folded;
+                self.fold_next(id);
+            }
+            Outcome::Write { ops, .. } if ops.iter().all(WriteOp::is_multipart) => {
+                // The writes are queued on the stream, and the fold continues while they are performed
+                stream.busy = false;
+                let folded = std::mem::take(&mut stream.stepping);
+                let start = !stream.writing;
+                let added = ops.len();
+                stream.writes.extend(ops);
+                // The values are folded, and the writes are pending until they complete
+                node.pending = node.pending - folded + added;
+                let op = start.then(|| node.pop_sequence().expect("a write"));
+                // A write in progress and the writes of one step queued behind it are enough to keep the storage busy
+                let stream = node.stream_mut().expect("a stream");
+                stream.throttled = !stream.writes.is_empty();
+                if let Some(op) = op {
+                    self.writes.push(WriteWork { node: id, op });
+                }
+                self.fold_next(id);
+            }
+            outcome => {
+                if stream.writing {
+                    // The outcome runs once the queued writes complete, and the fold waits for it
+                    stream.deferred = Some(outcome);
+                } else {
+                    self.run_fold_step(id, outcome);
+                }
+            }
+        }
+    }
+
+    /// Run `outcome`, of a fold step of the stream of the node `id`, as a child: the fold is busy until it completes.
+    #[inline(never)]
+    fn run_fold_step(&mut self, id: NodeId, outcome: Outcome<'a>) {
+        let depth = self.node(id).depth + 1;
         let child = self.insert(Node::new(Parent::FoldStep(id), depth));
         self.complete(child, Ok(outcome));
     }
@@ -2001,6 +2204,7 @@ impl<'a> Scheduler<'a> {
             self.error = Some(err);
         }
         self.compute.clear();
+        self.folds.clear();
         self.io.clear();
         self.writes.clear();
         self.generators.clear();

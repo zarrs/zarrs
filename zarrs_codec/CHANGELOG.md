@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The writes of a `plan::Outcome::Write` with a multipart step are performed in sequence
   - `plan::MultipartWriters`, the writers of the multipart writes in progress of an I/O backend of a store, and `plan::MultipartBuffers` for a backend that sets values whole
 - Add `plan::Outcome::Stream` and `plan::Fold`, which fold the values of generated children one at a time as they complete (in generation order, or in completion order if unordered), with the children not yet folded bounded by the generation window
+  - Values ready together are folded in one step with their multipart writes merged, fold steps run on the thread driving the tasks, and the multipart writes of a stream are queued and performed in order while the fold continues (with one step of writes queued behind the write in progress)
+- Add `CodecOptions::{multipart_write,multipart_part_size}` and `MultipartWrite`, which control whether codecs write chunks as they are encoded with multipart writes, and the size of the parts (default 1 MiB)
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`
@@ -87,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A drive of a single root task that completes with one write performs the write itself, without starting a scheduler
 
 ### Changed
+- A drive of a single root task that fans out uses the parallelism of the drive for the claims of its indexed generators, rather than one, so the first claims are not oversized
 - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
 - Make `async-trait` optional and enable it only with the `async` feature.
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views

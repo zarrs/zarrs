@@ -12,7 +12,7 @@ use zarrs_codec::plan::{
     Generator, MultipartId, MultipartOp, MultipartWriters, Outcome, PlanIndexer, ReadBytes,
     SourceKey, SyncIo, Task, TaskValue, WriteOp, encode_and_write, encode_hint,
 };
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, Resources};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, MultipartWrite, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{
@@ -62,6 +62,21 @@ fn write_multipart<'s, TStorage: ?Sized + WritableStorageTraits, TTransformed: ?
         OpStorage::Array(storage) => storage.set_multipart(&*keys.store_key(key)?, size_hint),
         OpStorage::Transformed(_) => Err(multipart_transformed_error()),
     })
+}
+
+/// Resolve the multipart write setting `multipart_write` for storage that writes values in parts if `supports_multipart`,
+/// which the chunk I/O backends can only begin multipart writes with without storage transformers.
+fn resolve_multipart_write(
+    multipart_write: MultipartWrite,
+    without_transformers: bool,
+    supports_multipart: bool,
+) -> MultipartWrite {
+    match multipart_write {
+        _ if !without_transformers => MultipartWrite::Never,
+        MultipartWrite::Auto if supports_multipart => MultipartWrite::Always,
+        MultipartWrite::Auto | MultipartWrite::Never => MultipartWrite::Never,
+        MultipartWrite::Always => MultipartWrite::Always,
+    }
 }
 
 /// The error of a multipart write through storage transformers.
@@ -257,6 +272,15 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
+    /// `options` with the multipart write setting resolved for the storage of the array (see [`MultipartWrite`]).
+    fn write_options(&self, options: &CodecOptions) -> CodecOptions {
+        options.with_multipart_write(resolve_multipart_write(
+            options.multipart_write(),
+            self.storage_transformers().is_empty(),
+            self.storage.supports_multipart(),
+        ))
+    }
+
     /// The I/O backend for writing the chunks of `keys`.
     fn chunk_write_io(&self, keys: ChunkKeys) -> Result<ChunkWriteIo<'_, TStorage>, ArrayError> {
         let storage = if self.storage_transformers().is_empty() {
@@ -282,7 +306,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let shape = self.chunk_shape(chunk_indices)?;
         let task = ChunkPlanner::plan_store_with(
             self.codecs_bound(),
-            *options,
+            self.write_options(options),
             SourceKey(0),
             &shape,
             chunk_bytes,
@@ -305,7 +329,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let chunks = chunks.to_array_subset();
         let keys = self.grid_keys(chunks.clone());
         let task = plan_store_subset(
-            self.chunk_planner(options),
+            self.chunk_planner(&self.write_options(options)),
             chunks,
             array_subset.clone(),
             chunks_bytes,
@@ -385,7 +409,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     ) -> Result<(), ArrayError> {
         let keys = self.grid_keys(chunks.clone());
         let task = plan_store_subset(
-            self.chunk_planner(options),
+            self.chunk_planner(&self.write_options(options)),
             chunks.clone(),
             array_subset.clone(),
             subset_bytes,
@@ -445,7 +469,7 @@ pub(super) mod async_planned {
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange, Bytes,
         ChunkKeys, ChunkPlanner, CodecOptions, Indexer, MultipartId, MultipartOp, MultipartWriters,
         OpStorage, PlanIndexer, ReadBytes, Resources, SourceKey, StorageError, WriteOp, is_shared,
-        multipart_transformed_error, plan_erase_chunks, plan_store_subset,
+        multipart_transformed_error, plan_erase_chunks, plan_store_subset, resolve_multipart_write,
     };
 
     /// Perform the write `op` to the chunks of `keys` in `storage`.
@@ -576,6 +600,16 @@ pub(super) mod async_planned {
     }
 
     impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
+        /// `options` with the multipart write setting resolved for the storage of the array (see
+        /// [`MultipartWrite`](zarrs_codec::MultipartWrite)).
+        fn async_write_options(&self, options: &CodecOptions) -> CodecOptions {
+            options.with_multipart_write(resolve_multipart_write(
+                options.multipart_write(),
+                self.storage_transformers().is_empty(),
+                self.storage.supports_multipart(),
+            ))
+        }
+
         /// The I/O backend for writing the chunks of `keys`.
         pub(super) async fn async_chunk_write_io(
             &self,
@@ -621,10 +655,11 @@ pub(super) mod async_planned {
             let io = self
                 .async_chunk_write_io(self.one_key(chunk_indices)?)
                 .await?;
+            let options = self.async_write_options(options);
             if is_shared(&chunk_bytes) {
                 let task = ChunkPlanner::plan_store_with(
                     self.codecs_bound(),
-                    *options,
+                    options,
                     SourceKey(0),
                     &shape,
                     chunk_bytes.into_owned(),
@@ -633,7 +668,7 @@ pub(super) mod async_planned {
             } else {
                 let task = ChunkPlanner::plan_store_with(
                     self.codecs_bound(),
-                    *options,
+                    options,
                     SourceKey(0),
                     &shape,
                     chunk_bytes,
@@ -655,7 +690,7 @@ pub(super) mod async_planned {
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError> {
-            let planner = self.chunk_planner(options);
+            let planner = self.chunk_planner(&self.async_write_options(options));
             let io = self
                 .async_chunk_write_io(self.grid_keys(chunks.clone()))
                 .await?;
@@ -748,7 +783,7 @@ pub(super) mod async_planned {
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError> {
-            let planner = self.chunk_planner(options);
+            let planner = self.chunk_planner(&self.async_write_options(options));
             let set_partial = self.storage.supports_set_partial();
             let io = self
                 .async_chunk_read_write_io(self.grid_keys(chunks.clone()))

@@ -99,7 +99,7 @@ _bench mode target filter *args:
         list) settings=(--list) ;;
     esac
     if [[ {{quote(target)}} == all ]]; then
-        targets=(array_subset array_uncompressed array_blosc codecs fill_value zero_copy_paths deferred_decode_into array_ops driver_overhead io_latency sharded_partial_read_memory)
+        targets=(array_subset array_uncompressed array_blosc codecs fill_value zero_copy_paths deferred_decode_into array_ops driver_overhead io_latency shard_write sharded_partial_read_memory)
     else
         targets=({{quote(target)}})
     fi

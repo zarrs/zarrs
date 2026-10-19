@@ -250,6 +250,7 @@ async fn drive_single<'a>(
         outcome => Ok(Err(Scheduler::from_root_outcome(
             outcome,
             generation_window(resources),
+            resources.compute_limit().min(1024),
         ))),
     }
 }
@@ -267,6 +268,7 @@ where
     let compute_limit = resources.compute_limit();
     let io_limit = resources.io_limit();
     scheduler.set_parallelism(compute_limit.min(1024));
+    scheduler.set_stream_window(generation_window(resources));
     scheduler.set_max_deferred(io_limit.min(1024));
     // Storage requests are not boxed: their futures are a concrete type
     let mut io_futures = FuturesUnordered::new();
@@ -275,8 +277,10 @@ where
     let mut panic = None;
     let window = generation_window(resources);
     let coalescing = read_coalescing(resources, io.read_coalescing());
+    let fold_ctx = ComputeCtx::new_inline(resources.compute().clone());
     loop {
         let mut inline = None;
+        scheduler.run_folds(&fold_ctx);
         scheduler.refill(window);
         if !scheduler.failed() {
             while io_futures.len() < io_limit {

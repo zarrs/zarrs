@@ -12,7 +12,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytes::Bytes;
-use zarrs_codec::plan::{ComputeCtx, Generator, Join, Outcome, Task, TaskValue};
+use zarrs_codec::plan::{
+    ComputeCtx, Fold, Generator, Join, MultipartId, MultipartOp, Outcome, SourceKey, Task,
+    TaskValue, WriteOp, encoded_value,
+};
 use zarrs_codec::{ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 
@@ -39,42 +42,34 @@ impl ShardingCodecBound {
         options: &CodecOptions,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        bytes.validate(
-            shape.iter().map(|d| d.get()).product(),
-            self.inner_codecs.data_type(),
-        )?;
-        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let index_shape = sharding_index_shape(&chunks_per_shard);
-        let index_encoded_size = usize::try_from(compute_index_encoded_size(
-            &self.index_codecs,
-            &index_shape,
-        )?)
-        .unwrap();
-        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let unordered = !matches!(self.options.subchunk_write_order(), SubchunkWriteOrder::C);
+        let encode = ShardEncode::new(self, bytes, shape, options)?;
         // The bound of the encoded size of a subchunk, if the encoded subchunks are written straight into the shard
-        let direct_bound = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
-                match self
-                    .inner_codecs
-                    .encoded_representation(&self.subchunk_shape)?
-                {
-                    BytesRepresentation::BoundedSize(size)
-                    | BytesRepresentation::FixedSize(size) => Some(usize::try_from(size).unwrap()),
-                    BytesRepresentation::UnboundedSize => None,
-                }
-            }
-            SubchunkWriteOrder::C => None,
+        let direct_bound = if unordered {
+            encode.subchunk_bound()?
+        } else {
+            None
         };
-        let encode = Arc::new(ShardEncode {
-            num_subchunks: num_subchunks(&subchunk_grid),
-            codec: self,
-            bytes,
-            subchunk_grid,
-            index_shape,
-            index_encoded_size,
-            options: *options,
-        });
         encode.plan(direct_bound, ctx)
+    }
+
+    /// Encode `bytes`, a shard of `shape`, and write it to `key` as its blocks of subchunks are encoded, with a
+    /// multipart write, in the compute step `ctx`. See [`ArrayToBytesCodecTraits::encode_write_step`].
+    ///
+    /// The encoded subchunks are written in C order, or in the order they are encoded with an unordered subchunk write
+    /// order, followed by the index. A shard of one block of subchunks is encoded whole and set.
+    ///
+    /// The index must be at the end of the shard.
+    pub(super) fn encode_shard_write_step<'a>(
+        self: Arc<Self>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        key: SourceKey,
+        options: &CodecOptions,
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
+        debug_assert_eq!(self.index_location, ShardingIndexLocation::End);
+        ShardEncode::new(self, bytes, shape, options)?.plan_write(key, ctx)
     }
 }
 
@@ -90,18 +85,170 @@ struct ShardEncode<'a> {
 }
 
 impl<'a> ShardEncode<'a> {
+    /// The encoding of `bytes`, a shard of `shape`, with `codec`.
+    fn new(
+        codec: Arc<ShardingCodecBound>,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<Self>, CodecError> {
+        bytes.validate(
+            shape.iter().map(|d| d.get()).product(),
+            codec.inner_codecs.data_type(),
+        )?;
+        let chunks_per_shard = calculate_chunks_per_shard(shape, &codec.subchunk_shape)?;
+        let index_shape = sharding_index_shape(&chunks_per_shard);
+        let index_encoded_size = usize::try_from(compute_index_encoded_size(
+            &codec.index_codecs,
+            &index_shape,
+        )?)
+        .unwrap();
+        let subchunk_grid = subchunk_grid(shape, &codec.subchunk_shape)?;
+        Ok(Arc::new(ShardEncode {
+            num_subchunks: num_subchunks(&subchunk_grid),
+            codec,
+            bytes,
+            subchunk_grid,
+            index_shape,
+            index_encoded_size,
+            options: *options,
+        }))
+    }
+
+    /// The bound of the encoded size of a subchunk, if the inner codecs have one.
+    fn subchunk_bound(&self) -> Result<Option<usize>, CodecError> {
+        Ok(
+            match self
+                .codec
+                .inner_codecs
+                .encoded_representation(&self.codec.subchunk_shape)?
+            {
+                BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
+                    Some(usize::try_from(size).unwrap())
+                }
+                BytesRepresentation::UnboundedSize => None,
+            },
+        )
+    }
+
+    /// The number of subchunks of a block, and the number of blocks, encoded in the compute step `ctx`.
+    fn blocks(&self, ctx: &ComputeCtx) -> (usize, usize) {
+        let parallelism = match ctx.resources().compute_target() {
+            0 => rayon::current_num_threads(),
+            target => target,
+        };
+        let block_len = (self.num_subchunks / (2 * parallelism.max(1))).clamp(1, MAX_BLOCK_LEN);
+        (block_len, self.num_subchunks.div_ceil(block_len))
+    }
+
+    /// The raveled indices of the subchunks of the block `block` of blocks of `block_len` subchunks.
+    fn block(&self, block: usize, block_len: usize) -> std::ops::Range<usize> {
+        let start = block * block_len;
+        start..(start + block_len).min(self.num_subchunks)
+    }
+
+    /// The generator of the encoded blocks of `block_len` subchunks of the shard.
+    fn encoded_blocks(self: &Arc<Self>, block_len: usize, num_blocks: usize) -> Generator<'a> {
+        let encode = self.clone();
+        Generator::indexed(num_blocks, move |index| {
+            let encode = encode.clone();
+            let subchunks = encode.block(index, block_len);
+            Ok(Some(Task::compute(move |ctx| {
+                let encoded = encode.encode_block(subchunks, ctx)?;
+                Ok(Outcome::Value(TaskValue::Any(Box::new(encoded))))
+            })))
+        })
+    }
+
+    /// Plan the encoding and writing of the shard to `key`, writing the encoded subchunks of each block as it is
+    /// encoded.
+    fn plan_write(
+        self: Arc<Self>,
+        key: SourceKey,
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
+        let (block_len, num_blocks) = self.blocks(ctx);
+        if num_blocks == 1 {
+            // A single block is encoded whole and set
+            let encoded = self.encode_block(0..self.num_subchunks, ctx)?;
+            let Outcome::Value(shard) = self.assemble(&[encoded], ctx)? else {
+                unreachable!("an assembled shard is a value")
+            };
+            let shard = encoded_value(shard)?;
+            return Ok(Outcome::Write {
+                ops: smallvec::smallvec![WriteOp::Set(key, shard)],
+                then: TaskValue::None,
+            });
+        }
+        // The shard is at most the bounds of its subchunks and its index
+        let size_hint = self
+            .subchunk_bound()?
+            .and_then(|bound| bound.checked_mul(self.num_subchunks))
+            .and_then(|size| size.checked_add(self.index_encoded_size))
+            .map(|size| size as u64);
+        let children = self.encoded_blocks(block_len, num_blocks);
+        let order = self.codec.options.subchunk_write_order();
+        let write = ShardWrite {
+            key,
+            size_hint,
+            part_size: self.options.multipart_part_size(),
+            id: None,
+            parts: Vec::new(),
+            parts_len: 0,
+            offset: 0,
+            shard_index: vec![EMPTY; self.num_subchunks * 2],
+        };
+        let fold = Fold::new(
+            write,
+            |write: &mut ShardWrite<'a>, value, _ctx| {
+                let block = value.downcast::<EncodedBlock>().ok_or_else(block_error)?;
+                Ok(write.write_block(block))
+            },
+            move |write, ctx| self.finish_write(write, ctx),
+        );
+        let fold = match order {
+            SubchunkWriteOrder::C => fold,
+            // The index locates the subchunks, so they are written as they are encoded
+            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => fold.unordered(),
+        };
+        Ok(Outcome::Stream { children, fold })
+    }
+
+    /// Write the rest of the shard `write` and its index and finish it, or erase (or set the index of) a shard without
+    /// subchunks.
+    fn finish_write(
+        &self,
+        mut write: ShardWrite<'a>,
+        ctx: &ComputeCtx,
+    ) -> Result<Outcome<'a>, CodecError> {
+        if write.id.is_none() && write.parts.is_empty() {
+            let op = if self.options.store_empty_chunks() {
+                WriteOp::Set(write.key, self.encode_index(write.shard_index, ctx)?)
+            } else {
+                WriteOp::Erase(write.key)
+            };
+            return Ok(Outcome::Write {
+                ops: smallvec::smallvec![op],
+                then: TaskValue::None,
+            });
+        }
+        let encoded_index = self.encode_index(std::mem::take(&mut write.shard_index), ctx)?;
+        write.parts.push(encoded_index);
+        let (mut ops, id) = write.take_parts();
+        ops.push(WriteOp::Multipart(id, MultipartOp::Finish));
+        Ok(Outcome::Write {
+            ops,
+            then: TaskValue::None,
+        })
+    }
+
     /// Plan the encoding of the blocks of subchunks of the shard.
     fn plan(
         self: Arc<Self>,
         direct_bound: Option<usize>,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        let parallelism = match ctx.resources().compute_target() {
-            0 => rayon::current_num_threads(),
-            target => target,
-        };
-        let block_len = (self.num_subchunks / (2 * parallelism.max(1))).clamp(1, MAX_BLOCK_LEN);
-        let num_blocks = self.num_subchunks.div_ceil(block_len);
+        let (block_len, num_blocks) = self.blocks(ctx);
 
         if num_blocks == 1 {
             // A single block is encoded without a separate task
@@ -150,17 +297,7 @@ impl<'a> ShardEncode<'a> {
                 })),
             })
         } else {
-            let children = {
-                let encode = self.clone();
-                Generator::indexed(num_blocks, move |index| {
-                    let encode = encode.clone();
-                    let subchunks = block(index);
-                    Ok(Some(Task::compute(move |ctx| {
-                        let encoded = encode.encode_block(subchunks, ctx)?;
-                        Ok(Outcome::Value(TaskValue::Any(Box::new(encoded))))
-                    })))
-                })
-            };
+            let children = self.encoded_blocks(block_len, num_blocks);
             Ok(Outcome::Generate {
                 children,
                 join: Some(Join::new(move |values, ctx| {
@@ -257,17 +394,7 @@ impl<'a> ShardEncode<'a> {
         shard_index: Vec<u64>,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        let encoded_index = self.codec.index_codecs.encode(
-            ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
-            &self.index_shape,
-            &self.options,
-            ctx.resources(),
-        )?;
-        if encoded_index.len() != self.index_encoded_size {
-            return Err(CodecError::Other(
-                "the encoded shard index has an unexpected size".to_string(),
-            ));
-        }
+        let encoded_index = self.encode_index(shard_index, ctx)?;
         let shard_len = match self.codec.index_location {
             // The index is reserved before the subchunks
             ShardingIndexLocation::Start => data_end,
@@ -296,6 +423,100 @@ impl<'a> ShardEncode<'a> {
         Ok(Outcome::Value(TaskValue::Bytes(Some(CowBytes::from(
             shard,
         )))))
+    }
+}
+
+impl ShardEncode<'_> {
+    /// Encode the decoded `shard_index`.
+    fn encode_index(
+        &self,
+        shard_index: Vec<u64>,
+        ctx: &ComputeCtx,
+    ) -> Result<CowBytes<'static>, CodecError> {
+        let encoded_index = self.codec.index_codecs.encode(
+            ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
+            &self.index_shape,
+            &self.options,
+            ctx.resources(),
+        )?;
+        if encoded_index.len() != self.index_encoded_size {
+            return Err(CodecError::Other(
+                "the encoded shard index has an unexpected size".to_string(),
+            ));
+        }
+        Ok(encoded_index.into_static())
+    }
+}
+
+/// A shard written as its blocks of subchunks are encoded, with a multipart write.
+struct ShardWrite<'a> {
+    key: SourceKey,
+    /// An upper bound on the size of the shard, if known.
+    size_hint: Option<u64>,
+    /// The size of the encoded subchunks collected before they are written as a part.
+    part_size: usize,
+    /// The multipart write, once it has begun with the first part.
+    id: Option<MultipartId>,
+    /// The encoded subchunks not yet written.
+    parts: Vec<CowBytes<'a>>,
+    /// The size of `parts`.
+    parts_len: usize,
+    /// The offset of the next encoded subchunk.
+    offset: u64,
+    /// The decoded shard index.
+    shard_index: Vec<u64>,
+}
+
+impl<'a> ShardWrite<'a> {
+    /// Collect the encoded subchunks of `block` (in the order of the block), and write the collected subchunks once
+    /// they reach the part size, beginning the write if they are the first.
+    fn write_block(&mut self, block: EncodedBlock) -> Outcome<'a> {
+        let EncodedBlock { first, encoded } = block;
+        let (shard_index, offset) = (&mut self.shard_index, &mut self.offset);
+        let mut len = 0;
+        let encoded = encoded.into_iter().enumerate().filter_map(|(i, encoded)| {
+            let encoded = encoded?;
+            let subchunk = first + i;
+            shard_index[subchunk * 2] = *offset;
+            shard_index[subchunk * 2 + 1] = encoded.len() as u64;
+            *offset += encoded.len() as u64;
+            len += encoded.len();
+            Some(CowBytes::Shared(encoded))
+        });
+        if self.parts.is_empty() {
+            // The parts reuse the allocation of the encoded subchunks of the block
+            self.parts = encoded.collect();
+        } else {
+            self.parts.extend(encoded);
+        }
+        self.parts_len += len;
+        if self.parts_len < self.part_size || self.parts.is_empty() {
+            return Outcome::Done;
+        }
+        let (ops, _) = self.take_parts();
+        Outcome::Write {
+            ops,
+            then: TaskValue::None,
+        }
+    }
+
+    /// The writes of the collected parts, beginning the write if they are the first, and the write.
+    fn take_parts(&mut self) -> (smallvec::SmallVec<[WriteOp<'a>; 1]>, MultipartId) {
+        let mut ops = smallvec::SmallVec::new();
+        let id = *self.id.get_or_insert_with(|| {
+            let id = MultipartId::unique();
+            ops.push(WriteOp::Multipart(
+                id,
+                MultipartOp::Begin(self.key, self.size_hint),
+            ));
+            id
+        });
+        self.parts_len = 0;
+        ops.push(WriteOp::Multipart(
+            id,
+            MultipartOp::Parts(std::mem::take(&mut self.parts)),
+        ));
+        (ops, id)
     }
 }
 
