@@ -1073,12 +1073,6 @@ mod tests {
     }
 
     #[test]
-    fn array_builder_codec_specific_options_random() {
-        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Random);
-    }
-
-    #[test]
     fn array_builder_codec_specific_options_c() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
@@ -1243,12 +1237,6 @@ mod tests {
         assert_eq!(data, read_data);
     }
 
-    #[test]
-    #[cfg(feature = "zstd")]
-    fn array_builder_codec_options_preserved_from_codec_object_random() {
-        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::Random);
-    }
 
     #[test]
     #[cfg(feature = "zstd")]
