@@ -286,7 +286,7 @@ mod tests {
 
         // Preserve the existing inclusive 1 MiB cutoff for both constructors.
         let configuration = ZstdCodecConfiguration::V1(ZstdCodecConfigurationV1 {
-            level: 1.try_into().unwrap(),
+            level: 1.into(),
             checksum: false,
         });
         for codec in [
