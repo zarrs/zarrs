@@ -388,7 +388,7 @@ pub enum Outcome<'a> {
     },
     /// Perform writes, then complete with the value `then`.
     Write {
-        /// The write operations, performed concurrently.
+        /// The write operations, performed concurrently, or in sequence if any is a step of a multipart write.
         ops: SmallVec<[WriteOp<'a>; 1]>,
         /// The value of the task once the writes complete.
         then: TaskValue<'a>,
@@ -480,16 +480,62 @@ pub enum WriteOp<'a> {
     SetPartial(SourceKey, Vec<(u64, CowBytes<'a>)>),
     /// Erase the value.
     Erase(SourceKey),
+    /// A step of the multipart write with an identifier.
+    ///
+    /// The steps of a multipart write must be performed in order. The multipart steps of an [`Outcome::Write`] are
+    /// performed in sequence (with its other writes), and the task that produces them must not produce later steps of
+    /// the same write until it completes (as the fold of an [`Outcome::Stream`] does not).
+    Multipart(MultipartId, MultipartOp<'a>),
 }
 
 impl WriteOp<'_> {
-    /// The key written.
+    /// The key written, or [`None`] for a step of a multipart write other than [`MultipartOp::Begin`].
     #[must_use]
-    pub fn key(&self) -> SourceKey {
+    pub fn key(&self) -> Option<SourceKey> {
         match self {
-            Self::Set(key, _) | Self::SetPartial(key, _) | Self::Erase(key) => *key,
+            Self::Set(key, _)
+            | Self::SetPartial(key, _)
+            | Self::Erase(key)
+            | Self::Multipart(_, MultipartOp::Begin(key, _)) => Some(*key),
+            Self::Multipart(..) => None,
         }
     }
+
+    /// Returns true if the operation is a step of a multipart write.
+    #[must_use]
+    pub fn is_multipart(&self) -> bool {
+        matches!(self, Self::Multipart(..))
+    }
+}
+
+/// The identifier of a multipart write ([`WriteOp::Multipart`]).
+///
+/// Identifiers are unique within the process, so an I/O backend can hold the multipart writes of several drives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MultipartId(u64);
+
+impl MultipartId {
+    /// A new identifier, distinct from all others.
+    #[must_use]
+    pub fn unique() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        Self(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+}
+
+/// A step of a multipart write ([`WriteOp::Multipart`]).
+///
+/// A multipart write begins, appends parts, and then finishes (making the value visible) or aborts.
+#[derive(Debug)]
+pub enum MultipartOp<'a> {
+    /// Begin the write of the value of a key, with an upper bound on the size of the value if known.
+    Begin(SourceKey, Option<u64>),
+    /// Append parts of the value, in order.
+    Parts(Vec<CowBytes<'a>>),
+    /// Complete the value.
+    Finish,
+    /// Abandon the value, leaving any existing value in place.
+    Abort,
 }
 
 #[cfg(test)]

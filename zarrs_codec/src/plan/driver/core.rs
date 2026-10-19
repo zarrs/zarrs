@@ -50,6 +50,8 @@ struct Node<'a> {
     join: Option<Join<'a>>,
     values: Vec<TaskValue<'a>>,
     value: TaskValue<'a>,
+    /// Writes performed in sequence, after the queued write of the node completes (last first).
+    sequence: Vec<WriteOp<'a>>,
 }
 
 impl Node<'_> {
@@ -63,6 +65,7 @@ impl Node<'_> {
             join: None,
             values: Vec::new(),
             value: TaskValue::None,
+            sequence: Vec::new(),
         }
     }
 }
@@ -1227,8 +1230,13 @@ impl<'a> Scheduler<'a> {
         match result {
             Ok(()) => {
                 if self.error.is_none() {
-                    self.node(node).pending -= 1;
-                    self.try_finish(node);
+                    let state = self.node(node);
+                    state.pending -= 1;
+                    if let Some(op) = state.sequence.pop() {
+                        self.writes.push(WriteWork { node, op });
+                    } else {
+                        self.try_finish(node);
+                    }
                 }
             }
             Err(err) => self.fail(err.into()),
@@ -1328,6 +1336,7 @@ impl<'a> Scheduler<'a> {
             join,
             values,
             value: TaskValue::None,
+            sequence: Vec::new(),
         });
         self.add_indexed(id, depth + 1, state, false);
     }
@@ -1423,8 +1432,16 @@ impl<'a> Scheduler<'a> {
             Outcome::Write { ops, then } => {
                 node.value = then;
                 node.pending += ops.len();
-                self.writes
-                    .extend(ops.into_iter().map(|op| WriteWork { node: id, op }));
+                if ops.iter().any(WriteOp::is_multipart) {
+                    // The steps of a multipart write are ordered, so the writes are queued one at a time
+                    let mut ops = ops.into_iter().rev().collect::<Vec<_>>();
+                    let op = ops.pop().expect("a write");
+                    node.sequence = ops;
+                    self.writes.push(WriteWork { node: id, op });
+                } else {
+                    self.writes
+                        .extend(ops.into_iter().map(|op| WriteWork { node: id, op }));
+                }
             }
         }
         self.try_finish(id);

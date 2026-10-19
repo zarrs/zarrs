@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `EncodedSubchunk` and `CodecError::UnsupportedEncodedSubchunk`
   - `ArrayToBytesCodecTraits::plan_store_encoded_subchunk`, which plans storing or erasing an encoded subchunk at any level of a chunk, and `plan::store_encoded_subchunk_memory`
 - Add `plan::TaskValue::{into_array,into_bytes,into_prepared,downcast}`
+- Add multipart writes to the plan: `plan::WriteOp::Multipart`, `plan::{MultipartId,MultipartOp}`
+  - The writes of a `plan::Outcome::Write` with a multipart step are performed in sequence
+  - `plan::MultipartWriters`, the writers of the multipart writes in progress of an I/O backend of a store, and `plan::MultipartBuffers` for a backend that sets values whole
 - Add `plan::drive_memory_one` for drives whose byte sources are all in memory, and `plan::drive_blocking_one`, which drives on Rayon or serially on wasm
 - Add `plan::{partial_decode_memory,partial_encode_memory}` for partially decoding and encoding an encoded chunk in memory
 - Add `plan::TargetViews::from_target`

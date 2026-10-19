@@ -9,7 +9,8 @@ use zarrs_storage::{Bytes, StorageError};
 
 use super::driver::memory_resources;
 use super::{
-    ByteSource, DecodeRequest, PlanIndexer, ReadBytes, SourceKey, SyncIo, TaskTarget, WriteOp,
+    ByteSource, DecodeRequest, MultipartBuffers, PlanIndexer, ReadBytes, SourceKey, SyncIo,
+    TaskTarget, WriteOp,
 };
 use crate::{
     ArrayBytes, ArrayToBytesCodecTraits, CodecError, CodecOptions, ComputeResources, CowBytes,
@@ -72,7 +73,7 @@ pub fn partial_encode_memory(
     resources: &ComputeResources,
 ) -> Result<(), CodecError> {
     bytes.validate(indexer.len(), codec.data_type())?;
-    let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
+    let io = MemoryValueIo::new(encoded.take().map(Bytes::from));
     let task = codec.plan_partial_encode(
         SourceKey(0),
         shape,
@@ -83,7 +84,7 @@ pub fn partial_encode_memory(
         options,
     )?;
     let result = super::drive_blocking_one(task, &io, &memory_resources(resources));
-    *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
+    *encoded = io.value.into_inner().unwrap().map(|value| value.to_vec());
     result?;
     Ok(())
 }
@@ -108,7 +109,7 @@ pub fn store_encoded_subchunk_memory(
     options: &CodecOptions,
     resources: &ComputeResources,
 ) -> Result<(), CodecError> {
-    let io = MemoryValueIo(Mutex::new(encoded.take().map(Bytes::from)));
+    let io = MemoryValueIo::new(encoded.take().map(Bytes::from));
     let task = codec.plan_store_encoded_subchunk(
         SourceKey(0),
         shape,
@@ -119,14 +120,26 @@ pub fn store_encoded_subchunk_memory(
         options,
     )?;
     let result = super::drive_blocking_one(task, &io, &memory_resources(resources));
-    *encoded = io.0.into_inner().unwrap().map(|value| value.to_vec());
+    *encoded = io.value.into_inner().unwrap().map(|value| value.to_vec());
     result?;
     Ok(())
 }
 
 /// The backend of a drive with one value at [`SourceKey`] 0 in memory, if it exists.
 #[derive(Default)]
-struct MemoryValueIo(Mutex<Option<Bytes>>);
+struct MemoryValueIo {
+    value: Mutex<Option<Bytes>>,
+    multipart: MultipartBuffers,
+}
+
+impl MemoryValueIo {
+    fn new(value: Option<Bytes>) -> Self {
+        Self {
+            value: Mutex::new(value),
+            multipart: MultipartBuffers::new(),
+        }
+    }
+}
 
 impl SyncIo for MemoryValueIo {
     fn read(
@@ -134,7 +147,7 @@ impl SyncIo for MemoryValueIo {
         _key: SourceKey,
         ranges: &[ByteRange],
     ) -> Result<Option<ReadBytes>, StorageError> {
-        let value = self.0.lock().unwrap();
+        let value = self.value.lock().unwrap();
         let Some(value) = value.as_ref() else {
             return Ok(None);
         };
@@ -151,7 +164,13 @@ impl SyncIo for MemoryValueIo {
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
-        let mut value = self.0.lock().unwrap();
+        if let WriteOp::Multipart(id, op) = op {
+            if let Some((_, finished)) = self.multipart.write(id, op)? {
+                *self.value.lock().unwrap() = Some(Bytes::from(finished));
+            }
+            return Ok(());
+        }
+        let mut value = self.value.lock().unwrap();
         match op {
             WriteOp::Set(_, bytes) => *value = Some(Bytes::copy_from_slice(&bytes)),
             WriteOp::SetPartial(_, offset_values) => {
@@ -180,6 +199,7 @@ impl SyncIo for MemoryValueIo {
                 *value = Some(Bytes::from(updated));
             }
             WriteOp::Erase(_) => *value = None,
+            WriteOp::Multipart(..) => unreachable!("handled above"),
         }
         Ok(())
     }
@@ -190,7 +210,7 @@ mod tests {
     use super::*;
 
     fn io(value: &[u8]) -> MemoryValueIo {
-        MemoryValueIo(Mutex::new(Some(Bytes::copy_from_slice(value))))
+        MemoryValueIo::new(Some(Bytes::copy_from_slice(value)))
     }
 
     #[test]
@@ -220,7 +240,7 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(
-            io.0.lock().unwrap().as_deref(),
+            io.value.lock().unwrap().as_deref(),
             Some(&[1, 4, 3, 0, 0, 5][..])
         );
     }
@@ -237,6 +257,6 @@ mod tests {
                 .is_err()
             );
         }
-        assert_eq!(io.0.lock().unwrap().as_deref(), Some(&[1, 2, 3][..]));
+        assert_eq!(io.value.lock().unwrap().as_deref(), Some(&[1, 2, 3][..]));
     }
 }

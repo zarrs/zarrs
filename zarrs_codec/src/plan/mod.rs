@@ -10,6 +10,7 @@ mod driver;
 mod encode;
 mod io;
 mod memory;
+mod multipart;
 mod prepare;
 mod source;
 mod subchunk;
@@ -37,6 +38,7 @@ pub use encode::{
 pub use io::AsyncIo;
 pub use io::{ReadBytes, SyncIo};
 pub use memory::{partial_decode_memory, partial_encode_memory, store_encoded_subchunk_memory};
+pub use multipart::{MultipartBuffers, MultipartWriters};
 pub use prepare::{
     DecodedDecoder, MissingDecoder, PrepareDecode, PreparedDecoder, SourceDecoder,
     prepare_decode_whole, prepared,
@@ -49,6 +51,7 @@ pub use subchunk::{
 };
 pub use target::{DecodeRequest, PlanIndexer, SharedOutput, TargetViews, TaskTarget};
 pub use task::{
-    AnyValue, ComputeCtx, Generator, Join, Outcome, Reads, Task, TaskHint, TaskValue, WriteOp,
+    AnyValue, ComputeCtx, Generator, Join, MultipartId, MultipartOp, Outcome, Reads, Task,
+    TaskHint, TaskValue, WriteOp,
 };
 pub(crate) use task::{ComputeStep, read_memory};

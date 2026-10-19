@@ -9,7 +9,8 @@ use zarrs_storage::byte_range::{ByteRange, extract_byte_ranges};
 use zarrs_storage::{Bytes, ReadCoalescing, StorageError};
 
 use super::super::{
-    ByteSource, Generator, Join, Outcome, ReadBytes, SourceKey, SyncIo, Task, TaskValue, WriteOp,
+    ByteSource, Generator, Join, MultipartBuffers, MultipartId, MultipartOp, Outcome, ReadBytes,
+    SourceKey, SyncIo, Task, TaskValue, WriteOp,
 };
 use crate::{CodecError, CowBytes, Resources};
 
@@ -19,6 +20,7 @@ pub(super) struct MemoryIo {
     pub(super) values: Mutex<BTreeMap<SourceKey, Vec<u8>>>,
     pub(super) reads: AtomicUsize,
     pub(super) writes: AtomicUsize,
+    pub(super) multipart: MultipartBuffers,
 }
 
 impl MemoryIo {
@@ -60,6 +62,12 @@ impl SyncIo for MemoryIo {
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
         self.writes.fetch_add(1, Ordering::SeqCst);
+        if let WriteOp::Multipart(id, op) = op {
+            if let Some((key, value)) = self.multipart.write(id, op)? {
+                self.values.lock().unwrap().insert(key, value);
+            }
+            return Ok(());
+        }
         let mut values = self.values.lock().unwrap();
         match op {
             WriteOp::Set(key, value) => {
@@ -78,6 +86,7 @@ impl SyncIo for MemoryIo {
             WriteOp::Erase(key) => {
                 values.remove(&key);
             }
+            WriteOp::Multipart(..) => unreachable!("handled above"),
         }
         Ok(())
     }
@@ -248,6 +257,106 @@ pub(super) fn writes_complete_before_value(drive: Driver) {
     assert_eq!(io.writes.load(Ordering::SeqCst), 3);
     assert_eq!(io.get(0), Some(vec![1, 2, 3]));
     assert_eq!(io.get(1), Some(vec![9, 7, 9, 9]));
+}
+
+/// A task whose outcome writes the value of `key` in parts: `0..len` one byte per part, each in its own step.
+fn multipart_write_task<'a>(key: usize, len: u8) -> Task<'a> {
+    Task::compute(move |_| {
+        let id = MultipartId::unique();
+        let mut ops = smallvec![WriteOp::Multipart(
+            id,
+            MultipartOp::Begin(SourceKey(key), Some(u64::from(len)))
+        )];
+        ops.extend(
+            (0..len).map(|i| WriteOp::Multipart(id, MultipartOp::Parts(vec![vec![i].into()]))),
+        );
+        ops.push(WriteOp::Multipart(id, MultipartOp::Finish));
+        Ok(Outcome::Write {
+            ops,
+            then: TaskValue::Bytes(Some(CowBytes::from(vec![len]))),
+        })
+    })
+}
+
+/// The steps of multipart writes are performed in order, within an outcome and across the steps of a fork.
+pub(super) fn multipart_writes_are_ordered(drive: Driver) {
+    let io = MemoryIo::default();
+    let mut tasks: Vec<_> = (0..16).map(|key| multipart_write_task(key, 8)).collect();
+    // A write begun by a child and finished by the join
+    tasks.push(Task::compute(|_| {
+        let id = MultipartId::unique();
+        Ok(Outcome::Fork {
+            children: vec![Task::compute(move |_| {
+                Ok(Outcome::Write {
+                    ops: smallvec![
+                        WriteOp::Multipart(id, MultipartOp::Begin(SourceKey(16), None)),
+                        WriteOp::Multipart(
+                            id,
+                            MultipartOp::Parts(vec![vec![1].into(), vec![2].into()])
+                        ),
+                    ],
+                    then: TaskValue::None,
+                })
+            })],
+            join: Join::new(move |_, _| {
+                Ok(Outcome::Write {
+                    ops: smallvec![
+                        WriteOp::Multipart(id, MultipartOp::Parts(vec![vec![3].into()])),
+                        WriteOp::Set(SourceKey(17), CowBytes::from(vec![4u8])),
+                        WriteOp::Multipart(id, MultipartOp::Finish),
+                    ],
+                    then: TaskValue::None,
+                })
+            }),
+        })
+    }));
+    // An aborted write
+    tasks.push(Task::compute(|_| {
+        let id = MultipartId::unique();
+        Ok(Outcome::Write {
+            ops: smallvec![
+                WriteOp::Multipart(id, MultipartOp::Begin(SourceKey(18), None)),
+                WriteOp::Multipart(id, MultipartOp::Parts(vec![vec![1].into()])),
+                WriteOp::Multipart(id, MultipartOp::Abort),
+            ],
+            then: TaskValue::None,
+        })
+    }));
+    let values = drive(tasks, &io, &Resources::default()).unwrap();
+    for (key, value) in values.iter().enumerate().take(16) {
+        assert_eq!(bytes_value(value), Some(vec![8]));
+        assert_eq!(io.get(key), Some((0..8).collect()));
+    }
+    assert_eq!(io.get(16), Some(vec![1, 2, 3]));
+    assert_eq!(io.get(17), Some(vec![4]));
+    assert_eq!(io.get(18), None);
+    assert_eq!(io.writes.load(Ordering::SeqCst), 16 * 10 + 5 + 3);
+
+    // A single root task, which a drive may perform without a scheduler
+    let io = MemoryIo::default();
+    let values = drive(vec![multipart_write_task(0, 3)], &io, &Resources::default()).unwrap();
+    assert_eq!(bytes_value(&values[0]), Some(vec![3]));
+    assert_eq!(io.get(0), Some(vec![0, 1, 2]));
+}
+
+/// A step of a multipart write that is not in progress fails the drive.
+pub(super) fn multipart_write_errors_fail(drive: Driver) {
+    let io = MemoryIo::default();
+    let task = Task::compute(|_| {
+        Ok(Outcome::Write {
+            ops: smallvec![
+                WriteOp::Multipart(
+                    MultipartId::unique(),
+                    MultipartOp::Parts(vec![vec![1].into()])
+                ),
+                WriteOp::Set(SourceKey(0), CowBytes::from(vec![1u8])),
+            ],
+            then: TaskValue::None,
+        })
+    });
+    assert!(drive(vec![task], &io, &Resources::default()).is_err());
+    // The writes after the failed step are not performed
+    assert_eq!(io.get(0), None);
 }
 
 /// A single root task that writes once, which a drive performs without a scheduler, then completes with its value.
@@ -725,6 +834,14 @@ macro_rules! driver_tests {
         #[test]
         fn invalid_reads_fail() {
             crate::plan::driver::tests::invalid_reads_fail($drive);
+        }
+        #[test]
+        fn multipart_writes_are_ordered() {
+            crate::plan::driver::tests::multipart_writes_are_ordered($drive);
+        }
+        #[test]
+        fn multipart_write_errors_fail() {
+            crate::plan::driver::tests::multipart_write_errors_fail($drive);
         }
     };
 }

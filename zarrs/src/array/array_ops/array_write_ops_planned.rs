@@ -9,13 +9,15 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use zarrs_codec::plan::{
-    Generator, Outcome, PlanIndexer, ReadBytes, SourceKey, SyncIo, Task, TaskValue, WriteOp,
-    encode_and_write, encode_hint,
+    Generator, MultipartId, MultipartOp, MultipartWriters, Outcome, PlanIndexer, ReadBytes,
+    SourceKey, SyncIo, Task, TaskValue, WriteOp, encode_and_write, encode_hint,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, Resources};
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::{Bytes, ReadableWritableStorageTraits, StorageError, WritableStorageTraits};
+use zarrs_storage::{
+    Bytes, ReadableWritableStorageTraits, StorageError, StoreWriter, WritableStorageTraits,
+};
 
 use super::super::codec::CodecChainBound;
 use super::OpStorage;
@@ -40,13 +42,40 @@ fn write_op(
             storage.set_partial_many(&*keys.store_key(key)?, Box::new(offset_values.into_iter()))
         }
         WriteOp::Erase(key) => storage.erase(&*keys.store_key(key)?),
+        WriteOp::Multipart(..) => unreachable!("multipart writes are performed by the backend"),
     }
+}
+
+/// Perform the step `op` of the multipart write `id` to the chunks of `keys` in `storage`, with the writers of
+/// `multipart`.
+///
+/// Multipart writes are only supported to the storage of the array (without storage transformers), since a writer
+/// borrows the storage.
+fn write_multipart<'s, TStorage: ?Sized + WritableStorageTraits, TTransformed: ?Sized>(
+    storage: &OpStorage<'s, TStorage, TTransformed>,
+    keys: &ChunkKeys,
+    multipart: &MultipartWriters<dyn StoreWriter + 's>,
+    id: MultipartId,
+    op: MultipartOp<'_>,
+) -> Result<(), StorageError> {
+    multipart.write(id, op, |key, size_hint| match storage {
+        OpStorage::Array(storage) => storage.set_multipart(&*keys.store_key(key)?, size_hint),
+        OpStorage::Transformed(_) => Err(multipart_transformed_error()),
+    })
+}
+
+/// The error of a multipart write through storage transformers.
+fn multipart_transformed_error() -> StorageError {
+    StorageError::Unsupported(
+        "multipart writes through storage transformers are not supported".to_string(),
+    )
 }
 
 /// The synchronous I/O backend for writing the chunks of an array.
 struct ChunkWriteIo<'s, TStorage: ?Sized> {
     storage: OpStorage<'s, TStorage, dyn WritableStorageTraits>,
     keys: ChunkKeys,
+    multipart: MultipartWriters<dyn StoreWriter + 's>,
 }
 
 impl<TStorage: ?Sized + WritableStorageTraits> SyncIo for ChunkWriteIo<'_, TStorage> {
@@ -61,6 +90,9 @@ impl<TStorage: ?Sized + WritableStorageTraits> SyncIo for ChunkWriteIo<'_, TStor
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
+        if let WriteOp::Multipart(id, op) = op {
+            return write_multipart(&self.storage, &self.keys, &self.multipart, id, op);
+        }
         with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op))
     }
 }
@@ -69,6 +101,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> SyncIo for ChunkWriteIo<'_, TStor
 struct ChunkReadWriteIo<'s, TStorage: ?Sized> {
     storage: OpStorage<'s, TStorage, dyn ReadableWritableStorageTraits>,
     keys: ChunkKeys,
+    multipart: MultipartWriters<dyn StoreWriter + 's>,
 }
 
 /// The synchronous I/O backend for reading and writing chunks that owns its storage.
@@ -99,6 +132,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits> SyncIo for ChunkReadWrite
     }
 
     fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
+        if let WriteOp::Multipart(id, op) = op {
+            return write_multipart(&self.storage, &self.keys, &self.multipart, id, op);
+        }
         with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op))
     }
 }
@@ -228,7 +264,11 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         } else {
             OpStorage::Transformed(self.writable_storage()?)
         };
-        Ok(ChunkWriteIo { storage, keys })
+        Ok(ChunkWriteIo {
+            storage,
+            keys,
+            multipart: MultipartWriters::new(),
+        })
     }
 
     /// Store `chunk_bytes` (validated) at `chunk_indices` with a planned write.
@@ -287,7 +327,11 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         } else {
             OpStorage::Transformed(self.readable_writable_storage()?)
         };
-        Ok(ChunkReadWriteIo { storage, keys })
+        Ok(ChunkReadWriteIo {
+            storage,
+            keys,
+            multipart: MultipartWriters::new(),
+        })
     }
 
     /// The I/O backend for reading and writing the chunks of `keys`, which owns its storage.
@@ -298,6 +342,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         Ok(ChunkReadWriteIo {
             storage: OpStorage::Transformed(self.readable_writable_storage()?),
             keys,
+            multipart: MultipartWriters::new(),
         })
     }
 
@@ -391,14 +436,16 @@ fn is_shared(bytes: &ArrayBytes<'_>) -> bool {
 #[cfg(feature = "async")]
 pub(super) mod async_planned {
     use zarrs_codec::plan::{AsyncIo, drive_async_offload_one, drive_async_one};
-    use zarrs_storage::{AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits};
+    use zarrs_storage::{
+        AsyncReadableWritableStorageTraits, AsyncStoreWriter, AsyncWritableStorageTraits,
+    };
 
     use super::super::array_read_ops_planned::async_read_ranges;
     use super::{
         Arc, Array, ArrayBytes, ArrayError, ArraySubset, ArrayToBytesCodecTraits, ByteRange, Bytes,
-        ChunkKeys, ChunkPlanner, CodecOptions, Indexer, OpStorage, PlanIndexer, ReadBytes,
-        Resources, SourceKey, StorageError, WriteOp, is_shared, plan_erase_chunks,
-        plan_store_subset,
+        ChunkKeys, ChunkPlanner, CodecOptions, Indexer, MultipartId, MultipartOp, MultipartWriters,
+        OpStorage, PlanIndexer, ReadBytes, Resources, SourceKey, StorageError, WriteOp, is_shared,
+        multipart_transformed_error, plan_erase_chunks, plan_store_subset,
     };
 
     /// Perform the write `op` to the chunks of `keys` in `storage`.
@@ -415,13 +462,44 @@ pub(super) mod async_planned {
                     .await
             }
             WriteOp::Erase(key) => storage.erase(&*keys.store_key(key)?).await,
+            WriteOp::Multipart(..) => {
+                unreachable!("multipart writes are performed by the backend")
+            }
         }
     }
 
+    /// Perform the step `op` of the multipart write `id` to the chunks of `keys` in `storage`, with the writers of
+    /// `multipart`.
+    async fn write_multipart<
+        's,
+        TStorage: ?Sized + AsyncWritableStorageTraits,
+        TTransformed: ?Sized,
+    >(
+        storage: &OpStorage<'s, TStorage, TTransformed>,
+        keys: &ChunkKeys,
+        multipart: &MultipartWriters<dyn AsyncStoreWriter + 's>,
+        id: MultipartId,
+        op: MultipartOp<'_>,
+    ) -> Result<(), StorageError> {
+        multipart
+            .write_async(id, op, |key, size_hint| async move {
+                match storage {
+                    OpStorage::Array(storage) => {
+                        storage
+                            .set_multipart(&*keys.store_key(key)?, size_hint)
+                            .await
+                    }
+                    OpStorage::Transformed(_) => Err(multipart_transformed_error()),
+                }
+            })
+            .await
+    }
+
     /// The asynchronous I/O backend for writing the chunks of an array.
-    struct AsyncChunkWriteIo<'s, TStorage: ?Sized> {
+    pub(super) struct AsyncChunkWriteIo<'s, TStorage: ?Sized> {
         storage: OpStorage<'s, TStorage, dyn AsyncWritableStorageTraits>,
         keys: ChunkKeys,
+        multipart: MultipartWriters<dyn AsyncStoreWriter + 's>,
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -438,6 +516,9 @@ pub(super) mod async_planned {
         }
 
         async fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
+            if let WriteOp::Multipart(id, op) = op {
+                return write_multipart(&self.storage, &self.keys, &self.multipart, id, op).await;
+            }
             with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op)
                 .await)
         }
@@ -447,6 +528,7 @@ pub(super) mod async_planned {
     pub(super) struct AsyncChunkReadWriteIo<'s, TStorage: ?Sized> {
         storage: OpStorage<'s, TStorage, dyn AsyncReadableWritableStorageTraits>,
         keys: ChunkKeys,
+        multipart: MultipartWriters<dyn AsyncStoreWriter + 's>,
     }
 
     /// The asynchronous I/O backend for reading and writing chunks that owns its storage.
@@ -485,6 +567,9 @@ pub(super) mod async_planned {
         }
 
         async fn write(&self, op: WriteOp<'_>) -> Result<(), StorageError> {
+            if let WriteOp::Multipart(id, op) = op {
+                return write_multipart(&self.storage, &self.keys, &self.multipart, id, op).await;
+            }
             with_op_storage!(self.storage, |storage| write_op(storage, &self.keys, op)
                 .await)
         }
@@ -492,7 +577,7 @@ pub(super) mod async_planned {
 
     impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         /// The I/O backend for writing the chunks of `keys`.
-        async fn async_chunk_write_io(
+        pub(super) async fn async_chunk_write_io(
             &self,
             keys: ChunkKeys,
         ) -> Result<AsyncChunkWriteIo<'_, TStorage>, ArrayError> {
@@ -501,7 +586,11 @@ pub(super) mod async_planned {
             } else {
                 OpStorage::Transformed(self.async_writable_storage().await?)
             };
-            Ok(AsyncChunkWriteIo { storage, keys })
+            Ok(AsyncChunkWriteIo {
+                storage,
+                keys,
+                multipart: MultipartWriters::new(),
+            })
         }
 
         /// Erase the chunks selected by `chunks` (validated) with a planned write.
@@ -601,7 +690,11 @@ pub(super) mod async_planned {
             } else {
                 OpStorage::Transformed(self.async_readable_writable_storage().await?)
             };
-            Ok(AsyncChunkReadWriteIo { storage, keys })
+            Ok(AsyncChunkReadWriteIo {
+                storage,
+                keys,
+                multipart: MultipartWriters::new(),
+            })
         }
 
         /// The I/O backend for reading and writing the chunks of `keys`, which owns its storage.
@@ -612,6 +705,7 @@ pub(super) mod async_planned {
             Ok(AsyncChunkReadWriteIo {
                 storage: OpStorage::Transformed(self.async_readable_writable_storage().await?),
                 keys,
+                multipart: MultipartWriters::new(),
             })
         }
 
@@ -726,5 +820,97 @@ pub(super) mod async_planned {
             drive_async_one(task, &io, resources).await?;
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smallvec::smallvec;
+    use zarrs_storage::ReadableStorageTraits;
+    use zarrs_storage::store::MemoryStore;
+
+    use super::*;
+    use crate::array::{ArrayBuilder, data_type};
+
+    /// A task that writes the chunk with source key 0 in two parts, as a multipart write.
+    fn multipart_task<'a>() -> Task<'a> {
+        Task::compute(|_| {
+            let id = MultipartId::unique();
+            Ok(Outcome::Write {
+                ops: smallvec![
+                    WriteOp::Multipart(id, MultipartOp::Begin(SourceKey(0), Some(3))),
+                    WriteOp::Multipart(
+                        id,
+                        MultipartOp::Parts(vec![vec![1u8].into(), vec![2u8].into()])
+                    ),
+                    WriteOp::Multipart(id, MultipartOp::Parts(vec![vec![3u8].into()])),
+                    WriteOp::Multipart(id, MultipartOp::Finish),
+                ],
+                then: TaskValue::None,
+            })
+        })
+    }
+
+    #[test]
+    fn chunk_io_multipart_writes() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+            .build(store.clone(), "/array")?;
+        let resources = Resources::default();
+        let key = array.chunk_key(&[1])?;
+
+        let io = array.chunk_write_io(array.one_key(&[1])?)?;
+        drive_blocking_one(multipart_task(), &io, &resources)?;
+        assert!(io.multipart.is_empty());
+        assert_eq!(store.get(&key)?.unwrap(), vec![1, 2, 3]);
+
+        store.erase(&key)?;
+        let io = array.chunk_read_write_io(array.one_key(&[1])?)?;
+        drive_blocking_one(multipart_task(), &io, &resources)?;
+        assert_eq!(store.get(&key)?.unwrap(), vec![1, 2, 3]);
+
+        // A writer borrows the storage, so a backend that owns its storage does not support multipart writes
+        let io = array.owned_chunk_read_write_io(array.one_key(&[1])?)?;
+        assert!(drive_blocking_one(multipart_task(), &io, &resources).is_err());
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn async_chunk_io_multipart_writes() -> Result<(), Box<dyn std::error::Error>> {
+        use zarrs_codec::plan::drive_async_one;
+        use zarrs_storage::AsyncReadableStorageTraits;
+        use zarrs_storage::store::AsyncMemoryStore;
+
+        futures::executor::block_on(async {
+            let store = Arc::new(AsyncMemoryStore::default());
+            let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+                .build_arc(store.clone(), "/array")?;
+            let resources = Resources::default();
+            let key = array.chunk_key(&[1])?;
+
+            let io = array.async_chunk_write_io(array.one_key(&[1])?).await?;
+            drive_async_one(multipart_task(), &io, &resources).await?;
+            assert_eq!(store.get(&key).await?.unwrap(), vec![1, 2, 3]);
+
+            let io = array
+                .async_chunk_read_write_io(array.one_key(&[0])?)
+                .await?;
+            drive_async_one(multipart_task(), &io, &resources).await?;
+            assert_eq!(
+                store.get(&array.chunk_key(&[0])?).await?.unwrap(),
+                vec![1, 2, 3]
+            );
+
+            let io = array
+                .async_owned_chunk_read_write_io(array.one_key(&[1])?)
+                .await?;
+            assert!(
+                drive_async_one(multipart_task(), &io, &resources)
+                    .await
+                    .is_err()
+            );
+            Ok(())
+        })
     }
 }

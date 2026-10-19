@@ -308,7 +308,10 @@ pub(crate) fn assert_plan_parity(
 
 /// A backend with one value at [`SourceKey`] 0 that can be written.
 #[derive(Default)]
-struct OneWritableValueIo(std::sync::Mutex<Option<Vec<u8>>>);
+struct OneWritableValueIo(
+    std::sync::Mutex<Option<Vec<u8>>>,
+    zarrs_codec::plan::MultipartBuffers,
+);
 
 impl SyncIo for OneWritableValueIo {
     fn read(
@@ -331,7 +334,14 @@ impl SyncIo for OneWritableValueIo {
 
     fn write(&self, op: zarrs_codec::plan::WriteOp<'_>) -> Result<(), StorageError> {
         use zarrs_codec::plan::WriteOp;
-        assert_eq!(op.key(), SourceKey(0));
+        if let WriteOp::Multipart(id, op) = op {
+            if let Some((key, finished)) = self.1.write(id, op)? {
+                assert_eq!(key, SourceKey(0));
+                *self.0.lock().unwrap() = Some(finished);
+            }
+            return Ok(());
+        }
+        assert_eq!(op.key(), Some(SourceKey(0)));
         let mut value = self.0.lock().unwrap();
         match op {
             WriteOp::Set(_, bytes) => *value = Some(bytes.to_vec()),
@@ -346,6 +356,7 @@ impl SyncIo for OneWritableValueIo {
                 }
             }
             WriteOp::Erase(_) => *value = None,
+            WriteOp::Multipart(..) => unreachable!("handled above"),
         }
         Ok(())
     }
