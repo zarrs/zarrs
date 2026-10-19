@@ -11,8 +11,8 @@ use super::{
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, fill_target,
-    merge_chunks, optional_innermost,
+    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
+    optional_innermost,
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
@@ -23,7 +23,7 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
     BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    decode_into_array_bytes_target,
+    copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -306,7 +306,7 @@ fn partial_decode_fixed_array_subset_into(
         .into());
     }
     let Some(shard_index) = shard_index else {
-        return fill_target(output_target, data_type, fill_value);
+        return copy_fill_value_into(data_type, fill_value, output_target);
     };
     // Optional data is decoded into views of its inner data and each validity mask
     let (output_view, mask_views) = extract_target_views(&output_target);
@@ -363,7 +363,7 @@ fn partial_decode_fixed_array_subset_into(
                 &options,
             )
         } else {
-            fill_target(subchunk_target, data_type, fill_value)
+            copy_fill_value_into(data_type, fill_value, subchunk_target)
         }
     };
 

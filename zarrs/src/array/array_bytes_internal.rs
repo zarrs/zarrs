@@ -6,11 +6,10 @@ use std::sync::Arc;
 use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArraySubset, DataType, FillValue, Indexer};
+use super::{ArraySubset, DataType, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
     ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
-    decode_into_array_bytes_target,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -137,27 +136,6 @@ impl FixedDecodeBuffers {
             unsafe { mask.set_len(num_elements) };
         }
         wrap_optional_masks(ArrayBytes::new_flen(self.data), self.masks)
-    }
-}
-
-/// Fill every element of `target` with `fill_value`.
-///
-/// # Errors
-/// Returns a [`CodecError`] if `fill_value` is incompatible with `data_type` or `target`.
-pub(crate) fn fill_target(
-    target: ArrayBytesDecodeIntoTarget<'_>,
-    data_type: &DataType,
-    fill_value: &FillValue,
-) -> Result<(), CodecError> {
-    match target {
-        ArrayBytesDecodeIntoTarget::Fixed(view) => view
-            .fill(fill_value.as_ne_bytes())
-            .map_err(CodecError::from),
-        target @ ArrayBytesDecodeIntoTarget::Optional(..) => {
-            let fill_bytes =
-                ArrayBytes::new_fill_value(data_type, target.num_elements(), fill_value)?;
-            decode_into_array_bytes_target(&fill_bytes, target)
-        }
     }
 }
 
@@ -400,7 +378,131 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::offsets_from_usize;
+    use super::*;
+    use crate::array::{FillValue, data_type};
+    use zarrs_codec::copy_fill_value_into;
+
+    #[test]
+    fn copy_fill_value_into_matches_materialised_fill() {
+        let cases = [
+            (data_type::uint16(), FillValue::from(0x1234u16)),
+            (data_type::raw_bits(0), FillValue::from(())),
+            (
+                data_type::uint16().to_optional(),
+                FillValue::from(None::<u16>),
+            ),
+            (
+                data_type::uint16().to_optional(),
+                FillValue::from(Some(0x1234u16)),
+            ),
+            (
+                data_type::uint16().to_optional().to_optional(),
+                FillValue::from(None::<Option<u16>>),
+            ),
+            (
+                data_type::uint16().to_optional().to_optional(),
+                FillValue::from(Some(None::<u16>)),
+            ),
+            (
+                data_type::uint16().to_optional().to_optional(),
+                FillValue::from(Some(Some(0x1234u16))),
+            ),
+            (
+                data_type::uint16()
+                    .to_optional()
+                    .to_optional()
+                    .to_optional(),
+                FillValue::from(Some(Some(None::<u16>))),
+            ),
+        ];
+        for (data_type, fill_value) in cases {
+            for subset in [
+                ArraySubset::new_with_shape(vec![3, 5]),
+                ArraySubset::new_with_ranges(&[1..3, 1..4]),
+                ArraySubset::new_with_start_shape(vec![99, 99], vec![0, 0]).unwrap(),
+            ] {
+                let mut outputs = Vec::new();
+                for direct in [false, true] {
+                    let mut buffers = FixedDecodeBuffers::new(&data_type, &[3, 5]).unwrap();
+                    buffers.data.resize(15 * buffers.data_type_size, 0xa5);
+                    for mask in &mut buffers.masks {
+                        mask.resize(15, 0xa5);
+                    }
+                    {
+                        let shape = [3, 5];
+                        // SAFETY: each view is the only view of its backing buffer.
+                        let mut data_view = unsafe {
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut buffers.data),
+                                buffers.data_type_size,
+                                &shape,
+                                subset.clone(),
+                            )
+                            .unwrap()
+                        };
+                        let mut mask_views: Vec<_> = buffers
+                            .masks
+                            .iter_mut()
+                            .map(|mask| unsafe {
+                                ArrayBytesFixedDisjointView::new(
+                                    UnsafeCellSlice::new(mask),
+                                    1,
+                                    &shape,
+                                    subset.clone(),
+                                )
+                                .unwrap()
+                            })
+                            .collect();
+                        let target = build_nested_optional_target(&mut data_view, &mut mask_views);
+                        if direct {
+                            copy_fill_value_into(&data_type, &fill_value, target).unwrap();
+                        } else {
+                            let bytes = ArrayBytes::new_fill_value(
+                                &data_type,
+                                subset.num_elements(),
+                                &fill_value,
+                            )
+                            .unwrap();
+                            zarrs_codec::decode_into_array_bytes_target(&bytes, target).unwrap();
+                        }
+                    }
+                    // Compare raw data too, including placeholder bytes beneath null masks.
+                    outputs.push((buffers.data, buffers.masks));
+                }
+                assert_eq!(
+                    outputs[0], outputs[1],
+                    "{data_type:?} {fill_value} {subset:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn copy_fill_value_into_rejects_incompatible_values_and_targets() {
+        for (data_type, fill_value) in [
+            (data_type::uint16(), FillValue::from(1u8)),
+            (data_type::uint8(), FillValue::from(1u8)),
+            (
+                data_type::uint16().to_optional(),
+                FillValue::from(Some(1u16)),
+            ),
+            (data_type::string(), FillValue::from("")),
+        ] {
+            let mut buffers = FixedDecodeBuffers::new(&data_type::uint16(), &[3]).unwrap();
+            let (mut data_view, _) = buffers.views().unwrap();
+            assert!(
+                copy_fill_value_into(&data_type, &fill_value, (&mut data_view).into()).is_err()
+            );
+        }
+
+        let mut buffers =
+            FixedDecodeBuffers::new(&data_type::uint16().to_optional(), &[3]).unwrap();
+        let (mut data_view, mut mask_views) = buffers.views().unwrap();
+        let target = build_nested_optional_target(&mut data_view, &mut mask_views);
+        assert!(
+            copy_fill_value_into(&data_type::uint16(), &FillValue::from(1u16), target).is_err()
+        );
+    }
 
     #[test]
     fn offsets_from_usize_reuses_matching_allocation() {

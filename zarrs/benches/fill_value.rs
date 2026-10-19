@@ -1,4 +1,4 @@
-//! Benchmark `FillValue::equals_all()`.
+//! Benchmark fill-value comparisons and output filling.
 #![allow(missing_docs)]
 
 use criterion::{
@@ -6,7 +6,11 @@ use criterion::{
     criterion_main,
 };
 use std::hint::black_box;
-use zarrs::array::FillValue;
+use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs::array::{
+    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, FillValue,
+    copy_fill_value_into, data_type,
+};
 
 fn fill_value(c: &mut Criterion) {
     for element_size in [1usize, 2, 4, 8, 16] {
@@ -38,5 +42,115 @@ fn fill_value(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, fill_value);
+fn fill_view(c: &mut Criterion) {
+    let shape = [64, 1024];
+    for element_size in [1usize, 3, 4, 17] {
+        let mut group = c.benchmark_group(format!("fill_view_{element_size}"));
+        let pattern: Vec<u8> = (1..=u8::try_from(element_size).unwrap()).collect();
+        for (name, subset) in [
+            ("contiguous", ArraySubset::new_with_shape(shape.to_vec())),
+            ("strided", ArraySubset::new_with_ranges(&[0..64, 1..1023])),
+        ] {
+            let mut storage = vec![0u8; 64 * 1024 * element_size];
+            // SAFETY: this is the only view of storage.
+            let mut view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut storage),
+                    element_size,
+                    &shape,
+                    subset,
+                )
+                .unwrap()
+            };
+            group.throughput(Throughput::Bytes(view.num_elements() * element_size as u64));
+            group.bench_function(name, |b| {
+                b.iter(|| black_box(&mut view).fill(black_box(&pattern)).unwrap());
+            });
+        }
+    }
+}
+
+fn nested_target<'a>(
+    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+) -> ArrayBytesDecodeIntoTarget<'a> {
+    if let Some((mask, rest)) = mask_views.split_first_mut() {
+        ArrayBytesDecodeIntoTarget::Optional(Box::new(nested_target(data_view, rest)), mask)
+    } else {
+        ArrayBytesDecodeIntoTarget::Fixed(data_view)
+    }
+}
+
+fn fill_output(c: &mut Criterion) {
+    let shape = [64, 1024];
+    for depth in [0usize, 1, 3] {
+        let mut group = c.benchmark_group(format!("fill_output_{depth}"));
+        for null in [false, true] {
+            if depth == 0 && null {
+                continue;
+            }
+            let mut data_type = data_type::uint32();
+            let mut fill_value = FillValue::from(0x1234_5678u32);
+            for _ in 0..depth {
+                data_type = data_type.to_optional();
+                fill_value = fill_value.into_optional();
+            }
+            if null {
+                fill_value = FillValue::new_optional_null();
+            }
+            for (layout, subset) in [
+                ("contiguous", ArraySubset::new_with_shape(shape.to_vec())),
+                ("strided", ArraySubset::new_with_ranges(&[0..64, 1..1023])),
+            ] {
+                // Allocate output buffers outside the measurement. Construct views
+                // and decode targets inside each timed iteration.
+                let mut storage = vec![0u8; 64 * 1024 * 4];
+                let mut masks = vec![vec![0u8; 64 * 1024]; depth];
+                group.throughput(Throughput::Bytes(
+                    subset.num_elements() * (4 + depth as u64),
+                ));
+                let name = format!("{layout}_{}", if null { "null" } else { "value" });
+                group.bench_function(name, |b| {
+                    b.iter(|| {
+                        {
+                            // SAFETY: each view is the only view of its backing buffer.
+                            let mut data_view = unsafe {
+                                ArrayBytesFixedDisjointView::new(
+                                    UnsafeCellSlice::new(&mut storage),
+                                    4,
+                                    &shape,
+                                    subset.clone(),
+                                )
+                                .unwrap()
+                            };
+                            let mut mask_views: Vec<_> = masks
+                                .iter_mut()
+                                .map(|mask| unsafe {
+                                    ArrayBytesFixedDisjointView::new(
+                                        UnsafeCellSlice::new(mask),
+                                        1,
+                                        &shape,
+                                        subset.clone(),
+                                    )
+                                    .unwrap()
+                                })
+                                .collect();
+                            let target = nested_target(&mut data_view, &mut mask_views);
+                            copy_fill_value_into(
+                                black_box(&data_type),
+                                black_box(&fill_value),
+                                target,
+                            )
+                            .unwrap();
+                        }
+                        black_box(&storage);
+                        black_box(&masks);
+                    });
+                });
+            }
+        }
+    }
+}
+
+criterion_group!(benches, fill_value, fill_view, fill_output);
 criterion_main!(benches);

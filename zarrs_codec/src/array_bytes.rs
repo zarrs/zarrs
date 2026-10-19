@@ -785,10 +785,13 @@ pub fn update_array_bytes<'a>(
 /// Decode the fill value into a subset of a preallocated output.
 ///
 /// This method is intended for internal use by Array.
-/// It currently only works for fixed length data types.
+/// Supports fixed length data types, including nested optional types with fixed length data.
 ///
 /// # Errors
 /// Returns [`CodecError::ExpectedFixedLengthBytes`] for variable-sized data.
+///
+/// # Panics
+/// Panics if the number of elements in a target exceeds [`usize::MAX`].
 ///
 /// # Safety
 /// The caller must ensure that:
@@ -800,9 +803,47 @@ pub fn copy_fill_value_into(
     fill_value: &FillValue,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
-    let num_elements = output_target.num_elements();
-    let fill_value_bytes = ArrayBytes::new_fill_value(data_type, num_elements, fill_value)?;
-    decode_into_array_bytes_target(&fill_value_bytes, output_target)
+    match (data_type.as_optional(), output_target) {
+        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target)) => {
+            let num_elements = data_target.num_elements();
+            if mask_target.num_elements() != num_elements {
+                return Err(InvalidBytesLengthError::new(
+                    usize::try_from(num_elements).unwrap(),
+                    usize::try_from(mask_target.num_elements()).unwrap(),
+                )
+                .into());
+            }
+            let is_null = opt.is_fill_value_null(fill_value);
+            let inner_fill_value = if is_null {
+                FillValue::new(vec![0; opt.fixed_size().unwrap_or(0)])
+            } else {
+                FillValue::from(opt.fill_value_inner_bytes(fill_value))
+            };
+            copy_fill_value_into(opt.data_type(), &inner_fill_value, *data_target)?;
+            mask_target.fill(&[u8::from(!is_null)])?;
+            Ok(())
+        }
+        (Some(_), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
+            Err(ExpectedFixedLengthBytesError.into())
+        }
+        (None, ArrayBytesDecodeIntoTarget::Optional(..)) => {
+            if data_type.is_fixed() {
+                Err(ExpectedOptionalBytesError.into())
+            } else {
+                Err(ExpectedFixedLengthBytesError.into())
+            }
+        }
+        (None, ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+            let DataTypeSize::Fixed(size) = data_type.size() else {
+                return Err(ExpectedFixedLengthBytesError.into());
+            };
+            if fill_value.size() != size {
+                return Err(DataTypeFillValueError.into());
+            }
+            view.fill(fill_value.as_ne_bytes())?;
+            Ok(())
+        }
+    }
 }
 
 /// Helper function to decode `ArrayBytes` into a target, handling mask and data separately.
