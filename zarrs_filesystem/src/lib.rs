@@ -10,12 +10,11 @@
 use bytes::BytesMut;
 use thiserror::Error;
 use walkdir::WalkDir;
-use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
-    MaybeBytesIterator, OffsetBytesIterator, ReadCoalescing, ReadableStorageTraits, StorageError,
-    StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, StoreWriter,
-    WritableStorageTraits,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    ReadCoalescing, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes, StoreWriter, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -67,11 +66,29 @@ fn bytes_aligned(size: usize) -> BytesMut {
 #[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct FilesystemStoreOptions {
+    atomic_write: bool,
     direct_io: bool,
     file_handle_cache_size: usize,
 }
 
 impl FilesystemStoreOptions {
+    /// Set whether complete writes atomically replace the value (default: false).
+    ///
+    /// Writes use a unique staging file next to the destination, synchronise it, and rename it
+    /// into place. Failed writes leave the destination unchanged and remove the staging file.
+    /// Staging files left by an interrupted process are hidden from store listings.
+    /// This also applies to direct I/O and its buffered multipart fallback. Buffered multipart
+    /// writes always use staging, regardless of this option.
+    ///
+    /// Partial updates read and rewrite the entire value when enabled, so
+    /// [`WritableStorageTraits::supports_set_partial`] returns false. This provides atomic
+    /// replacement, but does not make concurrent updates to the same key safe or guarantee
+    /// that the rename survives a power failure.
+    pub fn atomic_write(&mut self, atomic_write: bool) -> &mut Self {
+        self.atomic_write = atomic_write;
+        self
+    }
+
     /// Set whether or not to enable direct I/O. Needs support from the
     /// operating system (currently only Linux) and file system.
     pub fn direct_io(&mut self, direct_io: bool) -> &mut Self {
@@ -120,6 +137,8 @@ struct CachedFile {
 /// read or write of that key; the store performs no locking of its own.
 ///
 /// Writes synchronise file contents and metadata with [`std::fs::File::sync_all`] before returning success.
+/// Enable [`FilesystemStoreOptions::atomic_write`] to stage complete writes before replacing the
+/// destination. Partial updates then read and rewrite the entire value.
 ///
 /// Prefix operations ([`erase_prefix`](WritableStorageTraits::erase_prefix),
 /// [`list_prefix`](ListableStorageTraits::list_prefix) and
@@ -257,50 +276,46 @@ impl FilesystemStore {
         }
     }
 
-    fn set_impl(
-        &self,
-        key: &StoreKey,
-        value: &[u8],
-        offset: ByteOffset,
-        truncate: bool,
-    ) -> Result<(), StorageError> {
-        self.invalidate_handle(key);
-
-        // Create directories
-        let key_path = self.key_to_fspath(key);
-        if let Some(parent) = key_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
-
+    fn set_impl(&self, key: &StoreKey, value: &[u8]) -> Result<(), StorageError> {
         let mut flags = OpenOptions::new();
-        flags.write(true).create(true).truncate(truncate);
+        flags.write(true).create(true).truncate(true);
 
-        // TODO: for now, only Linux support; also no support for `offset != 0`
         let enable_direct =
-            cfg!(target_os = "linux") && self.options.direct_io && offset == 0 && !value.is_empty();
-
-        // If `value` is already page-size aligned, we don't need to copy.
-        let need_copy = value.as_ptr().align_offset(page_size::get()) != 0
-            || !value.len().is_multiple_of(page_size::get());
+            cfg!(target_os = "linux") && self.options.direct_io && !value.is_empty();
 
         #[cfg(target_os = "linux")]
         if enable_direct {
             flags.custom_flags(O_DIRECT);
         }
 
-        let mut file = flags.open(key_path)?;
-
-        // Write
-        if enable_direct {
-            if offset != 0 {
-                // This is unreachable, but keeping the check for safety.
-                return Err(StorageError::Other(
-                    "Direct I/O with non-zero offset is not supported".to_string(),
-                ));
+        if self.options.atomic_write {
+            let mut writer = FilesystemStoreWriter::new_with_options(self, key, &mut flags)?;
+            Self::write_value(writer.file(), value, enable_direct)?;
+            writer.commit()
+        } else {
+            self.invalidate_handle(key);
+            let key_path = self.key_to_fspath(key);
+            if let Some(parent) = key_path.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent)?;
+                }
             }
+            let mut file = flags.open(key_path)?;
+            Self::write_value(&mut file, value, enable_direct)?;
+            // Surface write-back errors before dropping the file, which ignores close errors.
+            Ok(file.sync_all()?)
+        }
+    }
 
+    fn write_value(
+        file: &mut std::fs::File,
+        value: &[u8],
+        enable_direct: bool,
+    ) -> std::io::Result<()> {
+        if enable_direct {
+            // If `value` is already page-size aligned, we don't need to copy.
+            let need_copy = value.as_ptr().align_offset(page_size::get()) != 0
+                || !value.len().is_multiple_of(page_size::get());
             if need_copy {
                 let mut buf = bytes_aligned(value.len());
                 buf.extend_from_slice(value);
@@ -317,11 +332,8 @@ impl FilesystemStore {
             // Truncate again to requested size
             file.set_len(value.len() as u64)?;
         } else {
-            file.write_all_at(offset, value)?;
+            file.write_all(value)?;
         }
-
-        // Surface write-back errors before dropping the file, which ignores close errors.
-        file.sync_all()?;
 
         Ok(())
     }
@@ -544,7 +556,7 @@ impl ReadableStorageTraits for FilesystemStore {
 
 impl WritableStorageTraits for FilesystemStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
-        Self::set_impl(self, key, &value, 0, true)
+        self.set_impl(key, &value)
     }
 
     fn set_partial_many<'a>(
@@ -552,7 +564,11 @@ impl WritableStorageTraits for FilesystemStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        self.set_partial_impl(key, offset_values)
+        if self.options.atomic_write {
+            zarrs_storage::store_set_partial_many(self, key, offset_values)
+        } else {
+            self.set_partial_impl(key, offset_values)
+        }
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -586,7 +602,7 @@ impl WritableStorageTraits for FilesystemStore {
     }
 
     fn supports_set_partial(&self) -> bool {
-        true
+        !self.options.atomic_write
     }
 
     fn set_multipart<'s>(
@@ -611,26 +627,6 @@ impl WritableStorageTraits for FilesystemStore {
 
     fn supports_multipart_patch(&self) -> bool {
         !self.options.direct_io
-    }
-}
-
-impl AtomicRenameStorageTraits for FilesystemStore {
-    fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
-        if source == destination {
-            return Ok(());
-        }
-
-        // The filesystem rename supplies atomicity of the path replacement itself, including across
-        // processes. The handle cache is invalidated first so that a later read opens the renamed
-        // file; a read of either key already in flight may still cache the pre-rename file, which
-        // is why a read must not overlap a rename (see `open_or_cached`).
-        self.invalidate_handle(source);
-        self.invalidate_handle(destination);
-
-        let source_path = self.key_to_fspath(source);
-        let destination_path = self.key_to_fspath(destination);
-        std::fs::rename(source_path, destination_path)?;
-        Ok(())
     }
 }
 

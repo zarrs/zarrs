@@ -1,10 +1,8 @@
 #![allow(missing_docs)]
 
 use std::error::Error;
-use std::sync::Arc;
 
 use zarrs_filesystem::{FilesystemStore, FilesystemStoreOptions};
-use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
 use zarrs_storage::{
     Bytes, ListableStorageTraits, ReadableStorageTraits, StoreKey, WritableStorageTraits,
 };
@@ -27,12 +25,12 @@ fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
 }
 
 #[cfg(target_os = "linux")]
-fn create_direct_io_fs() -> Result<FilesystemStore, Box<dyn Error>> {
+fn create_direct_io_fs(atomic_write: bool) -> Result<FilesystemStore, Box<dyn Error>> {
     use zarrs_filesystem::FilesystemStoreOptions;
 
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
-    opts.direct_io(true);
+    opts.direct_io(true).atomic_write(atomic_write);
 
     Ok(FilesystemStore::new_with_options(path.path(), opts)?.sorted())
 }
@@ -101,71 +99,84 @@ fn filesystem_sync_errors() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
-    let path = tempfile::TempDir::new()?;
-    let mut options = FilesystemStoreOptions::default();
-    options.file_handle_cache_size(2);
-    let store = Arc::new(FilesystemStore::new_with_options(path.path(), options)?.sorted());
-    let store = AtomicWriteStorageAdapter::new(store);
-    let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
+#[cfg_attr(miri, ignore)]
+fn filesystem_atomic_write() -> Result<(), Box<dyn Error>> {
+    use std::io::Read;
 
-    store.set(&key, Bytes::from_static(b"first").into())?;
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
-    assert!(!store.list()?.contains(&temporary_key));
+    for cache_size in [0, 2] {
+        let path = tempfile::TempDir::new()?;
+        let mut options = FilesystemStoreOptions::default();
+        options
+            .atomic_write(true)
+            .file_handle_cache_size(cache_size);
+        let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
+        assert!(!store.supports_set_partial());
+        zarrs_storage::store_test::store_write(&store)?;
+        zarrs_storage::store_test::store_read(&store)?;
+        zarrs_storage::store_test::store_list(&store)?;
+        zarrs_storage::store_test::store_list_size(&store)?;
 
-    store.set(&key, Bytes::from_static(b"second").into())?;
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"second")));
-    assert!(!store.list()?.contains(&temporary_key));
+        let key = StoreKey::new("a/b")?;
+        store.set(&key, Bytes::from_static(b"first").into())?;
+        assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
+        // An open handle to the original file must retain its contents after replacement.
+        let mut original = std::fs::File::open(store.key_to_fspath(&key))?;
+        store.set(&key, Bytes::from_static(b"second").into())?;
+        let mut bytes = Vec::new();
+        original.read_to_end(&mut bytes)?;
+        assert_eq!(bytes, b"first");
+        assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"second")));
 
-    store.set_partial(&key, 1, Bytes::from_static(b"X").into())?;
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond")));
-    assert!(!store.list()?.contains(&temporary_key));
+        let mut original = std::fs::File::open(store.key_to_fspath(&key))?;
+        store.set_partial_many(
+            &key,
+            Box::new([(1, b"X".as_slice().into()), (8, b"Y".as_slice().into())].into_iter()),
+        )?;
+        bytes.clear();
+        original.read_to_end(&mut bytes)?;
+        assert_eq!(bytes, b"second");
+        assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond\0\0Y")));
 
-    store.set(&temporary_key, Bytes::from_static(b"incomplete").into())?;
-    let error = store
-        .set(&key, Bytes::from_static(b"third").into())
-        .unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        format!("temporary key {temporary_key} already exists")
-    );
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"sXcond")));
-    assert_eq!(
-        store.get(&temporary_key)?,
-        Some(Bytes::from_static(b"incomplete"))
-    );
+        let missing = StoreKey::new("c/d")?;
+        store.set_partial(&missing, 2, b"Z".as_slice().into())?;
+        assert_eq!(store.get(&missing)?, Some(Bytes::from_static(b"\0\0Z")));
+        // Temporary keys used by the former adapter are now ordinary, independent keys.
+        let temporary_key = StoreKey::new("a/b.tmp")?;
+        store.set(&temporary_key, b"unrelated".as_slice().into())?;
+        store.set(&key, Bytes::new().into())?;
+        assert_eq!(store.get(&key)?, Some(Bytes::new()));
+        assert_eq!(
+            store.get(&temporary_key)?,
+            Some(Bytes::from_static(b"unrelated"))
+        );
+        assert!(files_on_disk(path.path())
+            .iter()
+            .all(|file| !file.ends_with(".zarrs-part")));
 
-    let error = store
-        .set(&StoreKey::root(), Bytes::from_static(b"root").into())
-        .unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "atomic writes do not support the root store key"
-    );
-    assert!(!path.path().join(".tmp").exists());
+        assert!(store
+            .set(&StoreKey::root(), b"root".as_slice().into())
+            .is_err());
+        assert!(store.set_multipart(&StoreKey::root(), None).is_err());
+    }
     Ok(())
 }
 
 #[test]
-fn atomic_write_adapter_leaves_temporary_key_on_rename_failure() -> Result<(), Box<dyn Error>> {
+#[cfg_attr(miri, ignore)]
+fn filesystem_atomic_write_failure_removes_staging_file() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
-    let adapter = AtomicWriteStorageAdapter::new(store.clone());
-    let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
-
+    let mut options = FilesystemStoreOptions::default();
+    options.atomic_write(true);
+    let store = FilesystemStore::new_with_options(path.path(), options)?;
+    let key = StoreKey::new("a/b")?;
     std::fs::create_dir_all(store.key_to_fspath(&key))?;
+    let child = StoreKey::new("a/b/child")?;
+    store.set(&child, b"original".as_slice().into())?;
 
-    assert!(adapter
-        .set(&key, Bytes::from_static(b"replacement").into())
-        .is_err());
+    assert!(store.set(&key, b"replacement".as_slice().into()).is_err());
     assert!(store.key_to_fspath(&key).is_dir());
-    assert_eq!(
-        store.get(&temporary_key)?,
-        Some(Bytes::from_static(b"replacement"))
-    );
-    assert!(store.list()?.contains(&temporary_key));
+    assert_eq!(store.get(&child)?, Some(Bytes::from_static(b"original")));
+    assert_eq!(files_on_disk(path.path()), vec!["a/b/child".to_string()]);
     Ok(())
 }
 
@@ -179,11 +190,14 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let store: FilesystemStore = create_direct_io_fs()?;
-    zarrs_storage::store_test::store_write(&store)?;
-    zarrs_storage::store_test::store_read(&store)?;
-    zarrs_storage::store_test::store_list(&store)?;
-    zarrs_storage::store_test::store_list_size(&store)?;
+    for atomic_write in [false, true] {
+        let store = create_direct_io_fs(atomic_write)?;
+        assert_eq!(store.supports_set_partial(), !atomic_write);
+        zarrs_storage::store_test::store_write(&store)?;
+        zarrs_storage::store_test::store_read(&store)?;
+        zarrs_storage::store_test::store_list(&store)?;
+        zarrs_storage::store_test::store_list_size(&store)?;
+    }
     Ok(())
 }
 
@@ -223,7 +237,7 @@ fn direct_io_get_partial_out_of_range() -> Result<(), Box<dyn Error>> {
         // Skip this test if direct I/O is not supported
         return Ok(());
     }
-    get_partial_out_of_range(&create_direct_io_fs()?)
+    get_partial_out_of_range(&create_direct_io_fs(false)?)
 }
 
 #[test]
@@ -291,7 +305,7 @@ fn direct_io_set_partial_keeps_the_file_length() -> Result<(), Box<dyn Error>> {
 
     // The direct I/O path of `set` truncates to the written length; a partial write at offset
     // 0 must not take it.
-    let store: FilesystemStore = create_direct_io_fs()?;
+    let store: FilesystemStore = create_direct_io_fs(false)?;
     let key: StoreKey = "a".try_into()?;
     store.set(&key, vec![5u8; 8192].into())?;
     store.set_partial(&key, 0, vec![1, 2].into())?;
@@ -407,7 +421,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let store: FilesystemStore = create_direct_io_fs()?;
+    let store: FilesystemStore = create_direct_io_fs(false)?;
 
     let ps = page_size::get();
     let base_vec: Bytes = (0..(ps * 10) + 15)
@@ -540,56 +554,62 @@ fn filesystem_multipart() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn filesystem_multipart_staging_file() -> Result<(), Box<dyn Error>> {
-    let path = tempfile::TempDir::new()?;
-    let mut options = FilesystemStoreOptions::default();
-    options.file_handle_cache_size(4);
-    let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
-    let key: StoreKey = "a/b".try_into()?;
-    store.set(&key, Bytes::from_static(b"old").into())?;
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
+    for atomic_write in [false, true] {
+        let path = tempfile::TempDir::new()?;
+        let mut options = FilesystemStoreOptions::default();
+        options.file_handle_cache_size(4).atomic_write(atomic_write);
+        let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
+        let key: StoreKey = "a/b".try_into()?;
+        store.set(&key, Bytes::from_static(b"old").into())?;
+        assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
 
-    // Many parts, more than one vectored write, including empty parts
-    let parts: Vec<Vec<u8>> = (0..200u8).map(|i| vec![i; usize::from(i % 3)]).collect();
-    let expected: Vec<u8> = parts.concat();
-    let mut writer = store.set_multipart(&key, None)?;
-    writer.write_many(parts.iter().map(Into::into).collect())?;
-    writer.write(Bytes::from_static(b"end").into())?;
+        // Many parts, more than one vectored write, including empty parts
+        let parts: Vec<Vec<u8>> = (0..200u8).map(|i| vec![i; usize::from(i % 3)]).collect();
+        let expected: Vec<u8> = parts.concat();
+        let mut writer = store.set_multipart(&key, None)?;
+        writer.write_many(parts.iter().map(Into::into).collect())?;
+        writer.write(Bytes::from_static(b"end").into())?;
 
-    // The staging file is hidden from listing, and the old value is intact
-    let files = files_on_disk(path.path());
-    assert_eq!(files.len(), 2);
-    assert!(files
-        .iter()
-        .any(|file| file.starts_with("a/.b.") && file.ends_with(".zarrs-part")));
-    assert_eq!(store.list()?, vec![key.clone()]);
-    assert_eq!(store.list_prefix(&"a/".try_into()?)?, vec![key.clone()]);
-    assert_eq!(
-        store.list_dir(&"a/".try_into()?)?.keys(),
-        &vec![key.clone()]
-    );
-    assert_eq!(store.size()?, 3);
-    assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
+        // The staging file is hidden from listing, and the old value is intact
+        let files = files_on_disk(path.path());
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .any(|file| file.starts_with("a/.b.") && file.ends_with(".zarrs-part")));
+        assert_eq!(store.list()?, vec![key.clone()]);
+        assert_eq!(store.list_prefix(&"a/".try_into()?)?, vec![key.clone()]);
+        assert_eq!(
+            store.list_dir(&"a/".try_into()?)?.keys(),
+            &vec![key.clone()]
+        );
+        assert_eq!(store.size()?, 3);
+        assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"old")));
 
-    writer.finish()?;
-    assert_eq!(files_on_disk(path.path()), vec!["a/b".to_string()]);
-    assert_eq!(
-        store.get(&key)?,
-        Some(Bytes::from([expected, b"end".to_vec()].concat()))
-    );
+        writer.finish()?;
+        assert_eq!(files_on_disk(path.path()), vec!["a/b".to_string()]);
+        assert_eq!(
+            store.get(&key)?,
+            Some(Bytes::from([expected, b"end".to_vec()].concat()))
+        );
+    }
     Ok(())
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn filesystem_multipart_finish_failure_removes_the_staging_file() -> Result<(), Box<dyn Error>> {
-    let path = tempfile::TempDir::new()?;
-    let store = FilesystemStore::new(path.path())?.sorted();
-    let key: StoreKey = "a/b".try_into()?;
-    std::fs::create_dir_all(store.key_to_fspath(&key).join("c"))?;
-    let mut writer = store.set_multipart(&key, None)?;
-    writer.write(Bytes::from_static(b"value").into())?;
-    assert!(writer.finish().is_err());
-    assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    for atomic_write in [false, true] {
+        let path = tempfile::TempDir::new()?;
+        let mut options = FilesystemStoreOptions::default();
+        options.atomic_write(atomic_write);
+        let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
+        let key: StoreKey = "a/b".try_into()?;
+        std::fs::create_dir_all(store.key_to_fspath(&key).join("c"))?;
+        let mut writer = store.set_multipart(&key, None)?;
+        writer.write(Bytes::from_static(b"value").into())?;
+        assert!(writer.finish().is_err());
+        assert_eq!(files_on_disk(path.path()), Vec::<String>::new());
+    }
     Ok(())
 }
 
@@ -597,18 +617,25 @@ fn filesystem_multipart_finish_failure_removes_the_staging_file() -> Result<(), 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn direct_io_multipart() -> Result<(), Box<dyn Error>> {
-    let store = create_direct_io_fs()?;
-    assert!(!store.supports_multipart());
-    zarrs_storage::store_test::store_multipart(&store)?;
+    let tmpfile = tempfile::NamedTempFile::new()?;
+    if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
+        return Ok(());
+    }
+    for atomic_write in [false, true] {
+        let store = create_direct_io_fs(atomic_write)?;
+        assert!(!store.supports_multipart());
+        zarrs_storage::store_test::store_multipart(&store)?;
+    }
     Ok(())
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn atomic_write_adapter_multipart() -> Result<(), Box<dyn Error>> {
+fn filesystem_atomic_write_multipart() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
-    let store = AtomicWriteStorageAdapter::new(store);
+    let mut options = FilesystemStoreOptions::default();
+    options.atomic_write(true);
+    let store = FilesystemStore::new_with_options(path.path(), options)?.sorted();
     assert!(store.supports_multipart_patch());
     zarrs_storage::store_test::store_multipart(&store)?;
     zarrs_storage::store_test::store_multipart_patch(&store)?;

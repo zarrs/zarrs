@@ -17,9 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MemoryStore` and `AsyncMemoryStore` append the parts into one buffer reserved from the size hint
   - Add `store_test::{store_multipart,async_store_multipart}`
   - Add `[Async]StoreWriter::patch`, which overwrites bytes already written (default `Unsupported`), `[Async]WritableStorageTraits::supports_multipart_patch` (default `false`), and `store_test::store_multipart_patch`; `StorageHandle` and the storage adapters forward them
-  - `StorageHandle` and the storage adapters forward multipart writes to their storage: `PerformanceMetricsStorageAdapter` counts each part as a write, `UsageLogStorageAdapter` logs each call of the writer, `AtomicWriteStorageAdapter` writes to the temporary key and renames it on finish, and `SyncToAsyncStorageAdapter`/`AsyncToSyncStorageAdapter` run each call of the writer on a blocking thread/with `block_on`
+  - `StorageHandle` and the storage adapters forward multipart writes to their storage: `PerformanceMetricsStorageAdapter` counts each part as a write, `UsageLogStorageAdapter` logs each call of the writer, and `SyncToAsyncStorageAdapter`/`AsyncToSyncStorageAdapter` run each call of the writer on a blocking thread/with `block_on`
 
 ### Changed
+- **Breaking**: Remove `AtomicWriteStorageAdapter` and `AtomicRenameStorageTraits`; use `zarrs_filesystem::FilesystemStoreOptions::atomic_write` for atomic filesystem writes
 - `MemoryStore` guards its values with a `RwLock` rather than a `Mutex`, so concurrent reads do not block each other
 - `AsyncMemoryStore` guards its values with a `std::sync::RwLock` rather than a `futures::lock::Mutex`, so concurrent reads do not block each other
 - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them

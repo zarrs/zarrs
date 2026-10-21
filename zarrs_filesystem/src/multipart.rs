@@ -11,10 +11,10 @@ use zarrs_storage::{CowBytes, StorageError, StoreKey, StoreWriter};
 
 use crate::FilesystemStore;
 
-/// The suffix of the staging file of a multipart write.
+/// The suffix of the staging file of an atomic or multipart write.
 pub(crate) const STAGING_SUFFIX: &str = ".zarrs-part";
 
-/// Returns true if `file_name` is the name of the staging file of a multipart write.
+/// Returns true if `file_name` is the name of the staging file of an atomic or multipart write.
 pub(crate) fn is_staging_file(file_name: &std::ffi::OsStr) -> bool {
     file_name
         .to_str()
@@ -44,10 +44,24 @@ pub(crate) struct FilesystemStoreWriter<'s> {
 
 impl<'s> FilesystemStoreWriter<'s> {
     pub(crate) fn new(store: &'s FilesystemStore, key: &StoreKey) -> Result<Self, StorageError> {
+        Self::new_with_options(store, key, &mut OpenOptions::new())
+    }
+
+    /// Create a staging writer with the supplied file options, including direct I/O flags.
+    pub(crate) fn new_with_options(
+        store: &'s FilesystemStore,
+        key: &StoreKey,
+        options: &mut OpenOptions,
+    ) -> Result<Self, StorageError> {
+        if key == &StoreKey::root() {
+            return Err(StorageError::Other(
+                "staged writes do not support the root store key".to_string(),
+            ));
+        }
         let key_path = store.key_to_fspath(key);
         let (Some(parent), Some(name)) = (key_path.parent(), key_path.file_name()) else {
             return Err(StorageError::Other(format!(
-                "the key {key} has no file for a multipart write"
+                "the key {key} has no file for a staged write"
             )));
         };
         let name = name.to_string_lossy();
@@ -57,11 +71,7 @@ impl<'s> FilesystemStoreWriter<'s> {
         loop {
             let number = STAGING_NUMBER.fetch_add(1, Ordering::Relaxed);
             let staging_path = parent.join(format!(".{name}.{number}{STAGING_SUFFIX}"));
-            match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&staging_path)
-            {
+            match options.write(true).create_new(true).open(&staging_path) {
                 Ok(file) => {
                     return Ok(Self {
                         store,
@@ -78,10 +88,20 @@ impl<'s> FilesystemStoreWriter<'s> {
         }
     }
 
-    fn file(&mut self) -> &mut File {
+    pub(crate) fn file(&mut self) -> &mut File {
         self.file
             .as_mut()
             .expect("the file is open until the writer is consumed")
+    }
+
+    /// Synchronise and publish the staged file, removing it on failure.
+    pub(crate) fn commit(mut self) -> Result<(), StorageError> {
+        // Surface write-back errors before dropping the file, which ignores close errors.
+        self.file().sync_all()?;
+        self.store.invalidate_handle(&self.key);
+        std::fs::rename(&self.staging_path, self.store.key_to_fspath(&self.key))?;
+        self.file = None;
+        Ok(())
     }
 
     /// Remove the staging file.
@@ -146,23 +166,8 @@ impl StoreWriter for FilesystemStoreWriter<'_> {
         Ok(())
     }
 
-    fn finish(mut self: Box<Self>) -> Result<(), StorageError> {
-        let result = (|| {
-            // Surface write-back errors before dropping the file, which ignores close errors.
-            self.file().sync_all()?;
-            self.store.invalidate_handle(&self.key);
-            std::fs::rename(&self.staging_path, self.store.key_to_fspath(&self.key))
-        })();
-        match result {
-            Ok(()) => {
-                self.file = None;
-                Ok(())
-            }
-            Err(err) => {
-                // Dropping the writer removes the staging file.
-                Err(err.into())
-            }
-        }
+    fn finish(self: Box<Self>) -> Result<(), StorageError> {
+        self.commit()
     }
 
     fn abort(mut self: Box<Self>) -> Result<(), StorageError> {
