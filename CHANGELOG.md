@@ -128,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `serial_test` to 3.5.0
 
 ### Removed
+- **Breaking**: Remove `SubchunkWriteOrder::Random` variant; use `SubchunkWriteOrder::Unordered` for the same behaviour
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
   - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
