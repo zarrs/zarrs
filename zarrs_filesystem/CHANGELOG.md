@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `lru` to 0.18.2
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
+### Fixed
+- `FilesystemStore::get_partial_many` returns an `InvalidByteRangeError` for a byte range beyond the end of the file, rather than allocating the requested length or reading from the start of the file (`Suffix`)
+  - With direct I/O, such a byte range no longer panics or reads pages beyond the end of the file
+
 ## [0.3.14](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.14) - 2026-10-13
 
 ### Fixed

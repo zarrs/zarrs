@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.5...HEAD)
 
 ### Added
+- Add `ByteRange::{checked_range,checked_range_usize}`, the range of a byte range within bytes of a given length, or `None` if it is out of bounds or overflows
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
 
 ### Changed
@@ -21,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 
 ### Fixed
+- `extract_byte_ranges` and `extract_byte_ranges_concat` return an `InvalidByteRangeError` rather than panicking for a byte range whose end overflows
+- `MemoryStore::get_partial_many` returns an `InvalidByteRangeError` rather than panicking for a suffix longer than the value, a start beyond its end, or an end that overflows
 - Make test utilities available to unit tests without the `tests` feature, and require `async` and `tests` for the adapter integration tests so default all-targets checks compile
 - Avoid a redundant copy in `MemoryStore::set` and `AsyncMemoryStore::set`
 - Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`

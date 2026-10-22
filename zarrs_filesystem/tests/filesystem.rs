@@ -187,6 +187,55 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn get_partial_out_of_range(store: &FilesystemStore) -> Result<(), Box<dyn Error>> {
+    use zarrs_storage::byte_range::ByteRange;
+
+    let key = StoreKey::new("a")?;
+    store.set(&key, vec![0, 1, 2].into())?;
+    for (byte_range, expected_range) in [
+        (ByteRange::Suffix(4), "-4.."),
+        (ByteRange::FromStart(4, None), "4.."),
+        (
+            ByteRange::FromStart(2, Some(u64::MAX)),
+            "2..18446744073709551617",
+        ),
+        (
+            ByteRange::FromStart(u64::MAX, Some(2)),
+            "18446744073709551615..18446744073709551617",
+        ),
+    ] {
+        let err = store.get_partial(&key, byte_range).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("invalid byte range invalid byte range {expected_range} for bytes of length 3")
+        );
+    }
+    assert_eq!(
+        store.get_partial(&key, ByteRange::Suffix(3))?,
+        Some(vec![0, 1, 2].into())
+    );
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn filesystem_get_partial_out_of_range() -> Result<(), Box<dyn Error>> {
+    let path = tempfile::TempDir::new()?;
+    get_partial_out_of_range(&FilesystemStore::new(path.path())?)
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn direct_io_get_partial_out_of_range() -> Result<(), Box<dyn Error>> {
+    let tmpfile = tempfile::NamedTempFile::new()?;
+    if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
+        // Skip this test if direct I/O is not supported
+        return Ok(());
+    }
+    get_partial_out_of_range(&create_direct_io_fs()?)
+}
+
 #[test]
 #[cfg_attr(miri, ignore)]
 fn filesystem_set_partial_in_place() -> Result<(), Box<dyn Error>> {

@@ -10,7 +10,7 @@
 use bytes::BytesMut;
 use thiserror::Error;
 use walkdir::WalkDir;
-use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use zarrs_storage::byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytesIterator,
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
@@ -387,10 +387,14 @@ impl FilesystemStore {
         let file_size: u64 = file.metadata()?.size();
         let ps = page_size::get() as u64;
 
-        // Find intersected pages
-        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
-        let intersected_pages_coalesced =
-            direct_io::coalesce_byte_ranges_with_page_size(file_size, &byte_ranges, ps);
+        // Find intersected pages of the valid byte ranges
+        let byte_ranges = byte_ranges
+            .map(|byte_range| byte_range.checked_range(file_size).ok_or(byte_range))
+            .collect::<Vec<_>>();
+        let intersected_pages_coalesced = direct_io::coalesce_byte_ranges_with_page_size(
+            byte_ranges.iter().filter_map(|range| range.clone().ok()),
+            ps,
+        );
 
         // Read intersected pages
         let mut page_bytes = BTreeMap::new();
@@ -415,19 +419,14 @@ impl FilesystemStore {
         // Extract the requested byte ranges
         let out = byte_ranges
             .into_iter()
-            .map(|byte_range| {
+            .map(|range| {
                 use std::ops::Bound;
 
-                let start = byte_range.start(file_size);
-                let length = usize::try_from(byte_range.length(file_size)).unwrap();
-
-                if (start + length as u64) > file_size {
-                    // NOTE: Could put this check earlier
-                    return Err(zarrs_storage::byte_range::InvalidByteRangeError::new(
-                        byte_range, file_size,
-                    )
-                    .into());
-                }
+                let range = range.map_err(|byte_range| {
+                    zarrs_storage::byte_range::InvalidByteRangeError::new(byte_range, file_size)
+                })?;
+                let start = range.start;
+                let length = usize::try_from(range.end - range.start).unwrap();
 
                 // Find the first element in page_bytes that is >= start_page_aligned
                 let (intersected_pages_start, bytes) = page_bytes
@@ -435,7 +434,7 @@ impl FilesystemStore {
                     .next_back()
                     .ok_or_else(|| {
                         StorageError::Other(format!(
-                            "Could not find intersected pages for byte range {byte_range}"
+                            "Could not find intersected pages for byte range {range:?}"
                         ))
                     })?;
                 // TODO: use upper bound when btree_cursors stabilises
@@ -476,22 +475,11 @@ impl ReadableStorageTraits for FilesystemStore {
 
         let out = byte_ranges
             .map(|byte_range| {
-                // Calculate offset
-                let offset = match byte_range {
-                    ByteRange::FromStart(offset, _) => offset,
-                    ByteRange::Suffix(length) => file_size.saturating_sub(length),
-                };
-
-                // Get read length
-                let length = match byte_range {
-                    ByteRange::FromStart(start, None) => {
-                        file_size.checked_sub(start).ok_or_else(|| {
-                            StorageError::from(InvalidByteRangeError::new(byte_range, file_size))
-                        })?
-                    }
-                    ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => length,
-                };
-                let length = usize::try_from(length).unwrap();
+                let range = byte_range.checked_range(file_size).ok_or_else(|| {
+                    StorageError::from(InvalidByteRangeError::new(byte_range, file_size))
+                })?;
+                let offset = range.start;
+                let length = usize::try_from(range.end - range.start).unwrap();
 
                 // Read at position
                 let mut buffer = Vec::with_capacity(length);

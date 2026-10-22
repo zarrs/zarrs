@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use bytes::BytesMut;
 use futures::{stream, StreamExt};
 
-use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use crate::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError,
@@ -56,20 +56,10 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
 
         let result = byte_ranges
             .map(|byte_range| {
-                let data_len = data.len() as u64;
-                let valid = match byte_range {
-                    ByteRange::FromStart(offset, length) => length
-                        .map_or(Some(offset), |length| offset.checked_add(length))
-                        .is_some_and(|end| end <= data_len),
-                    ByteRange::Suffix(length) => length <= data_len,
-                };
-                if !valid {
-                    return Err(InvalidByteRangeError::new(byte_range, data_len).into());
-                }
-
-                let start = usize::try_from(byte_range.start(data_len)).unwrap();
-                let end = usize::try_from(byte_range.end(data_len)).unwrap();
-                Ok(data.slice(start..end))
+                let range = byte_range
+                    .checked_range_usize(data.len())
+                    .ok_or_else(|| InvalidByteRangeError::new(byte_range, data.len() as u64))?;
+                Ok(data.slice(range))
             })
             .collect::<Vec<_>>();
         Ok(Some(stream::iter(result).boxed()))
@@ -192,6 +182,7 @@ mod tests {
     use futures::executor::block_on;
 
     use super::*;
+    use crate::byte_range::ByteRange;
     use crate::AsyncReadableWritableListableStorageTraits;
 
     #[test]

@@ -23,18 +23,16 @@ impl PartialOrd for IntersectedPages {
 }
 
 pub(super) fn coalesce_byte_ranges_with_page_size(
-    file_size: u64,
-    byte_ranges: &[zarrs_storage::byte_range::ByteRange],
+    byte_ranges: impl Iterator<Item = std::ops::Range<u64>>,
     page_size: u64,
 ) -> impl Iterator<Item = IntersectedPages> {
     use itertools::Itertools;
 
     // Find intersected pages
     let intersected_pages: std::collections::BTreeSet<IntersectedPages> = byte_ranges
-        .iter()
         .map(|range| {
-            let start_page = range.start(file_size) / page_size;
-            let end_page = range.end(file_size).div_ceil(page_size);
+            let start_page = range.start / page_size;
+            let end_page = range.end.div_ceil(page_size);
             IntersectedPages(start_page..end_page)
         })
         .collect();
@@ -59,7 +57,7 @@ mod tests {
     fn test_coalesce_byte_ranges_with_page_size() {
         let ps = 4;
         let file_size = 64;
-        let byte_ranges = vec![
+        let byte_ranges = [
             ByteRange::FromStart(5, Some(2)),  // 1
             ByteRange::FromStart(0, Some(1)),  // 0
             ByteRange::FromStart(30, Some(4)), // 7-8
@@ -68,8 +66,11 @@ mod tests {
             ByteRange::FromStart(8, Some(8)),  // 2-3
             ByteRange::Suffix(7),              // 14-15
         ];
-        let pages: Vec<_> =
-            coalesce_byte_ranges_with_page_size(file_size, &byte_ranges, ps).collect();
+        let pages: Vec<_> = coalesce_byte_ranges_with_page_size(
+            byte_ranges.iter().map(|range| range.to_range(file_size)),
+            ps,
+        )
+        .collect();
         let expected = vec![
             IntersectedPages(0..4),
             IntersectedPages(7..9),

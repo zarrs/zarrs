@@ -142,6 +142,32 @@ impl ByteRange {
     pub fn to_range_usize(&self, size: u64) -> core::ops::Range<usize> {
         self.start(size).try_into().unwrap()..self.end(size).try_into().unwrap()
     }
+
+    /// Convert the byte range to a [`Range<u64>`] of bytes of length `size`.
+    ///
+    /// Returns [`None`] if the byte range is not within the bytes, or its end overflows.
+    #[must_use]
+    pub fn checked_range(&self, size: u64) -> Option<Range<u64>> {
+        match *self {
+            Self::FromStart(offset, None) => (offset <= size).then_some(offset..size),
+            Self::FromStart(offset, Some(length)) => offset
+                .checked_add(length)
+                .filter(|&end| end <= size)
+                .map(|end| offset..end),
+            Self::Suffix(length) => size.checked_sub(length).map(|start| start..size),
+        }
+    }
+
+    /// Convert the byte range to a [`Range<usize>`] of bytes of length `size`, for indexing a slice of `size` bytes.
+    ///
+    /// Returns [`None`] if the byte range is not within the bytes, or its end overflows.
+    #[must_use]
+    pub fn checked_range_usize(&self, size: usize) -> Option<Range<usize>> {
+        // Cannot truncate: the range is within `size`
+        #[allow(clippy::cast_possible_truncation)]
+        self.checked_range(size as u64)
+            .map(|range| range.start as usize..range.end as usize)
+    }
 }
 
 impl std::fmt::Display for ByteRange {
@@ -155,7 +181,9 @@ impl std::fmt::Display for ByteRange {
                 } else {
                     offset.to_string()
                 },
-                length.map_or(String::new(), |length| (offset + length).to_string())
+                length.map_or(String::new(), |length| {
+                    (u128::from(*offset) + u128::from(length)).to_string()
+                })
             ),
             Self::Suffix(length) => write!(f, "-{length}.."),
         }
@@ -175,34 +203,21 @@ impl InvalidByteRangeError {
     }
 }
 
-fn is_valid(byte_range: ByteRange, bytes_len: u64) -> bool {
-    match byte_range {
-        ByteRange::FromStart(offset, length) => offset + length.unwrap_or(0) <= bytes_len,
-        ByteRange::Suffix(length) => length <= bytes_len,
-    }
-}
-
 /// Extract byte ranges from bytes.
 ///
 /// # Errors
 /// Returns [`InvalidByteRangeError`] if any bytes are requested beyond the end of `bytes`.
-///
-/// # Panics
-/// Panics if requesting bytes beyond [`usize::MAX`].
 pub fn extract_byte_ranges<R: Into<ByteRange>>(
     bytes: &[u8],
     byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<Vec<u8>>, InvalidByteRangeError> {
-    let bytes_len = bytes.len() as u64;
     let mut output = Vec::with_capacity(byte_ranges.size_hint().0);
     for byte_range in byte_ranges {
         let byte_range: ByteRange = byte_range.into();
-        if !is_valid(byte_range, bytes_len) {
-            return Err(InvalidByteRangeError(byte_range, bytes_len));
-        }
-        let start = usize::try_from(byte_range.start(bytes_len)).unwrap();
-        let end = usize::try_from(byte_range.end(bytes_len)).unwrap();
-        output.push(bytes[start..end].to_vec());
+        let range = byte_range
+            .checked_range_usize(bytes.len())
+            .ok_or(InvalidByteRangeError(byte_range, bytes.len() as u64))?;
+        output.push(bytes[range].to_vec());
     }
     Ok(output)
 }
@@ -213,42 +228,38 @@ pub fn extract_byte_ranges<R: Into<ByteRange>>(
 /// Returns [`InvalidByteRangeError`] if any bytes are requested beyond the end of `bytes`.
 ///
 /// # Panics
-/// Panics if requesting bytes beyond [`usize::MAX`].
+/// Panics if the length of the concatenated byte ranges exceeds [`usize::MAX`].
 pub fn extract_byte_ranges_concat<R: Into<ByteRange>>(
     bytes: &[u8],
     byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<u8>, InvalidByteRangeError> {
-    let bytes_len = bytes.len() as u64;
     // Collecting into a `Result` would not reserve from the size hint
-    let mut lengths_and_starts = Vec::with_capacity(byte_ranges.size_hint().0);
+    let mut ranges = Vec::with_capacity(byte_ranges.size_hint().0);
     for byte_range in byte_ranges {
         let byte_range: ByteRange = byte_range.into();
-        if !is_valid(byte_range, bytes_len) {
-            return Err(InvalidByteRangeError(byte_range, bytes_len));
-        }
-        lengths_and_starts.push((byte_range.length(bytes_len), byte_range.start(bytes_len)));
+        ranges.push(
+            byte_range
+                .checked_range_usize(bytes.len())
+                .ok_or(InvalidByteRangeError(byte_range, bytes.len() as u64))?,
+        );
     }
-    let out_size = usize::try_from(
-        lengths_and_starts
-            .iter()
-            .map(|(length, _)| length)
-            .sum::<u64>(),
-    )
-    .unwrap();
+    let out_size = ranges
+        .iter()
+        .try_fold(0usize, |size, range| size.checked_add(range.len()))
+        .expect("the concatenated byte ranges exceed usize::MAX");
     if out_size == 0 {
         return Ok(vec![]);
     }
     let mut out = Vec::with_capacity(out_size);
     let out_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut out);
     let mut offset: usize = 0;
-    for (length, start) in &lengths_and_starts {
-        let start = usize::try_from(*start).unwrap();
-        let byte_range_len = usize::try_from(*length).unwrap();
+    for range in ranges {
+        let byte_range_len = range.len();
         // SAFETY: the slices are non-overlapping
         unsafe {
             out_slice
                 .index_mut(offset..offset + byte_range_len)
-                .copy_from_slice(&bytes[start..start + byte_range_len]);
+                .copy_from_slice(&bytes[range]);
         }
         offset += byte_range_len;
     }
@@ -332,11 +343,20 @@ mod tests {
         assert_eq!(byte_range.to_range_usize(10), 1..6);
         assert_eq!(byte_range.length(10), 5);
 
-        assert!(is_valid(ByteRange::FromStart(1, Some(5)), 6));
-        assert!(!is_valid(ByteRange::FromStart(1, Some(5)), 2));
-
-        assert!(is_valid(ByteRange::Suffix(5), 6));
-        assert!(!is_valid(ByteRange::Suffix(5), 2));
+        assert_eq!(
+            ByteRange::FromStart(1, Some(5)).checked_range(6),
+            Some(1..6)
+        );
+        assert_eq!(ByteRange::FromStart(1, Some(5)).checked_range(2), None);
+        assert_eq!(ByteRange::FromStart(6, None).checked_range(6), Some(6..6));
+        assert_eq!(ByteRange::FromStart(7, None).checked_range(6), None);
+        assert_eq!(
+            ByteRange::FromStart(u64::MAX, Some(2)).checked_range(6),
+            None
+        );
+        assert_eq!(ByteRange::Suffix(5).checked_range(6), Some(1..6));
+        assert_eq!(ByteRange::Suffix(5).checked_range(2), None);
+        assert_eq!(ByteRange::Suffix(5).checked_range_usize(6), Some(1..6));
 
         assert!(extract_byte_ranges(
             &[1, 2, 3],
@@ -397,6 +417,14 @@ mod tests {
         assert_eq!(format!("{}", ByteRange::FromStart(0, None)), "..");
         assert_eq!(format!("{}", ByteRange::FromStart(5, None)), "5..");
         assert_eq!(format!("{}", ByteRange::FromStart(5, Some(2))), "5..7");
+        assert_eq!(
+            ByteRange::FromStart(u64::MAX, Some(2)).to_string(),
+            "18446744073709551615..18446744073709551617"
+        );
+        assert_eq!(
+            ByteRange::FromStart(u64::MAX, Some(u64::MAX)).to_string(),
+            "18446744073709551615..36893488147419103230"
+        );
         assert_eq!(format!("{}", ByteRange::Suffix(2)), "-2..");
     }
 
