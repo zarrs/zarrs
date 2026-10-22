@@ -400,6 +400,16 @@ fn extract_elements(
         // The contiguous runs of an array subset are iterated without boxing an iterator, and copied into an output of
         // the known size
         let runs = subset.contiguous_linearised_indices(array_shape)?;
+        // Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
+        // Validate it before allocating the output, which may be large even for truncated input.
+        if let Some((index, elements)) = runs.iter().next_back() {
+            let range = index * element_size..(index + elements) * element_size;
+            if range.end > bytes.len() as u64 {
+                return Err(
+                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64).into(),
+                );
+            }
+        }
         let mut out =
             Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
         for (index, elements) in runs.iter() {
@@ -978,6 +988,42 @@ impl<'a, const N: usize> From<&'a [u8; N]> for ArrayBytes<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_elements_validates_bounds_before_allocation() {
+        let shape = [1u64 << 63];
+        let subset = ArraySubset::new_with_shape(shape.to_vec());
+        assert!(matches!(
+            extract_elements(&[], &subset, &shape, 1),
+            Err(CodecError::InvalidByteRangeError(_))
+        ));
+    }
+
+    #[test]
+    fn extract_elements_validates_last_run() {
+        let subset = ArraySubset::new_with_ranges(&[0..2, 1..3]);
+        // The first run (bytes 2..6) exists, but the last run (bytes 10..14) is truncated.
+        assert!(matches!(
+            extract_elements(&[0; 12], &subset, &[3, 4], 2),
+            Err(CodecError::InvalidByteRangeError(_))
+        ));
+    }
+
+    #[test]
+    fn extract_elements_only_requires_selected_bytes() {
+        let subset = ArraySubset::new_with_ranges(&[0..2, 1..3]);
+        let bytes: Vec<_> = (0..14).collect();
+        assert_eq!(
+            extract_elements(&bytes, &subset, &[3, 4], 2).unwrap(),
+            [2, 3, 4, 5, 10, 11, 12, 13]
+        );
+        let empty_subset = ArraySubset::new_with_shape(vec![0, 4]);
+        assert!(
+            extract_elements(&[], &empty_subset, &[3, 4], 2)
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn offsets_from_usize_uses_narrowest_width() {
