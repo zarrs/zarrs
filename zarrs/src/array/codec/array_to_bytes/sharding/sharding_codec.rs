@@ -59,8 +59,7 @@ fn subchunk_order_iterator(
     match subchunks_write_order {
         SubchunkWriteOrder::C
         | SubchunkWriteOrder::Lexicographic
-        | SubchunkWriteOrder::Unordered
-        | SubchunkWriteOrder::Random => (0..n_chunks).collect_vec(),
+        | SubchunkWriteOrder::Unordered => (0..n_chunks).collect_vec(),
         SubchunkWriteOrder::Colexicographic => (0..n_chunks)
             .sorted_by_cached_key(|&i| {
                 let mut indices =
@@ -964,7 +963,7 @@ impl ShardingCodecBound {
         // Encode the shards and update the shard index
         let subchunks_write_order = self.options.subchunk_write_order();
         let encoded_shard_offset = match subchunks_write_order {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
+            SubchunkWriteOrder::Unordered => {
                 let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                 let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                 (0..n_chunks)
@@ -1172,7 +1171,7 @@ impl ShardingCodecBound {
         // Write shard and update shard index
         if !encoded_chunks.is_empty() {
             match self.options.subchunk_write_order() {
-                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
+                SubchunkWriteOrder::Unordered => {
                     let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                     let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                     encoded_chunks

@@ -768,7 +768,7 @@ mod tests {
         let mut expected = actual.clone();
         let unravel = |i: u64| crate::array::unravel_index(i, grid_shape).unwrap();
         match order {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => return,
+            SubchunkWriteOrder::Unordered => return,
             SubchunkWriteOrder::C | SubchunkWriteOrder::Lexicographic => expected.sort_unstable(),
             SubchunkWriteOrder::Colexicographic => expected.sort_by_key(|&i| {
                 let mut idx = unravel(i);
