@@ -4,9 +4,14 @@
 //! Heap allocation counts of representative array operations.
 //!
 //! A counting global allocator records the number of allocations, the total bytes allocated and the
-//! peak bytes live during an operation.
+//! peak growth in live bytes above the lowest balance seen so far during an operation.
 //! Operations run on a single-thread Rayon pool with a concurrency target of 1.
-//! All scenarios run in one test so other test-harness threads cannot pollute the counters.
+//! Counters are enabled only on that worker during the operation, excluding allocations on other
+//! threads (including test-harness and Rayon startup/teardown work).
+//! Rayon work uses the installed pool, and async operations use `block_on` on the same worker.
+//! These checks do not cover work offloaded to independent threads or pools, or native allocations
+//! that bypass Rust's global allocator. Revisit this assumption if a tested store or codec starts
+//! offloading work.
 //!
 //! Fill-value equality checks must allocate nothing. Other operations are checked against
 //! [`BASELINE`]. A copy of the 128 KiB data exceeds the byte tolerances, so they detect
@@ -14,9 +19,9 @@
 //! Update a baseline only when an operation allocates less.
 
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
 use std::num::NonZeroU64;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
 
 use zarrs::array::codec::ZstdCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, FillValue, data_type};
@@ -25,21 +30,44 @@ use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
 struct CountingAllocator;
 
-static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
-static ALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
-static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
-static PEAK_LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    // Const initialization and a Copy value keep callbacks allocation-free with native TLS.
+    // Targets with allocating, pthread-key-based TLS cannot use this allocator safely.
+    static COUNTER: Cell<Option<AllocationCounter>> = const { Cell::new(None) };
+}
+
+#[derive(Clone, Copy, Default)]
+struct AllocationCounter {
+    stats: Stats,
+    // Inputs can have been allocated before measurement, so dropping them can make this negative.
+    live_bytes: isize,
+    min_live_bytes: isize,
+}
 
 impl CountingAllocator {
     fn record_alloc(size: usize) {
-        ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-        ALLOCATED_BYTES.fetch_add(size, Ordering::Relaxed);
-        let live = LIVE_BYTES.fetch_add(size, Ordering::Relaxed) + size;
-        PEAK_LIVE_BYTES.fetch_max(live, Ordering::Relaxed);
+        let _ = COUNTER.try_with(|counter| {
+            if let Some(mut value) = counter.get() {
+                value.stats.allocations += 1;
+                value.stats.allocated_bytes += size;
+                value.live_bytes += size as isize;
+                value.stats.peak_bytes = value
+                    .stats
+                    .peak_bytes
+                    .max((value.live_bytes - value.min_live_bytes) as usize);
+                counter.set(Some(value));
+            }
+        });
     }
 
     fn record_dealloc(size: usize) {
-        LIVE_BYTES.fetch_sub(size, Ordering::Relaxed);
+        let _ = COUNTER.try_with(|counter| {
+            if let Some(mut value) = counter.get() {
+                value.live_bytes -= size as isize;
+                value.min_live_bytes = value.min_live_bytes.min(value.live_bytes);
+                counter.set(Some(value));
+            }
+        });
     }
 }
 
@@ -71,11 +99,12 @@ unsafe impl GlobalAlloc for CountingAllocator {
 #[global_allocator]
 static GLOBAL: CountingAllocator = CountingAllocator;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct Stats {
     allocations: usize,
     allocated_bytes: usize,
-    /// Peak live bytes above the live bytes at the start of the measurement.
+    /// Maximum growth in live bytes above the lowest balance seen before that allocation.
+    /// Freeing pre-existing inputs cannot mask subsequent allocations or inflate an earlier peak.
     peak_bytes: usize,
 }
 
@@ -89,21 +118,82 @@ where
         .build()
         .unwrap();
     pool.install(|| {
-        let start_live = LIVE_BYTES.load(Ordering::Relaxed);
-        ALLOCATIONS.store(0, Ordering::Relaxed);
-        ALLOCATED_BYTES.store(0, Ordering::Relaxed);
-        PEAK_LIVE_BYTES.store(start_live, Ordering::Relaxed);
+        COUNTER.with(|counter| counter.set(Some(AllocationCounter::default())));
         let result = f();
-        let stats = Stats {
-            allocations: ALLOCATIONS.load(Ordering::Relaxed),
-            allocated_bytes: ALLOCATED_BYTES.load(Ordering::Relaxed),
-            peak_bytes: PEAK_LIVE_BYTES
-                .load(Ordering::Relaxed)
-                .saturating_sub(start_live),
-        };
+        let stats = COUNTER.with(|counter| counter.take().unwrap().stats);
         println!("{name}: {stats:?}");
         (result, stats)
     })
+}
+
+#[test]
+fn counter_isolation() {
+    std::thread::scope(|scope| {
+        // The buffer is allocated before measurement, so sending does not allocate or block.
+        let (start, started) = mpsc::sync_channel(1);
+        let helper = scope.spawn(move || {
+            // If setup panics, dropping the measured closure disconnects this channel.
+            if started.recv().is_ok() {
+                drop(std::hint::black_box(vec![0u8; 4096]));
+            }
+        });
+        let (_, stats) = measure("counter_isolation", move || {
+            start.send(()).unwrap();
+            helper.join().unwrap();
+            std::hint::black_box(vec![0u8; 64])
+        });
+        assert_eq!(stats.allocations, 1, "{stats:?}");
+        assert_eq!(stats.allocated_bytes, 64, "{stats:?}");
+        assert_eq!(stats.peak_bytes, 64, "{stats:?}");
+    });
+}
+
+#[test]
+fn counter_drop_input() {
+    let bytes = std::hint::black_box(vec![0u8; DECODED_BYTES]);
+    let ((), stats) = measure("counter_drop_input", move || drop(bytes));
+    assert_eq!(stats.allocations, 0, "{stats:?}");
+    assert_eq!(stats.allocated_bytes, 0, "{stats:?}");
+    assert_eq!(stats.peak_bytes, 0, "{stats:?}");
+}
+
+#[test]
+fn counter_copy_after_drop() {
+    let input = std::hint::black_box(vec![0u8; 2 * DECODED_BYTES]);
+    let source = std::hint::black_box(vec![1u8; DECODED_BYTES]);
+    let (_, stats) = measure("counter_copy_after_drop", move || {
+        drop(input);
+        // The live balance stays negative even with this full-sized copy.
+        std::hint::black_box(source.clone())
+    });
+    assert_eq!(stats.allocations, 1, "{stats:?}");
+    assert_eq!(stats.allocated_bytes, DECODED_BYTES, "{stats:?}");
+    assert_eq!(stats.peak_bytes, DECODED_BYTES, "{stats:?}");
+}
+
+#[test]
+fn counter_drop_after_peak() {
+    let input = std::hint::black_box(vec![0u8; DECODED_BYTES]);
+    let ((), stats) = measure("counter_drop_after_peak", move || {
+        drop(std::hint::black_box(vec![0u8; 64]));
+        drop(input);
+    });
+    assert_eq!(stats.allocations, 1, "{stats:?}");
+    assert_eq!(stats.allocated_bytes, 64, "{stats:?}");
+    assert_eq!(stats.peak_bytes, 64, "{stats:?}");
+}
+
+#[test]
+fn counter_rayon_work() {
+    let (_, stats) = measure("counter_rayon_work", || {
+        rayon::join(
+            || std::hint::black_box(vec![0u8; 64]),
+            || std::hint::black_box(vec![0u8; 128]),
+        )
+    });
+    assert_eq!(stats.allocations, 2, "{stats:?}");
+    assert_eq!(stats.allocated_bytes, 192, "{stats:?}");
+    assert_eq!(stats.peak_bytes, 192, "{stats:?}");
 }
 
 const SHAPE: [u64; 2] = [256, 256];
@@ -143,32 +233,33 @@ fn array(
 }
 
 /// Allocation baselines: `(name, allocations, allocated bytes, peak bytes)`.
+/// Re-measure with `cargo +nightly test -p zarrs --all-features --test allocations -- --nocapture`.
 const BASELINE: &[(&str, usize, usize, usize)] = &[
-    ("async_retrieve_chunk_zstd", 14, 131433, 131258),
+    ("async_retrieve_chunk_zstd", 11, 131348, 131258),
     (
         "async_store_array_subset_many_chunks_zstd",
-        630,
-        329122,
+        566,
+        327506,
         145603,
     ),
-    ("partial_decoder_sharded_zstd", 852, 100159, 16623),
+    ("partial_decoder_sharded_zstd", 763, 98250, 16340),
     (
         "retrieve_array_subset_many_chunks_zstd",
-        582,
-        274754,
-        140010,
+        438,
+        271346,
+        139994,
     ),
-    ("retrieve_chunk_uncompressed", 11, 257, 162),
-    ("retrieve_chunk_zstd", 11, 131321, 131226),
-    ("retrieve_sharded_all_zstd", 1729, 300621, 135116),
-    ("retrieve_sharded_partial_zstd", 1228, 165813, 26975),
-    ("sharding_decode_borrowed_shard", 1649, 168134, 132852),
-    ("store_array_subset_many_chunks_zstd", 582, 306498, 16948),
-    ("store_array_subset_partial_chunks_zstd", 884, 345870, 21012),
-    ("store_array_subset_sharded", 1449, 493792, 139691),
-    ("store_chunk_uncompressed_borrowed", 10, 131244, 131122),
-    ("store_chunk_zstd", 11, 131780, 131736),
-    ("store_chunks_sharded", 1441, 493616, 139595),
+    ("retrieve_chunk_uncompressed", 8, 172, 162),
+    ("retrieve_chunk_zstd", 8, 131236, 131226),
+    ("retrieve_sharded_all_zstd", 1329, 292072, 134956),
+    ("retrieve_sharded_partial_zstd", 1116, 163408, 26692),
+    ("sharding_decode_borrowed_shard", 1252, 159670, 132692),
+    ("store_array_subset_many_chunks_zstd", 502, 304802, 16948),
+    ("store_array_subset_partial_chunks_zstd", 696, 341618, 21012),
+    ("store_array_subset_sharded", 1380, 492662, 139691),
+    ("store_chunk_uncompressed_borrowed", 5, 131138, 131122),
+    ("store_chunk_zstd", 6, 131674, 131658),
+    ("store_chunks_sharded", 1372, 492486, 139595),
 ];
 
 /// The baseline of `name`.
@@ -223,6 +314,7 @@ fn measure_and_check<R: Send>(
     check(name, stats);
 }
 
+#[test]
 fn retrieve_chunk_uncompressed() {
     let array = array(&SHAPE, false, None);
     measure_and_check("retrieve_chunk_uncompressed", &array, |array| {
@@ -231,6 +323,7 @@ fn retrieve_chunk_uncompressed() {
     });
 }
 
+#[test]
 fn retrieve_chunk_zstd() {
     let array = array(&SHAPE, true, None);
     measure_and_check("retrieve_chunk_zstd", &array, |array| {
@@ -238,6 +331,7 @@ fn retrieve_chunk_zstd() {
     });
 }
 
+#[test]
 fn retrieve_array_subset_many_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     measure_and_check("retrieve_array_subset_many_chunks_zstd", &array, |array| {
@@ -247,20 +341,26 @@ fn retrieve_array_subset_many_chunks_zstd() {
     });
 }
 
-fn retrieve_sharded_zstd() {
+#[test]
+fn retrieve_sharded_all_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     measure_and_check("retrieve_sharded_all_zstd", &array, |array| {
         array
             .retrieve_array_subset::<ArrayBytes>(&array.subset_all())
             .unwrap()
     });
+}
 
+#[test]
+fn retrieve_sharded_partial_zstd() {
+    let array = array(&SHAPE, true, Some(&[32, 32]));
     let subset = ArraySubset::new_with_ranges(&[16..112, 16..112]);
     measure_and_check("retrieve_sharded_partial_zstd", &array, |array| {
         array.retrieve_array_subset::<ArrayBytes>(&subset).unwrap()
     });
 }
 
+#[test]
 fn partial_decoder_sharded_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     measure_and_check("partial_decoder_sharded_zstd", &array, |array| {
@@ -276,6 +376,7 @@ fn partial_decoder_sharded_zstd() {
     });
 }
 
+#[test]
 fn sharding_decode_borrowed_shard() {
     let array = array(&SHAPE, false, Some(&[32, 32]));
     let encoded = array.retrieve_encoded_chunk(&[0, 0]).unwrap().unwrap();
@@ -296,6 +397,7 @@ fn sharding_decode_borrowed_shard() {
     check("sharding_decode_borrowed_shard", stats);
 }
 
+#[test]
 fn store_chunk_uncompressed_borrowed() {
     let array = array(&SHAPE, false, None);
     let data = data();
@@ -305,6 +407,7 @@ fn store_chunk_uncompressed_borrowed() {
     check("store_chunk_uncompressed_borrowed", stats);
 }
 
+#[test]
 fn store_chunk_zstd() {
     let array = array(&SHAPE, true, None);
     let data = data();
@@ -314,6 +417,7 @@ fn store_chunk_zstd() {
     check("store_chunk_zstd", stats);
 }
 
+#[test]
 fn store_array_subset_sharded() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     let data = data();
@@ -325,6 +429,7 @@ fn store_array_subset_sharded() {
     check("store_array_subset_sharded", stats);
 }
 
+#[test]
 fn store_array_subset_many_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     let data = data();
@@ -335,6 +440,7 @@ fn store_array_subset_many_chunks_zstd() {
     });
 }
 
+#[test]
 fn store_array_subset_partial_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     let subset = ArraySubset::new_with_ranges(&[32..224, 32..224]);
@@ -344,6 +450,7 @@ fn store_array_subset_partial_chunks_zstd() {
     });
 }
 
+#[test]
 fn store_chunks_sharded() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     let data = data();
@@ -358,6 +465,7 @@ fn store_chunks_sharded() {
 }
 
 #[cfg(feature = "async")]
+#[test]
 fn async_retrieve_chunk_zstd() {
     use zarrs::storage::store::AsyncMemoryStore;
     let store = Arc::new(AsyncMemoryStore::new());
@@ -374,6 +482,7 @@ fn async_retrieve_chunk_zstd() {
 }
 
 #[cfg(feature = "async")]
+#[test]
 fn async_store_array_subset_many_chunks_zstd() {
     use zarrs::storage::store::AsyncMemoryStore;
     let array = ArrayBuilder::new(SHAPE.to_vec(), vec![64, 64], data_type::uint16(), 0u16)
@@ -391,6 +500,7 @@ fn async_store_array_subset_many_chunks_zstd() {
     check("async_store_array_subset_many_chunks_zstd", stats);
 }
 
+#[test]
 fn optional_fill_value_checks() {
     for depth in 1..=3 {
         let mut fill_value = FillValue::from(0x1234u16);
@@ -411,27 +521,5 @@ fn optional_fill_value_checks() {
             assert_eq!(matches, expected);
             assert_eq!(stats.allocations, 0, "{name}, depth {depth}: {stats:?}");
         }
-    }
-}
-
-#[test]
-fn allocation_regressions() {
-    optional_fill_value_checks();
-    retrieve_chunk_uncompressed();
-    retrieve_chunk_zstd();
-    retrieve_array_subset_many_chunks_zstd();
-    retrieve_sharded_zstd();
-    partial_decoder_sharded_zstd();
-    sharding_decode_borrowed_shard();
-    store_chunk_uncompressed_borrowed();
-    store_chunk_zstd();
-    store_array_subset_sharded();
-    store_array_subset_many_chunks_zstd();
-    store_array_subset_partial_chunks_zstd();
-    store_chunks_sharded();
-    #[cfg(feature = "async")]
-    {
-        async_retrieve_chunk_zstd();
-        async_store_array_subset_many_chunks_zstd();
     }
 }

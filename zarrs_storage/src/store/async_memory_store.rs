@@ -1,9 +1,9 @@
 //! An asynchronous in-memory store.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::RwLock;
 
 use bytes::BytesMut;
-use futures::lock::Mutex;
 use futures::{stream, StreamExt};
 
 use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
@@ -14,11 +14,9 @@ use crate::{
 };
 
 /// An asynchronous in-memory store.
-///
-/// This store uses [`futures::lock::Mutex`], so it is not tied to a particular async runtime.
 #[derive(Debug)]
 pub struct AsyncMemoryStore {
-    data_map: Mutex<BTreeMap<StoreKey, Bytes>>,
+    data_map: RwLock<BTreeMap<StoreKey, Bytes>>,
 }
 
 impl Default for AsyncMemoryStore {
@@ -32,7 +30,7 @@ impl AsyncMemoryStore {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data_map: Mutex::new(BTreeMap::new()),
+            data_map: RwLock::default(),
         }
     }
 }
@@ -41,7 +39,7 @@ impl AsyncMemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncReadableStorageTraits for AsyncMemoryStore {
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map.get(key).cloned())
     }
 
@@ -50,7 +48,7 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         let Some(data) = data_map.get(key).cloned() else {
             return Ok(None);
         };
@@ -78,7 +76,7 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map.get(key).map(|entry| entry.len() as u64))
     }
 
@@ -92,7 +90,7 @@ impl AsyncReadableStorageTraits for AsyncMemoryStore {
 impl AsyncWritableStorageTraits for AsyncMemoryStore {
     async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
-        let mut data_map = self.data_map.lock().await;
+        let mut data_map = self.data_map.write().unwrap();
         data_map.insert(key.clone(), value.into());
         Ok(())
     }
@@ -102,7 +100,7 @@ impl AsyncWritableStorageTraits for AsyncMemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().await;
+        let mut data_map = self.data_map.write().unwrap();
         let entry = data_map.entry(key.clone()).or_default();
 
         // Take ownership so try_into_mut can succeed when there are no other clones.
@@ -122,13 +120,13 @@ impl AsyncWritableStorageTraits for AsyncMemoryStore {
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().await;
+        let mut data_map = self.data_map.write().unwrap();
         data_map.remove(key);
         Ok(())
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.lock().await;
+        let mut data_map = self.data_map.write().unwrap();
         data_map.retain(|key, _| !key.has_prefix(prefix));
         Ok(())
     }
@@ -142,12 +140,12 @@ impl AsyncWritableStorageTraits for AsyncMemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncListableStorageTraits for AsyncMemoryStore {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map.keys().cloned().collect())
     }
 
     async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map
             .keys()
             .filter(|&key| key.has_prefix(prefix))
@@ -158,7 +156,7 @@ impl AsyncListableStorageTraits for AsyncMemoryStore {
     async fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
         let mut keys: StoreKeys = vec![];
         let mut prefixes: BTreeSet<StorePrefix> = BTreeSet::new();
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         for key in data_map.keys() {
             if key.has_prefix(prefix) {
                 let key_strip = key.as_str().strip_prefix(prefix.as_str()).unwrap();
@@ -177,7 +175,7 @@ impl AsyncListableStorageTraits for AsyncMemoryStore {
     }
 
     async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        let data_map = self.data_map.lock().await;
+        let data_map = self.data_map.read().unwrap();
         Ok(data_map
             .iter()
             .filter(|(key, _)| key.has_prefix(prefix))
