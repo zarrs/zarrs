@@ -221,10 +221,10 @@ impl<T: Indexer> Indexer for &[T] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        let linearised_indices = self
-            .iter()
-            .map(|indexer| indexer.iter_linearised_indices(array_shape))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indexer in *self {
+            linearised_indices.push(indexer.iter_linearised_indices(array_shape)?);
+        }
 
         Ok(Box::new(
             linearised_indices
@@ -237,10 +237,11 @@ impl<T: Indexer> Indexer for &[T] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        let contiguous_linearised_indices = self
-            .iter()
-            .map(|indexer| indexer.iter_contiguous_linearised_indices(array_shape))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut contiguous_linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indexer in *self {
+            contiguous_linearised_indices
+                .push(indexer.iter_contiguous_linearised_indices(array_shape)?);
+        }
 
         Ok(Box::new(
             contiguous_linearised_indices
@@ -376,21 +377,20 @@ impl Indexer for &[ArrayIndices] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        let linearised_indices = self
-            .iter()
-            .map(|indices| {
-                if indices.len() == array_shape.len() {
-                    ravel_indices(indices, array_shape)
-                        .ok_or_else(|| IndexerError::new_oob(indices.clone(), array_shape.to_vec()))
-                } else {
-                    Err(IncompatibleDimensionalityError::new(
-                        self.dimensionality(),
-                        array_shape.len(),
-                    )
-                    .into())
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indices in *self {
+            if indices.len() == array_shape.len() {
+                let index = ravel_indices(indices, array_shape)
+                    .ok_or_else(|| IndexerError::new_oob(indices.clone(), array_shape.to_vec()))?;
+                linearised_indices.push(index);
+            } else {
+                return Err(IncompatibleDimensionalityError::new(
+                    self.dimensionality(),
+                    array_shape.len(),
+                )
+                .into());
+            }
+        }
         Ok(Box::new(linearised_indices.into_iter()))
     }
 
@@ -398,23 +398,20 @@ impl Indexer for &[ArrayIndices] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        let contiguous_linearised_indices = self
-            .iter()
-            .map(|indices| {
-                if indices.len() == array_shape.len() {
-                    let index = ravel_indices(indices, array_shape).ok_or_else(|| {
-                        IndexerError::new_oob(indices.clone(), array_shape.to_vec())
-                    })?;
-                    Ok((index, 1))
-                } else {
-                    Err(IncompatibleDimensionalityError::new(
-                        self.dimensionality(),
-                        array_shape.len(),
-                    )
-                    .into())
-                }
-            })
-            .collect::<Result<Vec<_>, IndexerError>>()?;
+        let mut contiguous_linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indices in *self {
+            if indices.len() == array_shape.len() {
+                let index = ravel_indices(indices, array_shape)
+                    .ok_or_else(|| IndexerError::new_oob(indices.clone(), array_shape.to_vec()))?;
+                contiguous_linearised_indices.push((index, 1));
+            } else {
+                return Err(IncompatibleDimensionalityError::new(
+                    self.dimensionality(),
+                    array_shape.len(),
+                )
+                .into());
+            }
+        }
         Ok(Box::new(contiguous_linearised_indices.into_iter()))
     }
 }
@@ -611,6 +608,78 @@ impl<const N: usize> Indexer for [Range<u64>; N] {
 mod tests {
     use super::*;
     use crate::ArraySubset;
+
+    #[test]
+    fn collection_order_empty_and_large() {
+        for count in [0, 1, 1024] {
+            let indices: Vec<Vec<u64>> = (0..count).rev().map(|i| vec![i]).collect();
+            let subsets: Vec<_> = (0..count)
+                .rev()
+                .map(|i| ArraySubset::new_with_ranges(&[i..i + 1]))
+                .collect();
+            for indexer in [&indices as &dyn Indexer, &subsets as &dyn Indexer] {
+                assert_eq!(
+                    indexer
+                        .iter_linearised_indices(&[1024])
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    (0..count).rev().collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    indexer
+                        .iter_contiguous_linearised_indices(&[1024])
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    (0..count).rev().map(|i| (i, 1)).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn collection_first_error() {
+        let indices: Vec<Vec<u64>> = vec![vec![0], vec![4], vec![0, 0]];
+        let subsets = vec![
+            ArraySubset::new_with_ranges(&[0..1]),
+            ArraySubset::new_with_ranges(&[4..5]),
+            ArraySubset::new_with_ranges(&[0..1, 0..1]),
+        ];
+        for indexer in [&indices as &dyn Indexer, &subsets as &dyn Indexer] {
+            assert!(matches!(
+                indexer.iter_linearised_indices(&[4]),
+                Err(IndexerError::OutOfBounds(..))
+            ));
+            assert!(matches!(
+                indexer.iter_contiguous_linearised_indices(&[4]),
+                Err(IndexerError::OutOfBounds(..))
+            ));
+        }
+        let indices = vec![vec![0], vec![0, 0], vec![4]];
+        assert!(matches!(
+            indices.iter_linearised_indices(&[4]),
+            Err(IndexerError::IncompatibleDimensionality(..))
+        ));
+        assert!(matches!(
+            indices.iter_contiguous_linearised_indices(&[4]),
+            Err(IndexerError::IncompatibleDimensionality(..))
+        ));
+    }
+
+    #[test]
+    fn optional_chunk_shape() {
+        for count in [0, 1, 1024] {
+            let subset = ArraySubset::new_with_shape(vec![2; count]);
+            assert_eq!(
+                subset.chunk_shape().unwrap(),
+                vec![std::num::NonZeroU64::new(2).unwrap(); count]
+            );
+        }
+        assert!(
+            ArraySubset::new_with_shape(vec![2, 0, 3])
+                .chunk_shape()
+                .is_none()
+        );
+    }
 
     /// Test `as_array_subset` is Some for types implementing ArraySubsetTraits.
     #[test]

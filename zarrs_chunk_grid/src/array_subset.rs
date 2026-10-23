@@ -207,7 +207,11 @@ impl ArraySubset {
     /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
     #[must_use]
     pub fn chunk_shape(&self) -> Option<ChunkShape> {
-        self.shape.iter().map(|s| NonZeroU64::new(*s)).collect()
+        let mut shape = Vec::with_capacity(self.shape.len());
+        for &size in &self.shape {
+            shape.push(NonZeroU64::new(size)?);
+        }
+        Some(shape)
     }
 
     /// Return the shape of the array subset.
