@@ -159,15 +159,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
                 "Length of transpose codec `order` does not match chunk grid dimensionality",
             ));
         };
-        let chunk_shapes = self
-            .order
-            .0
-            .iter()
-            .map(|&decoded_dim| {
-                let edge_lengths = decoded_chunk_grid.chunk_edge_lengths(decoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+        let mut chunk_shapes = Vec::with_capacity(self.order.0.len());
+        for &dimension in &self.order.0 {
+            let edge_lengths = decoded_chunk_grid.chunk_edge_lengths(dimension)?;
+            chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
+        }
 
         Ok(ChunkGridEncoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(array_shape, &chunk_shapes)?,
@@ -196,13 +192,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
         }
 
         let inverse = inverse_permutation(&self.order.0);
-        let chunk_shapes = inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+        let mut chunk_shapes = Vec::with_capacity(inverse.len());
+        for &dimension in &inverse {
+            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(dimension)?;
+            chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
+        }
 
         Ok(ChunkGridDecoded::Array(ChunkGrid::new(
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,

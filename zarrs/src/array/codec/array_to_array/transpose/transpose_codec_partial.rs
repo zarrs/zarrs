@@ -85,15 +85,14 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             ));
         }
 
-        let chunk_shapes = self
-            .order_inverse
-            .iter()
-            .map(|&encoded_dim| {
-                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                Ok(ChunkEdgeLengths::encode(&edge_lengths))
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let mut chunk_shapes = Vec::with_capacity(self.order_inverse.len());
+        for &dimension in &self.order_inverse {
+            let edge_lengths = encoded_subchunk_grid
+                .chunk_edge_lengths(dimension)
+                .map_err(zarrs_chunk_grid::ChunkGridCreateError::from)
+                .map_err(|err| CodecError::Other(err.to_string()))?;
+            chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
+        }
         let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
         Ok(ChunkGrid::new(
             RectilinearChunkGrid::new(array_shape, &chunk_shapes)

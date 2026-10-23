@@ -124,15 +124,14 @@ impl CodecChain {
         let array_to_bytes =
             self.array_to_bytes
                 .with_context(data_type, fill_value, codec_specific_options)?;
-        let bytes_to_bytes = self
-            .bytes_to_bytes
-            .iter()
-            .map(|codec| {
+        let mut bytes_to_bytes = Vec::with_capacity(self.bytes_to_bytes.len());
+        for codec in &self.bytes_to_bytes {
+            bytes_to_bytes.push(
                 codec
                     .clone()
-                    .with_codec_specific_options(codec_specific_options)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    .with_codec_specific_options(codec_specific_options)?,
+            );
+        }
 
         let mut cache_index_must = None;
         let mut cache_index_should = None;

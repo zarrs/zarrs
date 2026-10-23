@@ -361,13 +361,14 @@ impl Indexer for SubchunkIndices {
                 array_shape.len(),
             ));
         }
-        let linearised_indices = self
-            .elements()
-            .map(|indices| {
-                ravel_indices(indices, array_shape)
-                    .ok_or_else(|| IndexerError::new_oob(indices.to_vec(), array_shape.to_vec()))
-            })
-            .collect::<Result<Vec<u64>, _>>()?;
+        let elements = self.elements();
+        let mut linearised_indices = Vec::with_capacity(elements.size_hint().0);
+        for indices in elements {
+            linearised_indices
+                .push(ravel_indices(indices, array_shape).ok_or_else(|| {
+                    IndexerError::new_oob(indices.to_vec(), array_shape.to_vec())
+                })?);
+        }
         Ok(Box::new(linearised_indices.into_iter()))
     }
 

@@ -184,17 +184,17 @@ where
                     output_subset.clone(),
                 )?
             };
-            let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_slices
-                .iter()
-                .map(|mask_slice| unsafe {
+            let mut mask_views = Vec::with_capacity(mask_slices.len());
+            for mask_slice in mask_slices {
+                mask_views.push(unsafe {
                     ArrayBytesFixedDisjointView::new(
                         *mask_slice,
                         1,
                         &array_subset_shape,
                         output_subset.clone(),
                     )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+                }?);
+            }
             let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
             decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
         };

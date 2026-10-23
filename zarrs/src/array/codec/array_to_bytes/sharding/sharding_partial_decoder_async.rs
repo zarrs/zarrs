@@ -372,48 +372,54 @@ async fn partial_decode_fixed_array_subset_into(
     }
 
     use futures::{StreamExt, TryStreamExt};
-    let decoded_subchunks = futures::stream::iter(subchunks)
-        .map(
-            |(offset_size, chunk_subset, chunk_subset_overlap, output_subset)| {
-                let options = &options;
-                async move {
-                    if let Some((offset, size)) = offset_size {
-                        let inner_partial_decoder = get_subchunk_partial_decoder(
-                            input_handle,
-                            &chunk_subset.chunk_shape().expect("nonempty subchunk"),
-                            inner_codecs,
-                            options,
-                            offset,
-                            size,
-                        )
-                        .await?;
-                        let decoded = inner_partial_decoder
-                            .partial_decode(
-                                &chunk_subset_overlap
-                                    .relative_to(chunk_subset.start())
-                                    .unwrap(),
+    let decoded_subchunks = {
+        let mut values = Vec::with_capacity(subchunks.len());
+        let mut results = futures::stream::iter(subchunks)
+            .map(
+                |(offset_size, chunk_subset, chunk_subset_overlap, output_subset)| {
+                    let options = &options;
+                    async move {
+                        if let Some((offset, size)) = offset_size {
+                            let inner_partial_decoder = get_subchunk_partial_decoder(
+                                input_handle,
+                                &chunk_subset.chunk_shape().expect("nonempty subchunk"),
+                                inner_codecs,
                                 options,
+                                offset,
+                                size,
                             )
-                            .await?
-                            .into_owned();
-                        Ok((Some(decoded), output_subset))
-                    } else {
-                        Ok::<_, CodecError>((None, output_subset))
+                            .await?;
+                            let decoded = inner_partial_decoder
+                                .partial_decode(
+                                    &chunk_subset_overlap
+                                        .relative_to(chunk_subset.start())
+                                        .unwrap(),
+                                    options,
+                                )
+                                .await?
+                                .into_owned();
+                            Ok((Some(decoded), output_subset))
+                        } else {
+                            Ok::<_, CodecError>((None, output_subset))
+                        }
                     }
-                }
-            },
-        )
-        .buffer_unordered(subchunk_concurrent_limit)
-        .try_collect::<Vec<_>>()
-        .await?;
+                },
+            )
+            .buffer_unordered(subchunk_concurrent_limit);
+
+        while let Some(value) = results.try_next().await? {
+            values.push(value);
+        }
+        values
+    };
 
     for (decoded, output_subset) in decoded_subchunks {
         // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
         let mut subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
-        let mut subchunk_mask_views = mask_views
-            .iter()
-            .map(|mask_view| unsafe { mask_view.subdivide(output_subset.clone()) })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
+        for mask_view in &mask_views {
+            subchunk_mask_views.push(unsafe { mask_view.subdivide(output_subset.clone()) }?);
+        }
         let subchunk_target =
             build_nested_optional_target(&mut subchunk_view, &mut subchunk_mask_views);
         if let Some(decoded) = decoded {
@@ -693,30 +699,36 @@ async fn partial_decode_indexer(
     use futures::{StreamExt, TryStreamExt};
 
     let options = &options;
-    let decoded = futures::stream::iter(groups)
-        .map(|(subchunk_index, group)| async move {
-            let shard_index_idx = usize::try_from(subchunk_index).unwrap();
-            let bytes = if let Some((offset, size)) =
-                super::subchunk_offset_size(shard_index, shard_index_idx)
-            {
-                let decoder = get_subchunk_partial_decoder(
-                    input_handle,
-                    &group.subchunk_shape,
-                    inner_codecs,
-                    options,
-                    offset,
-                    size,
-                )
-                .await?;
-                decoder.partial_decode(&group, options).await?.into_owned()
-            } else {
-                ArrayBytes::new_fill_value(data_type, group.len(), fill_value)?
-            };
-            Ok::<_, CodecError>((bytes, group.positions))
-        })
-        .buffer_unordered(subchunk_concurrent_limit)
-        .try_collect::<Vec<_>>()
-        .await?;
+    let decoded = {
+        let mut values = Vec::with_capacity(groups.len());
+        let mut results = futures::stream::iter(groups)
+            .map(|(subchunk_index, group)| async move {
+                let shard_index_idx = usize::try_from(subchunk_index).unwrap();
+                let bytes = if let Some((offset, size)) =
+                    super::subchunk_offset_size(shard_index, shard_index_idx)
+                {
+                    let decoder = get_subchunk_partial_decoder(
+                        input_handle,
+                        &group.subchunk_shape,
+                        inner_codecs,
+                        options,
+                        offset,
+                        size,
+                    )
+                    .await?;
+                    decoder.partial_decode(&group, options).await?.into_owned()
+                } else {
+                    ArrayBytes::new_fill_value(data_type, group.len(), fill_value)?
+                };
+                Ok::<_, CodecError>((bytes, group.positions))
+            })
+            .buffer_unordered(subchunk_concurrent_limit);
+
+        while let Some(value) = results.try_next().await? {
+            values.push(value);
+        }
+        values
+    };
     super::merge_indexer_subchunks(decoded, usize::try_from(indexer.len()).unwrap(), data_type)
 }
 

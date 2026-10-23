@@ -506,9 +506,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     )?
                 };
 
-                let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
-                    .iter()
-                    .map(|mask_slice| unsafe {
+                let mut mask_views = Vec::with_capacity(mask_output_slices.len());
+                for mask_slice in &mask_output_slices {
+                    mask_views.push(unsafe {
                         // SAFETY: chunks represent disjoint array subsets
                         ArrayBytesFixedDisjointView::new(
                             *mask_slice,
@@ -516,8 +516,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                             &array_subset_shape,
                             chunk_subset_in_array.clone(),
                         )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    }?);
+                }
 
                 let target =
                     build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());

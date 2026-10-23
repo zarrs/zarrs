@@ -50,20 +50,23 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
-        decoded_regions
-            .map(|decoded_region| {
-                let bytes = self
-                    .input_handle
-                    .partial_decode(encoded_region(decoded_region, self.suffix_size), options)?;
-                Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
-                    ByteRange::FromStart(_, Some(_)) => bytes,
-                    ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
-                        let length = bytes.len() - self.suffix_size;
-                        bytes.slice(0..length)
-                    }
-                }))
-            })
-            .collect()
+        let mut results = Vec::with_capacity(decoded_regions.size_hint().0);
+        for decoded_region in decoded_regions {
+            let Some(bytes) = self
+                .input_handle
+                .partial_decode(encoded_region(decoded_region, self.suffix_size), options)?
+            else {
+                return Ok(None);
+            };
+            results.push(match decoded_region {
+                ByteRange::FromStart(_, Some(_)) => bytes,
+                ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
+                    let length = bytes.len() - self.suffix_size;
+                    bytes.slice(0..length)
+                }
+            });
+        }
+        Ok(Some(results))
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -132,15 +135,19 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                 }
             }
         });
-        let results: Vec<Option<_>> = futures::stream::iter(futures)
+        let mut values = Vec::with_capacity(futures.size_hint().0);
+        let mut results = futures::stream::iter(futures)
             // A zero target is unconstrained, but buffered(0) never makes progress.
             .buffered(match options.concurrent_target() {
                 0 => usize::MAX,
                 target => target,
-            })
-            .try_collect()
-            .await?;
-        let results: Option<Vec<_>> = results.into_iter().collect();
+            });
+
+        while let Some(value) = results.try_next().await? {
+            values.push(value);
+        }
+        // Resolve missing values only after collecting, so later errors still propagate.
+        let results: Option<Vec<_>> = values.into_iter().collect();
         Ok(results)
     }
 
@@ -176,6 +183,154 @@ mod tests {
         assert_eq!(decode(ByteRange::FromStart(1, Some(2))), vec![1, 2]);
         assert_eq!(decode(ByteRange::Suffix(2)), vec![4, 5]);
         assert_eq!(decode(ByteRange::Suffix(6)), vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn strip_suffix_empty_and_missing() {
+        let input = Arc::new(std::sync::Mutex::new(None));
+        let decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        let options = CodecOptions::default();
+        assert_eq!(
+            decoder
+                .partial_decode_many(Box::new(std::iter::empty()), &options)
+                .unwrap()
+                .unwrap()
+                .len(),
+            0
+        );
+        let ranges =
+            std::iter::once(ByteRange::FromStart(0, Some(1))).chain(std::iter::once_with(|| {
+                panic!("must stop at a missing value")
+            }));
+        assert!(
+            decoder
+                .partial_decode_many(Box::new(ranges), &options)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[cfg(feature = "async")]
+    mod collection_tests {
+        use super::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Clone, Copy)]
+        enum Outcome {
+            Value,
+            Missing,
+            Error,
+            Pending,
+        }
+
+        struct Input {
+            outcomes: [Outcome; 3],
+            second_started: std::sync::Mutex<Option<futures::channel::oneshot::Sender<()>>>,
+            first_resume: std::sync::Mutex<Option<futures::channel::oneshot::Receiver<()>>>,
+            active: AtomicUsize,
+            completed: std::sync::Mutex<Vec<u64>>,
+        }
+
+        struct Active<'a>(&'a AtomicUsize);
+        impl Drop for Active<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl AsyncBytesPartialDecoderTraits for Input {
+            async fn exists(&self) -> Result<bool, StorageError> {
+                Ok(true)
+            }
+            fn size_held(&self) -> usize {
+                0
+            }
+            fn supports_partial_decode(&self) -> bool {
+                true
+            }
+
+            async fn partial_decode_many<'a>(
+                &'a self,
+                mut ranges: ByteRangeIterator<'a>,
+                _options: &CodecOptions,
+            ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
+                let index = ranges.next().unwrap().start(3);
+                self.active.fetch_add(1, Ordering::SeqCst);
+                let _active = Active(&self.active);
+                if index == 0 {
+                    let resume = self.first_resume.lock().unwrap().take().unwrap();
+                    resume.await.unwrap();
+                } else if index == 1 {
+                    self.second_started
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .unwrap()
+                        .send(())
+                        .unwrap();
+                }
+                let result = match self.outcomes[usize::try_from(index).unwrap()] {
+                    Outcome::Value => Ok(Some(vec![vec![u8::try_from(index).unwrap()].into()])),
+                    Outcome::Missing => Ok(None),
+                    Outcome::Error => Err(CodecError::Other("collection error".into())),
+                    Outcome::Pending => std::future::pending().await,
+                };
+                self.completed.lock().unwrap().push(index);
+                result
+            }
+        }
+
+        #[tokio::test]
+        async fn ordering_missing_errors_and_cancellation() {
+            use Outcome::{Error, Missing, Pending, Value};
+            for outcomes in [
+                [Value, Value, Value],
+                [Missing, Error, Value],
+                [Error, Pending, Pending],
+                [Missing, Value, Value],
+            ] {
+                let (started, resume) = futures::channel::oneshot::channel();
+                let input = Arc::new(Input {
+                    outcomes,
+                    second_started: std::sync::Mutex::new(Some(started)),
+                    first_resume: std::sync::Mutex::new(Some(resume)),
+                    active: AtomicUsize::new(0),
+                    completed: std::sync::Mutex::new(Vec::new()),
+                });
+                let decoder = AsyncStripSuffixPartialDecoder::new(input.clone(), SUFFIX_SIZE);
+                let options = CodecOptions::default().with_concurrent_target(3);
+                let ranges = (0u64..3).map(|i| ByteRange::FromStart(i, Some(1)));
+                let result = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    decoder.partial_decode_many(Box::new(ranges), &options),
+                )
+                .await
+                .unwrap();
+                assert_eq!(input.active.load(Ordering::SeqCst), 0);
+                match outcomes {
+                    [Value, Value, Value] => {
+                        let values = result.unwrap().unwrap();
+                        assert_eq!(
+                            values.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+                            vec![&[0][..], &[1][..], &[2][..]]
+                        );
+                        assert_eq!(input.completed.lock().unwrap()[0], 1);
+                    }
+                    [Missing, Value, Value] => {
+                        assert!(result.unwrap().is_none());
+                        assert_eq!(input.completed.lock().unwrap().len(), 3);
+                    }
+                    _ => assert_eq!(result.unwrap_err().to_string(), "collection error"),
+                }
+                let empty = decoder
+                    .partial_decode_many(Box::new(std::iter::empty()), &options)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(empty.len(), 0);
+            }
+        }
     }
 
     #[cfg(feature = "async")]

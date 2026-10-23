@@ -51,20 +51,20 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
         }
 
         let mut encoded_dim = 0;
-        let chunk_shapes = self
-            .shape
-            .iter()
-            .map(|dim| {
-                if dim.get() == 1 {
-                    Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
-                } else {
-                    let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
-                    encoded_dim += 1;
-                    Ok(ChunkEdgeLengths::encode(&edge_lengths))
-                }
-            })
-            .collect::<Result<Vec<_>, zarrs_chunk_grid::ChunkGridCreateError>>()
-            .map_err(|err| CodecError::Other(err.to_string()))?;
+        let mut chunk_shapes = Vec::with_capacity(self.shape.len());
+        for dim in &self.shape {
+            let shape = if dim.get() == 1 {
+                ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())
+            } else {
+                let edge_lengths = encoded_subchunk_grid
+                    .chunk_edge_lengths(encoded_dim)
+                    .map_err(zarrs_chunk_grid::ChunkGridCreateError::from)
+                    .map_err(|err| CodecError::Other(err.to_string()))?;
+                encoded_dim += 1;
+                ChunkEdgeLengths::encode(&edge_lengths)
+            };
+            chunk_shapes.push(shape);
+        }
         let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
         Ok(ChunkGrid::new(
             RectilinearChunkGrid::new(array_shape, &chunk_shapes)

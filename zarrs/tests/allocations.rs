@@ -242,7 +242,7 @@ const BASELINE: &[(&str, usize, usize, usize)] = &[
         327506,
         145603,
     ),
-    ("partial_decoder_sharded_zstd", 763, 98250, 16340),
+    ("partial_decoder_sharded_zstd", 746, 92578, 16340),
     (
         "retrieve_array_subset_many_chunks_zstd",
         438,
@@ -251,15 +251,15 @@ const BASELINE: &[(&str, usize, usize, usize)] = &[
     ),
     ("retrieve_chunk_uncompressed", 8, 172, 162),
     ("retrieve_chunk_zstd", 8, 131236, 131226),
-    ("retrieve_sharded_all_zstd", 1329, 292072, 134956),
-    ("retrieve_sharded_partial_zstd", 1116, 163408, 26692),
-    ("sharding_decode_borrowed_shard", 1252, 159670, 132692),
+    ("retrieve_sharded_all_zstd", 1329, 291_048, 134_940),
+    ("retrieve_sharded_partial_zstd", 1096, 155_920, 26692),
+    ("sharding_decode_borrowed_shard", 1252, 158_646, 132_676),
     ("store_array_subset_many_chunks_zstd", 502, 304802, 16948),
     ("store_array_subset_partial_chunks_zstd", 696, 341618, 21012),
-    ("store_array_subset_sharded", 1380, 492662, 139691),
+    ("store_array_subset_sharded", 1380, 462_966, 139_675),
     ("store_chunk_uncompressed_borrowed", 5, 131138, 131122),
     ("store_chunk_zstd", 6, 131674, 131658),
-    ("store_chunks_sharded", 1372, 492486, 139595),
+    ("store_chunks_sharded", 1372, 462_790, 139_579),
 ];
 
 /// The baseline of `name`.
@@ -521,5 +521,84 @@ fn optional_fill_value_checks() {
             assert_eq!(matches, expected);
             assert_eq!(stats.allocations, 0, "{name}, depth {depth}: {stats:?}");
         }
+    }
+}
+
+// Before reservation, 1,024 one-byte ranges used 1,033 allocations / 50,080 bytes
+// for both helpers. The outer vector now allocates once: 1,025 / 25,600 total.
+#[test]
+fn collection_byte_ranges() {
+    use zarrs::storage::byte_range::{
+        ByteRange, extract_byte_ranges, extract_byte_ranges_read_seek,
+    };
+
+    for count in [0, 1, 1024] {
+        let ranges = vec![ByteRange::FromStart(0, Some(1)); count];
+        let (output, stats) = measure("collection_byte_ranges", || {
+            extract_byte_ranges(&[42], ranges.iter().copied()).unwrap()
+        });
+        assert_eq!(output, vec![vec![42]; count]);
+        assert_eq!(
+            stats.allocations,
+            count + usize::from(count > 0),
+            "{stats:?}"
+        );
+        assert_eq!(stats.allocated_bytes, count * (size_of::<Vec<u8>>() + 1));
+        let (output, stats) = measure("collection_byte_ranges_read_seek", || {
+            extract_byte_ranges_read_seek(std::io::Cursor::new([42]), ranges.iter().copied())
+                .unwrap()
+        });
+        assert_eq!(output, vec![vec![42]; count]);
+        assert_eq!(
+            stats.allocations,
+            count + usize::from(count > 0),
+            "{stats:?}"
+        );
+        assert_eq!(stats.allocated_bytes, count * (size_of::<Vec<u8>>() + 1));
+    }
+}
+
+// The 1,024-index baseline was 10 allocations / 16,384 bytes; now 2 / 8,224.
+#[test]
+fn collection_indexer() {
+    use zarrs_chunk_grid::Indexer;
+
+    for count in [0, 1, 1024] {
+        let indices: Vec<Vec<u64>> = (0..count).map(|i| vec![i]).collect();
+        let (output, stats) = measure("collection_indexer", || {
+            indices.iter_linearised_indices(&[1024]).unwrap()
+        });
+        assert_eq!(output.collect::<Vec<_>>(), (0..count).collect::<Vec<_>>());
+        assert_eq!(stats.allocations, 1 + usize::from(count > 0), "{stats:?}");
+    }
+}
+
+// The 1,024-range baseline was 15 allocations / 114,768 bytes; now 7 / 82,136.
+#[cfg(feature = "async")]
+#[test]
+fn collection_async_partial_decode() {
+    use zarrs::storage::byte_range::ByteRange;
+    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::{AsyncWritableStorageTraits, StoreKey};
+    use zarrs_codec::AsyncBytesPartialDecoderTraits;
+
+    let store = AsyncMemoryStore::new();
+    let key = StoreKey::new("data").unwrap();
+    futures::executor::block_on(store.set(&key, vec![42].into())).unwrap();
+    let decoder = (store, key);
+    for count in [0, 1, 1024] {
+        let ranges = vec![ByteRange::FromStart(0, Some(1)); count];
+        let (output, stats) =
+            measure("collection_async_partial_decode", || {
+                futures::executor::block_on(decoder.partial_decode_many(
+                    Box::new(ranges.iter().copied()),
+                    &CodecOptions::default(),
+                ))
+                .unwrap()
+                .unwrap()
+            });
+        assert_eq!(output.len(), count);
+        assert!(output.iter().all(|bytes| bytes.as_ref() == [42]));
+        assert!(stats.allocations <= 7, "{stats:?}");
     }
 }

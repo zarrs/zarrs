@@ -109,19 +109,18 @@ impl FixedDecodeBuffers {
                 subset.clone(),
             )?
         };
-        let mask_views = self
-            .masks
-            .iter_mut()
-            .map(|mask| unsafe {
+        let mut mask_views = Vec::with_capacity(self.masks.len());
+        for mask in &mut self.masks {
+            mask_views.push(unsafe {
                 // SAFETY: the view is the only view of the mask
                 ArrayBytesFixedDisjointView::new(
                     UnsafeCellSlice::new_from_vec_with_spare_capacity(mask),
                     1,
                     &self.shape,
                     subset.clone(),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                )?
+            });
+        }
         Ok((data_view, mask_views))
     }
 

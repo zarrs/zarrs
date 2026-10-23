@@ -88,15 +88,21 @@ impl RepeatChunkGrid {
             return Err(RepeatChunkGridCreateError::ZeroRepeat(dimension));
         }
 
-        let array_shape = std::iter::zip(&shape, &repeats)
-            .map(|(shape, repeats)| shape.checked_mul(*repeats))
-            .collect::<Option<ArrayShape>>()
-            .ok_or(RepeatChunkGridCreateError::ShapeOverflow)?;
+        let mut array_shape = Vec::with_capacity(repeats.len());
+        for (size, repeats) in std::iter::zip(&shape, &repeats) {
+            array_shape.push(
+                size.checked_mul(*repeats)
+                    .ok_or(RepeatChunkGridCreateError::ShapeOverflow)?,
+            );
+        }
 
-        let grid_shape = std::iter::zip(inner_chunk_grid.grid_shape(), &repeats)
-            .map(|(inner_grid_shape, repeats)| inner_grid_shape.checked_mul(*repeats))
-            .collect::<Option<ArrayShape>>()
-            .ok_or(RepeatChunkGridCreateError::ShapeOverflow)?;
+        let mut grid_shape = Vec::with_capacity(repeats.len());
+        for (size, repeats) in std::iter::zip(inner_chunk_grid.grid_shape(), &repeats) {
+            grid_shape.push(
+                size.checked_mul(*repeats)
+                    .ok_or(RepeatChunkGridCreateError::ShapeOverflow)?,
+            );
+        }
 
         for dimension in 0..shape.len() {
             let inner_edge_lengths =
@@ -159,19 +165,14 @@ impl RepeatChunkGrid {
             return None;
         }
 
-        std::iter::zip(chunk_indices, self.inner_chunk_grid.grid_shape())
-            .map(|(chunk_index, inner_grid_shape)| {
-                if *inner_grid_shape == 0 {
-                    None
-                } else {
-                    Some((
-                        chunk_index / inner_grid_shape,
-                        chunk_index % inner_grid_shape,
-                    ))
-                }
-            })
-            .collect::<Option<Vec<_>>>()
-            .map(|repeat_inner_indices| repeat_inner_indices.into_iter().unzip())
+        let mut repeat_inner_indices = Vec::with_capacity(chunk_indices.len());
+        for (index, size) in std::iter::zip(chunk_indices, self.inner_chunk_grid.grid_shape()) {
+            if *size == 0 {
+                return None;
+            }
+            repeat_inner_indices.push((index / size, index % size));
+        }
+        Some(repeat_inner_indices.into_iter().unzip())
     }
 
     fn local_array_indices(&self, array_indices: &[u64]) -> Option<(ArrayIndices, ArrayIndices)> {
@@ -179,16 +180,14 @@ impl RepeatChunkGrid {
             return None;
         }
 
-        std::iter::zip(array_indices, &self.shape)
-            .map(|(array_index, shape)| {
-                if *shape == 0 {
-                    None
-                } else {
-                    Some((array_index / shape, array_index % shape))
-                }
-            })
-            .collect::<Option<Vec<_>>>()
-            .map(|repeat_local_indices| repeat_local_indices.into_iter().unzip())
+        let mut repeat_local_indices = Vec::with_capacity(array_indices.len());
+        for (index, size) in std::iter::zip(array_indices, &self.shape) {
+            if *size == 0 {
+                return None;
+            }
+            repeat_local_indices.push((index / size, index % size));
+        }
+        Some(repeat_local_indices.into_iter().unzip())
     }
 
     fn offset_origin(&self, repeat_indices: &[u64], inner_origin: &[u64]) -> ArrayIndices {

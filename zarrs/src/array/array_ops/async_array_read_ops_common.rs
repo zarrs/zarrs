@@ -1,8 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 
 use crate::array::{
-    ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset,
-    ArraySubsetTraits, Indexer,
+    ArrayError, ArrayIndicesTinyVec, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
@@ -168,13 +167,13 @@ where
                 data_view_ref.subdivide(chunk_subset_in_view.clone())?
             };
 
-            let mut mask_subs: Vec<ArrayBytesFixedDisjointView<'_>> = mask_view_refs
-                .iter()
-                .map(|mask_view| unsafe {
+            let mut mask_subs = Vec::with_capacity(mask_view_refs.len());
+            for mask_view in mask_view_refs {
+                mask_subs.push(unsafe {
                     // SAFETY: chunks represent disjoint array subsets
                     mask_view.subdivide(chunk_subset_in_view.clone())
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+                }?);
+            }
 
             let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
 

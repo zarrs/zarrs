@@ -122,8 +122,8 @@ impl RectangularChunkGrid {
                 }
             })
             .collect();
-        let grid_shape = std::iter::zip(&array_shape, chunks.iter())
-            .map(|(array_shape, chunks)| match chunks {
+        let grid_sizes =
+            std::iter::zip(&array_shape, chunks.iter()).map(|(array_shape, chunks)| match chunks {
                 RectangularChunkGridDimension::Fixed(s) => {
                     let s = s.get();
                     Some(array_shape.div_ceil(s))
@@ -141,11 +141,13 @@ impl RectangularChunkGrid {
                         None
                     }
                 }
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| {
+            });
+        let mut grid_shape = Vec::with_capacity(grid_sizes.size_hint().0);
+        for size in grid_sizes {
+            grid_shape.push(size.ok_or_else(|| {
                 RectangularChunkGridCreateError(array_shape.clone(), chunk_shapes.to_vec())
-            })?;
+            })?);
+        }
         Ok(Self {
             array_shape,
             chunks,
@@ -230,8 +232,8 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             if self.array_shape.contains(&0) {
                 return Ok(None);
             }
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
+            let values = std::iter::zip(chunk_indices, &self.chunks).map(
+                |(chunk_index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
                     RectangularChunkGridDimension::Varying(offsets_sizes) => {
                         let chunk_index = usize::try_from(*chunk_index).unwrap();
@@ -241,8 +243,16 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                             None
                         }
                     }
-                })
-                .collect::<Option<Vec<_>>>())
+                },
+            );
+            let mut output = Vec::with_capacity(values.size_hint().0);
+            for value in values {
+                let Some(value) = value else {
+                    return Ok(None);
+                };
+                output.push(value);
+            }
+            Ok(Some(output))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -259,8 +269,8 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             if self.array_shape.contains(&0) {
                 return Ok(None);
             }
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
+            let values = std::iter::zip(chunk_indices, &self.chunks).map(
+                |(chunk_index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
                     RectangularChunkGridDimension::Varying(offsets_sizes) => {
                         let chunk_index = usize::try_from(*chunk_index).unwrap();
@@ -270,8 +280,16 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                             None
                         }
                     }
-                })
-                .collect::<Option<Vec<_>>>())
+                },
+            );
+            let mut output = Vec::with_capacity(values.size_hint().0);
+            for value in values {
+                let Some(value) = value else {
+                    return Ok(None);
+                };
+                output.push(value);
+            }
+            Ok(Some(output))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),

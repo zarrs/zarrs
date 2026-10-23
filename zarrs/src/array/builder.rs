@@ -574,18 +574,17 @@ impl ArrayBuilder {
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
-            let subchunk_shape: ChunkShape = subchunk_shape
-                .iter()
-                .copied()
-                .map(NonZeroU64::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| {
+            let mut shape = Vec::with_capacity(subchunk_shape.len());
+            for &size in subchunk_shape {
+                shape.push(NonZeroU64::try_from(size).map_err(|_| {
                     ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::other(
                         ChunkGridCreateError::other(
                             "`subchunk_shape` shape must have all non-zero elements".to_string(),
                         ),
                     ))
-                })?;
+                })?);
+            }
+            let subchunk_shape: ChunkShape = shape;
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, data_type);
             sharding_builder

@@ -336,13 +336,13 @@ fn partial_decode_fixed_array_subset_into(
             // SAFETY: chunks represent disjoint array subsets
             output_view.subdivide(chunk_output_overlap_subset.clone())?
         };
-        let mut subchunk_mask_views = mask_views
-            .iter()
-            .map(|mask_view| unsafe {
+        let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
+        for mask_view in &mask_views {
+            subchunk_mask_views.push(unsafe {
                 // SAFETY: chunks represent disjoint array subsets
                 mask_view.subdivide(chunk_output_overlap_subset.clone())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            }?);
+        }
         let subchunk_target =
             build_nested_optional_target(&mut subchunk_view, &mut subchunk_mask_views);
         if let Some((offset, size)) = offset_size {

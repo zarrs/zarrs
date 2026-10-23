@@ -52,6 +52,22 @@ async fn async_chunk_grid_ops_accept_scattered_indices() -> Result<(), Box<dyn s
         encoded[1],
         array.async_retrieve_encoded_chunk(&[0, 1]).await?
     );
+    let empty: Vec<ArrayIndices> = Vec::new();
+    assert_eq!(
+        array.async_retrieve_encoded_chunks(&empty).await?,
+        Vec::new()
+    );
+    let repeated: Vec<ArrayIndices> = (0..1024)
+        .map(|i| if i % 2 == 0 { vec![1, 0] } else { vec![0, 0] })
+        .collect();
+    let many = array.async_retrieve_encoded_chunks(&repeated).await?;
+    assert_eq!(many.len(), 1024);
+    for (i, value) in many.iter().enumerate() {
+        assert_eq!(value, if i % 2 == 0 { &encoded[0] } else { &None });
+    }
+    for invalid in [vec![vec![9, 9]], vec![vec![0]]] {
+        assert!(array.async_retrieve_encoded_chunks(&invalid).await.is_err());
+    }
     array.async_erase_chunks(&scattered).await?;
     assert!(
         array

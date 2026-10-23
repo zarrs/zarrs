@@ -208,14 +208,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         };
 
         let futures = chunks.iter_indices().map(retrieve_encoded_chunk);
-        futures::stream::iter(futures)
+        let mut values = Vec::with_capacity(futures.size_hint().0);
+        let mut results = futures::stream::iter(futures)
             // A zero target is unconstrained, but buffered(0) never makes progress.
             .buffered(match options.concurrent_target() {
                 0 => usize::MAX,
                 target => target,
-            })
-            .try_collect()
-            .await
+            });
+
+        while let Some(value) = results.try_next().await? {
+            values.push(value);
+        }
+        Ok(values)
     }
 
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
@@ -484,11 +488,19 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 ))
             }
         };
-        let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-            .map(retrieve_chunk)
-            .buffered(chunk_concurrent_limit)
-            .try_collect()
-            .await?;
+        let chunk_bytes_and_subsets = {
+            let indices = chunks.indices();
+            let indices = indices.iter();
+            let mut values = Vec::with_capacity(indices.size_hint().0);
+            let mut results = futures::stream::iter(indices)
+                .map(retrieve_chunk)
+                .buffered(chunk_concurrent_limit);
+
+            while let Some(value) = results.try_next().await? {
+                values.push(value);
+            }
+            values
+        };
         Ok(merge_chunks(
             chunk_bytes_and_subsets,
             &array_subset.shape(),
@@ -547,9 +559,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         )?
                     };
 
-                    let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
-                        .iter()
-                        .map(|mask_slice| unsafe {
+                    let mut mask_views = Vec::with_capacity(mask_output_slices.len());
+                    for mask_slice in mask_output_slices {
+                        mask_views.push(unsafe {
                             // SAFETY: chunks represent disjoint array subsets
                             ArrayBytesFixedDisjointView::new(
                                 *mask_slice,
@@ -557,8 +569,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                                 array_subset_shape,
                                 chunk_subset_in_array.clone(),
                             )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                        }?);
+                    }
 
                     let target =
                         build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());

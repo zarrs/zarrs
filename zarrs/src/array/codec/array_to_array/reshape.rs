@@ -166,16 +166,13 @@ fn get_reshaped_indexer(
 
     let decoded_shape = bytemuck::must_cast_slice(decoded_shape);
     let encoded_shape = bytemuck::must_cast_slice(encoded_shape);
-    let indices = indexer
-        .iter_linearised_indices(decoded_shape)?
-        .map(|linear_index| {
-            unravel_index(linear_index, encoded_shape).ok_or_else(|| {
-                CodecError::Other(
-                    "reshape codec encoded/decoded number of elements differ".to_string(),
-                )
-            })
-        })
-        .collect::<Result<Vec<ArrayIndices>, _>>()?;
+    let linear_indices = indexer.iter_linearised_indices(decoded_shape)?;
+    let mut indices = Vec::with_capacity(linear_indices.size_hint().0);
+    for linear_index in linear_indices {
+        indices.push(unravel_index(linear_index, encoded_shape).ok_or_else(|| {
+            CodecError::Other("reshape codec encoded/decoded number of elements differ".to_string())
+        })?);
+    }
 
     if indices.is_empty() {
         return Ok(ReshapedIndexer::Empty(ArraySubset::new_with_shape(

@@ -681,13 +681,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 // SAFETY: subchunks represent disjoint array subsets
                 output_view.subdivide(output_subset_chunk.clone())?
             };
-            let mut mask_views_subchunk = mask_views
-                .iter()
-                .map(|mask_view| unsafe {
+            let mut mask_views_subchunk = Vec::with_capacity(mask_views.len());
+            for mask_view in &mask_views {
+                mask_views_subchunk.push(unsafe {
                     // SAFETY: subchunks represent disjoint array subsets
                     mask_view.subdivide(output_subset_chunk.clone())
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+                }?);
+            }
             let output_target_subchunk =
                 build_nested_optional_target(&mut output_view_subchunk, &mut mask_views_subchunk);
 

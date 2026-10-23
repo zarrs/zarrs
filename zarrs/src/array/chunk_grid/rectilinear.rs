@@ -157,28 +157,32 @@ impl RectilinearChunkGrid {
             })
             .collect();
 
-        let grid_shape = std::iter::zip(&array_shape, chunks.iter())
-            .map(|(array_size, chunk_dim)| match chunk_dim {
-                RectilinearChunkGridDimension::Fixed(chunk_size) => {
-                    if *array_size == 0 {
-                        Some(0)
-                    } else {
-                        Some(array_size.div_ceil(chunk_size.get()))
+        let grid_sizes =
+            std::iter::zip(&array_shape, chunks.iter()).map(|(array_size, chunk_dim)| {
+                match chunk_dim {
+                    RectilinearChunkGridDimension::Fixed(chunk_size) => {
+                        if *array_size == 0 {
+                            Some(0)
+                        } else {
+                            Some(array_size.div_ceil(chunk_size.get()))
+                        }
+                    }
+                    RectilinearChunkGridDimension::Varying(chunks) => {
+                        let last = chunks.last()?;
+                        if last.offset + last.size.get() >= *array_size {
+                            Some(chunks.len() as u64)
+                        } else {
+                            None
+                        }
                     }
                 }
-                RectilinearChunkGridDimension::Varying(chunks) => {
-                    let last = chunks.last()?;
-                    if last.offset + last.size.get() >= *array_size {
-                        Some(chunks.len() as u64)
-                    } else {
-                        None
-                    }
-                }
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| {
+            });
+        let mut grid_shape = Vec::with_capacity(grid_sizes.size_hint().0);
+        for size in grid_sizes {
+            grid_shape.push(size.ok_or_else(|| {
                 RectilinearChunkGridCreateError(array_shape.clone(), chunk_shapes.to_vec())
-            })?;
+            })?);
+        }
         Ok(Self {
             array_shape,
             chunks,
@@ -264,8 +268,8 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
             return Ok(None);
         }
 
-        Ok(std::iter::zip(chunk_indices, &self.chunks)
-            .map(|(chunk_index, chunk_dim)| match chunk_dim {
+        let values = std::iter::zip(chunk_indices, &self.chunks).map(|(chunk_index, chunk_dim)| {
+            match chunk_dim {
                 RectilinearChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let chunk_index = usize::try_from(*chunk_index).unwrap();
@@ -275,8 +279,16 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                         None
                     }
                 }
-            })
-            .collect::<Option<Vec<_>>>())
+            }
+        });
+        let mut output = Vec::with_capacity(values.size_hint().0);
+        for value in values {
+            let Some(value) = value else {
+                return Ok(None);
+            };
+            output.push(value);
+        }
+        Ok(Some(output))
     }
 
     fn chunk_shape_u64(
@@ -293,8 +305,8 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
             return Ok(None);
         }
 
-        Ok(std::iter::zip(chunk_indices, &self.chunks)
-            .map(|(chunk_index, chunk_dim)| match chunk_dim {
+        let values = std::iter::zip(chunk_indices, &self.chunks).map(|(chunk_index, chunk_dim)| {
+            match chunk_dim {
                 RectilinearChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
                 RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                     let chunk_index = usize::try_from(*chunk_index).unwrap();
@@ -304,8 +316,16 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                         None
                     }
                 }
-            })
-            .collect::<Option<Vec<_>>>())
+            }
+        });
+        let mut output = Vec::with_capacity(values.size_hint().0);
+        for value in values {
+            let Some(value) = value else {
+                return Ok(None);
+            };
+            output.push(value);
+        }
+        Ok(Some(output))
     }
 
     fn chunk_origin(

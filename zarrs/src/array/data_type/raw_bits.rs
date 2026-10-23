@@ -177,15 +177,16 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
             if arr.len() != self.size_bytes {
                 return Err(zarrs_data_type::DataTypeFillValueMetadataError);
             }
-            let bytes: Result<Vec<u8>, _> = arr
-                .iter()
-                .map(|v| {
-                    v.as_u64()
+            let mut bytes = Vec::with_capacity(arr.len());
+            for value in arr {
+                bytes.push(
+                    value
+                        .as_u64()
                         .and_then(|u| u8::try_from(u).ok())
-                        .ok_or(zarrs_data_type::DataTypeFillValueMetadataError)
-                })
-                .collect();
-            Ok(zarrs_data_type::FillValue::from(bytes?))
+                        .ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?,
+                );
+            }
+            Ok(zarrs_data_type::FillValue::from(bytes))
         } else {
             Err(zarrs_data_type::DataTypeFillValueMetadataError)
         }

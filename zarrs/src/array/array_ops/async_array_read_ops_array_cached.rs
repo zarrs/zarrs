@@ -121,11 +121,19 @@ where
         ))
     };
 
-    let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
-        .map(retrieve_chunk)
-        .buffered(chunk_concurrent_limit)
-        .try_collect()
-        .await?;
+    let chunk_bytes_and_subsets = {
+        let indices = chunks.indices();
+        let indices = indices.iter();
+        let mut values = Vec::with_capacity(indices.size_hint().0);
+        let mut results = futures::stream::iter(indices)
+            .map(retrieve_chunk)
+            .buffered(chunk_concurrent_limit);
+
+        while let Some(value) = results.try_next().await? {
+            values.push(value);
+        }
+        values
+    };
 
     Ok(merge_cached_chunks(
         chunk_bytes_and_subsets,
@@ -194,17 +202,17 @@ where
                         output_subset.clone(),
                     )?
                 };
-                let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_slices
-                    .iter()
-                    .map(|mask_slice| unsafe {
+                let mut mask_views = Vec::with_capacity(mask_slices.len());
+                for mask_slice in mask_slices {
+                    mask_views.push(unsafe {
                         ArrayBytesFixedDisjointView::new(
                             *mask_slice,
                             1,
                             array_subset_shape,
                             output_subset.clone(),
                         )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    }?);
+                }
                 let target =
                     build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
                 decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
