@@ -194,14 +194,13 @@ impl<TStorage: AsyncReadableStorageTraits + 'static> AsyncBytesPartialDecoderTra
         _options: &CodecOptions,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let bytes = self.0.get_partial_many(&self.1, decoded_regions).await?;
-        Ok(if let Some(bytes) = bytes {
-            use futures::{StreamExt, TryStreamExt};
-            Some(
-                bytes
-                    .map(|bytes| Ok::<_, StorageError>(CowBytes::from(bytes?)))
-                    .try_collect()
-                    .await?,
-            )
+        Ok(if let Some(mut bytes) = bytes {
+            use futures::StreamExt;
+            let mut outputs = Vec::with_capacity(bytes.size_hint().0);
+            while let Some(bytes) = bytes.next().await {
+                outputs.push(CowBytes::from(bytes?));
+            }
+            Some(outputs)
         } else {
             None
         })

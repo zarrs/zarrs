@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 
 ### Changed
+- Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
 - Make `async-trait` optional and enable it only with the `async` feature.
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views

@@ -156,17 +156,20 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
-            .output_shape()
-            .iter()
-            .map(|f| NonZeroU64::try_from(*f))
-            .collect();
+        let output_shape = (|| {
+            let output_shape = indexer.output_shape();
+            let mut shape = Vec::with_capacity(output_shape.len());
+            for &size in &output_shape {
+                shape.push(NonZeroU64::new(size)?);
+            }
+            Some(shape)
+        })();
 
         // Read the subsets
         let chunk_bytes = self.input_output_handle.partial_decode(indexer, options)?;
 
         // Decode the subsets
-        if let Ok(shape) = output_shape {
+        if let Some(shape) = output_shape {
             let shape = ChunkShape::from(shape);
             self.codec
                 .decode(chunk_bytes, &shape, options)
@@ -510,11 +513,14 @@ where
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
-        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
-            .output_shape()
-            .iter()
-            .map(|f| NonZeroU64::try_from(*f))
-            .collect();
+        let output_shape = (|| {
+            let output_shape = indexer.output_shape();
+            let mut shape = Vec::with_capacity(output_shape.len());
+            for &size in &output_shape {
+                shape.push(NonZeroU64::new(size)?);
+            }
+            Some(shape)
+        })();
 
         // Read the subsets
         let chunk_bytes = self
@@ -523,7 +529,7 @@ where
             .await?;
 
         // Decode the subsets
-        if let Ok(shape) = output_shape {
+        if let Some(shape) = output_shape {
             let shape = ChunkShape::from(shape);
             self.codec
                 .decode(chunk_bytes, &shape, options)

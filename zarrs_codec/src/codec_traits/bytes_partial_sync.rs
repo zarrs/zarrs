@@ -180,7 +180,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         if let Some(input) = self.lock().unwrap().as_ref() {
             let size = input.len() as u64;
-            let mut outputs = vec![];
+            let mut outputs = Vec::with_capacity(decoded_regions.size_hint().0);
             for byte_range in decoded_regions {
                 if byte_range.end(size) <= size {
                     outputs.push(CowBytes::from(
@@ -247,12 +247,11 @@ impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (T
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let results = self.0.get_partial_many(&self.1, decoded_regions)?;
         if let Some(results) = results {
-            Ok(Some(
-                results
-                    .into_iter()
-                    .map(|bytes| Ok::<_, StorageError>(CowBytes::from(bytes?)))
-                    .collect::<Result<Vec<_>, _>>()?,
-            ))
+            let mut outputs = Vec::with_capacity(results.size_hint().0);
+            for bytes in results {
+                outputs.push(CowBytes::from(bytes?));
+            }
+            Ok(Some(outputs))
         } else {
             Ok(None)
         }
