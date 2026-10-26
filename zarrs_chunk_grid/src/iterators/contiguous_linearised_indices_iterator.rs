@@ -38,6 +38,9 @@ impl ContiguousLinearisedIndices {
     /// # Errors
     ///
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
+    ///
+    /// # Panics
+    /// Panics if the linearised indices of `subset` exceed [`u64::MAX`].
     pub fn new(
         subset: &(impl ArraySubsetTraits + ?Sized),
         array_shape: &[u64],

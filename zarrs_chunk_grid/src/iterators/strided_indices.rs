@@ -36,24 +36,44 @@ impl StridedIndices {
     /// `array_shape`, where adjacent positions along a dimension are adjacent elements of the array.
     ///
     /// The positions must be within the array if there are any.
+    ///
+    /// # Panics
+    /// Panics if the linearised index of a position or the number of positions exceeds [`u64::MAX`].
     pub(crate) fn new(starts: &[u64], counts: &[u64], array_shape: &[u64]) -> Self {
         debug_assert_eq!(starts.len(), array_shape.len());
         debug_assert_eq!(counts.len(), array_shape.len());
-        let num_elements = counts.iter().product::<u64>();
+        let mut num_elements = 0;
         let mut first = 0;
-        let mut dimensions = TinyVec::new();
-        if num_elements > 0 {
-            let mut stride = 1;
+        let mut dimensions = TinyVec::<[StridedDimension; 4]>::new();
+        if !counts.contains(&0) {
+            // The linearised indices fit in a `u64` if the last does, since it is the greatest
+            let mut last: u64 = 0;
+            // The stride is only needed along dimensions with a nonzero index, so it may overflow beyond them
+            let mut stride = Some(1u64);
             for ((&start, &count), &array_size) in
                 std::iter::zip(starts, counts).zip(array_shape).rev()
             {
-                first += start * stride;
-                if count > 1 {
-                    dimensions.push(StridedDimension { count, stride });
+                let end = start + (count - 1);
+                if end > 0 {
+                    let stride = stride.expect("linearised indices exceed u64::MAX");
+                    last = end
+                        .checked_mul(stride)
+                        .and_then(|offset| last.checked_add(offset))
+                        .expect("linearised indices exceed u64::MAX");
+                    first += start * stride;
+                    if count > 1 {
+                        dimensions.push(StridedDimension { count, stride });
+                    }
                 }
-                stride *= array_size;
+                stride = stride.and_then(|stride| stride.checked_mul(array_size));
             }
             dimensions.reverse();
+            num_elements = dimensions
+                .iter()
+                .try_fold(1u64, |num_elements, dimension| {
+                    num_elements.checked_mul(dimension.count)
+                })
+                .expect("the number of positions exceeds u64::MAX");
         }
         Self {
             num_elements,

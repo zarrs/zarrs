@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
 - `ArraySubset[Traits]::inbounds_shape` now returns `false` for a subset whose end exceeds `u64::MAX`, and `LinearisedIndices::new`, `ContiguousIndices::new` and `ContiguousLinearisedIndices::new` return an error for it, rather than wrapping in release builds
 - `Indices` iterators over a subset with five or more dimensions no longer yield nothing if the number of elements in the subset exceeds `u64::MAX`
+- `LinearisedIndices` and `ContiguousLinearisedIndices` panic if a linearised index exceeds `u64::MAX`, rather than wrapping in release builds, and no longer overflow in debug builds for an array with more than `u64::MAX` elements whose subset's linearised indices fit
 
 ## [0.5.1] - 2026-02-08
 

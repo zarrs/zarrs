@@ -27,6 +27,9 @@ impl LinearisedIndices {
     ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
+    ///
+    /// # Panics
+    /// Panics if the linearised indices of `subset` exceed [`u64::MAX`].
     pub fn new(
         subset: &(impl ArraySubsetTraits + ?Sized),
         array_shape: &[u64],
@@ -42,13 +45,20 @@ impl LinearisedIndices {
     ///
     /// # Safety
     /// `array_shape` must encapsulate `subset`.
+    ///
+    /// # Panics
+    /// Panics if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`, or if the
+    /// linearised indices of `subset` exceed [`u64::MAX`].
     #[must_use]
     pub unsafe fn new_unchecked(
         subset: &(impl ArraySubsetTraits + ?Sized),
         array_shape: &[u64],
     ) -> Self {
         let (start, shape) = (subset.start(), subset.shape());
-        debug_assert!(validate_start_shape(&start, &shape, array_shape).is_ok());
+        // Out-of-bounds linearised indices are used to index buffers, so this is checked even in release builds
+        if let Err(err) = validate_start_shape(&start, &shape, array_shape) {
+            panic!("{err}");
+        }
         Self {
             indices: StridedIndices::new(&start, &shape, array_shape),
         }
@@ -183,6 +193,32 @@ mod tests {
         assert!(LinearisedIndices::new(&subset, &[10]).is_err());
         let subset = ArraySubset::new_with_start_shape(vec![u64::MAX, 0], vec![2, 1]).unwrap();
         assert!(ContiguousLinearisedIndices::new(&subset, &[10, 1]).is_err());
+    }
+
+    #[test]
+    fn linearised_indices_iterator_large_array() {
+        // The array has more than `u64::MAX` elements, but the linearised indices of the subset fit in a `u64`
+        let array_shape = [1 << 40, 1 << 40];
+        let subset = ArraySubset::new_with_ranges(&[0..1, 5..7]);
+        let indices = LinearisedIndices::new(&subset, &array_shape).unwrap();
+        assert_eq!(indices.iter().collect::<Vec<_>>(), vec![5, 6]);
+        let subset = ArraySubset::new_with_ranges(&[1..2, 0..1]);
+        let indices = ContiguousLinearisedIndices::new(&subset, &array_shape).unwrap();
+        assert_eq!(indices.iter().collect::<Vec<_>>(), vec![(1 << 40, 1)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "linearised indices exceed u64::MAX")]
+    fn linearised_indices_iterator_overflow() {
+        let subset = ArraySubset::new_with_ranges(&[(1 << 40) - 1..1 << 40, 0..1]);
+        let _ = LinearisedIndices::new(&subset, &[1 << 40, 1 << 40]);
+    }
+
+    #[test]
+    #[should_panic(expected = "out-of-bounds")]
+    fn linearised_indices_iterator_unchecked_oob() {
+        let subset = ArraySubset::new_with_ranges(&[1..3, 5..7]);
+        let _ = unsafe { LinearisedIndices::new_unchecked(&subset, &[1, 1]) };
     }
 
     #[test]
