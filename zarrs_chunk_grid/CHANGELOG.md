@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayIndices` is a `TinyVec<[u64; 4]>` rather than a `Vec<u64>`, and `ArrayIndicesTinyVec` is removed
   - Indices of up to four dimensions are held inline, so `ChunkGridTraits::{chunk_origin,chunk_indices,chunk_element_indices}` and the indices of iterators do not allocate
   - `Indexer` is implemented for lists of `Vec<u64>` as well as of `ArrayIndices` (e.g. `vec![vec![0, 1], vec![2, 3]]`)
+- `ArraySubset::bound` computes the bounded start and shape in one pass
+- Remove temporary vectors from `ChunkGridTraits::{chunks_subset,chunks_in_array_subset,iter_chunk_indices,par_iter_chunk_indices}`
 - Bump `zarrs_metadata` to 0.7.6
 - Zero sized dimensions are no longer considered _unlimited_
   - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays

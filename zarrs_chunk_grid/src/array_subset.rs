@@ -186,14 +186,14 @@ impl ArraySubset {
     /// Returns an error if `end` does not match the array subset dimensionality.
     pub fn bound(&self, end: &[u64]) -> Result<Self, ArraySubsetError> {
         if end.len() == self.start.len() {
-            let start = std::iter::zip(&self.start, end)
-                .map(|(&a, &b)| std::cmp::min(a, b))
-                .collect::<ArrayIndices>();
-            let end_exc = std::iter::zip(&self.start, &self.shape).map(|(&s, &l)| s + l);
-            let end = std::iter::zip(end_exc, end)
-                .map(|(a, &b)| std::cmp::min(a, b))
-                .collect::<ArrayIndices>();
-            Ok(Self::new_with_start_end_exc(start, end)?)
+            // Bounding the start and end alike keeps the end at or after the start
+            let (start, shape) = std::iter::zip(std::iter::zip(&self.start, &self.shape), end)
+                .map(|((&start, &size), &end)| {
+                    let bounded_start = start.min(end);
+                    (bounded_start, (start + size).min(end) - bounded_start)
+                })
+                .unzip();
+            Ok(Self { start, shape })
         } else {
             Err(ArraySubsetError::IncompatibleStartEnd {
                 start: self.start.to_vec(),

@@ -381,10 +381,9 @@ pub unsafe trait ChunkGridTraits:
             let chunk0 = self.subset(&chunks.start())?;
             let chunk1 = self.subset(&end)?;
             if let (Some(chunk0), Some(chunk1)) = (chunk0, chunk1) {
-                let ranges = std::iter::zip(chunk0.start(), chunk1.end_exc())
-                    .map(|(&s, e)| s..e)
-                    .collect::<Vec<_>>();
-                Ok(Some(ArraySubset::new_with_ranges(&ranges)))
+                Ok(Some(ArraySubset::from(
+                    std::iter::zip(chunk0.start(), chunk1.end_exc()).map(|(&s, e)| s..e),
+                )))
             } else {
                 Ok(None)
             }
@@ -453,10 +452,9 @@ pub unsafe trait ChunkGridTraits:
 
                 Ok(
                     if let (Some(chunks_start), Some(chunks_end)) = (chunks_start, chunks_end) {
-                        let ranges = std::iter::zip(&chunks_start, chunks_end)
-                            .map(|(&s, e)| s..e + 1)
-                            .collect::<Vec<_>>();
-                        Some(ArraySubset::new_with_ranges(&ranges))
+                        Some(ArraySubset::from(
+                            std::iter::zip(&chunks_start, chunks_end).map(|(&s, e)| s..e + 1),
+                        ))
                     } else {
                         None
                     },
@@ -468,7 +466,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return a serial iterator over the chunk indices of the chunk grid.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
-        let shape = self.grid_shape().to_vec();
+        let shape = self.grid_shape();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         IndicesIntoIterator::new(ArraySubset::new_with_shape(shape), 0..n_chunks)
@@ -476,7 +474,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
-        let shape = self.grid_shape().to_vec();
+        let shape = self.grid_shape();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         ParIndicesIntoIterator {
