@@ -18,6 +18,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 - Sample `numcodecs.fixedscaleoffset` data that is encoded in the range of the encoded data type, as out-of-range values are unspecified
 - Add `schema::describe` to describe a case from its metadata, shape and chunk shape
 - Add `schema::FLETCHER32_ODD_LENGTH`, the non-conformance in `schema::REJECTS_CONFORMANT`
+- Report `packbits` padding compatibility issues with `zarrs` 0.20-0.23 as known issues, and expand coverage of padding encodings and `numcodecs.packbits`
 
 ## [0.1.0] - Unreleased
 

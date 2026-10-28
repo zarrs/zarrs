@@ -1,7 +1,13 @@
 //! The `packbits` codec data type traits.
 
+use crate::codec_traits::bytes::BytesDataTypeTraits;
+
 /// Traits for a data type supporting the `packbits` codec.
-pub trait PackBitsDataTypeTraits {
+///
+/// Components are packed from their little-endian `bytes` codec representation, as in the `packbits` specification.
+/// The `packbits` codec reads decoded bytes directly if [`BytesDataTypeTraits::is_decode_passthrough`] for either byte order,
+/// and otherwise converts them with [`BytesDataTypeTraits::encode`] and [`BytesDataTypeTraits::decode`].
+pub trait PackBitsDataTypeTraits: BytesDataTypeTraits {
     /// The component size in bits.
     fn component_size_bits(&self) -> u64;
 

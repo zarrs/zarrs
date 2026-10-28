@@ -35,7 +35,6 @@ mod bytes_codec_partial;
 use std::sync::Arc;
 
 pub use bytes_codec::BytesCodec;
-pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;

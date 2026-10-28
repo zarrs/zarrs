@@ -6,7 +6,10 @@
 use std::path::Path;
 
 use serde_json::Value;
-use zarrs_regression_testing::schema::FLETCHER32_ODD_LENGTH;
+use zarrs::array::codec::PackBitsDataTypeExt;
+use zarrs::array::{Codec, CodecSpecificOptions, DataType, FillValue};
+use zarrs::metadata::v3::MetadataV3;
+use zarrs_regression_testing::schema::{FLETCHER32_ODD_LENGTH, PACKBITS_PADDING_BYTE_OMITTED};
 
 use crate::native::for_each_codec;
 use crate::releases::Release;
@@ -87,9 +90,88 @@ pub(crate) fn non_conformances(
             _ => {}
         }
     });
+    if PACKBITS_NON_CONFORMANT.contains(&release.0)
+        && let Some(data_type) = array_data_type(metadata)
+        && packbits_padding_byte_omitted(&metadata["codecs"], &data_type)
+    {
+        non_conformances.push(PACKBITS_PADDING_BYTE_OMITTED.to_string());
+    }
     non_conformances.sort();
     non_conformances.dedup();
     non_conformances
+}
+
+/// The releases whose `packbits` codec is non-conformant ([`PACKBITS_PADDING_BYTE_OMITTED`]).
+const PACKBITS_NON_CONFORMANT: std::ops::RangeInclusive<u32> = 20..=23;
+
+/// The data type of array `metadata`, if supported.
+fn array_data_type(metadata: &Value) -> Option<DataType> {
+    let data_type = serde_json::from_value::<MetadataV3>(metadata["data_type"].clone()).ok()?;
+    DataType::from_metadata(&data_type).ok()
+}
+
+/// Whether `codecs` of data with `data_type` include a `packbits` codec that zarrs 0.20 to 0.23 encoded without its padding encoding byte.
+///
+/// The padding encoding byte of `first_byte` and `last_byte` was omitted if the components are whole bytes that are all packed, as these were encoded like the `bytes` codec.
+/// The components are those of the data type encoded by the preceding array-to-array codecs (e.g. `cast_value`).
+fn packbits_padding_byte_omitted(codecs: &Value, data_type: &DataType) -> bool {
+    let mut data_type = data_type.clone();
+    for codec in codecs.as_array().into_iter().flatten() {
+        let configuration = &codec["configuration"];
+        let omitted = match codec["name"].as_str() {
+            Some("packbits") => {
+                let Ok(packbits) = data_type.codec_packbits() else {
+                    return false;
+                };
+                let component_size_bits = packbits.component_size_bits();
+                component_size_bits.is_multiple_of(8)
+                    && matches!(
+                        configuration["padding_encoding"].as_str(),
+                        Some("first_byte" | "last_byte")
+                    )
+                    && configuration["first_bit"].as_u64().unwrap_or(0) == 0
+                    && configuration["last_bit"]
+                        .as_u64()
+                        .is_none_or(|last_bit| last_bit == component_size_bits - 1)
+            }
+            Some("sharding_indexed") => {
+                packbits_padding_byte_omitted(&configuration["codecs"], &data_type)
+            }
+            Some("zarrs.optional" | "optional") => {
+                data_type.optional_inner().is_some_and(|data_type| {
+                    packbits_padding_byte_omitted(&configuration["data_codecs"], data_type)
+                })
+            }
+            _ => {
+                // The data type that later codecs receive is unknown if this codec is not supported
+                let Some(encoded_data_type) = encoded_data_type(codec, data_type) else {
+                    return false;
+                };
+                data_type = encoded_data_type;
+                false
+            }
+        };
+        if omitted {
+            return true;
+        }
+    }
+    false
+}
+
+/// The data type encoded by `codec` from `data_type`, which is unchanged unless it is an array-to-array codec.
+///
+/// Returns [`None`] if the codec is not supported.
+fn encoded_data_type(codec: &Value, data_type: DataType) -> Option<DataType> {
+    let metadata = serde_json::from_value::<MetadataV3>(codec.clone()).ok()?;
+    let Codec::ArrayToArray(codec) = Codec::from_metadata(&metadata).ok()? else {
+        return Some(data_type);
+    };
+    // The fill value does not affect the encoded data type
+    let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap_or_default()]);
+    let codec = codec
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .ok()?;
+    Some(codec.encoded_data_type().clone())
 }
 
 /// Describe the non-conformances of the chunks in `array_dir` of an array with `metadata`.
@@ -244,6 +326,108 @@ mod tests {
         assert_eq!(
             non_conformances(Release(11), &conformant, None),
             Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn packbits_non_conformances() {
+        let omitted = [PACKBITS_PADDING_BYTE_OMITTED];
+        let none: [&str; 0] = [];
+        let packbits = |data_type: Value, configuration: Value| json!({"data_type": data_type, "codecs": [{"name": "packbits", "configuration": configuration}]});
+        let first_byte = json!({"padding_encoding": "first_byte"});
+        for release in [19, 24] {
+            assert_eq!(
+                non_conformances(
+                    Release(release),
+                    &packbits("float32".into(), first_byte.clone()),
+                    None
+                ),
+                Vec::<String>::new()
+            );
+        }
+        for (data_type, configuration, expected) in [
+            ("float32", json!({}), &none[..]),
+            ("float32", json!({"padding_encoding": "none"}), &none[..]),
+            ("float32", first_byte.clone(), &omitted[..]),
+            (
+                "int16",
+                json!({"padding_encoding": "last_byte", "first_bit": 0, "last_bit": 15}),
+                &omitted[..],
+            ),
+            (
+                "float32",
+                json!({"padding_encoding": "first_byte", "last_bit": 30}),
+                &none[..],
+            ),
+            (
+                "int16",
+                json!({"padding_encoding": "last_byte", "first_bit": 1}),
+                &none[..],
+            ),
+            ("uint4", first_byte.clone(), &none[..]),
+            ("bool", first_byte.clone(), &none[..]),
+        ] {
+            for release in 20..=23 {
+                assert_eq!(
+                    non_conformances(
+                        Release(release),
+                        &packbits(data_type.into(), configuration.clone()),
+                        None
+                    ),
+                    expected,
+                    "{data_type} {configuration}"
+                );
+            }
+        }
+
+        // The data type encoded by preceding array-to-array codecs
+        let cast = |data_type: &str, cast_data_type: &str| {
+            json!({"data_type": data_type, "codecs": [
+                {"name": "cast_value", "configuration": {"data_type": cast_data_type, "rounding": "nearest-even", "out_of_range": "clamp"}},
+                {"name": "packbits", "configuration": first_byte},
+            ]})
+        };
+        assert_eq!(
+            non_conformances(Release(23), &cast("uint4", "uint8"), None),
+            omitted
+        );
+        assert_eq!(
+            non_conformances(Release(23), &cast("float32", "uint4"), None),
+            none
+        );
+        let unsupported = json!({"data_type": "uint8", "codecs": [
+            {"name": "unsupported"},
+            {"name": "packbits", "configuration": first_byte},
+        ]});
+        assert_eq!(non_conformances(Release(23), &unsupported, None), none);
+
+        // Inner codecs of `sharding_indexed` and `optional`
+        let sharded = json!({"data_type": "float32", "codecs": [{"name": "sharding_indexed", "configuration": {
+            "chunk_shape": [2],
+            "codecs": [{"name": "packbits", "configuration": first_byte}],
+            "index_codecs": [{"name": "bytes"}],
+        }}]});
+        assert_eq!(non_conformances(Release(23), &sharded, None), omitted);
+        let optional = |data_codecs: Value| {
+            json!({
+                "data_type": {"name": "zarrs.optional", "configuration": {"name": "uint8", "configuration": {}}},
+                "codecs": [{"name": "zarrs.optional", "configuration": {
+                    "mask_codecs": [{"name": "packbits"}],
+                    "data_codecs": data_codecs,
+                }}],
+            })
+        };
+        assert_eq!(
+            non_conformances(Release(23), &optional(json!([{"name": "bytes"}])), None),
+            none
+        );
+        assert_eq!(
+            non_conformances(
+                Release(23),
+                &optional(json!([{"name": "packbits", "configuration": first_byte}])),
+                None
+            ),
+            omitted
         );
     }
 

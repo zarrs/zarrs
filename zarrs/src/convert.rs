@@ -471,6 +471,45 @@ mod tests {
     };
 
     #[test]
+    fn array_v2_packbits() -> Result<(), Box<dyn std::error::Error>> {
+        let metadata = |dtype: &str| -> Result<ArrayMetadataV2, serde_json::Error> {
+            serde_json::from_str(&format!(
+                r#"{{
+                    "chunks": [5],
+                    "compressor": null,
+                    "dtype": "{dtype}",
+                    "fill_value": 0,
+                    "filters": [{{"id": "packbits"}}],
+                    "order": "C",
+                    "shape": [10],
+                    "zarr_format": 2
+                }}"#
+            ))
+        };
+
+        // The packbits filter is an array-to-array codec followed by the bytes codec
+        let array_metadata_v3 = array_metadata_v2_to_v3(&metadata("|b1")?)?;
+        let names: Vec<_> = array_metadata_v3
+            .codecs
+            .iter()
+            .map(MetadataV3::name)
+            .collect();
+        assert_eq!(names, ["numcodecs.packbits", "bytes"]);
+        assert!(
+            array_metadata_v3.codecs[0]
+                .configuration()
+                .is_none_or(|configuration| configuration.is_empty())
+        );
+
+        let mut invalid_metadata = metadata("|b1")?;
+        invalid_metadata.filters = Some(vec![serde_json::from_str(
+            r#"{"id":"packbits","first_bit":0}"#,
+        )?]);
+        assert!(array_metadata_v2_to_v3(&invalid_metadata).is_err());
+        Ok(())
+    }
+
+    #[test]
     #[cfg(all(feature = "blosc", feature = "transpose"))]
     fn array_v2_config() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"

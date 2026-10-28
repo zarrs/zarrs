@@ -8,7 +8,7 @@ use crate::cases::{CodecKind, VlenKind};
 /// The release that introduced a codec, or [`None`] if not yet released.
 pub(crate) fn codec(kind: CodecKind) -> Option<&'static str> {
     match kind {
-        CodecKind::CastValue { .. } => None,
+        CodecKind::CastValue { .. } | CodecKind::NumcodecsPackBits => None,
         CodecKind::Bytes
         | CodecKind::Transpose
         | CodecKind::Blosc { .. }
@@ -38,7 +38,7 @@ pub(crate) fn codec(kind: CodecKind) -> Option<&'static str> {
         CodecKind::FixedScaleOffset { .. }
         // `zarrs.squeeze` is read from `zarrs_registry` 0.1.5
         | CodecKind::Squeeze
-        | CodecKind::PackBits
+        | CodecKind::PackBits { .. }
         | CodecKind::Shuffle
         | CodecKind::Zlib
         // As a Zarr V3 codec (Zarr V2 only from 0.16.0)

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 
-use zarrs_regression_testing::schema::{self, REJECTS_CONFORMANT, Status};
+use zarrs_regression_testing::schema::{self, REJECTS_CONFORMANT, Status, UNREAD_BY_REFERENCE};
 
 use crate::cases::{Case, Combination, DataTypeCase};
 use crate::releases::Release;
@@ -122,6 +122,7 @@ impl Run<'_> {
     /// It is also a failure if current cannot read back data it wrote, unless the latest release cannot either (a known issue).
     ///
     /// It is a known issue rather than a failure if a release cannot read data written by current, and it wrote the case non-conformantly in a way that also makes it reject conformant data (see [`REJECTS_CONFORMANT`]).
+    /// It is also a known issue if current cannot read data written by a release with a non-conformance that current deliberately does not read (see [`UNREAD_BY_REFERENCE`]).
     #[must_use]
     pub(crate) fn failures(&self) -> (Vec<Failure>, Vec<Failure>) {
         let mut failures = Vec::new();
@@ -147,7 +148,19 @@ impl Run<'_> {
                 }
                 let release = Some(release);
                 if let Status::Fail(message) = &release_result.backward {
-                    failures.push(failure(FailureKind::ReleaseToCurrent, release, message));
+                    let failure = failure(FailureKind::ReleaseToCurrent, release, message);
+                    let unread_by_current =
+                        release_result
+                            .non_conformances
+                            .iter()
+                            .any(|non_conformance| {
+                                UNREAD_BY_REFERENCE.contains(&non_conformance.as_str())
+                            });
+                    if unread_by_current {
+                        known_issues.push(failure);
+                    } else {
+                        failures.push(failure);
+                    }
                 }
                 if let Status::Fail(message) = &release_result.forward {
                     let failure = failure(FailureKind::CurrentToRelease, release, message);
