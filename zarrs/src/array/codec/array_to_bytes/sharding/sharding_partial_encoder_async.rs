@@ -142,7 +142,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
     async fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase().await
+        let mut shard_index = self.shard_index.lock().await;
+        self.input_output_handle.erase().await?;
+        shard_index.fill(u64::MAX);
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]

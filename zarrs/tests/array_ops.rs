@@ -1127,6 +1127,57 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
+    builder.subchunk_shape(vec![1, 1]);
+    let array = builder.build_arc(store, "/array")?;
+    array.store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])?;
+
+    // Erasing a shard through a partial encoder must also reset its cached shard index, otherwise a subsequent
+    // partial encode references subchunks of the erased shard
+    let encoder = array.partial_encoder(&[0, 0])?;
+    encoder.erase()?;
+    encoder.partial_encode(
+        &ArraySubset::new_with_ranges(&[0..1, 0..1]),
+        &ArrayBytes::new_flen(vec![42u8]),
+        &CodecOptions::default(),
+    )?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0])?,
+        [42, 255, 255, 255, 255, 255, 255, 255, 255]
+    );
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
+    let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
+    let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
+    builder.subchunk_shape(vec![1, 1]);
+    let array = builder.build_arc(store, "/array")?;
+    array
+        .async_store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])
+        .await?;
+
+    let encoder = array.async_partial_encoder(&[0, 0]).await?;
+    encoder.erase().await?;
+    encoder
+        .partial_encode(
+            &ArraySubset::new_with_ranges(&[0..1, 0..1]),
+            &ArrayBytes::new_flen(vec![42u8]),
+            &CodecOptions::default(),
+        )
+        .await?;
+    assert_eq!(
+        array.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+        [42, 255, 255, 255, 255, 255, 255, 255, 255]
+    );
+    Ok(())
+}
+
 #[cfg(feature = "async")]
 mod async_cached {
     use std::sync::Arc;

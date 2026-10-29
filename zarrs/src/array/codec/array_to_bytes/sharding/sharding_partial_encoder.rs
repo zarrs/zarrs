@@ -131,7 +131,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     fn erase(&self) -> Result<(), super::CodecError> {
-        self.input_output_handle.erase()
+        let mut shard_index = self.shard_index.lock().unwrap();
+        self.input_output_handle.erase()?;
+        shard_index.fill(u64::MAX);
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
