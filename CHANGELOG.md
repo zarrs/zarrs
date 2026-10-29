@@ -206,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove the `async-generic` dependency
 
 ### Fixed
+- Reject shard index entries whose subchunk spans overflow or exceed the shard when compacting a shard, instead of panicking
 - `zstd` `decode_into` reports an output of the wrong length as `CodecError::UnexpectedChunkDecodedSize` (like other codecs) without decompressing, where the frames record their decoded size
 - **Breaking**: The `packbits` codec writes the padding encoding byte of `first_byte` and `last_byte` when the components are whole bytes that are all packed (e.g. `float32`), as required by the specification
   - It was omitted, as these were encoded with the `bytes` codec. Such chunks written by `zarrs` 0.20-0.23 are no longer read

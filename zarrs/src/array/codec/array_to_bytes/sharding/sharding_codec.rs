@@ -30,6 +30,7 @@ use zarrs_codec::{
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_storage::byte_range::ByteRange;
 
 /// Return the subchunk grid of a sharded `chunk_grid`.
 ///
@@ -415,64 +416,58 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let index_encoded_size =
             compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
 
-        // Check if compaction is needed (no-op optimization)
-        let mut needs_compaction = false;
-        let mut chunks_size = 0;
-        for &[offset, size] in shard_index.as_chunks::<2>().0 {
-            if offset != u64::MAX && size != u64::MAX {
-                chunks_size += size;
-            }
-        }
-        if chunks_size != bytes.len() as u64 - index_encoded_size {
-            needs_compaction = true;
-        }
-
-        if !needs_compaction {
-            return Ok(None); // No compaction needed
-        }
-
-        // Calculate compact size
-        let data_size: usize = shard_index
+        // Validate the byte ranges of the encoded subchunks
+        let subchunk_byte_ranges = shard_index
             .as_chunks::<2>()
             .0
             .iter()
-            .filter(|chunk| chunk[0] != u64::MAX)
-            .map(|chunk| usize::try_from(chunk[1]).unwrap())
-            .sum();
+            .map(|&[offset, size]| {
+                if offset == u64::MAX && size == u64::MAX {
+                    Ok(None)
+                } else {
+                    ByteRange::FromStart(offset, Some(size))
+                        .checked_range_usize(bytes.len())
+                        .map(Some)
+                        .ok_or_else(shard_index_out_of_bounds)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let data_size = subchunk_byte_ranges
+            .iter()
+            .flatten()
+            .try_fold(0usize, |sum, byte_range| sum.checked_add(byte_range.len()))
+            .ok_or_else(shard_index_out_of_bounds)?;
+        let index_encoded_size = usize::try_from(index_encoded_size).unwrap();
 
-        let compact_size = data_size + usize::try_from(index_encoded_size).unwrap();
+        // Check if compaction is needed (no-op optimization)
+        if data_size == bytes.len() - index_encoded_size {
+            return Ok(None); // No compaction needed
+        }
 
         // Build compacted shard
+        let compact_size = data_size
+            .checked_add(index_encoded_size)
+            .ok_or_else(shard_index_out_of_bounds)?;
         let mut compact_shard = vec![0u8; compact_size];
         let mut new_index = vec![u64::MAX; shard_index.len()];
 
         let mut write_offset = match self.index_location {
-            ShardingIndexLocation::Start => usize::try_from(index_encoded_size).unwrap(),
+            ShardingIndexLocation::Start => index_encoded_size,
             ShardingIndexLocation::End => 0,
         };
 
-        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
-            if old_offset != u64::MAX && size != u64::MAX {
-                let old_offset_usize = usize::try_from(old_offset).unwrap();
-                let size_usize = usize::try_from(size).unwrap();
-
-                // Validate bounds
-                if old_offset_usize + size_usize > bytes.len() {
-                    return Err(CodecError::Other(
-                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                            .to_string(),
-                    ));
-                }
-
+        for (i, byte_range) in subchunk_byte_ranges.into_iter().enumerate() {
+            if let Some(byte_range) = byte_range {
                 // Copy chunk data
-                compact_shard[write_offset..write_offset + size_usize]
-                    .copy_from_slice(&bytes[old_offset_usize..old_offset_usize + size_usize]);
+                let size = byte_range.len();
+                compact_shard[write_offset..write_offset + size]
+                    .copy_from_slice(&bytes[byte_range]);
 
                 // Update index
                 new_index[i * 2] = u64::try_from(write_offset).unwrap();
-                new_index[i * 2 + 1] = size;
+                new_index[i * 2 + 1] = u64::try_from(size).unwrap();
 
-                write_offset += size_usize;
+                write_offset += size;
             }
         }
 
@@ -771,4 +766,11 @@ impl ShardingCodecBound {
             resources,
         )
     }
+}
+
+/// A corrupt shard index references bytes outside of the shard, or a subchunk end that overflows.
+fn shard_index_out_of_bounds() -> CodecError {
+    CodecError::Other(
+        "The shard index references out-of-bounds bytes. The chunk may be corrupted.".to_string(),
+    )
 }
