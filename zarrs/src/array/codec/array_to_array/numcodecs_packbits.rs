@@ -29,7 +29,7 @@ mod numcodecs_packbits_partial;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecSubchunkingTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
@@ -221,6 +221,25 @@ impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
         _encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(ChunkGridDecoded::None)
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        _encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        // Packed elements are not aligned to the encoded bytes
+        Ok(None)
+    }
+
+    fn encoded_coordinates(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        _decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        Err(CodecError::Other(
+            "the numcodecs.packbits codec does not map elements to encoded elements".to_string(),
+        ))
     }
 }
 

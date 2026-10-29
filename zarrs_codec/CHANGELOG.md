@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 - Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
+- Add `ArrayToArrayCodecSubchunkingTraits::{decoded_local_subchunk_grid,encoded_coordinates}` to map chunk-local subchunk grids and element coordinates through an array-to-array codec
+  - Add `validate_chunk_coordinates`
+  - The default array-to-array partial decoder maps chunk-local subchunk grids through its codec, rather than passing them through unchanged
 
 ### Changed
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk

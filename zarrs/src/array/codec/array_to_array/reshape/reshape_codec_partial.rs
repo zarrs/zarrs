@@ -63,18 +63,6 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
             data_type: data_type.clone(),
         }
     }
-
-    fn map_local_subchunk_grid(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<Option<ChunkGrid>, CodecError> {
-        reshape_rectilinear_grid(
-            &self.encoded_shape,
-            &self.decoded_shape,
-            encoded_subchunk_grid,
-        )
-        .map_err(|err| CodecError::Other(err.to_string()))
-    }
 }
 
 #[cfg(feature = "async")]
@@ -117,7 +105,12 @@ where
         self.input_handle
             .local_subchunk_grids(options)?
             .into_iter()
-            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
+            .map(|grid| {
+                grid.map_or(Ok(None), |grid| {
+                    reshape_rectilinear_grid(&self.encoded_shape, &self.decoded_shape, &grid)
+                        .map_err(|err| CodecError::Other(err.to_string()))
+                })
+            })
             .collect()
     }
 }
@@ -169,7 +162,12 @@ where
             .local_subchunk_grids(options)
             .await?
             .into_iter()
-            .map(|grid| grid.map_or(Ok(None), |grid| self.map_local_subchunk_grid(&grid)))
+            .map(|grid| {
+                grid.map_or(Ok(None), |grid| {
+                    reshape_rectilinear_grid(&self.encoded_shape, &self.decoded_shape, &grid)
+                        .map_err(|err| CodecError::Other(err.to_string()))
+                })
+            })
             .collect()
     }
 }

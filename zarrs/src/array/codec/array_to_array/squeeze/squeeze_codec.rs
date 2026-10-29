@@ -5,7 +5,7 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -244,6 +244,70 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(decoded_shape, encoded_subchunk_grid).map(Some)
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        zarrs_codec::validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
+        // Squeezed dimensions have a length of one, so their coordinates are zero
+        let encoded_coordinates: ArrayIndices = std::iter::zip(decoded_coordinates, decoded_shape)
+            .filter(|(_, length)| length.get() > 1)
+            .map(|(&coordinate, _)| coordinate)
+            .collect();
+        if encoded_coordinates.is_empty() {
+            Ok(ArrayIndices::from([0].as_slice()))
+        } else {
+            Ok(encoded_coordinates)
+        }
+    }
+}
+
+/// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `decoded_shape`.
+pub(super) fn decoded_local_subchunk_grid(
+    decoded_shape: &[NonZeroU64],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, CodecError> {
+    let expected_dimensionality = decoded_shape
+        .iter()
+        .filter(|dim| dim.get() > 1)
+        .count()
+        .max(1);
+    if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
+        return Err(CodecError::Other(
+            "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
+                .to_string(),
+        ));
+    }
+
+    let mut encoded_dim = 0;
+    let chunk_shapes = decoded_shape
+        .iter()
+        .map(|dim| {
+            if dim.get() == 1 {
+                Ok(ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap()))
+            } else {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                encoded_dim += 1;
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            }
+        })
+        .collect::<Result<Vec<_>, ChunkGridCreateError>>()
+        .map_err(|err| CodecError::Other(err.to_string()))?;
+    let array_shape = bytemuck::must_cast_slice(decoded_shape).to_vec();
+    Ok(ChunkGrid::new(
+        RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+            .map_err(|err| CodecError::Other(err.to_string()))?,
+    ))
 }
 
 #[cfg_attr(

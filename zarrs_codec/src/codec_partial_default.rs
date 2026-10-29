@@ -146,6 +146,24 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
     }
 }
 
+impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits> {
+    /// Map the chunk-local subchunk grids of the encoded chunk to the decoded chunk.
+    fn decoded_local_subchunk_grids(
+        &self,
+        encoded_subchunk_grids: Vec<Option<super::ChunkGrid>>,
+    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
+        let shape = self.decoded_representation.shape();
+        encoded_subchunk_grids
+            .into_iter()
+            .map(|grid| {
+                grid.map_or(Ok(None), |grid| {
+                    self.codec.decoded_local_subchunk_grid(shape, &grid)
+                })
+            })
+            .collect()
+    }
+}
+
 impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
@@ -155,7 +173,7 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
+        self.decoded_local_subchunk_grids(self.input_output_handle.local_subchunk_grids(options)?)
     }
 }
 
@@ -518,7 +536,11 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
+        self.decoded_local_subchunk_grids(
+            self.input_output_handle
+                .local_subchunk_grids(options)
+                .await?,
+        )
     }
 }
 

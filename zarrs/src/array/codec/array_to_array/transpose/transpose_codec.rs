@@ -202,6 +202,60 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(
+            decoded_shape,
+            &inverse_permutation(&self.order.0),
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        zarrs_codec::validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
+        permute(decoded_coordinates, &self.order.0).ok_or_else(|| {
+            CodecError::Other(
+                "Length of transpose codec `order` does not match chunk dimensionality".to_string(),
+            )
+        })
+    }
+}
+
+/// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `decoded_shape`.
+pub(super) fn decoded_local_subchunk_grid(
+    decoded_shape: &[NonZeroU64],
+    order_inverse: &[usize],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, CodecError> {
+    if order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+        return Err(CodecError::Other(
+            "Length of transpose codec `order` does not match local subchunk grid dimensionality"
+                .to_string(),
+        ));
+    }
+
+    let chunk_shapes = order_inverse
+        .iter()
+        .map(|&encoded_dim| {
+            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+            Ok(ChunkEdgeLengths::encode(&edge_lengths))
+        })
+        .collect::<Result<Vec<_>, ChunkGridCreateError>>()
+        .map_err(|err| CodecError::Other(err.to_string()))?;
+    let array_shape = bytemuck::must_cast_slice(decoded_shape).to_vec();
+    Ok(ChunkGrid::new(
+        RectilinearChunkGrid::new(array_shape, &chunk_shapes)
+            .map_err(|err| CodecError::Other(err.to_string()))?,
+    ))
 }
 
 #[cfg_attr(
