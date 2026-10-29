@@ -22,6 +22,8 @@
   - `zarrs: 0.11-0.12` `numcodecs.bz2` codec with the unregistered `bz2` name
   - `zarrs: 0.10-0.12` `zfp` codec with the non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (registered as `fixed_rate`, `fixed_precision`, and `fixed_accuracy`)
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
+- `zarrs: 0.20-0.23` Data encoded with `packbits` with a `first_byte` or `last_byte` `padding_encoding` omitted the padding encoding byte if the components are whole bytes that are all packed (e.g. `float32`, or `int8` without `first_bit`/`last_bit`)
+  - These chunks fail to be decoded by other Zarr implementations. `zarrs` 0.24+ reads them, as they are one byte shorter than conformant chunks
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`

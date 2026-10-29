@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add sync/async array I/O latency benchmarks with a latency-injecting store, peak request concurrency, both Tokio runtime modes, and borrowed/owned writes
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 - Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
+- Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
 - Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
   - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
 - Add the `cast_value` array-to-array codec
@@ -60,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key
 - **Breaking**: `ArrayError::{InvalidArraySubset,InvalidChunkSubset}` box their `ArraySubset`, so array results stay small now that subsets are stored inline
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- Bind the equivalent `bytes` codec once for whole-byte `packbits` components instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
+- **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
 - Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
 - Retrieve complete cached chunks without extracting a subset
@@ -148,6 +149,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
+- **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Existing `zarrs` 0.20-0.23 chunks remain readable, but those releases cannot read the corrected chunks
+- Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
+- Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 - Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
 - Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
 - Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
@@ -161,7 +165,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `gdeflate` codec decodes chunks of more than one page and returns an error rather than panicking if a page is corrupt
 - The `gdeflate` codec checks decoded representation bounds and validates unbounded input page by page before allocating the full decoded length
 - The `bytes` codec returns an error rather than panicking if a decoded shape's element count or byte size overflows
-- The `packbits` codec returns an error rather than panicking if a decoded shape's element count or packed size overflows
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
@@ -179,10 +182,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass the encoded shape and data type to the partial decoder cache in a codec chain
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 - Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- Fix the `packbits` codec:
-  - Sign extension of `int2`/`int4` data when partially decoding
-  - Sign extension of data types wider than a byte, which only extended to the end of the byte holding the sign bit
-  - Partial decoding with a non-zero `first_bit`
 - Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
 - Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
 - Fix `numcodecs.fixedscaleoffset` encoding to match `numcodecs`

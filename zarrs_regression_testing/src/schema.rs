@@ -339,14 +339,25 @@ pub struct Subject {
     pub reference: bool,
 }
 
-/// Non-conformances (see [`Outcomes::non_conformances`]) of data written by a subject that also make it reject the conformant equivalent.
+/// Non-conformances (see [`Outcomes::non_conformances`]) of data written by a subject that also make it reject or misread the conformant equivalent.
 ///
 /// A subject failing to read conformant data of a case is a known issue rather than a regression if it wrote the case with one of these non-conformances.
-pub const REJECTS_CONFORMANT: &[&str] = &[FLETCHER32_ODD_LENGTH];
+pub const REJECTS_CONFORMANT: &[&str] = &[FLETCHER32_ODD_LENGTH, PACKBITS_PADDING_BYTE_OMITTED];
+
+/// Non-conformances (see [`Outcomes::non_conformances`]) of data written by a subject that the reference subject deliberately does not read.
+///
+/// The reference subject failing to read data of a case is a known issue rather than a regression if the case was written with one of these non-conformances.
+pub const UNREAD_BY_REFERENCE: &[&str] = &[];
 
 /// The non-conformance of `numcodecs.fletcher32` checksums that omit the last byte of data with an odd length (zarrs 0.19 to 0.23), which also makes a subject reject conformant checksums (see [`REJECTS_CONFORMANT`]).
 pub const FLETCHER32_ODD_LENGTH: &str =
     "`numcodecs.fletcher32` checksums omit the last byte of data with an odd length";
+
+/// The non-conformance of `packbits` omitting the `first_byte` or `last_byte` padding encoding byte if whole-byte components are all packed (zarrs 0.20 to 0.23, see [`REJECTS_CONFORMANT`]).
+///
+/// The reference subject reads these chunks, as they are one byte shorter than conformant chunks.
+pub const PACKBITS_PADDING_BYTE_OMITTED: &str =
+    "`packbits` omits the padding encoding byte if whole-byte components are all packed";
 
 /// The outcome of a subject writing a case.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
