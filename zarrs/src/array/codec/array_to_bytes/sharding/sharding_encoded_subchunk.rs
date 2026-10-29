@@ -1,11 +1,11 @@
 //! Encoded subchunk access for the sharding codec.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError,
-    CodecOptions, EncodedSubchunk,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
+    BytesPartialDecoderTraits, CodecError, CodecOptions, EncodedSubchunk,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits};
@@ -14,7 +14,9 @@ use zarrs_storage::byte_range::ByteRange;
 use super::{nested_local_subchunk_grids, subchunk_byte_range};
 use crate::array::array_ops::{enclosing_chunk_indices, subset_chunk_indices};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
-use crate::array::{ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, CodecChainBound};
+use crate::array::{
+    ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, CodecChainBound, ravel_indices,
+};
 
 /// Return the shape of the subchunk at `subchunk_indices` of a shard.
 fn subchunk_shape(
@@ -22,6 +24,19 @@ fn subchunk_shape(
     subchunk_indices: &[u64],
 ) -> Result<ChunkShape, CodecError> {
     subchunk_grid.chunk_shape(subchunk_indices)?.ok_or_else(|| {
+        CodecError::Other(format!(
+            "subchunk indices {subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
+            subchunk_grid.grid_shape()
+        ))
+    })
+}
+
+/// Return the linear index of the subchunk at `subchunk_indices` in the shard index.
+pub(crate) fn subchunk_linear_index(
+    subchunk_grid: &RegularBoundedChunkGrid,
+    subchunk_indices: &[u64],
+) -> Result<u64, CodecError> {
+    ravel_indices(subchunk_indices, subchunk_grid.grid_shape()).ok_or_else(|| {
         CodecError::Other(format!(
             "subchunk indices {subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
             subchunk_grid.grid_shape()
@@ -81,6 +96,46 @@ pub(crate) fn enclosing_subchunk(
         subset: subset.relative_to(outer_subset.start())?,
         indices,
     })
+}
+
+/// An in-memory partial encoder of the level zero subchunk of a shard enclosing a subchunk at a deeper level.
+pub(crate) struct EnclosingSubchunkEncoder {
+    /// The linear index of the level zero subchunk in the shard index.
+    pub(crate) index: u64,
+    /// The encoded bytes of the level zero subchunk, updated in place by [`encoder`](Self::encoder).
+    pub(crate) buffer: Arc<Mutex<Option<Vec<u8>>>>,
+    /// The partial encoder of the level zero subchunk.
+    pub(crate) encoder: Arc<dyn ArrayPartialEncoderTraits>,
+    /// The indices of the subchunk in the subchunk grid one level below of [`encoder`](Self::encoder).
+    pub(crate) nested_indices: ArrayIndices,
+}
+
+impl EnclosingSubchunkEncoder {
+    /// Create a partial encoder of the `existing` encoded bytes of the level zero subchunk `enclosing`.
+    pub(crate) fn new(
+        inner_codecs: &Arc<CodecChainBound>,
+        index: u64,
+        existing: Option<Vec<u8>>,
+        enclosing: &EnclosingSubchunk,
+        level: usize,
+        options: &CodecOptions,
+    ) -> Result<Self, CodecError> {
+        let buffer = Arc::new(Mutex::new(existing));
+        let encoder =
+            inner_codecs
+                .clone()
+                .partial_encoder(buffer.clone(), &enclosing.shape, options)?;
+        let nested_grid = encoder
+            .local_subchunk_grid_at_level(level - 1, options)?
+            .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
+        let nested_indices = subset_chunk_indices(&nested_grid, &enclosing.subset)?;
+        Ok(Self {
+            index,
+            buffer,
+            encoder,
+            nested_indices,
+        })
+    }
 }
 
 /// Return the byte offset and length of a non-empty encoded subchunk byte range.

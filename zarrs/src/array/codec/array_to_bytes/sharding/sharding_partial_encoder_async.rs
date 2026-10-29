@@ -6,6 +6,9 @@ use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraits};
 
+use super::sharding_encoded_subchunk::{
+    EnclosingSubchunkEncoder, enclosing_subchunk, subchunk_linear_index,
+};
 use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, sharding_index_shape,
     subchunk_updates,
@@ -270,6 +273,44 @@ impl AsyncShardingPartialEncoder {
         *shard_index_guard = shard_index;
         Ok(())
     }
+
+    /// Create an in-memory partial encoder of the level zero subchunk enclosing the subchunk at `subchunk_indices` of
+    /// the `level` subchunk grid.
+    async fn enclosing_subchunk_encoder(
+        &self,
+        shard_index: &[u64],
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<EnclosingSubchunkEncoder, CodecError> {
+        let enclosing = enclosing_subchunk(
+            &self.chunk_grid,
+            &self.inner_codecs,
+            level,
+            subchunk_indices,
+        )?;
+        let index = subchunk_linear_index(&self.chunk_grid, &enclosing.indices)?;
+        let existing = match super::subchunk_byte_range(
+            Some(shard_index),
+            &self.chunk_grid,
+            &enclosing.indices,
+        )? {
+            Some(byte_range) => self
+                .input_output_handle
+                .partial_decode(byte_range, options)
+                .await?
+                .map(CowBytes::into_vec),
+            None => None,
+        };
+        EnclosingSubchunkEncoder::new(
+            &self.inner_codecs,
+            index,
+            existing,
+            &enclosing,
+            level,
+            options,
+        )
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -477,5 +518,73 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
+    }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let mut shard_index = self.shard_index.lock().await;
+        if level == 0 {
+            let index = subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
+            return self
+                .commit_subchunk_updates(&mut shard_index, vec![(index, Some(bytes))], options)
+                .await;
+        }
+
+        // Update the enclosing level zero subchunk in memory
+        let enclosing = self
+            .enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)
+            .await?;
+        // SAFETY: The caller upholds the safety requirements, the subchunk is only located in the enclosing subchunk.
+        unsafe {
+            enclosing.encoder.store_encoded_subchunk_at_level(
+                level - 1,
+                &enclosing.nested_indices,
+                bytes,
+                options,
+            )?;
+        }
+        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
+            .await
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let mut shard_index = self.shard_index.lock().await;
+        if level == 0 {
+            let index = subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
+            if super::subchunk_offset_size(&shard_index, usize::try_from(index).unwrap()).is_none()
+            {
+                // The subchunk is not stored
+                return Ok(());
+            }
+            return self
+                .commit_subchunk_updates(&mut shard_index, vec![(index, None)], options)
+                .await;
+        }
+
+        // Update the enclosing level zero subchunk in memory
+        let enclosing = self
+            .enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)
+            .await?;
+        if enclosing.buffer.lock().unwrap().is_none() {
+            // The enclosing subchunk is not stored
+            return Ok(());
+        }
+        enclosing
+            .encoder
+            .erase_subchunk_at_level(level - 1, &enclosing.nested_indices, options)?;
+        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
+            .await
     }
 }

@@ -13,6 +13,7 @@ use super::{
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
+use zarrs_storage::ReadableWritableStorage;
 
 #[inherent]
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
@@ -142,6 +143,40 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         self.with_storage(self.storage.clone().readable())
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        self.update_encoded_subchunk(level, subchunk_indices, |encoder, indices, options| {
+            // SAFETY: The caller upholds the safety requirements.
+            unsafe { encoder.store_encoded_subchunk_at_level(level, indices, bytes, options) }
+        })
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError> {
+        self.update_encoded_subchunk(level, subchunk_indices, |encoder, indices, options| {
+            encoder.erase_subchunk_at_level(level, indices, options)
+        })
+    }
+
     #[allow(clippy::missing_errors_doc)]
     pub fn partial_encoder(
         &self,
@@ -152,6 +187,58 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
 }
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Update the encoded subchunk at `subchunk_indices` of the `level` subchunk grid with the partial encoder of its
+    /// chunk.
+    ///
+    /// If the store does not support partial writes, the encoded chunk is updated in memory and stored whole.
+    fn update_encoded_subchunk(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        update: impl FnOnce(
+            &dyn ArrayPartialEncoderTraits,
+            &[u64],
+            &CodecOptions,
+        ) -> Result<(), zarrs_codec::CodecError>,
+    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let storage = self.readable_writable_storage()?;
+        if storage.supports_set_partial() {
+            let encoder = self.partial_encoder_with_storage(storage, &chunk_indices, options)?;
+            let local_indices = super::local_subchunk_indices(
+                encoder.local_subchunk_grid_at_level(level, options)?,
+                &subset,
+            )?;
+            update(encoder.as_ref(), &local_indices, options)?;
+            Ok(())
+        } else {
+            let buffer = Arc::new(std::sync::Mutex::new(
+                self.retrieve_encoded_chunk(&chunk_indices)?
+                    .map(|bytes| bytes.to_vec()),
+            ));
+            let encoder = self.codecs_bound().partial_encoder(
+                buffer.clone(),
+                &self.chunk_shape(&chunk_indices)?,
+                options,
+            )?;
+            let local_indices = super::local_subchunk_indices(
+                encoder.local_subchunk_grid_at_level(level, options)?,
+                &subset,
+            )?;
+            update(encoder.as_ref(), &local_indices, options)?;
+            drop(encoder);
+            let updated = buffer.lock().unwrap().take();
+            if let Some(updated) = updated {
+                // SAFETY: The bytes were encoded by the codecs of the array.
+                unsafe { self.store_encoded_chunk(&chunk_indices, updated.into()) }
+            } else {
+                self.erase_chunk(&chunk_indices)
+            }
+        }
+    }
+
     pub(in crate::array) fn store_partial_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -236,10 +323,19 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        // Input/output
+        self.partial_encoder_with_storage(self.readable_writable_storage()?, chunk_indices, options)
+    }
+
+    /// Initialise the partial encoder of the chunk at `chunk_indices` in `storage`, the storage of the array with its
+    /// storage transformers applied.
+    fn partial_encoder_with_storage(
+        &self,
+        storage: ReadableWritableStorage,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         let chunk_key = self.chunk_key(chunk_indices)?;
-        let storage_transformer = self.readable_writable_storage()?;
-        let input_handle = Arc::new((storage_transformer, chunk_key));
+        let input_handle = Arc::new((storage, chunk_key));
         Ok(self.codecs_bound().partial_encoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,

@@ -335,6 +335,46 @@ where
     fn supports_partial_encode(&self) -> bool {
         false
     }
+
+    unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)?,
+            subchunk_indices,
+        )?;
+        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        unsafe {
+            self.input_output_handle.store_encoded_subchunk_at_level(
+                level,
+                &encoded_subchunk_indices,
+                bytes,
+                options,
+            )
+        }
+    }
+
+    fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)?,
+            subchunk_indices,
+        )?;
+        self.input_output_handle
+            .erase_subchunk_at_level(level, &encoded_subchunk_indices, options)
+    }
 }
 
 // The default array-to-bytes partial codec decodes an entire chunk, so it exposes no subchunks.
@@ -730,6 +770,46 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         false
+    }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)
+                .await?,
+            subchunk_indices,
+        )?;
+        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        unsafe {
+            self.input_output_handle
+                .store_encoded_subchunk_at_level(level, &encoded_subchunk_indices, bytes, options)
+                .await
+        }
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)
+                .await?,
+            subchunk_indices,
+        )?;
+        self.input_output_handle
+            .erase_subchunk_at_level(level, &encoded_subchunk_indices, options)
+            .await
     }
 }
 

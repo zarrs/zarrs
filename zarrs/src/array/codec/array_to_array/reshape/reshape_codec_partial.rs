@@ -43,6 +43,8 @@ where
     fn supports_partial_encode(&self) -> bool {
         self.input_handle.supports_partial_encode()
     }
+
+    super::super::subchunk_forwarding::encoder_subchunk_forwarding!(input_handle);
 }
 
 impl<T: ?Sized> ReshapeCodecPartial<T> {
@@ -90,6 +92,38 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_handle.supports_partial_encode()
+    }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices = self
+            .async_encoded_subchunk_indices(level, subchunk_indices, options)
+            .await?;
+        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        unsafe {
+            self.input_handle
+                .store_encoded_subchunk_at_level(level, &subchunk_indices, bytes, options)
+                .await
+        }
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices = self
+            .async_encoded_subchunk_indices(level, subchunk_indices, options)
+            .await?;
+        self.input_handle
+            .erase_subchunk_at_level(level, &subchunk_indices, options)
+            .await
     }
 }
 

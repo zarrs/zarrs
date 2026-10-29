@@ -13,6 +13,7 @@ use crate::array::{ArrayIndices, update_array_bytes};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits,
 };
+use zarrs_storage::AsyncReadableWritableStorage;
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -153,6 +154,78 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         self.with_storage(self.storage.clone().readable())
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
+        match self
+            .async_encoded_subchunk_encoder(level, subchunk_indices)
+            .await?
+        {
+            EncodedSubchunkEncoder::Storage(encoder, indices) => {
+                // SAFETY: The caller upholds the safety requirements.
+                unsafe {
+                    encoder
+                        .store_encoded_subchunk_at_level(level, &indices, bytes, options)
+                        .await?;
+                }
+                Ok(())
+            }
+            EncodedSubchunkEncoder::Memory(update) => {
+                // SAFETY: The caller upholds the safety requirements.
+                unsafe {
+                    update.encoder.store_encoded_subchunk_at_level(
+                        level,
+                        &update.indices,
+                        bytes,
+                        options,
+                    )?;
+                }
+                self.async_store_updated_chunk(update).await
+            }
+        }
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError> {
+        let options = self.codec_options();
+        match self
+            .async_encoded_subchunk_encoder(level, subchunk_indices)
+            .await?
+        {
+            EncodedSubchunkEncoder::Storage(encoder, indices) => {
+                encoder
+                    .erase_subchunk_at_level(level, &indices, options)
+                    .await?;
+                Ok(())
+            }
+            EncodedSubchunkEncoder::Memory(update) => {
+                update
+                    .encoder
+                    .erase_subchunk_at_level(level, &update.indices, options)?;
+                self.async_store_updated_chunk(update).await
+            }
+        }
+    }
+
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_partial_encoder(
         &self,
@@ -164,6 +237,76 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
 }
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Initialise the partial encoder that updates the encoded subchunk at `subchunk_indices` of the `level` subchunk
+    /// grid, and locate the subchunk in its chunk.
+    ///
+    /// If the store does not support partial writes, the encoded chunk is updated in memory.
+    async fn async_encoded_subchunk_encoder(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<EncodedSubchunkEncoder, ArrayError> {
+        let options = self.codec_options();
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let storage = self.async_readable_writable_storage().await?;
+        if storage.supports_set_partial() {
+            let encoder = self
+                .async_partial_encoder_with_storage(storage, &chunk_indices, options)
+                .await?;
+            let indices = super::local_subchunk_indices(
+                encoder.local_subchunk_grid_at_level(level, options).await?,
+                &subset,
+            )?;
+            Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
+        } else {
+            let buffer = Arc::new(std::sync::Mutex::new(
+                self.async_retrieve_encoded_chunk(&chunk_indices)
+                    .await?
+                    .map(|bytes| bytes.to_vec()),
+            ));
+            let encoder = self.codecs_bound().partial_encoder(
+                buffer.clone(),
+                &self.chunk_shape(&chunk_indices)?,
+                options,
+            )?;
+            let indices = super::local_subchunk_indices(
+                encoder.local_subchunk_grid_at_level(level, options)?,
+                &subset,
+            )?;
+            Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate {
+                chunk_indices,
+                buffer,
+                encoder,
+                indices,
+            }))
+        }
+    }
+
+    /// Store the encoded chunk updated by an in-memory partial encoder, or erase it if it is empty.
+    async fn async_store_updated_chunk(
+        &self,
+        update: InMemoryChunkUpdate,
+    ) -> Result<(), ArrayError> {
+        let InMemoryChunkUpdate {
+            chunk_indices,
+            buffer,
+            encoder,
+            ..
+        } = update;
+        drop(encoder);
+        let updated = buffer.lock().unwrap().take();
+        if let Some(updated) = updated {
+            // SAFETY: The bytes were encoded by the codecs of the array.
+            unsafe {
+                self.async_store_encoded_chunk(&chunk_indices, updated.into())
+                    .await
+            }
+        } else {
+            self.async_erase_chunk(&chunk_indices).await
+        }
+    }
+
     pub(in crate::array) async fn async_store_partial_chunk_with_options<
         'a,
         T: IntoArrayBytes<'a> + MaybeSend,
@@ -257,15 +400,44 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        self.async_partial_encoder_with_storage(
+            self.async_readable_writable_storage().await?,
+            chunk_indices,
+            options,
+        )
+        .await
+    }
 
-        // Input/output
+    /// Initialise the partial encoder of the chunk at `chunk_indices` in `storage`, the storage of the array with its
+    /// storage transformers applied.
+    async fn async_partial_encoder_with_storage(
+        &self,
+        storage: AsyncReadableWritableStorage,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_key = self.chunk_key(chunk_indices)?;
-        let storage_transformer = self.async_readable_writable_storage().await?;
-        let input_output_handle = Arc::new((storage_transformer, chunk_key));
+        let input_output_handle = Arc::new((storage, chunk_key));
         Ok(self
             .codecs_bound()
             .async_partial_encoder(input_output_handle, &chunk_shape, options)
             .await?)
     }
+}
+
+/// A partial encoder for updating an encoded subchunk, and the indices of the subchunk in its chunk.
+enum EncodedSubchunkEncoder {
+    /// A partial encoder of the chunk in the store.
+    Storage(Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayIndices),
+    /// A partial encoder of the chunk in memory, for a store without partial writes.
+    Memory(InMemoryChunkUpdate),
+}
+
+/// An encoded chunk updated in memory by a partial encoder.
+struct InMemoryChunkUpdate {
+    chunk_indices: ArrayIndices,
+    buffer: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    encoder: Arc<dyn zarrs_codec::ArrayPartialEncoderTraits>,
+    indices: ArrayIndices,
 }

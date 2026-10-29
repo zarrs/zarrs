@@ -10,7 +10,7 @@ use crate::array::chunk_cache::AsyncChunkCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderSubchunkingTraits,
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, CodecError,
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, CodecError, CowBytes,
 };
 use zarrs_storage::StorageError;
 
@@ -113,6 +113,37 @@ where
     fn supports_partial_encode(&self) -> bool {
         self.encoder.supports_partial_encode()
     }
+
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: The caller upholds the safety requirements.
+        let result = unsafe {
+            self.encoder
+                .store_encoded_subchunk_at_level(level, subchunk_indices, bytes, options)
+                .await
+        };
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
+
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let result = self
+            .encoder
+            .erase_subchunk_at_level(level, subchunk_indices, options)
+            .await;
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
 }
 
 #[inherent]
@@ -164,6 +195,51 @@ where
     #[allow(clippy::must_use_candidate)]
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.array().async_readable()
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
+    pub async unsafe fn async_store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        // SAFETY: The caller upholds the safety requirements.
+        let result = unsafe {
+            self.array()
+                .async_store_encoded_subchunk_at_level(level, subchunk_indices, bytes)
+                .await
+        };
+        self.cache().invalidate_chunk(&chunk_indices).await;
+        result
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, _) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let result = self
+            .array()
+            .async_erase_subchunk_at_level(level, subchunk_indices)
+            .await;
+        self.cache().invalidate_chunk(&chunk_indices).await;
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]

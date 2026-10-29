@@ -7,7 +7,8 @@ use zarrs_storage::StorageError;
 
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
-    CodecOptions, EncodedSubchunk, InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    CodecOptions, CowBytes, EncodedSubchunk, InvalidNumberOfElementsError,
+    decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -212,6 +213,86 @@ pub trait AsyncArrayPartialEncoderTraits:
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
+
+    /// Store the encoded subchunk at `subchunk_indices` of the outermost subchunk grid.
+    ///
+    /// See [`ArrayPartialEncoderTraits::store_encoded_subchunk`](crate::ArrayPartialEncoderTraits::store_encoded_subchunk).
+    ///
+    /// # Safety
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level).
+    async unsafe fn store_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe {
+            self.store_encoded_subchunk_at_level(0, subchunk_indices, bytes, options)
+                .await
+        }
+    }
+
+    /// Store the encoded subchunk at `subchunk_indices` of the `level` subchunk grid, without decoding it.
+    ///
+    /// See [`ArrayPartialEncoderTraits::store_encoded_subchunk_at_level`](crate::ArrayPartialEncoderTraits::store_encoded_subchunk_at_level).
+    ///
+    /// # Safety
+    /// The `bytes` must be an encoded subchunk of the subchunk codec at `level` (see
+    /// [`subchunk_codecs_at_level`](crate::ArrayToBytesCodecSubchunkingTraits::subchunk_codecs_at_level)), with the
+    /// shape, data type, and fill value of the subchunk in its encoded domain (see [`EncodedSubchunk`]).
+    /// The bytes are stored verbatim, so a mismatch is not detected and corrupts the chunk.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this encoder does not expose encoded subchunks, or a
+    /// [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the subchunk indices are invalid, a codec fails,
+    /// or there is an underlying store error.
+    async unsafe fn store_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let _ = (level, subchunk_indices, bytes, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Erase the subchunk at `subchunk_indices` of the outermost subchunk grid.
+    ///
+    /// See [`ArrayPartialEncoderTraits::erase_subchunk`](crate::ArrayPartialEncoderTraits::erase_subchunk).
+    ///
+    /// # Errors
+    /// See [`erase_subchunk_at_level`](Self::erase_subchunk_at_level).
+    async fn erase_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.erase_subchunk_at_level(0, subchunk_indices, options)
+            .await
+    }
+
+    /// Erase the subchunk at `subchunk_indices` of the `level` subchunk grid, so that it has the fill value.
+    ///
+    /// See [`ArrayPartialEncoderTraits::erase_subchunk_at_level`](crate::ArrayPartialEncoderTraits::erase_subchunk_at_level).
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this encoder does not expose encoded subchunks, or a
+    /// [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the subchunk indices are invalid, a codec fails,
+    /// or there is an underlying store error.
+    async fn erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let _ = (level, subchunk_indices, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
+    }
 
     /// Returns whether this encoder supports partial encoding.
     ///
