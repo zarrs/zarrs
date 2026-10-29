@@ -274,8 +274,14 @@ fn subchunk_byte_range(
             ))
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        Ok(subchunk_offset_size(shard_index, shard_index_idx)
-            .map(|(offset, size)| ByteRange::FromStart(offset, Some(size))))
+        subchunk_offset_size(shard_index, shard_index_idx)
+            .map(|(offset, size)| {
+                offset
+                    .checked_add(size)
+                    .ok_or_else(shard_index_out_of_bounds)?;
+                Ok(ByteRange::FromStart(offset, Some(size)))
+            })
+            .transpose()
     } else {
         Ok(None)
     }
