@@ -20,7 +20,7 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
     InvalidNumberOfElementsError, copy_fill_value_into,
 };
-use zarrs_storage::{Bytes, StorageHandle};
+use zarrs_storage::Bytes;
 
 #[inherent]
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
@@ -159,12 +159,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Bytes>, ArrayError> {
-        let options = self.codec_options();
-        let _ = options;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_storage()?;
 
         Ok(storage_transformer.get(&self.chunk_key(chunk_indices)?)?)
     }
@@ -286,10 +281,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .into(),
             ));
         }
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_storage()?;
         let chunk_encoded = storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
             .map_err(ArrayError::StorageError)?;
@@ -329,10 +321,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         }
 
         let bytes = {
-            let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-            let storage_transformer = self
-                .storage_transformers()
-                .create_readable_transformer(storage_handle)?;
+            let storage_transformer = self.readable_storage()?;
             let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
             self.codecs_bound()
                 .partial_decoder(input_handle, &chunk_shape, options)?
@@ -368,10 +357,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             }
         }
 
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_storage()?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         self.codecs_bound()
             .partial_decoder(input_handle, &chunk_shape, options)?
@@ -389,10 +375,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 chunk_indices.to_vec(),
             ));
         }
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_storage()?;
         let chunk_encoded = storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
             .map_err(ArrayError::StorageError)?;
@@ -417,10 +400,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_storage()?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self.codecs_bound().partial_decoder(
             input_handle,

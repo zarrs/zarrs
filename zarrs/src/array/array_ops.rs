@@ -81,6 +81,7 @@ mod array_read_ops;
 mod array_read_ops_array;
 mod array_read_ops_array_cached;
 mod array_read_ops_common;
+mod array_storage;
 mod array_update_ops;
 mod array_update_ops_array;
 mod array_update_ops_array_cached;

@@ -20,7 +20,7 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
     CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
 };
-use zarrs_storage::{Bytes, StorageHandle};
+use zarrs_storage::Bytes;
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -167,13 +167,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Bytes>, ArrayError> {
-        let options = self.codec_options();
-        let _ = options;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
 
         Ok(storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
@@ -202,11 +196,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
         let options = self.codec_options();
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
 
         let retrieve_encoded_chunk = |chunk_indices: ArrayIndices| {
             let storage_transformer = storage_transformer.clone();
@@ -327,11 +317,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .into(),
             ));
         }
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
         let chunk_encoded = storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
             .await
@@ -373,11 +359,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             }
         }
 
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         let bytes = self
             .codecs_bound()
@@ -413,11 +395,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             }
         }
 
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         self.codecs_bound()
             .async_partial_decoder(input_handle, &chunk_shape, options)
@@ -437,11 +415,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 chunk_indices.to_vec(),
             ));
         }
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
         let chunk_encoded = storage_transformer
             .get(&self.chunk_key(chunk_indices)?)
             .await
@@ -468,11 +442,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_storage().await?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self
             .codecs_bound()

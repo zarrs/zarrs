@@ -11,7 +11,6 @@ use super::{
 };
 use crate::array::{ArrayIndices, update_array_bytes};
 use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
-use zarrs_storage::StorageHandle;
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -233,15 +232,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-
         let chunk_shape = self.chunk_shape(chunk_indices)?;
 
         // Input/output
-        let storage_transformer = self
-            .storage_transformers()
-            .create_async_readable_writable_transformer(storage_handle)
-            .await?;
+        let storage_transformer = self.async_readable_writable_storage().await?;
         let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self
             .codecs_bound()

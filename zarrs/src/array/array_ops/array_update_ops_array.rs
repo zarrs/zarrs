@@ -13,7 +13,6 @@ use super::{
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
-use zarrs_storage::StorageHandle;
 
 #[inherent]
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
@@ -217,12 +216,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-
         // Input/output
-        let storage_transformer = self
-            .storage_transformers()
-            .create_readable_writable_transformer(storage_handle)?;
+        let storage_transformer = self.readable_writable_storage()?;
         let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
         Ok(self.codecs_bound().partial_encoder(
             input_handle,

@@ -1,5 +1,4 @@
 use inherent::inherent;
-use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -21,10 +20,7 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
+        let storage_transformer = self.writable_storage()?;
 
         // Get the metadata with options applied and store
         let metadata = self.metadata_opt();
@@ -149,10 +145,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
+        let storage_transformer = self.writable_storage()?;
         Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
     }
 
@@ -161,10 +154,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
+        let storage_transformer = self.writable_storage()?;
         let erase_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
             Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
@@ -185,10 +175,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
+        let storage_transformer = self.writable_storage()?;
         storage_transformer.set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)?;
 
         Ok(())
