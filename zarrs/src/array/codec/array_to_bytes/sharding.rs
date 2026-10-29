@@ -65,18 +65,39 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
-//! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
-//! 2. create a storage partial decoder for the shard object,
-//! 3. construct the sharding partial decoder with the bound codec accessors, and
-//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
+//! Encoded subchunk bytes can be retrieved without decoding them.
+//! This is a codec generic operation, so it is usually most convenient to go through the array API:
+//! 1. call [`retrieve_encoded_subchunk`](crate::array::ArrayReadOps::retrieve_encoded_subchunk)
+//!    with subchunk indices of the [`subchunk_grid`](crate::array::ArrayOps::subchunk_grid), and
+//! 2. decode the [`EncodedSubchunk`](zarrs_codec::EncodedSubchunk) bytes with the codec from
+//!    [`subchunk_codecs_at_level`](crate::array::ArrayOps::subchunk_codecs_at_level) and
+//!    [`EncodedSubchunk::shape`](zarrs_codec::EncodedSubchunk::shape), if desired.
 //!
-//! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
+//! The codec is a property of the array, so it is resolved once and reused, while the shape is
+//! resolved per subchunk and travels with the bytes. It is the shape in the *encoded domain* of the
+//! codec, which differs from the shape in the subchunk grid if the array has array-to-array codecs.
+//!
+//! Nested subchunk grid levels (e.g. sharding within sharding) are addressed with the
+//! `_at_level` variants of those methods.
+//! Retrieving a subchunk of a nested shard reads only the shard indexes and that subchunk.
+//!
+//! Alternatively, work directly with a partial decoder for a shard:
+//! 1. downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
+//! 2. create a storage partial decoder for the shard object,
+//! 3. construct a [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`] with the bound codec accessors, and
+//! 4. call
+//!    [`retrieve_encoded_subchunk`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk)
+//!    (or
+//!    [`retrieve_encoded_subchunk_at_level`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level)
+//!    for a nested level) with subchunk indices local to the shard.
+//!
+//! See the `encoded_subchunk` and `sharding_partial_decoder_retrieve_encoded_subchunk` tests for examples.
 
 #[cfg(test)]
 mod indexer_tests;
 mod sharding_codec;
 mod sharding_codec_builder;
+mod sharding_encoded_subchunk;
 mod sharding_options;
 #[cfg(feature = "async")]
 mod sharding_partial_decoder_async;

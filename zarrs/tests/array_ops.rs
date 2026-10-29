@@ -15,8 +15,9 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
-    ArrayCached, ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps,
-    ArrayWriteOps, ChunkGridDecodedRef, CodecOptions, data_type,
+    ArrayCached, ArrayMetadataOptions, ArrayOps, ArrayPartialDecoderSubchunkingTraits,
+    ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps, ChunkGridDecodedRef, CodecOptions,
+    data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -286,27 +287,41 @@ where
 }
 
 #[test]
-fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
+fn sharding_partial_decoder_retrieve_encoded_subchunk() -> TestResult {
     let (array, _) = fixture();
     populate(array.as_ref())?;
 
     let decoder = sharding_partial_decoder(array.as_ref())?;
 
-    assert!(decoder.retrieve_subchunk_encoded(&[1, 1])?.is_some());
-    assert!(decoder.retrieve_subchunk_encoded(&[3, 3]).is_err());
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[1, 1], &CodecOptions::default())?
+            .is_some()
+    );
+    assert!(
+        decoder
+            .retrieve_encoded_subchunk(&[3, 3], &CodecOptions::default())
+            .is_err()
+    );
     Ok(())
 }
 
 #[test]
-fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
+fn sharding_partial_decoder_retrieve_encoded_subchunk_missing() -> TestResult {
     let (array, _) = fixture();
 
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0])?, None);
+    assert_eq!(
+        decoder.retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?,
+        None
+    );
 
     array.store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])?;
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1])?, None);
+    assert_eq!(
+        decoder.retrieve_encoded_subchunk(&[0, 1], &CodecOptions::default())?,
+        None
+    );
     Ok(())
 }
 

@@ -14,7 +14,8 @@ use zarrs::array::chunk_cache::{
 };
 use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayCached, ArrayPartialEncoderTraits, CodecOptions, data_type,
+    Array, ArrayBuilder, ArrayCached, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialEncoderTraits, CodecOptions, data_type,
 };
 use zarrs::storage::StorageHandle;
 use zarrs::storage::store::MemoryStore;
@@ -59,7 +60,7 @@ fn sharding_partial_decoder(
 
     Ok(ShardingPartialDecoder::new(
         input_handle,
-        encoded_shape,
+        &encoded_shape,
         sharding_codec.subchunk_shape().clone(),
         sharding_codec.inner_codecs().clone(),
         sharding_codec.index_codecs(),
@@ -148,8 +149,10 @@ fn transpose_preserves_subchunk_codec_encoded_domain() -> TestResult {
     let codec = array.subchunk_codecs_at_level(0).unwrap();
     let sharding_decoder = sharding_partial_decoder(&array, &case.chunk_indices)?;
     let encoded = sharding_decoder
-        .retrieve_subchunk_encoded(&[0, 0])?
-        .unwrap();
+        .retrieve_encoded_subchunk(&[0, 0], &CodecOptions::default())?
+        .unwrap()
+        .into_bytes()
+        .into();
     let decoded_bytes = codec
         .decode(
             encoded,

@@ -7,5 +7,6 @@ pub mod fixedscaleoffset;
 pub mod numcodecs_packbits;
 pub mod reshape;
 pub mod squeeze;
+mod subchunk_forwarding;
 #[cfg(feature = "transpose")]
 pub mod transpose;

@@ -9,7 +9,7 @@ use super::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, CowBytes, DataType,
+    CodecError, CodecOptions, CowBytes, DataType, EncodedSubchunk,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -162,6 +162,25 @@ impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToAr
             })
             .collect()
     }
+
+    /// Map subchunk indices of the `level` decoded local subchunk grid to the `encoded_subchunk_grid` at that level.
+    fn encoded_subchunk_indices(
+        &self,
+        level: usize,
+        encoded_subchunk_grid: Option<super::ChunkGrid>,
+        subchunk_indices: &[u64],
+    ) -> Result<zarrs_chunk_grid::ArrayIndices, CodecError> {
+        let encoded_subchunk_grid = encoded_subchunk_grid.ok_or_else(|| {
+            CodecError::Other(format!(
+                "there is no resolvable subchunk grid at level {level}"
+            ))
+        })?;
+        self.codec.encoded_subchunk_indices(
+            self.decoded_representation.shape(),
+            &encoded_subchunk_grid,
+            subchunk_indices,
+        )
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits
@@ -174,6 +193,25 @@ where
         options: &CodecOptions,
     ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
         self.decoded_local_subchunk_grids(self.input_output_handle.local_subchunk_grids(options)?)
+    }
+
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)?,
+            subchunk_indices,
+        )?;
+        self.input_output_handle.retrieve_encoded_subchunk_at_level(
+            level,
+            &encoded_subchunk_indices,
+            options,
+        )
     }
 }
 
@@ -541,6 +579,24 @@ where
                 .local_subchunk_grids(options)
                 .await?,
         )
+    }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+            level,
+            self.input_output_handle
+                .local_subchunk_grid_at_level(level, options)
+                .await?,
+            subchunk_indices,
+        )?;
+        self.input_output_handle
+            .retrieve_encoded_subchunk_at_level(level, &encoded_subchunk_indices, options)
+            .await
     }
 }
 

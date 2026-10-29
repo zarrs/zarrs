@@ -32,6 +32,17 @@ where
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.encoder.local_subchunk_grids(options).await
     }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
+            .await
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

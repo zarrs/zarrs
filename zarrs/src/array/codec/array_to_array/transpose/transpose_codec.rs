@@ -329,6 +329,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
                 shape,
                 &self.data_type,
                 self.order.0.clone(),
+                self.clone(),
             ),
         ))
     }
@@ -345,6 +346,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
                 shape,
                 &self.data_type,
                 self.order.0.clone(),
+                self.clone(),
             ),
         ))
     }
@@ -362,6 +364,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
                 shape,
                 &self.data_type,
                 self.order.0.clone(),
+                self.clone(),
             ),
         ))
     }
@@ -379,6 +382,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
                 shape,
                 &self.data_type,
                 self.order.0.clone(),
+                self.clone(),
             ),
         ))
     }

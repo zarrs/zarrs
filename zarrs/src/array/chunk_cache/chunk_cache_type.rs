@@ -166,6 +166,16 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
         self.0.local_subchunk_grids(options)
     }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, CodecError> {
+        self.0
+            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
+    }
 }
 
 #[cfg(feature = "async")]

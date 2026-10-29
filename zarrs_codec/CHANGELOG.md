@@ -16,11 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The fill value is `None` if it is undefined (e.g. in the `data_codecs` of an `optional` codec with a `null` fill value), and codecs whose encoded representation depends on the fill value must reject it
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
-- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s][_at_level]` for chunk-local subchunk grids
+- Add `[Async]ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk[_at_level]`, `EncodedSubchunk`, and `CodecError::UnsupportedEncodedSubchunk` for encoded subchunk access
+  - The default array-to-array partial decoder forwards encoded subchunks through its codec
 - Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
 - Add `ArrayToArrayCodecSubchunkingTraits::{decoded_local_subchunk_grid,encoded_coordinates}` to map chunk-local subchunk grids and element coordinates through an array-to-array codec
   - Add `validate_chunk_coordinates`
+  - Add `ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices` to map subchunk indices through an array-to-array codec
   - The default array-to-array partial decoder maps chunk-local subchunk grids through its codec, rather than passing them through unchanged
 
 ### Changed

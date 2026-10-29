@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
 - Add `ArrayOps::subchunk_codecs[_at_level]` for the codecs that encode the subchunks at each level
+- Add `[Async]ArrayReadOps::[async_]retrieve_encoded_subchunk[_at_level]` for encoded subchunk access
+  - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`
+  - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
+  - Returns an `EncodedSubchunk`, which holds the encoded domain shape needed to decode the bytes alongside them
+  - Encoded subchunks are exposed through array-to-array codecs, which map subchunk indices into the domain they wrap
+    - The bytes remain in the encoded domain: the data type is that of the subchunk codec, and the shape can differ in extent and dimensionality from the subchunk grid (e.g. `[3]` rather than `[1, 3]` for a `reshape` codec)
+- Re-export `EncodedSubchunk` from `zarrs::array`
 - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
 - Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec
@@ -148,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
   - Most methods have become part of `ArrayReadOps`'
-  - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
+  - `[async_]retrieve_encoded_subchunk` is now part of `ArrayReadOps` / `AsyncArrayReadOps`; use `[Async]ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk[_at_level]` for low-level encoded subchunk access
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
 - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
 - **Breaking**: Remove `CodecChain::with_codec_specific_options`, pass `CodecSpecificOptions` to `CodecChain::with_context` instead

@@ -66,7 +66,7 @@ impl ReshapeCodec {
 
 impl ReshapeCodecBound {
     fn new_partial<T: ?Sized>(
-        &self,
+        self: &Arc<Self>,
         input_handle: Arc<T>,
         decoded_shape: &[NonZeroU64],
     ) -> Result<super::reshape_codec_partial::ReshapeCodecPartial<T>, CodecError> {
@@ -76,6 +76,7 @@ impl ReshapeCodecBound {
             decoded_shape,
             &self.data_type,
             encoded_shape,
+            self.clone(),
         ))
     }
 }

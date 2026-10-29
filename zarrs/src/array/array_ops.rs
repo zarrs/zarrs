@@ -71,6 +71,90 @@ use zarrs_storage::{
     WritableStorageTraits,
 };
 
+/// Locate the chunk holding the subchunk at `subchunk_indices` of the `level` subchunk grid.
+///
+/// Returns the chunk indices and the subchunk subset relative to the origin of that chunk.
+fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<(ArrayIndices, ArraySubset), ArrayError> {
+    let subchunk_grid = array
+        .subchunk_grid_at_level(level)
+        .as_chunk_grid()
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    if !subchunk_grid.chunk_indices_inbounds(subchunk_indices) {
+        return Err(ArrayError::InvalidChunkGridIndicesError(
+            subchunk_indices.to_vec(),
+        ));
+    }
+    let subchunk_subset = subchunk_grid
+        .subset(subchunk_indices)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    let chunks = array
+        .chunks_in_array_subset(&subchunk_subset)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    if chunks.num_elements() != 1 {
+        // A subchunk grid refines the chunk grid, so this is unexpected
+        return Err(ArrayError::UnsupportedMethod(
+            "a subchunk spanning multiple chunks cannot be addressed".to_string(),
+        ));
+    }
+    let chunk_indices: ArrayIndices = chunks.start().into();
+    let chunk_origin = array.chunk_origin(&chunk_indices)?;
+    let local_subset = subchunk_subset.relative_to(&chunk_origin)?;
+    Ok((chunk_indices, local_subset))
+}
+
+/// Return the indices of the chunk of `chunk_grid` which encloses `subset`.
+///
+/// A subchunk must be enclosed by exactly one chunk of an inner grid for its bytes to be a single encoded subchunk, so
+/// a subset spanning several is an error.
+pub(crate) fn enclosing_chunk_indices(
+    chunk_grid: &ChunkGrid,
+    subset: &ArraySubset,
+) -> Result<ArrayIndices, zarrs_codec::CodecError> {
+    let chunks = chunk_grid.chunks_in_array_subset(subset)?.ok_or_else(|| {
+        zarrs_codec::CodecError::Other(format!(
+            "subchunk subset {subset:?} is out of bounds of a subchunk grid with shape {:?}",
+            chunk_grid.grid_shape()
+        ))
+    })?;
+    if chunks.num_elements() != 1 {
+        return Err(zarrs_codec::CodecError::Other(format!(
+            "subchunk subset {subset:?} spans multiple subchunks of an inner subchunk grid"
+        )));
+    }
+    Ok(chunks.start().into())
+}
+
+/// Return the indices of the chunk of `chunk_grid` whose subset is `subset`.
+///
+/// A subchunk located through one subchunk grid must be exactly a subchunk of another for its encoded bytes to be
+/// those of the addressed subchunk, so a subset that is only part of a chunk is an error.
+pub(crate) fn subset_chunk_indices(
+    chunk_grid: &ChunkGrid,
+    subset: &ArraySubset,
+) -> Result<ArrayIndices, zarrs_codec::CodecError> {
+    let indices = enclosing_chunk_indices(chunk_grid, subset)?;
+    let chunk_subset = chunk_grid.subset(&indices)?;
+    if chunk_subset.as_ref() != Some(subset) {
+        return Err(zarrs_codec::CodecError::Other(format!(
+            "subchunk subset {subset:?} is not a subchunk of an inner subchunk grid, the enclosing subchunk is {chunk_subset:?}"
+        )));
+    }
+    Ok(indices)
+}
+
+/// Return the indices of the subchunk at `subset` in the chunk-local subchunk `grid` of a partial decoder or encoder.
+fn local_subchunk_indices(
+    grid: Option<ChunkGrid>,
+    subset: &ArraySubset,
+) -> Result<ArrayIndices, ArrayError> {
+    let grid = grid.ok_or(ArrayError::MissingSubchunkGrid)?;
+    Ok(subset_chunk_indices(&grid, subset)?)
+}
+
 mod array_mut_ops;
 mod array_mut_ops_array;
 #[allow(clippy::module_inception)]

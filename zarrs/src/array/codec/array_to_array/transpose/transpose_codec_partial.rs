@@ -4,17 +4,14 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
+use crate::array::{ArrayBytes, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecError, CodecOptions,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, CodecError,
+    CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{
-    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncArrayPartialEncoderTraits,
-};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Transpose codec.
@@ -26,6 +23,7 @@ pub(crate) struct TransposeCodecPartial<T: ?Sized> {
     order: Vec<usize>,
     /// Inverse permutation order (for decoding).
     order_inverse: Vec<usize>,
+    codec: Arc<dyn ArrayToArrayCodecTraits>,
 }
 
 impl<T: ?Sized> TransposeCodecPartial<T> {
@@ -36,6 +34,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         shape: &[NonZeroU64],
         data_type: &DataType,
         order: Vec<usize>,
+        codec: Arc<dyn ArrayToArrayCodecTraits>,
     ) -> Self {
         let order_inverse = inverse_permutation(&order);
         Self {
@@ -44,6 +43,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             data_type: data_type.clone(),
             order,
             order_inverse,
+            codec,
         }
     }
 
@@ -70,31 +70,6 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             &self.order_inverse,
             &self.data_type,
         )
-    }
-}
-
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
-where
-    T: ArrayPartialDecoderSubchunkingTraits,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| {
-                    super::transpose_codec::decoded_local_subchunk_grid(
-                        &self.shape,
-                        &self.order_inverse,
-                        &grid,
-                    )
-                })
-                .transpose()
-            })
-            .collect()
     }
 }
 
@@ -170,35 +145,6 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)
-            .await?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| {
-                    super::transpose_codec::decoded_local_subchunk_grid(
-                        &self.shape,
-                        &self.order_inverse,
-                        &grid,
-                    )
-                })
-                .transpose()
-            })
-            .collect()
     }
 }
 
@@ -283,3 +229,10 @@ where
         self.input_output_handle.supports_partial_encode()
     }
 }
+
+super::super::subchunk_forwarding::impl_subchunk_forwarding!(
+    TransposeCodecPartial,
+    input_output_handle,
+    codec,
+    shape
+);

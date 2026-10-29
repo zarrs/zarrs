@@ -364,6 +364,19 @@ where
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],

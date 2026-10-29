@@ -1,14 +1,10 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{
-    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncArrayPartialEncoderTraits,
-};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_storage::StorageError;
 
 use super::cast_value_codec::{CastBytesContext, ScalarMap, cast_bytes};
@@ -115,18 +111,6 @@ fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
     Ok(())
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
-where
-    T: ArrayPartialDecoderSubchunkingTraits,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
-    }
-}
-
 impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
     T: ArrayPartialDecoderTraits,
@@ -180,21 +164,6 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
     }
 }
 
@@ -263,3 +232,9 @@ where
         self.input_output_handle.supports_partial_encode()
     }
 }
+
+super::super::subchunk_forwarding::impl_subchunk_forwarding!(
+    CastValueCodecPartial,
+    input_output_handle,
+    identity
+);

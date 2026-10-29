@@ -6,8 +6,8 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, EncodedSubchunk,
+    InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for a partial array decoder.
@@ -39,11 +39,69 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
     fn local_subchunk_grid(&self, options: &CodecOptions) -> Result<Option<ChunkGrid>, CodecError> {
+        self.local_subchunk_grid_at_level(0, options)
+    }
+
+    /// Return the chunk-local subchunk grid at `level` for this decoder, if available.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
+    fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
         Ok(self
             .local_subchunk_grids(options)?
             .into_iter()
-            .next()
+            .nth(level)
             .flatten())
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the outermost subchunk grid.
+    ///
+    /// This is a compatibility wrapper around
+    /// [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level).
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        self.retrieve_encoded_subchunk_at_level(0, subchunk_indices, options)
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the `level` subchunk grid.
+    ///
+    /// The `subchunk_indices` index the `level` grid returned by
+    /// [`local_subchunk_grids`](Self::local_subchunk_grids), which is local to the chunk handled by this decoder.
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// The returned [`EncodedSubchunk`] holds the shape to decode the bytes with in the encoded domain of the subchunk
+    /// codec, which is not necessarily the shape of the subchunk in the grid it was addressed by.
+    ///
+    /// Returns [`None`] if the subchunk, or any subchunk enclosing it, is not stored, in which case it has the fill
+    /// value.
+    ///
+    /// The default implementation returns [`CodecError::UnsupportedEncodedSubchunk`]. A decoder that exposes subchunks
+    /// should implement it, and a decoder that wraps another should forward it.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this decoder does not expose encoded subchunks, or a
+    /// [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the subchunk indices are invalid, a codec
+    /// fails, or there is an underlying store error.
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let _ = (level, subchunk_indices, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
     }
 }
 

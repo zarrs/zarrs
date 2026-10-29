@@ -3,14 +3,10 @@ use std::sync::Arc;
 use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use zarrs_codec::{
-    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncArrayPartialEncoderTraits,
-};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
@@ -33,18 +29,6 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
             data_type: data_type.clone(),
             keepbits,
         })
-    }
-}
-
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
-where
-    T: ArrayPartialDecoderSubchunkingTraits,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
     }
 }
 
@@ -103,21 +87,6 @@ where
 
     fn supports_partial_encode(&self) -> bool {
         self.input_output_handle.supports_partial_encode()
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T: ?Sized> AsyncArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
-where
-    T: AsyncArrayPartialDecoderSubchunkingTraits,
-{
-    async fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-    ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
     }
 }
 
@@ -187,3 +156,9 @@ where
         self.input_output_handle.supports_partial_encode()
     }
 }
+
+super::super::subchunk_forwarding::impl_subchunk_forwarding!(
+    BitroundCodecPartial,
+    input_output_handle,
+    identity
+);

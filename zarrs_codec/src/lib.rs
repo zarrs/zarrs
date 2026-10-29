@@ -48,6 +48,9 @@ pub use codec_traits::bytes_partial_async::{
     AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 
+mod encoded_subchunk;
+pub use encoded_subchunk::EncodedSubchunk;
+
 mod recommended_concurrency;
 pub use recommended_concurrency::RecommendedConcurrency;
 
@@ -645,6 +648,9 @@ pub enum CodecError {
     /// Unsupported data type.
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
+    /// Encoded subchunks are not supported.
+    #[error("encoded subchunks are not supported by this partial decoder or encoder")]
+    UnsupportedEncodedSubchunk,
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"

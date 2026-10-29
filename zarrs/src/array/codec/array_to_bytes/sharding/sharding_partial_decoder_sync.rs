@@ -17,13 +17,13 @@ use crate::array::array_bytes_internal::{
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubsetTraits, ChunkGrid,
-    ChunkShape, CodecChainBound, CowBytes, DataType, Indexer, ravel_indices,
+    ChunkShape, CodecChainBound, DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into, decode_into_array_bytes_target,
+    BytesPartialDecoderTraits, CodecError, CodecOptions, EncodedSubchunk,
+    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -94,25 +94,6 @@ impl ShardingPartialDecoder {
             chunk_indices,
         )
     }
-
-    /// Retrieve the encoded bytes of a subchunk.
-    ///
-    /// The `chunk_indices` are relative to the start of the shard.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid or the bytes cannot be retrieved.
-    pub fn retrieve_subchunk_encoded(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<CowBytes<'_>>, CodecError> {
-        let byte_range = self.subchunk_byte_range(chunk_indices)?;
-        if let Some(byte_range) = byte_range {
-            self.input_handle
-                .partial_decode(byte_range, &CodecOptions::default())
-        } else {
-            Ok(None)
-        }
-    }
 }
 
 pub(crate) fn partial_decode(
@@ -177,6 +158,23 @@ impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialDecoder {
         nested_local_subchunk_grids(
             ChunkGrid::new(self.subchunk_grid.clone()),
             &self.inner_codecs,
+        )
+    }
+
+    fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        super::sharding_encoded_subchunk::retrieve_encoded_subchunk_at_level(
+            &self.input_handle,
+            &self.subchunk_grid,
+            &self.inner_codecs,
+            self.shard_index.as_deref(),
+            level,
+            subchunk_indices,
+            options,
         )
     }
 }

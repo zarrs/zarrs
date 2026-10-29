@@ -370,6 +370,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_handle,
                 shape,
                 &self.data_type,
+                self.clone(),
             ),
         ))
     }
@@ -385,6 +386,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_output_handle,
                 shape,
                 &self.data_type,
+                self.clone(),
             ),
         ))
     }
@@ -401,6 +403,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_handle,
                 shape,
                 &self.data_type,
+                self.clone(),
             ),
         ))
     }
@@ -417,6 +420,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_output_handle,
                 shape,
                 &self.data_type,
+                self.clone(),
             ),
         ))
     }

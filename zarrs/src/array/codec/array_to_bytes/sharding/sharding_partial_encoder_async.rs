@@ -22,7 +22,7 @@ use crate::array::{
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderSubchunkingTraits,
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
+    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, EncodedSubchunk, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -280,6 +280,27 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialEncoder {
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
+    }
+
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        // Hold the lock while reading, so a concurrent update cannot move the subchunk
+        let shard_index = self.shard_index.lock().await;
+        let handle: Arc<dyn AsyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
+        super::sharding_encoded_subchunk::async_retrieve_encoded_subchunk_at_level(
+            &handle,
+            &self.chunk_grid,
+            &self.inner_codecs,
+            Some(shard_index.as_slice()),
+            level,
+            subchunk_indices,
+            options,
+        )
+        .await
     }
 }
 

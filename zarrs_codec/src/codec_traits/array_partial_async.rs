@@ -7,7 +7,7 @@ use zarrs_storage::StorageError;
 
 use crate::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
-    CodecOptions, InvalidNumberOfElementsError, decode_into_array_bytes_target,
+    CodecOptions, EncodedSubchunk, InvalidNumberOfElementsError, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -43,12 +43,59 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
         &self,
         options: &CodecOptions,
     ) -> Result<Option<ChunkGrid>, CodecError> {
+        self.local_subchunk_grid_at_level(0, options).await
+    }
+
+    /// Return the chunk-local subchunk grid at `level` for this decoder, if available.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the local grid hierarchy cannot be resolved.
+    async fn local_subchunk_grid_at_level(
+        &self,
+        level: usize,
+        options: &CodecOptions,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
         Ok(self
             .local_subchunk_grids(options)
             .await?
             .into_iter()
-            .next()
+            .nth(level)
             .flatten())
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the outermost subchunk grid.
+    ///
+    /// See [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk`](crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk).
+    ///
+    /// # Errors
+    /// See [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level).
+    async fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        self.retrieve_encoded_subchunk_at_level(0, subchunk_indices, options)
+            .await
+    }
+
+    /// Retrieve the encoded subchunk at `subchunk_indices` of the `level` subchunk grid.
+    ///
+    /// See [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level`](crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UnsupportedEncodedSubchunk`] if this decoder does not expose encoded subchunks, or a
+    /// [`CodecError`] if `level` is beyond the subchunk grid hierarchy, the subchunk indices are invalid, a codec
+    /// fails, or there is an underlying store error.
+    async fn retrieve_encoded_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let _ = (level, subchunk_indices, options);
+        Err(CodecError::UnsupportedEncodedSubchunk)
     }
 }
 
