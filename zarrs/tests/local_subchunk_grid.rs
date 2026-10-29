@@ -32,7 +32,7 @@ use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 #[derive(Clone, Debug)]
 struct DynamicLocalSubchunkCodec;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct DynamicLocalSubchunkCodecBound {
     data_type: DataType,
     fill_value: Option<FillValue>,
@@ -183,6 +183,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCod
         _decoded_chunk_grid: zarrs_codec::ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, zarrs::array::ChunkGridCreateError> {
         Ok(vec![ChunkGridDecoded::ChunkLocal])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        vec![Arc::new(self.clone())]
     }
 }
 
@@ -575,7 +579,7 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TestSubchunkingCodecBound {
     data_type: DataType,
     fill_value: Option<FillValue>,
@@ -622,6 +626,14 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBou
             }
         };
         Ok(vec![subchunk_grid])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        if self.expose_subchunks {
+            vec![ArrayToBytesCodecTraits::into_dyn(Arc::new(self.clone()))]
+        } else {
+            Vec::new()
+        }
     }
 }
 
