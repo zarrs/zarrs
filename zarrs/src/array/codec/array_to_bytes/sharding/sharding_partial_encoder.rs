@@ -83,75 +83,17 @@ impl ShardingPartialEncoder {
             sharding_options,
         })
     }
-}
 
-impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
-    fn local_subchunk_grids(
-        &self,
-        _options: &CodecOptions,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
-    }
-}
-
-impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
-    fn data_type(&self) -> &DataType {
-        self.inner_codecs.data_type()
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.input_output_handle.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.input_output_handle.size_held()
-            + self.index_shape.num_elements_usize() * size_of::<u64>()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn crate::array::Indexer,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
-        super::sharding_partial_decoder_sync::partial_decode(
-            &handle,
-            &self.chunk_grid,
-            &self.subchunk_shape,
-            &self.inner_codecs,
-            Some(self.shard_index.lock().unwrap().as_slice()),
-            indexer,
-            options,
-        )
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        self.input_output_handle.supports_partial_decode()
-    }
-}
-
-impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
-    fn erase(&self) -> Result<(), super::CodecError> {
-        let mut shard_index = self.shard_index.lock().unwrap();
-        self.input_output_handle.erase()?;
-        shard_index.fill(u64::MAX);
-        Ok(())
-    }
-
+    /// Append the encoded `updated_subchunks` to the shard and replace their entries in the shard index.
+    ///
+    /// A [`None`] subchunk is removed. The cached `shard_index_guard` is only updated once the shard is written.
     #[allow(clippy::too_many_lines)]
-    #[allow(clippy::similar_names)]
-    fn partial_encode(
+    fn commit_subchunk_updates(
         &self,
-        chunk_subset_indexer: &dyn crate::array::Indexer,
-        chunk_subset_bytes: &ArrayBytes<'_>,
-        options: &super::CodecOptions,
-    ) -> Result<(), super::CodecError> {
-        let data_type = self.inner_codecs.data_type();
-        let fill_value = self
-            .inner_codecs
-            .fill_value()
-            .ok_or(CodecError::UndefinedFillValue)?;
-        let mut shard_index_guard = self.shard_index.lock().unwrap();
+        shard_index_guard: &mut Vec<u64>,
+        updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
         let mut shard_index = shard_index_guard.clone();
 
         // Get the maximum offset of existing encoded chunks
@@ -169,112 +111,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             })
             .try_fold(0, |max, end| end.map(|end| end.max(max)))?;
 
-        // Validate the indexer and bytes
-        chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
-        chunk_subset_bytes.validate(chunk_subset_indexer.len(), data_type)?;
-        if chunk_subset_indexer.is_empty() {
-            return Ok(());
-        }
-
-        // Split the update into the intersected subchunks
-        let updates = subchunk_updates(
-            &self.chunk_grid,
-            &self.subchunk_shape,
-            chunk_subset_indexer,
-            chunk_subset_bytes,
-            data_type,
-        )?;
-        let subchunks_intersected: Vec<u64> =
-            updates.iter().map(|update| update.subchunk_index).collect();
-
-        // Get the byte ranges of the subchunks that need to be retrieved
-        //   This only includes chunks that are not entirely replaced by the update.
-        //   Sorting byte ranges may improves store retrieve efficiency in some cases
-        let (subchunks_straddling, byte_ranges): (Vec<u64>, Vec<ByteRange>) = updates
-            .iter()
-            .filter(|update| !update.fully_covered)
-            .filter_map(|update| {
-                let (offset, size) = super::subchunk_offset_size(
-                    &shard_index,
-                    usize::try_from(update.subchunk_index).unwrap(),
-                )?;
-                Some((
-                    update.subchunk_index,
-                    ByteRange::FromStart(offset, Some(size)),
-                ))
-            })
-            .sorted_by_key(|(_, byte_range)| *byte_range)
-            .unzip();
-
-        // Read the straddling subchunks
-        let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| {
-                std::iter::zip(
-                    subchunks_straddling,
-                    bytes.into_iter().map(CowBytes::into_vec),
-                )
-                .collect()
-            })
-            .unwrap_or_default();
-
-        // Decode, update and encode all of the intersecting subchunks
-        let updates = updates
-            .into_iter()
-            .map(|update| {
-                let subchunk_encoded = subchunks_encoded.remove(&update.subchunk_index);
-                (update, subchunk_encoded)
-            })
-            .collect::<Vec<_>>();
-
-        let (subchunk_concurrent_limit, subchunk_options) =
-            super::get_concurrent_target_and_codec_options(
-                &self.inner_codecs,
-                &self.subchunk_shape,
-                updates.len(),
-                options,
-            )?;
-        let updated_subchunks = updates
-            .concurrent_limit(subchunk_concurrent_limit)
-            .map(|(update, subchunk_encoded)| {
-                let subchunk_decoded = if let Some(subchunk_encoded) = subchunk_encoded {
-                    self.inner_codecs
-                        .decode(
-                            CowBytes::from(subchunk_encoded),
-                            &update.subchunk_shape,
-                            &subchunk_options,
-                        )?
-                        .into_owned()
-                } else {
-                    ArrayBytes::new_fill_value(
-                        data_type,
-                        update.subchunk_shape.num_elements_u64(),
-                        fill_value,
-                    )?
-                };
-                let subchunk_updated = update_array_bytes(
-                    subchunk_decoded,
-                    bytemuck::cast_slice(&update.subchunk_shape),
-                    update.indexer.as_ref(),
-                    &update.bytes,
-                    data_type.size(),
-                )?;
-                if subchunk_updated.is_fill_value(fill_value) {
-                    Ok((update.subchunk_index, None))
-                } else {
-                    let subchunk_encoded = self
-                        .inner_codecs
-                        .encode(subchunk_updated, &update.subchunk_shape, &subchunk_options)?
-                        .into_static();
-                    Ok((update.subchunk_index, Some(subchunk_encoded)))
-                }
-            })
-            .collect::<Result<Vec<_>, CodecError>>()?;
-
         // Check if the shard can be entirely rewritten instead of appended
         //  This occurs if the shard index is empty if all of the intersected subchunks are removed
-        for subchunk_index in &subchunks_intersected {
+        for (subchunk_index, _) in &updated_subchunks {
             shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
             shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
         }
@@ -402,6 +241,179 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         }
         *shard_index_guard = shard_index;
         Ok(())
+    }
+}
+
+impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
+    fn local_subchunk_grids(
+        &self,
+        _options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
+    }
+}
+
+impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
+    fn data_type(&self) -> &DataType {
+        self.inner_codecs.data_type()
+    }
+
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
+            + self.index_shape.num_elements_usize() * size_of::<u64>()
+    }
+
+    fn partial_decode(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
+        super::sharding_partial_decoder_sync::partial_decode(
+            &handle,
+            &self.chunk_grid,
+            &self.subchunk_shape,
+            &self.inner_codecs,
+            Some(self.shard_index.lock().unwrap().as_slice()),
+            indexer,
+            options,
+        )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
+}
+
+impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
+    fn erase(&self) -> Result<(), super::CodecError> {
+        let mut shard_index = self.shard_index.lock().unwrap();
+        self.input_output_handle.erase()?;
+        shard_index.fill(u64::MAX);
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::similar_names)]
+    fn partial_encode(
+        &self,
+        chunk_subset_indexer: &dyn crate::array::Indexer,
+        chunk_subset_bytes: &ArrayBytes<'_>,
+        options: &super::CodecOptions,
+    ) -> Result<(), super::CodecError> {
+        let data_type = self.inner_codecs.data_type();
+        let fill_value = self
+            .inner_codecs
+            .fill_value()
+            .ok_or(CodecError::UndefinedFillValue)?;
+        let mut shard_index_guard = self.shard_index.lock().unwrap();
+
+        // Validate the indexer and bytes
+        chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
+        chunk_subset_bytes.validate(chunk_subset_indexer.len(), data_type)?;
+        if chunk_subset_indexer.is_empty() {
+            return Ok(());
+        }
+
+        // Split the update into the intersected subchunks
+        let updates = subchunk_updates(
+            &self.chunk_grid,
+            &self.subchunk_shape,
+            chunk_subset_indexer,
+            chunk_subset_bytes,
+            data_type,
+        )?;
+
+        // Get the byte ranges of the subchunks that need to be retrieved
+        //   This only includes chunks that are not entirely replaced by the update.
+        //   Sorting byte ranges may improves store retrieve efficiency in some cases
+        let (subchunks_straddling, byte_ranges): (Vec<u64>, Vec<ByteRange>) = updates
+            .iter()
+            .filter(|update| !update.fully_covered)
+            .filter_map(|update| {
+                let (offset, size) = super::subchunk_offset_size(
+                    &shard_index_guard,
+                    usize::try_from(update.subchunk_index).unwrap(),
+                )?;
+                Some((
+                    update.subchunk_index,
+                    ByteRange::FromStart(offset, Some(size)),
+                ))
+            })
+            .sorted_by_key(|(_, byte_range)| *byte_range)
+            .unzip();
+
+        // Read the straddling subchunks
+        let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
+            .input_output_handle
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
+            .map(|bytes| {
+                std::iter::zip(
+                    subchunks_straddling,
+                    bytes.into_iter().map(CowBytes::into_vec),
+                )
+                .collect()
+            })
+            .unwrap_or_default();
+
+        // Decode, update and encode all of the intersecting subchunks
+        let updates = updates
+            .into_iter()
+            .map(|update| {
+                let subchunk_encoded = subchunks_encoded.remove(&update.subchunk_index);
+                (update, subchunk_encoded)
+            })
+            .collect::<Vec<_>>();
+
+        let (subchunk_concurrent_limit, subchunk_options) =
+            super::get_concurrent_target_and_codec_options(
+                &self.inner_codecs,
+                &self.subchunk_shape,
+                updates.len(),
+                options,
+            )?;
+        let updated_subchunks = updates
+            .concurrent_limit(subchunk_concurrent_limit)
+            .map(|(update, subchunk_encoded)| {
+                let subchunk_decoded = if let Some(subchunk_encoded) = subchunk_encoded {
+                    self.inner_codecs
+                        .decode(
+                            CowBytes::from(subchunk_encoded),
+                            &update.subchunk_shape,
+                            &subchunk_options,
+                        )?
+                        .into_owned()
+                } else {
+                    ArrayBytes::new_fill_value(
+                        data_type,
+                        update.subchunk_shape.num_elements_u64(),
+                        fill_value,
+                    )?
+                };
+                let subchunk_updated = update_array_bytes(
+                    subchunk_decoded,
+                    bytemuck::cast_slice(&update.subchunk_shape),
+                    update.indexer.as_ref(),
+                    &update.bytes,
+                    data_type.size(),
+                )?;
+                if subchunk_updated.is_fill_value(fill_value) {
+                    Ok((update.subchunk_index, None))
+                } else {
+                    let subchunk_encoded = self
+                        .inner_codecs
+                        .encode(subchunk_updated, &update.subchunk_shape, &subchunk_options)?
+                        .into_static();
+                    Ok((update.subchunk_index, Some(subchunk_encoded)))
+                }
+            })
+            .collect::<Result<Vec<_>, CodecError>>()?;
+
+        self.commit_subchunk_updates(&mut shard_index_guard, updated_subchunks, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
