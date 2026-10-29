@@ -89,7 +89,8 @@ pub fn blosc_compress_bytes(
     let mut dest: Vec<u8> = vec![0; destsize];
     let destsize = {
         let mut cparams = BLOSC2_CPARAMS_DEFAULTS;
-        cparams.typesize = typesize as i32;
+        // blusc requires a positive typesize, but it is optional (zero) if shuffling is disabled
+        cparams.typesize = typesize.max(1) as i32;
         cparams.clevel = clevel.into();
         cparams.nthreads = numinternalthreads as i16;
         cparams.blocksize = blocksize as i32;
