@@ -2,9 +2,7 @@ use std::any::Any;
 use std::sync::Mutex;
 
 use zarrs_plugin::{MaybeSend, MaybeSync};
-use zarrs_storage::byte_range::{
-    ByteRange, ByteRangeIterator, InvalidByteRangeError, extract_byte_ranges,
-};
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{
     OffsetBytesIterator, ReadableStorageTraits, ReadableWritableStorageTraits, StorageError,
     StoreKey,
@@ -179,18 +177,12 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
         _options: &CodecOptions,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         if let Some(input) = self.lock().unwrap().as_ref() {
-            let size = input.len() as u64;
-            let mut outputs = Vec::with_capacity(decoded_regions.size_hint().0);
-            for byte_range in decoded_regions {
-                if byte_range.end(size) <= size {
-                    outputs.push(CowBytes::from(
-                        input[byte_range.to_range_usize(size)].to_vec(),
-                    ));
-                } else {
-                    return Err(InvalidByteRangeError::new(byte_range, size).into());
-                }
-            }
-            Ok(Some(outputs))
+            Ok(Some(
+                extract_byte_ranges(input, decoded_regions)?
+                    .into_iter()
+                    .map(CowBytes::from)
+                    .collect(),
+            ))
         } else {
             Ok(None)
         }
@@ -282,5 +274,37 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
 
     fn supports_partial_encode(&self) -> bool {
         self.0.supports_set_partial()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mutex_option_vec_partial_decode() {
+        let decoder = Mutex::new(Some((0u8..10).collect::<Vec<u8>>()));
+        let options = CodecOptions::default();
+        let decode = |byte_range| decoder.partial_decode(byte_range, &options);
+
+        assert_eq!(
+            decode(ByteRange::FromStart(2, Some(3))).unwrap().unwrap(),
+            [2, 3, 4]
+        );
+        assert_eq!(decode(ByteRange::Suffix(2)).unwrap().unwrap(), [8, 9]);
+        assert!(
+            decode(ByteRange::FromStart(10, None))
+                .unwrap()
+                .unwrap()
+                .is_empty()
+        );
+        for invalid in [
+            ByteRange::Suffix(20),
+            ByteRange::FromStart(15, None),
+            ByteRange::FromStart(8, Some(3)),
+            ByteRange::FromStart(1, Some(u64::MAX)),
+        ] {
+            assert!(decode(invalid).is_err(), "{invalid:?}");
+        }
     }
 }
