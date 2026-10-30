@@ -1,4 +1,9 @@
-use super::*;
+#[cfg(doc)]
+use super::{Array, ArrayCreateError};
+use super::{
+    ArrayMetadataOptions, ArrayOps, ArrayShape, CodecCreateError, CodecOptions,
+    CodecSpecificOptions, DimensionName, MetadataEraseVersion,
+};
 
 /// Mutable array metadata/configuration operations.
 pub trait ArrayMutOps: ArrayOps {

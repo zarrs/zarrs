@@ -5,7 +5,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
-use super::{ArrayReadOps, *};
+use super::{
+    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkCache, ChunkGrid,
+    CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits, recommended_codec_concurrency,
+};
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
@@ -449,7 +452,7 @@ mod tests {
         ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
         ChunkCacheTypeDecoded,
     };
-    use crate::array::{ArrayBuilder, ArrayError, FillValue, data_type};
+    use crate::array::{ArrayBuilder, ArrayError, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
     fn test_cache<C>(cache: C)

@@ -134,7 +134,10 @@ fn bench_sync_write(c: &mut Criterion) {
 
 #[cfg(feature = "async")]
 mod asynchronous {
-    use super::*;
+    use super::{
+        Arc, Array, ArrayBytes, Criterion, Duration, LatencyStore, Throughput, builder,
+        compressible_u16, label, latencies_sharded, num_elements, read_subsets,
+    };
     use zarrs::storage::store::AsyncMemoryStore;
 
     fn runtimes() -> [(&'static str, tokio::runtime::Runtime); 2] {

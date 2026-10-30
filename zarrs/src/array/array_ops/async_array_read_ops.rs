@@ -1,4 +1,6 @@
-use super::*;
+#[cfg(doc)]
+use super::ArrayReadOps;
+use super::{ArrayError, ArrayOps, ArraySubsetTraits, ChunkGrid, FromArrayBytes, Indexer};
 use std::sync::Arc;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;

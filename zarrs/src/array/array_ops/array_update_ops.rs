@@ -1,4 +1,9 @@
-use super::*;
+use super::{
+    Arc, Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ArrayWriteOps, Indexer,
+    IntoArrayBytes, ReadableStorageTraits,
+};
+#[cfg(doc)]
+use super::{ArrayOps, ArraySubset};
 use zarrs_codec::ArrayPartialEncoderTraits;
 
 /// Synchronous array read/write update operations.

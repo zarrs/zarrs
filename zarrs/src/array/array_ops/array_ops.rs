@@ -1,4 +1,12 @@
-use super::*;
+use super::{
+    Arc, ArrayBuilder, ArrayError, ArrayIndices, ArrayMetadata, ArrayMetadataOptions, ArraySubset,
+    ArraySubsetTraits, ChunkGrid, ChunkGridDecoded, ChunkGridDecodedRef, ChunkKeyEncoding,
+    ChunkShape, CodecChain, CodecChainBound, CodecOptions, CodecSpecificOptions, DataType,
+    DimensionName, FillValue, IncompatibleDimensionalityError, MetadataEraseVersion, NodePath,
+    StorageTransformerChain, StoreKey,
+};
+#[cfg(doc)]
+use super::{Array, ArrayMutOps};
 
 /// Core array operations.
 pub trait ArrayOps {

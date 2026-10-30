@@ -1,4 +1,8 @@
-use super::*;
+#[cfg(doc)]
+use super::ArraySubset;
+use super::{
+    Arc, ArrayError, ArrayIndices, ArrayOps, ArraySubsetTraits, ChunkGrid, FromArrayBytes, Indexer,
+};
 use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
