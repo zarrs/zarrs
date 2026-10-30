@@ -188,7 +188,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         };
         futures::stream::iter(chunks.iter_indices())
             .map(Ok)
-            .try_for_each_concurrent(None, erase_chunk)
+            .try_for_each_concurrent(Some(self.codec_options().concurrent_target()), erase_chunk)
             .await
     }
     /////////////////////////////////////////////////////////////////////////////

@@ -169,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
+- `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
 - `ArrayOps::chunk_key` returns `ArrayError::InvalidChunkGridIndicesError` if the chunk indices do not match the dimensionality of the array
   - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
 - Partial encoding checks whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store

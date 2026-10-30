@@ -2,7 +2,7 @@ use inherent::inherent;
 use zarrs_codec::CowBytes;
 
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
@@ -159,22 +159,20 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
 
-        // FIXME: Bound concurrency
-        #[cfg(not(target_arch = "wasm32"))]
+        let concurrent_limit = self.codec_options().concurrent_target();
         if let Some(chunks) = chunks.as_array_subset() {
-            chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+            chunks
+                .indices()
+                .concurrent_limit(concurrent_limit)
+                .try_for_each(erase_chunk)
         } else {
             // `Indexer::iter_indices` is a sequential iterator, so collect it for parallel iteration.
             chunks
                 .iter_indices()
                 .collect::<Vec<_>>()
-                .into_par_iter()
-                .try_for_each(erase_chunk)?;
+                .concurrent_limit(concurrent_limit)
+                .try_for_each(erase_chunk)
         }
-        #[cfg(target_arch = "wasm32")]
-        chunks.iter_indices().try_for_each(erase_chunk)?;
-
-        Ok(())
     }
 
     #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
