@@ -259,23 +259,33 @@ mod tests {
         let additional_field = serde_json::Map::new();
         let additional_field: AdditionalFieldV3 = additional_field.into();
         assert!(additional_field.must_understand());
-        assert!(
-            additional_field.as_value() == &serde_json::Value::Object(serde_json::Map::default())
+        assert_eq!(
+            additional_field.as_value(),
+            &serde_json::Value::Object(serde_json::Map::default())
         );
-        assert!(serde_json::to_string(&additional_field).unwrap() == r#"{"must_understand":true}"#);
+        assert_eq!(
+            serde_json::to_string(&additional_field).unwrap(),
+            r#"{"must_understand":true}"#
+        );
 
         let additional_field = AdditionalFieldV3::new("test", true);
         assert!(additional_field.must_understand());
-        assert!(additional_field.as_value() == &serde_json::Value::String("test".to_string()));
-        assert!(serde_json::to_string(&additional_field).unwrap() == r#""test""#);
+        assert_eq!(
+            additional_field.as_value(),
+            &serde_json::Value::String("test".to_string())
+        );
+        assert_eq!(
+            serde_json::to_string(&additional_field).unwrap(),
+            r#""test""#
+        );
 
         let additional_field = AdditionalFieldV3::new(123, false);
         assert!(!additional_field.must_understand());
-        assert!(
-            additional_field.as_value()
-                == &serde_json::Value::Number(serde_json::Number::from(123))
+        assert_eq!(
+            additional_field.as_value(),
+            &serde_json::Value::Number(serde_json::Number::from(123))
         );
-        assert!(serde_json::to_string(&additional_field).unwrap() == "123");
+        assert_eq!(serde_json::to_string(&additional_field).unwrap(), "123");
     }
 
     #[test]
@@ -296,7 +306,7 @@ mod tests {
             "unsupported_field_4": "test"
         }"#;
         let additional_fields = serde_json::from_str::<AdditionalFieldsV3>(json).unwrap();
-        assert!(additional_fields.len() == 5);
+        assert_eq!(additional_fields.len(), 5);
         assert!(!additional_fields["unknown_field"].must_understand());
         assert!(additional_fields["unsupported_field_1"].must_understand());
         assert!(additional_fields["unsupported_field_2"].must_understand());
