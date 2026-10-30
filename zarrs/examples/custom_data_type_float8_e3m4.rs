@@ -1,7 +1,7 @@
 //! A custom data type for `float8_e3m4`.
 //!
 //! It accepts float compatible fill values.
-#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use std::sync::Arc;
 use zarrs::array::CowBytes;
