@@ -310,9 +310,10 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// [`Group::with_metadata_options`] to override them.
     #[must_use]
     pub fn metadata_opt(&self) -> GroupMetadata {
-        let options = self.metadata_options();
         use GroupMetadata as GM;
         use MetadataConvertVersion as V;
+
+        let options = self.metadata_options();
         let metadata = (*self.metadata).clone();
 
         match (metadata, options.metadata_convert_version()) {

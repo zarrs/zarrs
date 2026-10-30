@@ -2,6 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
+use futures::{StreamExt, TryStreamExt};
 use rayon::prelude::*;
 
 use unsafe_cell_slice::UnsafeCellSlice;
@@ -380,7 +381,6 @@ async fn partial_decode_fixed_array_subset_into(
         ));
     }
 
-    use futures::{StreamExt, TryStreamExt};
     let decoded_subchunks = {
         let mut values = Vec::with_capacity(subchunks.len());
         let mut results = futures::stream::iter(subchunks)
@@ -702,8 +702,6 @@ async fn partial_decode_indexer(
         groups.len(),
         options,
     )?;
-    use futures::{StreamExt, TryStreamExt};
-
     let options = &options;
     let decoded = {
         let mut values = Vec::with_capacity(groups.len());
@@ -752,8 +750,6 @@ async fn partial_decode_fixed_indexer_into<'a>(
     options: &CodecOptions,
     output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
 ) -> Result<(), CodecError> {
-    use futures::{StreamExt, TryStreamExt};
-
     let fill_value = inner_codecs.fill_value();
     let Some(shard_index) = shard_index else {
         return output_view

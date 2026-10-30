@@ -120,7 +120,6 @@ mod tests {
 
     #[test]
     fn warning_get_child_nodes() {
-        testing_logger::setup();
         const JSON_GROUP: &str = r#"{
             "zarr_format": 3,
             "node_type": "group",
@@ -128,6 +127,7 @@ mod tests {
                 "info": "The store for this group contains a fake node, which is not part of the dataset."
             }
         }"#;
+        testing_logger::setup();
         let root_md = serde_json::from_str::<NodeMetadata>(JSON_GROUP).unwrap();
         let json = serde_json::to_vec_pretty(&root_md).unwrap();
 

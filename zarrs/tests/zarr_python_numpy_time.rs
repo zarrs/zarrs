@@ -175,10 +175,11 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
         NumpyTimeUnit::Microsecond,
         NumpyTimeUnit::Nanosecond,
     ] {
-        println!("{unit:?}");
         use zarrs::array::ArrayBuilder;
         use zarrs::storage::store::MemoryStore;
         use zarrs_data_type::FillValue;
+
+        println!("{unit:?}");
 
         let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(

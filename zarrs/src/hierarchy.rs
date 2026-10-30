@@ -475,6 +475,8 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_invalid_async_group() {
+        use zarrs_storage::AsyncWritableStorageTraits;
+
         let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let root = Group::new_with_metadata(
@@ -486,7 +488,6 @@ mod tests {
 
         assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
 
-        use zarrs_storage::AsyncWritableStorageTraits;
         // Inject fauly subgroup
         store
             .set(
