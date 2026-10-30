@@ -722,7 +722,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             if Some(codec_index) == self.cache_index {
                 // The cache wraps the input handle, which decodes to this codec's encoded representation
                 input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                    &*input_handle,
+                    input_handle,
                     encoded_shape.clone(),
                     encoded_data_type.clone(),
                     options,
@@ -737,7 +737,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         if Some(codec_index) == self.cache_index {
             let (shape, data_type) = array_representations.first().unwrap();
             input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                &*input_handle,
+                input_handle,
                 shape.clone(),
                 data_type.clone(),
                 options,
@@ -834,7 +834,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 // The cache wraps the input handle, which decodes to this codec's encoded representation
                 input_handle = Arc::new(
                     ArrayPartialDecoderCache::async_new(
-                        &*input_handle,
+                        input_handle,
                         encoded_shape.clone(),
                         encoded_data_type.clone(),
                         options,
@@ -853,7 +853,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             let (shape, data_type) = array_representations.first().unwrap();
             input_handle = Arc::new(
                 ArrayPartialDecoderCache::async_new(
-                    &*input_handle,
+                    input_handle,
                     shape.clone(),
                     data_type.clone(),
                     options,
