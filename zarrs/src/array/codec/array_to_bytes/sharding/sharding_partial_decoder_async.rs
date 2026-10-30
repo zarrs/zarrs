@@ -50,7 +50,7 @@ impl AsyncShardingPartialDecoder {
     #[expect(clippy::too_many_arguments)]
     pub async fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shard_shape: ChunkShape,
+        shard_shape: &[NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
         index_codecs: &CodecChainBound,
@@ -62,7 +62,7 @@ impl AsyncShardingPartialDecoder {
             &*input_handle,
             index_codecs,
             index_location,
-            &shard_shape,
+            shard_shape,
             &subchunk_shape,
             options,
         )
@@ -70,7 +70,7 @@ impl AsyncShardingPartialDecoder {
 
         Ok(Self {
             input_handle,
-            subchunk_grid: subchunk_grid(&shard_shape, &subchunk_shape)?,
+            subchunk_grid: subchunk_grid(shard_shape, &subchunk_shape)?,
             subchunk_shape,
             inner_codecs,
             shard_index,

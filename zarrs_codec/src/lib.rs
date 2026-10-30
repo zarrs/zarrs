@@ -590,6 +590,10 @@ impl From<zarrs_data_type::DataTypeCodecError> for CodecCreateError {
 impl CodecCreateError {
     /// Create a new [`CodecCreateError::Other`] from a displayable error or message.
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }

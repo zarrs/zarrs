@@ -386,14 +386,14 @@ fn sharding_codec_chain(data_type: &DataType) -> Arc<CodecChain> {
 /// Store and retrieve `data` in the whole array.
 fn assert_store_round_trip<T>(
     array: &Array<MemoryStore>,
-    data: T,
+    data: &T,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: IntoArrayBytes<'static> + FromArrayBytes + Clone + PartialEq + std::fmt::Debug,
 {
     let subset = ArraySubset::new_with_shape(array.shape());
     array.store_array_subset(&subset, data.clone())?;
-    assert_eq!(array.retrieve_array_subset::<T>(&subset)?, data);
+    assert_eq!(&array.retrieve_array_subset::<T>(&subset)?, data);
     Ok(())
 }
 
@@ -410,7 +410,7 @@ fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std
     builder.array_to_bytes_codec(Arc::new(vlen));
     let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
     let data = ["a", "bb", "", "cc"].map(String::from).to_vec();
-    assert_store_round_trip(&array, data)?;
+    assert_store_round_trip(&array, &data)?;
 
     let optional = OptionalCodec::new(
         bytes_codec_chain(),
@@ -425,7 +425,7 @@ fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std
     builder.array_to_bytes_codec(Arc::new(optional));
     let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
     let data = vec![Some(1u16), None, Some(3), Some(4)];
-    assert_store_round_trip(&array, data)?;
+    assert_store_round_trip(&array, &data)?;
     Ok(())
 }
 

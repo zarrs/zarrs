@@ -621,7 +621,7 @@ mod tests {
     }
 
     fn codec_optional_round_trip_impl(
-        data_type: DataType,
+        data_type: &DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use std::num::NonZeroU64;
@@ -632,7 +632,7 @@ mod tests {
         let num_elements = chunk_shape.num_elements_usize();
 
         // Build codec configuration recursively for nested optional types
-        let data_codecs_config = build_codec_config_for_type(&data_type);
+        let data_codecs_config = build_codec_config_for_type(data_type);
 
         let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
             r#"{{
@@ -649,7 +649,7 @@ mod tests {
             )?;
 
         // Build nested ArrayBytes structure for input
-        let input = build_nested_array_bytes(&data_type, num_elements);
+        let input = build_nested_array_bytes(data_type, num_elements);
 
         let encoded = codec.encode(input, &chunk_shape, &CodecOptions::default())?;
         let decoded = codec.decode(encoded, &chunk_shape, &CodecOptions::default())?;
@@ -662,12 +662,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_null() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::new_optional_null(), // null/missing value: [0]
         )
         .unwrap();
@@ -676,12 +676,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_nonnull() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(Some(0u8)),
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(0u8).into_optional(),
         )
         .unwrap();
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_i32() {
         codec_optional_round_trip_impl(
-            data_type::int32().to_optional(),
+            &data_type::int32().to_optional(),
             FillValue::from(None::<i32>), // null/missing value: [0]
         )
         .unwrap();
@@ -699,7 +699,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_f32() {
         codec_optional_round_trip_impl(
-            data_type::float32().to_optional(),
+            &data_type::float32().to_optional(),
             FillValue::from(None::<f32>), // null/missing value: [0]
         )
         .unwrap();
@@ -709,7 +709,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level() {
         // Test Option<Option<u8>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional().to_optional(),
+            &data_type::uint8().to_optional().to_optional(),
             FillValue::from(None::<Option<u8>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -719,7 +719,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level_i32() {
         // Test Option<Option<i32>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::int32().to_optional().to_optional(),
+            &data_type::int32().to_optional().to_optional(),
             FillValue::from(None::<Option<i32>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -729,7 +729,7 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level() {
         // Test Option<Option<Option<u8>>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional().to_optional().to_optional(),
+            &data_type::uint8().to_optional().to_optional().to_optional(),
             FillValue::from(None::<Option<Option<u8>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -739,7 +739,7 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_none() {
         // Test Option<Option<Option<f64>>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none_alt() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -777,7 +777,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_none() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -789,7 +789,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_some() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),

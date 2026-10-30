@@ -731,7 +731,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(ShardingPartialDecoder::new(
             input_handle,
-            ChunkShape::from(shape.to_vec()),
+            shape,
             self.subchunk_shape.clone(),
             self.inner_codecs.clone(),
             &self.index_codecs,
@@ -751,7 +751,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         Ok(Arc::new(
             AsyncShardingPartialDecoder::new(
                 input_handle,
-                ChunkShape::from(shape.to_vec()),
+                shape,
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
                 &self.index_codecs,
@@ -771,7 +771,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         Ok(Arc::new(
             sharding_partial_encoder::ShardingPartialEncoder::new(
                 input_output_handle,
-                ChunkShape::from(shape.to_vec()),
+                shape,
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
                 self.index_codecs.clone(),
@@ -792,7 +792,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         Ok(Arc::new(
             super::sharding_partial_encoder_async::AsyncShardingPartialEncoder::new(
                 input_output_handle,
-                ChunkShape::from(shape.to_vec()),
+                shape,
                 self.subchunk_shape.clone(),
                 self.inner_codecs.clone(),
                 self.index_codecs.clone(),

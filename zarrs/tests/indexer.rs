@@ -21,10 +21,10 @@ use zarrs_data_type::FillValue;
 fn indexer_basic<T: Indexer>(
     indexer: T,
     dimensionality: usize,
-    output_shape: Vec<u64>,
-    indices: Vec<Vec<u64>>,
-    linearised_indices: Vec<u64>,
-    contiguous_indices: Vec<(u64, u64)>,
+    output_shape: &[u64],
+    indices: &[Vec<u64>],
+    linearised_indices: &[u64],
+    contiguous_indices: &[(u64, u64)],
 ) {
     assert_eq!(indexer.dimensionality(), dimensionality);
     assert_eq!(indexer.len(), indices.len() as u64);
@@ -75,10 +75,10 @@ fn indexer_indices_list() {
     indexer_basic(
         indexer,
         2,
-        vec![4],
-        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
-        vec![0, 1, 3, 5],
-        vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
+        &[4],
+        &[vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
+        &[0, 1, 3, 5],
+        &[(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
 }
 
@@ -88,10 +88,10 @@ fn indexer_indices_vec() {
     indexer_basic(
         indexer,
         2,
-        vec![4],
-        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
-        vec![0, 1, 3, 5],
-        vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
+        &[4],
+        &[vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
+        &[0, 1, 3, 5],
+        &[(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
 }
 
@@ -101,10 +101,10 @@ fn indexer_indices_slice() {
     indexer_basic(
         &indexer,
         2,
-        vec![4],
-        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
-        vec![0, 1, 3, 5],
-        vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
+        &[4],
+        &[vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
+        &[0, 1, 3, 5],
+        &[(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
 }
 
@@ -114,8 +114,8 @@ fn indexer_array_subset1() {
     indexer_basic(
         indexer,
         2,
-        vec![3, 2],
-        vec![
+        &[3, 2],
+        &[
             vec![1, 2],
             vec![1, 3],
             vec![2, 2],
@@ -123,8 +123,8 @@ fn indexer_array_subset1() {
             vec![3, 2],
             vec![3, 3],
         ],
-        vec![6, 7, 10, 11, 14, 15],
-        vec![(6, 2), (10, 2), (14, 2)],
+        &[6, 7, 10, 11, 14, 15],
+        &[(6, 2), (10, 2), (14, 2)],
     );
 }
 
@@ -134,8 +134,8 @@ fn indexer_array_subset1_ref() {
     indexer_basic(
         &indexer,
         2,
-        vec![3, 2],
-        vec![
+        &[3, 2],
+        &[
             vec![1, 2],
             vec![1, 3],
             vec![2, 2],
@@ -143,8 +143,8 @@ fn indexer_array_subset1_ref() {
             vec![3, 2],
             vec![3, 3],
         ],
-        vec![6, 7, 10, 11, 14, 15],
-        vec![(6, 2), (10, 2), (14, 2)],
+        &[6, 7, 10, 11, 14, 15],
+        &[(6, 2), (10, 2), (14, 2)],
     );
 }
 
@@ -154,10 +154,10 @@ fn indexer_array_subset2() {
     indexer_basic(
         &indexer,
         2,
-        vec![1, 4],
-        vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3]],
-        vec![0, 1, 2, 3],
-        vec![(0, 4)],
+        &[1, 4],
+        &[vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3]],
+        &[0, 1, 2, 3],
+        &[(0, 4)],
     );
 }
 
@@ -170,8 +170,8 @@ fn indexer_array_subsets_list() {
     indexer_basic(
         indexer,
         2,
-        vec![10],
-        vec![
+        &[10],
+        &[
             vec![1, 2],
             vec![1, 3],
             vec![2, 2],
@@ -183,8 +183,8 @@ fn indexer_array_subsets_list() {
             vec![0, 2],
             vec![0, 3],
         ],
-        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
-        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+        &[6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        &[(6, 2), (10, 2), (14, 2), (0, 4)],
     );
 }
 
@@ -197,8 +197,8 @@ fn indexer_array_subsets_slice() {
     indexer_basic(
         &indexer,
         2,
-        vec![10],
-        vec![
+        &[10],
+        &[
             vec![1, 2],
             vec![1, 3],
             vec![2, 2],
@@ -210,8 +210,8 @@ fn indexer_array_subsets_slice() {
             vec![0, 2],
             vec![0, 3],
         ],
-        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
-        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+        &[6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        &[(6, 2), (10, 2), (14, 2), (0, 4)],
     );
 }
 
@@ -224,8 +224,8 @@ fn indexer_array_subsets_vec() {
     indexer_basic(
         indexer,
         2,
-        vec![10],
-        vec![
+        &[10],
+        &[
             vec![1, 2],
             vec![1, 3],
             vec![2, 2],
@@ -237,17 +237,17 @@ fn indexer_array_subsets_vec() {
             vec![0, 2],
             vec![0, 3],
         ],
-        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
-        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+        &[6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        &[(6, 2), (10, 2), (14, 2), (0, 4)],
     );
 }
 
 #[async_generic::async_generic]
 fn indexer_partial_decode_impl<T: ElementOwned>(
-    codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
+    codec: &Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
-    data_type: DataType,
+    data_type: &DataType,
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
@@ -261,7 +261,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(
-                T::to_array_bytes(&data_type, bytes).unwrap(),
+                T::to_array_bytes(data_type, bytes).unwrap(),
                 shape,
                 &CodecOptions::default(),
             )
@@ -283,7 +283,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     };
 
     T::from_array_bytes(
-        &data_type,
+        data_type,
         if _async {
             partial_decoder
                 .partial_decode(indexer, &CodecOptions::default())
@@ -298,11 +298,11 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
 
 // #[async_generic::async_generic]
 fn indexer_partial_encode_impl<T: ElementOwned>(
-    codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
+    codec: &Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     elements_partial_encode: &[T],
-    data_type: DataType,
+    data_type: &DataType,
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
@@ -316,7 +316,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let encoded_chunk = Arc::new(
         bound_codec
             .encode(
-                T::to_array_bytes(&data_type, bytes).unwrap(),
+                T::to_array_bytes(data_type, bytes).unwrap(),
                 shape,
                 &CodecOptions::default(),
             )
@@ -342,14 +342,14 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     partial_encoder
         .partial_encode(
             indexer,
-            &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
+            &T::to_array_bytes(data_type, elements_partial_encode).unwrap(),
             &CodecOptions::default(),
         )
         .unwrap();
 
     let output = output.lock().unwrap().clone().unwrap();
     T::from_array_bytes(
-        &data_type,
+        data_type,
         bound_codec
             .decode(output.into(), shape, &CodecOptions::default())
             .unwrap(),
@@ -417,22 +417,16 @@ async fn async_indexer_array_subsets_fixed() {
 
     for (codec, test_partial_encoding) in codecs {
         assert_eq!(
-            indexer_partial_decode_impl(
-                codec.clone(),
-                &shape,
-                &indexer,
-                data_type::float32(),
-                &elements
-            ),
+            indexer_partial_decode_impl(&codec, &shape, &indexer, &data_type::float32(), &elements),
             expected
         );
         #[cfg(feature = "async")]
         assert_eq!(
             indexer_partial_decode_impl_async(
-                codec.clone(),
+                &codec,
                 &shape,
                 &indexer,
-                data_type::float32(),
+                &data_type::float32(),
                 &elements
             )
             .await,
@@ -441,11 +435,11 @@ async fn async_indexer_array_subsets_fixed() {
         if test_partial_encoding {
             assert_eq!(
                 indexer_partial_encode_impl(
-                    codec.clone(),
+                    &codec,
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    data_type::float32(),
+                    &data_type::float32(),
                     &elements,
                 ),
                 expected_partial_encode
@@ -547,21 +541,15 @@ async fn async_indexer_array_subsets_variable() {
 
     for (codec, test_partial_encoding) in codecs {
         assert_eq!(
-            indexer_partial_decode_impl(
-                codec.clone(),
-                &shape,
-                &indexer,
-                data_type::string(),
-                &elements
-            ),
+            indexer_partial_decode_impl(&codec, &shape, &indexer, &data_type::string(), &elements),
             expected
         );
         assert_eq!(
             indexer_partial_decode_impl_async(
-                codec.clone(),
+                &codec,
                 &shape,
                 &indexer,
-                data_type::string(),
+                &data_type::string(),
                 &elements
             )
             .await,
@@ -570,11 +558,11 @@ async fn async_indexer_array_subsets_variable() {
         if test_partial_encoding {
             assert_eq!(
                 indexer_partial_encode_impl(
-                    codec.clone(),
+                    &codec,
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    data_type::string(),
+                    &data_type::string(),
                     &elements
                 ),
                 expected_partial_encode

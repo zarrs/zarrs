@@ -251,7 +251,7 @@ mod tests {
         json: &str,
         data_type: DataType,
         fill_value: FillValue,
-        output_shape: Vec<NonZeroU64>,
+        output_shape: &[NonZeroU64],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let shape = vec![
             NonZeroU64::new(5).unwrap(),
@@ -292,7 +292,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -313,7 +313,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -330,7 +330,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -351,7 +351,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -372,7 +372,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -394,7 +394,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -416,7 +416,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_err()
         );
@@ -438,7 +438,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_err()
         );
@@ -958,7 +958,7 @@ mod tests {
     }
 
     fn partial_decoder_u16(
-        codec: Arc<ReshapeCodec>,
+        codec: &Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
     ) -> Arc<dyn ArrayPartialDecoderTraits> {
@@ -1003,7 +1003,7 @@ mod tests {
     }
 
     fn partial_encode_u16(
-        codec: Arc<ReshapeCodec>,
+        codec: &Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
         indexer: &dyn Indexer,
@@ -1085,7 +1085,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
         assert_eq!(
@@ -1123,7 +1123,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
         assert_eq!(
@@ -1151,7 +1151,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..3, 2..4]);
         assert_eq!(
@@ -1189,7 +1189,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![0, 2, 3], vec![1, 0, 0], vec![1, 2, 2]];
         assert_eq!(
@@ -1216,7 +1216,7 @@ mod tests {
             ReshapeDim::Size(NonZeroU64::new(2).unwrap()),
         ])));
         let shape = vec![NonZeroU64::new(12).unwrap()];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..12).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..12).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[3..10]);
         assert_eq!(
@@ -1246,7 +1246,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..1, 0..1, 2..4]),
@@ -1269,7 +1269,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let wrong_dimensionality = ArraySubset::new_with_ranges(&[0..1, 0..1]);
         assert!(
@@ -1314,7 +1314,7 @@ mod tests {
 
         assert_eq!(
             partial_encode_u16(
-                codec,
+                &codec,
                 &shape,
                 (0..24).collect(),
                 &decoded_region,
@@ -1360,7 +1360,7 @@ mod tests {
 
         assert_eq!(
             partial_encode_u16(
-                codec,
+                &codec,
                 &shape,
                 (0..24).collect(),
                 &indexer,
@@ -1380,13 +1380,13 @@ mod tests {
         let shape = [nz(8), nz(6)];
         let elements: Vec<u16> = (0..48).collect();
         let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
-        let decoder = partial_decoder_u16(codec.clone(), &shape, elements.clone());
+        let decoder = partial_decoder_u16(&codec, &shape, elements.clone());
         assert_eq!(
             partial_decode_u16(decoder.as_ref(), &empty),
             Vec::<u16>::new()
         );
         assert_eq!(
-            partial_encode_u16(codec, &shape, elements.clone(), &empty, vec![]),
+            partial_encode_u16(&codec, &shape, elements.clone(), &empty, vec![]),
             elements
         );
     }

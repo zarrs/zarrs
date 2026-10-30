@@ -71,7 +71,7 @@ fn array_2d() -> Result<Array<MemoryStore>, Box<dyn Error>> {
 }
 
 #[track_caller]
-fn assert_encoding_error(error: ArrayError) {
+fn assert_encoding_error(error: &ArrayError) {
     assert!(
         matches!(error, ArrayError::ChunkKeyEncodingError(_)),
         "expected a chunk key encoding error, got {error:?}"
@@ -81,17 +81,17 @@ fn assert_encoding_error(error: ArrayError) {
 #[test]
 fn chunk_key_surfaces_an_encoding_error() -> TestResult {
     assert_eq!(array_3d()?.chunk_key(&[0, 1, 2])?.as_str(), "array/0/1/2");
-    assert_encoding_error(array_2d()?.chunk_key(&[0, 0]).unwrap_err());
+    assert_encoding_error(&array_2d()?.chunk_key(&[0, 0]).unwrap_err());
     Ok(())
 }
 
 #[test]
 fn array_ops_surface_an_encoding_error_rather_than_panicking() -> TestResult {
     let array = array_2d()?;
-    assert_encoding_error(array.store_chunk(&[0, 0], vec![0u8; 4]).unwrap_err());
-    assert_encoding_error(array.retrieve_chunk::<Vec<u8>>(&[0, 0]).unwrap_err());
-    assert_encoding_error(array.retrieve_encoded_chunk(&[0, 0]).unwrap_err());
-    assert_encoding_error(array.erase_chunk(&[0, 0]).unwrap_err());
+    assert_encoding_error(&array.store_chunk(&[0, 0], vec![0u8; 4]).unwrap_err());
+    assert_encoding_error(&array.retrieve_chunk::<Vec<u8>>(&[0, 0]).unwrap_err());
+    assert_encoding_error(&array.retrieve_encoded_chunk(&[0, 0]).unwrap_err());
+    assert_encoding_error(&array.erase_chunk(&[0, 0]).unwrap_err());
     Ok(())
 }
 

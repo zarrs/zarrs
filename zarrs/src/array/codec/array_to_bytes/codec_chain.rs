@@ -1181,7 +1181,7 @@ mod tests {
         elements: Vec<f32>,
         json_array_to_bytes: &str,
         decoded_region: &dyn ArraySubsetTraits,
-        decoded_partial_chunk_true: Vec<f32>,
+        decoded_partial_chunk_true: &[f32],
     ) {
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
 
@@ -1281,7 +1281,7 @@ mod tests {
             elements,
             JSON_BYTES,
             &decoded_region,
-            decoded_partial_chunk_true,
+            &decoded_partial_chunk_true,
         );
     }
 
@@ -1329,7 +1329,7 @@ mod tests {
             elements,
             JSON_PCODEC,
             &decoded_region,
-            decoded_partial_chunk_true,
+            &decoded_partial_chunk_true,
         );
     }
 }

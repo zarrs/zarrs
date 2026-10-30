@@ -32,6 +32,10 @@ pub enum ChunkKeyEncodingError {
 impl ChunkKeyEncodingError {
     /// Create a new [`ChunkKeyEncodingError::Other`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }

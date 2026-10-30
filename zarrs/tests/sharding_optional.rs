@@ -94,7 +94,7 @@ macro_rules! decode_into_new {
 }
 
 fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
-    data_type: DataType,
+    data_type: &DataType,
     elements: &[T],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(MemoryStore::default());
@@ -106,10 +106,7 @@ fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
     );
     builder.subchunk_shape(SUBCHUNK_SHAPE.to_vec());
     let array = builder.build(store, "/")?;
-    array.store_array_subset(
-        &array.subset_all(),
-        T::to_array_bytes(&data_type, elements)?,
-    )?;
+    array.store_array_subset(&array.subset_all(), T::to_array_bytes(data_type, elements)?)?;
 
     // Retrieve the entire array (spanning multiple shards)
     assert_eq!(
@@ -214,7 +211,7 @@ async fn sharding_optional<T: ElementOwned + Clone + PartialEq + Debug>(
     element: impl Fn(u64) -> T,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let elements: Vec<T> = (0..SHAPE.iter().product()).map(element).collect();
-    sharding_optional_round_trip(data_type.clone(), &elements)?;
+    sharding_optional_round_trip(&data_type, &elements)?;
     sharding_optional_codec(data_type, &elements).await
 }
 

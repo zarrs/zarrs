@@ -275,7 +275,7 @@ where
 
     Ok(ShardingPartialDecoder::new(
         input_handle,
-        array.chunk_shape(&[0, 0])?,
+        &array.chunk_shape(&[0, 0])?,
         sharding_codec.subchunk_shape().clone(),
         sharding_codec.inner_codecs().clone(),
         sharding_codec.index_codecs(),

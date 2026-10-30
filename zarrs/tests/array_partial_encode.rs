@@ -14,7 +14,7 @@ use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
 #[allow(clippy::too_many_lines)]
 fn array_partial_encode_sharding(
     sharding_index_location: ShardingIndexLocation,
-    inner_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+    inner_bytes_to_bytes_codecs: &[Arc<dyn BytesToBytesCodecTraits>],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
@@ -45,7 +45,7 @@ fn array_partial_encode_sharding(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &data_type::uint16())
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
-                .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
+                .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.to_owned())
                 .build(),
         ))
         .bytes_to_bytes_codecs(vec![]);
@@ -170,12 +170,12 @@ fn array_partial_encode_sharding(
 
 #[test]
 fn array_partial_encode_sharding_index_start() {
-    array_partial_encode_sharding(ShardingIndexLocation::Start, vec![]).unwrap();
+    array_partial_encode_sharding(ShardingIndexLocation::Start, &[]).unwrap();
 }
 
 #[test]
 fn array_partial_encode_sharding_index_end() {
-    array_partial_encode_sharding(ShardingIndexLocation::End, vec![]).unwrap();
+    array_partial_encode_sharding(ShardingIndexLocation::End, &[]).unwrap();
 }
 
 #[cfg(feature = "async")]
@@ -227,7 +227,7 @@ fn array_partial_encode_sharding_index_compressed() {
     for index_location in &[ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         array_partial_encode_sharding(
             *index_location,
-            vec![
+            &[
                 #[cfg(feature = "gzip")]
                 Arc::new(zarrs::array::codec::GzipCodec::new(5).unwrap()),
                 #[cfg(feature = "zstd")]
@@ -259,7 +259,7 @@ fn array_partial_encode_sharding_index_compressed() {
 
 fn array_partial_encode_sharding_compact(
     sharding_index_location: ShardingIndexLocation,
-    inner_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+    inner_bytes_to_bytes_codecs: &[Arc<dyn BytesToBytesCodecTraits>],
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Test the compact_chunk() API by creating a shard with gaps
     // Strategy: Write a large compressible chunk, then overwrite with random data
@@ -282,7 +282,7 @@ fn array_partial_encode_sharding_compact(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16()) // 2x2 subchunks
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
-                .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
+                .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.to_owned())
                 .build(),
         ))
         .bytes_to_bytes_codecs(vec![]);
@@ -380,12 +380,12 @@ fn array_partial_encode_sharding_compact(
 
 #[test]
 fn array_partial_encode_sharding_compact_index_start() {
-    array_partial_encode_sharding_compact(ShardingIndexLocation::Start, vec![]).unwrap();
+    array_partial_encode_sharding_compact(ShardingIndexLocation::Start, &[]).unwrap();
 }
 
 #[test]
 fn array_partial_encode_sharding_compact_index_end() {
-    array_partial_encode_sharding_compact(ShardingIndexLocation::End, vec![]).unwrap();
+    array_partial_encode_sharding_compact(ShardingIndexLocation::End, &[]).unwrap();
 }
 
 #[test]
@@ -400,7 +400,7 @@ fn array_partial_encode_sharding_compact_index_compressed() {
     for index_location in &[ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         let result = array_partial_encode_sharding_compact(
             *index_location,
-            vec![
+            &[
                 #[cfg(feature = "gzip")]
                 Arc::new(zarrs::array::codec::GzipCodec::new(5).unwrap()),
                 #[cfg(feature = "zstd")]

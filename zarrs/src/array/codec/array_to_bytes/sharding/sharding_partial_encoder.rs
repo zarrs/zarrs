@@ -44,7 +44,7 @@ impl ShardingPartialEncoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shard_shape: ChunkShape,
+        shard_shape: &[std::num::NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
         index_codecs: Arc<CodecChainBound>,
@@ -52,7 +52,7 @@ impl ShardingPartialEncoder {
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
-        let chunks_per_shard = calculate_chunks_per_shard(&shard_shape, &subchunk_shape)?;
+        let chunks_per_shard = calculate_chunks_per_shard(shard_shape, &subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
 
         // Decode the index
@@ -60,7 +60,7 @@ impl ShardingPartialEncoder {
             input_output_handle.as_ref(),
             &index_codecs,
             index_location,
-            &shard_shape,
+            shard_shape,
             &subchunk_shape,
             options,
         )?
@@ -70,7 +70,7 @@ impl ShardingPartialEncoder {
             vec![u64::MAX; num_chunks * 2]
         });
 
-        let chunk_grid = subchunk_grid(&shard_shape, &subchunk_shape)?;
+        let chunk_grid = subchunk_grid(shard_shape, &subchunk_shape)?;
         Ok(Self {
             input_output_handle,
             subchunk_shape,

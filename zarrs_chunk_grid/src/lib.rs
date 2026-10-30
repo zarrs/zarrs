@@ -102,12 +102,20 @@ pub enum ChunkGridCreateError {
 impl ChunkGridCreateError {
     /// Create a new [`ChunkGridCreateError`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn new(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
 
     /// Create a new [`ChunkGridCreateError::Other`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
