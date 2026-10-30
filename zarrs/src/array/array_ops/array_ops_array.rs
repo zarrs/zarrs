@@ -326,6 +326,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .map_or(ChunkGridDecodedRef::None, Into::into)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
         Ok(StoreKey::new(chunk_store_key_path(
             self.path(),
@@ -334,6 +335,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         )?)?)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError> {
         self.chunk_grid()
             .chunk_origin(chunk_indices)
@@ -341,6 +343,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError> {
         self.chunk_grid()
             .chunk_shape(chunk_indices)
@@ -353,6 +356,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         ArraySubset::new_with_shape(self.shape())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_shape_usize(&self, chunk_indices: &[u64]) -> Result<Vec<usize>, ArrayError> {
         Ok(self
             .chunk_shape(chunk_indices)?
@@ -361,6 +365,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .collect())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         self.chunk_grid()
             .subset(chunk_indices)
@@ -368,12 +373,13 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_subset_bounded(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         let chunk_subset = self.chunk_subset(chunk_indices)?;
         Ok(chunk_subset.bound(self.shape())?)
     }
 
-    #[allow(clippy::similar_names)]
+    #[allow(clippy::missing_errors_doc, clippy::similar_names)]
     pub fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
         match chunks.end_inc() {
             Some(end) => {
@@ -387,6 +393,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunks_subset_bounded(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -395,6 +402,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         Ok(chunks_subset.bound(self.shape())?)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunks_in_array_subset(
         &self,
         array_subset: &dyn ArraySubsetTraits,

@@ -27,6 +27,7 @@ use zarrs_storage::{Bytes, StorageHandle};
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     for Array<TStorage>
 {
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
@@ -35,6 +36,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
@@ -48,11 +50,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
@@ -62,6 +66,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
@@ -77,6 +82,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
@@ -156,6 +162,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
@@ -177,6 +184,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     // Advanced methods
     /////////////////////////////////////////////////////////////////////////////
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
@@ -185,6 +193,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn Indexer,
@@ -225,6 +234,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         Ok(values)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
@@ -237,6 +247,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunk_indices: &[u64],
     ) -> Result<T, ArrayError>;
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
@@ -249,6 +260,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
@@ -264,6 +276,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_partial_decoder(
         &self,
         chunk_indices: &[u64],
@@ -272,11 +285,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkGrid>, ArrayError>;
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_local_subchunk_grid_at_level(
         &self,
         level: usize,

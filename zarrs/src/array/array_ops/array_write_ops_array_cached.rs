@@ -12,18 +12,21 @@ where
     TStorage: ?Sized + WritableStorageTraits + 'static,
     C: ChunkCache,
 {
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         self.array().store_metadata()?;
         self.cache().invalidate();
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         self.array().erase_metadata()?;
         self.cache().invalidate();
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -34,6 +37,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -44,19 +48,21 @@ where
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         self.array().erase_chunk(chunk_indices)?;
         let _ = self.cache().invalidate_chunk(chunk_indices);
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         self.array().erase_chunks(chunks)?;
         let _ = self.cache().invalidate_chunks(chunks);
         Ok(())
     }
 
-    #[allow(clippy::missing_safety_doc)]
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
     pub unsafe fn store_encoded_chunk(
         &self,
         chunk_indices: &[u64],

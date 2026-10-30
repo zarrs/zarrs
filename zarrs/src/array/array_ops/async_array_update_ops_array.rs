@@ -18,6 +18,7 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArrayUpdateOps
     for Array<TStorage>
 {
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
@@ -33,6 +34,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_array_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
@@ -123,6 +125,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
         let options = self.codec_options();
         let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
@@ -149,6 +152,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         self.with_storage(self.storage.clone().readable())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],

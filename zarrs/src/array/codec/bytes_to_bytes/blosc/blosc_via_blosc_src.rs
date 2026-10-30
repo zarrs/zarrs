@@ -61,6 +61,9 @@ pub(super) const fn compressor_as_cstr(compressor: BloscCompressor) -> *const u8
 }
 
 /// Compress bytes using blosc.
+///
+/// # Errors
+/// Returns a [`BloscError`] if compression fails.
 pub fn blosc_compress_bytes(
     src: &[u8],
     clevel: BloscCompressionLevel,
@@ -159,6 +162,9 @@ pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
 }
 
 /// Decompress a blosc buffer.
+///
+/// # Errors
+/// Returns a [`BloscError`] if decompression fails.
 pub fn blosc_decompress_bytes(
     src: &[u8],
     destsize: usize,
@@ -191,6 +197,9 @@ pub fn blosc_decompress_bytes(
 }
 
 /// Partially decompress a blosc buffer at a given byte offset and length.
+///
+/// # Errors
+/// Returns a [`BloscError`] if decompression fails.
 pub fn blosc_decompress_bytes_partial(
     src: &[u8],
     offset: usize,

@@ -115,6 +115,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
         let options = self.codec_options();
         let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
@@ -142,6 +143,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         self.with_storage(self.storage.clone().readable())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn partial_encoder(
         &self,
         chunk_indices: &[u64],

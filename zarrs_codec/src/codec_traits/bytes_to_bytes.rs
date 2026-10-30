@@ -23,6 +23,9 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// This is applied when a codec chain containing this codec is bound.
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecCreateError`] if the codec cannot be reconfigured with `opts`.
     #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,

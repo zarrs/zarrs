@@ -20,6 +20,7 @@ use zarrs_storage::StorageHandle;
 impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     for Array<TStorage>
 {
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -64,6 +65,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
@@ -100,6 +102,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
@@ -109,6 +112,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -165,6 +169,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -176,6 +181,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             .await?)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())

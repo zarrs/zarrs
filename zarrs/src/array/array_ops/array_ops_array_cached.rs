@@ -166,14 +166,17 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().subchunk_grid_at_level(level)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
         self.array().chunk_key(chunk_indices)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError> {
         self.array().chunk_origin(chunk_indices)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError> {
         self.array().chunk_shape(chunk_indices)
     }
@@ -183,22 +186,27 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().subset_all()
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_shape_usize(&self, chunk_indices: &[u64]) -> Result<Vec<usize>, ArrayError> {
         self.array().chunk_shape_usize(chunk_indices)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         self.array().chunk_subset(chunk_indices)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunk_subset_bounded(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         self.array().chunk_subset_bounded(chunk_indices)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
         self.array().chunks_subset(chunks)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunks_subset_bounded(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -206,6 +214,7 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().chunks_subset_bounded(chunks)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn chunks_in_array_subset(
         &self,
         array_subset: &dyn ArraySubsetTraits,

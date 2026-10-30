@@ -41,6 +41,9 @@ pub struct ShardingPartialDecoder {
 
 impl ShardingPartialDecoder {
     /// Create a new partial decoder for the sharding codec.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the shard index cannot be retrieved or decoded.
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
@@ -74,6 +77,9 @@ impl ShardingPartialDecoder {
     /// Retrieve the byte range of an encoded subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid.
     pub fn subchunk_byte_range(
         &self,
         chunk_indices: &[u64],
@@ -88,6 +94,9 @@ impl ShardingPartialDecoder {
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid or the bytes cannot be retrieved.
     pub fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],

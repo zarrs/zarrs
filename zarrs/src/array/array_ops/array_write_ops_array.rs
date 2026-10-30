@@ -19,6 +19,7 @@ use zarrs_storage::StorageHandle;
 
 #[inherent]
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -60,6 +61,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         let options = self.metadata_erase_version();
         let storage_handle = StorageHandle::new(self.storage.clone());
@@ -84,6 +86,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -92,6 +95,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
@@ -143,6 +147,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(())
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -151,6 +156,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
@@ -173,7 +179,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         Ok(())
     }
 
-    #[allow(clippy::missing_safety_doc)]
+    #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
     pub unsafe fn store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
