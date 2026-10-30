@@ -406,7 +406,7 @@ fn sharding_decode_borrowed_shard() {
 fn store_chunk_uncompressed_borrowed() {
     let array = array(&SHAPE, false, None);
     let data = data();
-    let (_, stats) = measure("store_chunk_uncompressed_borrowed", || {
+    let ((), stats) = measure("store_chunk_uncompressed_borrowed", || {
         array.store_chunk(&[0, 0], data.as_slice()).unwrap();
     });
     check("store_chunk_uncompressed_borrowed", stats);
@@ -416,7 +416,7 @@ fn store_chunk_uncompressed_borrowed() {
 fn store_chunk_zstd() {
     let array = array(&SHAPE, true, None);
     let data = data();
-    let (_, stats) = measure("store_chunk_zstd", || {
+    let ((), stats) = measure("store_chunk_zstd", || {
         array.store_chunk(&[0, 0], data.as_slice()).unwrap();
     });
     check("store_chunk_zstd", stats);
@@ -426,7 +426,7 @@ fn store_chunk_zstd() {
 fn store_array_subset_sharded() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     let data = data();
-    let (_, stats) = measure("store_array_subset_sharded", || {
+    let ((), stats) = measure("store_array_subset_sharded", || {
         array
             .store_array_subset(&array.subset_all(), data.as_slice())
             .unwrap();
