@@ -285,15 +285,6 @@ impl PackBitsCodecBound {
         })
     }
 
-    /// Returns the range of the packed elements in chunks written by zarrs 0.20-0.23, if it differs from `sizes`.
-    ///
-    /// These omitted the padding encoding byte if all bits of whole-byte components are packed,
-    /// so there are no padding bits.
-    pub(super) fn legacy_packed(&self, sizes: &PackBitsSizes) -> Option<Range<usize>> {
-        (sizes.padding_byte.is_some() && self.layout.packs_whole_bytes())
-            .then(|| 0..sizes.packed.len())
-    }
-
     /// Convert decoded bytes to the byte order of the packed components, if they differ.
     ///
     /// # Errors
@@ -414,19 +405,13 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let sizes = self.sizes(shape)?;
 
         // Input checks
-        let packed = if bytes.len() == sizes.encoded_bytes {
-            if let Some((index, _)) = sizes.padding_byte {
-                sizes.check_padding_byte(bytes[index])?;
-            }
-            sizes.packed
-        } else if let Some(legacy) = self.legacy_packed(&sizes)
-            && bytes.len() == legacy.end
-        {
-            legacy
-        } else {
+        if bytes.len() != sizes.encoded_bytes {
             return Err(InvalidBytesLengthError::new(bytes.len(), sizes.encoded_bytes).into());
-        };
-        let packed_elements = &bytes[packed];
+        }
+        if let Some((index, _)) = sizes.padding_byte {
+            sizes.check_padding_byte(bytes[index])?;
+        }
+        let packed_elements = &bytes[sizes.packed];
 
         let decoded_bytes = usize::try_from(sizes.decoded_bytes)
             .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;

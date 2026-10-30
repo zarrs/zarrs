@@ -157,11 +157,6 @@ impl PackBitsLayout {
         self.last_bit - self.first_bit + 1
     }
 
-    /// Whether all bits of whole-byte components are packed (e.g. `float32`), so there are no padding bits.
-    fn packs_whole_bytes(self) -> bool {
-        self.packed_bits() as usize == self.component_size_bytes * 8
-    }
-
     /// A mask of the low [`packed_bits`](Self::packed_bits) bits.
     fn mask(self) -> u64 {
         u64::MAX >> (64 - self.packed_bits())
@@ -384,7 +379,7 @@ mod tests {
 
     use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
-    use crate::array::{ArrayBytes, ArraySubset, CowBytes, DataType, data_type};
+    use crate::array::{ArrayBytes, ArraySubset, CowBytes, data_type};
     use zarrs_codec::{
         BytesPartialDecoderTraits, Codec, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
         UnboundArrayToBytesCodecTraits,
@@ -1135,7 +1130,6 @@ mod tests {
     /// Encoded bytes with an incorrect length or padding encoding byte are rejected by decoding.
     ///
     /// Partial decoding only checks the byte ranges it reads.
-    /// Chunks with the length of those written by zarrs 0.20-0.23 are tested by [`codec_packbits_reads_legacy_chunks`].
     #[test]
     fn codec_packbits_rejects_invalid_encoded_bytes() -> Result<(), Box<dyn std::error::Error>> {
         let options = CodecOptions::default();
@@ -1176,22 +1170,17 @@ mod tests {
                 let expected = partial_decode(&encoded)?;
 
                 // Invalid encoded bytes, and whether partial decoding can read them as the valid bytes
-                let mut invalid = vec![([encoded.as_slice(), &[0]].concat(), true)];
-                // One byte shorter is the length of a legacy chunk with whole-byte components (e.g. `float32`)
-                let legacy =
-                    encoding != PackBitsPaddingEncoding::None && data_type == data_type::float32();
-                if !legacy {
-                    invalid.push((encoded[..encoded.len() - 1].to_vec(), true));
-                }
+                let mut invalid = vec![
+                    ([encoded.as_slice(), &[0]].concat(), true),
+                    (encoded[..encoded.len() - 1].to_vec(), true),
+                ];
                 if encoding != PackBitsPaddingEncoding::None {
                     // Omitting the padding encoding byte offsets the packed elements with `first_byte`
-                    if !legacy {
-                        let (_, packed) = split_padding(encoding, &encoded);
-                        invalid.push((
-                            packed.to_vec(),
-                            encoding == PackBitsPaddingEncoding::LastByte,
-                        ));
-                    }
+                    let (_, packed) = split_padding(encoding, &encoded);
+                    invalid.push((
+                        packed.to_vec(),
+                        encoding == PackBitsPaddingEncoding::LastByte,
+                    ));
                     let mut incorrect_padding = encoded.to_vec();
                     let index = if encoding == PackBitsPaddingEncoding::FirstByte {
                         0
@@ -1225,246 +1214,6 @@ mod tests {
             }
         }
         Ok(())
-    }
-
-    /// A legacy chunk with its padding encoding, data type, and decoded elements.
-    type LegacyChunk = (
-        PackBitsPaddingEncoding,
-        DataType,
-        CowBytes<'static>,
-        ArrayBytes<'static>,
-    );
-
-    /// The legacy chunks of zarrs 0.20-0.23 and their elements for [`codec_packbits_reads_legacy_chunks`].
-    ///
-    /// These omitted the padding encoding byte if all bits of whole-byte components are packed.
-    fn legacy_chunks() -> Result<Vec<LegacyChunk>, Box<dyn std::error::Error>> {
-        let options = CodecOptions::default();
-        let mut chunks = Vec::new();
-        for (data_type, fill_value) in [
-            (data_type::float32(), FillValue::from(0.0f32)),
-            (data_type::int8(), FillValue::from(0i8)),
-        ] {
-            let elements = ArrayBytes::new_flen(
-                (0..12 * data_type.fixed_size().unwrap())
-                    .map(|i| u8::try_from(i * 37 % 251).unwrap())
-                    .collect::<Vec<u8>>(),
-            );
-            for encoding in [
-                PackBitsPaddingEncoding::FirstByte,
-                PackBitsPaddingEncoding::LastByte,
-            ] {
-                let codec = Arc::new(PackBitsCodec::new(encoding, None, None)?).with_context(
-                    data_type.clone(),
-                    fill_value.clone(),
-                    &CodecSpecificOptions::default(),
-                )?;
-                let encoded = codec.encode(elements.clone(), &LEGACY_CHUNK_SHAPE, &options)?;
-                let (padding, packed) = split_padding(encoding, &encoded);
-                assert_eq!(padding, Some(0));
-                chunks.push((
-                    encoding,
-                    data_type.clone(),
-                    CowBytes::from(packed.to_vec()),
-                    elements.clone(),
-                ));
-            }
-        }
-        Ok(chunks)
-    }
-
-    const LEGACY_CHUNK_SHAPE: [NonZeroU64; 2] =
-        [NonZeroU64::new(4).unwrap(), NonZeroU64::new(3).unwrap()];
-
-    /// Subsets at the start, in the middle, touching the last element, and of all elements of a legacy chunk.
-    fn legacy_chunk_subsets() -> [ArraySubset; 4] {
-        [
-            ArraySubset::new_with_ranges(&[0..1, 0..2]),
-            ArraySubset::new_with_ranges(&[1..3, 1..2]),
-            ArraySubset::new_with_ranges(&[2..4, 1..3]),
-            ArraySubset::new_with_ranges(&[0..4, 0..3]),
-        ]
-    }
-
-    /// The chunks of zarrs 0.20-0.23 that omitted the padding encoding byte are identified by their length.
-    #[test]
-    fn codec_packbits_reads_legacy_chunks() -> Result<(), Box<dyn std::error::Error>> {
-        let options = CodecOptions::default();
-        let shape = [4, 3];
-        for (encoding, data_type, legacy, elements) in legacy_chunks()? {
-            let codec = Arc::new(PackBitsCodec::new(encoding, None, None)?).with_context(
-                data_type.clone(),
-                FillValue::new(vec![0; data_type.fixed_size().unwrap()]),
-                &CodecSpecificOptions::default(),
-            )?;
-            assert_eq!(
-                codec.decode(legacy.clone(), &LEGACY_CHUNK_SHAPE, &options)?,
-                elements,
-                "{data_type} {encoding:?}"
-            );
-            for input in [
-                Arc::new(legacy.clone()) as Arc<dyn BytesPartialDecoderTraits>,
-                // A store that clamps byte ranges to the end of the chunk instead of erroring
-                Arc::new(ClampingPartialDecoder(legacy.clone())),
-            ] {
-                let partial_decoder =
-                    codec
-                        .clone()
-                        .partial_decoder(input, &LEGACY_CHUNK_SHAPE, &options)?;
-                for subset in legacy_chunk_subsets() {
-                    assert_eq!(
-                        partial_decoder.partial_decode(&subset, &options)?,
-                        elements.extract_array_subset(&subset, &shape, &data_type)?,
-                        "{data_type} {encoding:?} {subset:?}"
-                    );
-                }
-            }
-
-            // Chunks of other lengths are still rejected
-            let short = CowBytes::from(legacy[..legacy.len() - 1].to_vec());
-            assert!(
-                codec
-                    .decode(short.clone(), &LEGACY_CHUNK_SHAPE, &options)
-                    .is_err()
-            );
-            if encoding == PackBitsPaddingEncoding::FirstByte {
-                let partial_decoder = codec.clone().partial_decoder(
-                    Arc::new(short),
-                    &LEGACY_CHUNK_SHAPE,
-                    &options,
-                )?;
-                for subset in legacy_chunk_subsets() {
-                    assert!(partial_decoder.partial_decode(&subset, &options).is_err());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Legacy chunks are read from a store, which rejects byte ranges beyond the end of a chunk.
-    #[test]
-    fn codec_packbits_reads_legacy_chunks_from_store() -> Result<(), Box<dyn std::error::Error>> {
-        use crate::array::{Array, ArrayMetadata};
-        use zarrs_storage::store::MemoryStore;
-        use zarrs_storage::{StoreKey, WritableStorageTraits};
-
-        for (encoding, data_type, legacy, elements) in legacy_chunks()? {
-            let store = Arc::new(MemoryStore::new());
-            let array = Array::new_with_metadata(
-                store.clone(),
-                "/",
-                ArrayMetadata::V3(legacy_array_metadata(encoding, &data_type)?),
-            )?;
-            store.set(&StoreKey::new("c/0/0")?, legacy)?;
-            assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 0])?, elements);
-            for subset in legacy_chunk_subsets() {
-                assert_eq!(
-                    array.retrieve_array_subset::<ArrayBytes>(&subset)?,
-                    elements.extract_array_subset(&subset, &[4, 3], &data_type)?,
-                    "{data_type} {encoding:?} {subset:?}"
-                );
-            }
-        }
-        Ok(())
-    }
-
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn codec_packbits_async_reads_legacy_chunks() -> Result<(), Box<dyn std::error::Error>> {
-        use crate::array::{Array, ArrayMetadata};
-        use zarrs_storage::store::AsyncMemoryStore;
-        use zarrs_storage::{AsyncWritableStorageTraits, StoreKey};
-
-        let options = CodecOptions::default();
-        for (encoding, data_type, legacy, elements) in legacy_chunks()? {
-            let codec = Arc::new(PackBitsCodec::new(encoding, None, None)?).with_context(
-                data_type.clone(),
-                FillValue::new(vec![0; data_type.fixed_size().unwrap()]),
-                &CodecSpecificOptions::default(),
-            )?;
-            let partial_decoder = codec
-                .async_partial_decoder(Arc::new(legacy.clone()), &LEGACY_CHUNK_SHAPE, &options)
-                .await?;
-            for subset in legacy_chunk_subsets() {
-                assert_eq!(
-                    partial_decoder.partial_decode(&subset, &options).await?,
-                    elements.extract_array_subset(&subset, &[4, 3], &data_type)?,
-                    "{data_type} {encoding:?} {subset:?}"
-                );
-            }
-
-            let store = Arc::new(AsyncMemoryStore::new());
-            let array = Array::new_with_metadata(
-                store.clone(),
-                "/",
-                ArrayMetadata::V3(legacy_array_metadata(encoding, &data_type)?),
-            )?;
-            store.set(&StoreKey::new("c/0/0")?, legacy).await?;
-            assert_eq!(
-                array.async_retrieve_chunk::<ArrayBytes>(&[0, 0]).await?,
-                elements
-            );
-            for subset in legacy_chunk_subsets() {
-                assert_eq!(
-                    array
-                        .async_retrieve_array_subset::<ArrayBytes>(&subset)
-                        .await?,
-                    elements.extract_array_subset(&subset, &[4, 3], &data_type)?,
-                    "{data_type} {encoding:?} {subset:?}"
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn legacy_array_metadata(
-        encoding: PackBitsPaddingEncoding,
-        data_type: &DataType,
-    ) -> Result<zarrs_metadata::v3::ArrayMetadataV3, serde_json::Error> {
-        serde_json::from_value(serde_json::json!({
-            "zarr_format": 3,
-            "node_type": "array",
-            "shape": [4, 3],
-            "data_type": data_type.name_v3().unwrap(),
-            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4, 3]}},
-            "chunk_key_encoding": {"name": "default"},
-            "fill_value": 0,
-            "codecs": [{"name": "packbits", "configuration": {"padding_encoding": encoding}}],
-        }))
-    }
-
-    /// Returns each requested byte range clamped to the end of the bytes, like a store that does not reject them.
-    struct ClampingPartialDecoder(CowBytes<'static>);
-
-    impl BytesPartialDecoderTraits for ClampingPartialDecoder {
-        fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
-            Ok(true)
-        }
-
-        fn size_held(&self) -> usize {
-            0
-        }
-
-        fn partial_decode_many(
-            &self,
-            decoded_regions: zarrs_storage::byte_range::ByteRangeIterator,
-            _options: &CodecOptions,
-        ) -> Result<Option<Vec<CowBytes<'_>>>, zarrs_codec::CodecError> {
-            let size = self.0.len() as u64;
-            Ok(Some(
-                decoded_regions
-                    .map(|byte_range| {
-                        let start = byte_range.start(size).min(size) as usize;
-                        let end = byte_range.end(size).min(size) as usize;
-                        self.0.slice(start..end)
-                    })
-                    .collect(),
-            ))
-        }
-
-        fn supports_partial_decode(&self) -> bool {
-            true
-        }
     }
 
     #[cfg(feature = "async")]

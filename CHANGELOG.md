@@ -152,7 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed
-- **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Existing `zarrs` 0.20-0.23 chunks remain readable, but those releases cannot read the corrected chunks
+- **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 - Accept `optional` data type metadata without an inner data type `configuration`, which is optional in the specification
