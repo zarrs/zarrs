@@ -152,6 +152,6 @@ fn async_partial_encode_limits_subchunk_concurrency() {
                 .await
                 .unwrap();
             assert_eq!(decoded, vec![7u8; 196]);
-        })
+        });
     });
 }
