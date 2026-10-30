@@ -303,12 +303,7 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
             use chrono::TimeDelta;
             let elements = array.retrieve_array_subset::<Vec<TimeDelta>>(&subset_all)?;
 
-            let start_elem = if matches!(unit, NumpyTimeUnit::Picosecond) {
-                // first element overflows in numpy
-                1
-            } else {
-                0
-            };
+            let start_elem = usize::from(matches!(unit, NumpyTimeUnit::Picosecond));
 
             println!("{path:?}");
             println!("{elements:?}");
