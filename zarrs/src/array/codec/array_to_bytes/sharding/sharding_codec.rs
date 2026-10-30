@@ -80,7 +80,7 @@ fn subchunk_order_iterator(
     }
 }
 
-/// Compare two indices in Morton (Z) order, first axis most significant: https://en.wikipedia.org/wiki/Z-order_curve#Efficiently_building_quadtrees_and_octrees
+/// Compare two indices in Morton (Z) order, first axis most significant: <https://en.wikipedia.org/wiki/Z-order_curve#Efficiently_building_quadtrees_and_octrees>
 fn morton_cmp(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
     // `x < y && x < x ^ y` iff the highest set bit of `x` is below that of `y`.
     let less_msb = |x: u64, y: u64| x < y && x < (x ^ y);
@@ -877,7 +877,7 @@ impl ShardingCodecBound {
     }
 
     /// Encode an inner chunk from the `decoded_value` or return None.
-    /// The chunk_index is the lexicographic index into the underlying grid.
+    /// The `chunk_index` is the lexicographic index into the underlying grid.
     fn encode_inner_by_chunk_index(
         &self,
         chunk_index: usize,
