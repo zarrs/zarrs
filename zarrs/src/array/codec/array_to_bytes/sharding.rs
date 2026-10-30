@@ -2117,6 +2117,344 @@ mod tests {
         assert!(original_compacted.is_none());
     }
 
+    /// An in-memory shard whose writes fail while `fail_writes` is set.
+    struct FailingHandle {
+        inner: Mutex<Option<Vec<u8>>>,
+        fail_writes: std::sync::atomic::AtomicBool,
+    }
+
+    impl FailingHandle {
+        fn new(bytes: Vec<u8>) -> Self {
+            Self {
+                inner: Mutex::new(Some(bytes)),
+                fail_writes: std::sync::atomic::AtomicBool::new(false),
+            }
+        }
+
+        fn set_fail_writes(&self, fail: bool) {
+            self.fail_writes
+                .store(fail, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        fn check_write(&self) -> Result<(), CodecError> {
+            if self.fail_writes.load(std::sync::atomic::Ordering::SeqCst) {
+                Err(CodecError::Other("injected write failure".to_string()))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn bytes(&self) -> Option<Vec<u8>> {
+            self.inner.lock().unwrap().clone()
+        }
+    }
+
+    impl BytesPartialDecoderTraits for FailingHandle {
+        fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
+            self.inner.exists()
+        }
+
+        fn size_held(&self) -> usize {
+            self.inner.size_held()
+        }
+
+        fn partial_decode_many(
+            &self,
+            decoded_regions: zarrs_storage::byte_range::ByteRangeIterator,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
+            self.inner
+                .partial_decode_many(decoded_regions, options, resources)
+        }
+
+        fn supports_partial_decode(&self) -> bool {
+            true
+        }
+    }
+
+    impl zarrs_codec::BytesPartialEncoderTraits for FailingHandle {
+        fn erase(&self) -> Result<(), CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::erase(&self.inner)
+        }
+
+        fn encode(
+            &self,
+            bytes: CowBytes<'_>,
+            options: &CodecOptions,
+            resources: &zarrs_codec::Resources,
+        ) -> Result<(), CodecError> {
+            self.check_write()?;
+            self.inner.encode(bytes, options, resources)
+        }
+
+        fn size(
+            &self,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<Option<u64>, CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::size(&self.inner, options, resources)
+        }
+
+        fn partial_encode_many(
+            &self,
+            offset_values: zarrs_storage::OffsetBytesIterator<CowBytes<'_>>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), CodecError> {
+            self.check_write()?;
+            self.inner
+                .partial_encode_many(offset_values, options, resources)
+        }
+
+        fn supports_partial_encode(&self) -> bool {
+            true
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[async_trait::async_trait]
+    impl zarrs_codec::AsyncBytesPartialDecoderTraits for FailingHandle {
+        async fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
+            BytesPartialDecoderTraits::exists(self)
+        }
+
+        fn size_held(&self) -> usize {
+            BytesPartialDecoderTraits::size_held(self)
+        }
+
+        async fn partial_decode_many<'a>(
+            &'a self,
+            decoded_regions: zarrs_storage::byte_range::ByteRangeIterator<'a>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
+            BytesPartialDecoderTraits::partial_decode_many(
+                self,
+                decoded_regions,
+                options,
+                resources,
+            )
+        }
+
+        fn supports_partial_decode(&self) -> bool {
+            true
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[async_trait::async_trait]
+    impl zarrs_codec::AsyncBytesPartialEncoderTraits for FailingHandle {
+        async fn erase(&self) -> Result<(), CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::erase(self)
+        }
+
+        async fn encode(
+            &self,
+            bytes: CowBytes<'_>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::encode(self, bytes, options, resources)
+        }
+
+        async fn size(
+            &self,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<Option<u64>, CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::size(self, options, resources)
+        }
+
+        async fn partial_encode_many<'a>(
+            &'a self,
+            offset_values: zarrs_storage::OffsetBytesIterator<'a, CowBytes<'_>>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), CodecError> {
+            zarrs_codec::BytesPartialEncoderTraits::partial_encode_many(
+                self,
+                offset_values,
+                options,
+                resources,
+            )
+        }
+
+        fn supports_partial_encode(&self) -> bool {
+            true
+        }
+    }
+
+    /// A `[2, 4]` shard of two `[2, 2]` subchunks, A (columns 0..2) and B (columns 2..4).
+    ///
+    /// Returns the codec, the shard shape, and the encoded shard with A and B fully written.
+    fn failed_rewrite_shard(
+        index_location: ShardingIndexLocation,
+    ) -> (Arc<dyn ArrayToBytesCodecTraits>, ChunkShape, Vec<u8>) {
+        let shape: ChunkShape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(4).unwrap()];
+        let codec =
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint8())
+                .index_location(index_location)
+                .build()
+                .with_context(
+                    data_type::uint8(),
+                    Some(FillValue::from(FAILED_REWRITE_FILL)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+        let elements: Vec<u8> = (1..=8).collect();
+        let encoded = codec
+            .encode(
+                elements.into(),
+                &shape,
+                &CodecOptions::default(),
+                &zarrs_codec::ComputeResources::default(),
+            )
+            .unwrap()
+            .into_vec();
+        (codec, shape, encoded)
+    }
+
+    /// Nonzero, so that bytes zero-filled by a write past the end of an erased shard are not
+    /// mistaken for the fill value.
+    const FAILED_REWRITE_FILL: u8 = 7;
+
+    /// A = 30, B unchanged, since the failed rewrite left the existing shard intact.
+    fn failed_rewrite_expected() -> ArrayBytes<'static> {
+        vec![30u8, 30, 3, 4, 30, 30, 7, 8].into()
+    }
+
+    #[test]
+    fn sharding_partial_encoder_failed_rewrite_invalidates_index() {
+        let options = CodecOptions::default();
+        let whole = ArraySubset::new_with_ranges(&[0..2, 0..4]);
+        let subchunk_a = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+        for index_location in [ShardingIndexLocation::End, ShardingIndexLocation::Start] {
+            let (codec, shape, shard_bytes) = failed_rewrite_shard(index_location);
+            let handle = Arc::new(FailingHandle::new(shard_bytes));
+            let encoder = codec
+                .clone()
+                .partial_encoder(
+                    handle.clone(),
+                    &shape,
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .unwrap();
+
+            // Overwriting A and B rewrites the shard, and the write fails.
+            handle.set_fail_writes(true);
+            assert!(
+                encoder
+                    .partial_encode(
+                        &whole,
+                        &ArrayBytes::from(vec![20u8; 8]),
+                        &options,
+                        &zarrs_codec::Resources::default()
+                    )
+                    .is_err()
+            );
+            handle.set_fail_writes(false);
+
+            encoder
+                .partial_encode(
+                    &subchunk_a,
+                    &ArrayBytes::from(vec![30u8; 4]),
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .unwrap();
+
+            let expected = failed_rewrite_expected();
+            assert_eq!(
+                encoder
+                    .partial_decode(&whole, &options, &zarrs_codec::Resources::default())
+                    .unwrap(),
+                expected
+            );
+            let stored = handle.bytes().unwrap();
+            assert_eq!(
+                codec
+                    .decode(
+                        stored.into(),
+                        &shape,
+                        &options,
+                        &zarrs_codec::ComputeResources::default()
+                    )
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn sharding_async_partial_encoder_failed_rewrite_invalidates_index() {
+        let options = CodecOptions::default();
+        let whole = ArraySubset::new_with_ranges(&[0..2, 0..4]);
+        let subchunk_a = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+        for index_location in [ShardingIndexLocation::End, ShardingIndexLocation::Start] {
+            let (codec, shape, shard_bytes) = failed_rewrite_shard(index_location);
+            let handle = Arc::new(FailingHandle::new(shard_bytes));
+            let encoder = codec
+                .clone()
+                .async_partial_encoder(
+                    handle.clone(),
+                    &shape,
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .await
+                .unwrap();
+
+            // Overwriting A and B rewrites the shard, and the write fails.
+            handle.set_fail_writes(true);
+            assert!(
+                encoder
+                    .partial_encode(
+                        &whole,
+                        &ArrayBytes::from(vec![20u8; 8]),
+                        &options,
+                        &zarrs_codec::Resources::default()
+                    )
+                    .await
+                    .is_err()
+            );
+            handle.set_fail_writes(false);
+
+            encoder
+                .partial_encode(
+                    &subchunk_a,
+                    &ArrayBytes::from(vec![30u8; 4]),
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .await
+                .unwrap();
+
+            let expected = failed_rewrite_expected();
+            assert_eq!(
+                encoder
+                    .partial_decode(&whole, &options, &zarrs_codec::Resources::default())
+                    .await
+                    .unwrap(),
+                expected
+            );
+            let stored = handle.bytes().unwrap();
+            assert_eq!(
+                codec
+                    .decode(
+                        stored.into(),
+                        &shape,
+                        &options,
+                        &zarrs_codec::ComputeResources::default()
+                    )
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+
     #[test]
     fn sharding_partial_encoder_size_held() {
         let options = CodecOptions::default();

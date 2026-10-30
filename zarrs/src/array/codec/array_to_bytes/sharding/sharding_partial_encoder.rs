@@ -34,7 +34,7 @@ pub(crate) struct ShardingPartialEncoder {
     index_codecs: Arc<CodecChainBound>,
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
-    shard_index: Arc<Mutex<Vec<u64>>>,
+    shard_index: Arc<Mutex<Option<Vec<u64>>>>,
     #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
     sharding_options: ShardingCodecOptions,
 }
@@ -81,9 +81,38 @@ impl ShardingPartialEncoder {
             index_codecs,
             index_location,
             index_shape,
-            shard_index: Arc::new(Mutex::new(shard_index)),
+            shard_index: Arc::new(Mutex::new(Some(shard_index))),
             sharding_options,
         })
+    }
+
+    fn loaded_shard_index<'a>(
+        &self,
+        index: &'a mut Option<Vec<u64>>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<&'a mut Vec<u64>, CodecError> {
+        if index.is_none() {
+            let shape: ChunkShape = self
+                .chunk_grid
+                .array_shape()
+                .iter()
+                .map(|&length| std::num::NonZeroU64::new(length).unwrap())
+                .collect();
+            *index = Some(
+                super::decode_shard_index_partial_decoder(
+                    self.input_output_handle.as_ref(),
+                    &self.index_codecs,
+                    self.index_location,
+                    &shape,
+                    &self.subchunk_shape,
+                    options,
+                    resources,
+                )?
+                .unwrap_or_else(|| vec![u64::MAX; self.index_shape.num_elements_usize()]),
+            );
+        }
+        Ok(index.as_mut().expect("loaded above"))
     }
 
     /// Append the encoded `updated_subchunks` to the shard and replace their entries in the shard index.
@@ -93,17 +122,18 @@ impl ShardingPartialEncoder {
     #[allow(clippy::too_many_lines)]
     fn commit_subchunk_updates(
         &self,
-        shard_index_guard: &mut Vec<u64>,
+        shard_index_guard: &mut Option<Vec<u64>>,
         updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
+        let mut shard_index = self.loaded_shard_index(shard_index_guard, options, resources)?.clone();
         // Rewrite the retained subchunks too if the shard is rewritten entirely anyway (e.g. in memory)
         //  Otherwise superseded subchunks accumulate in the shard
         let mut updated_subchunks = updated_subchunks;
         if !self.input_output_handle.supports_partial_encode() {
             let (retained, byte_ranges) =
-                super::retained_subchunks(shard_index_guard, &updated_subchunks);
+                super::retained_subchunks(&shard_index, &updated_subchunks);
             if !retained.is_empty() {
                 let retained_encoded = self
                     .input_output_handle
@@ -116,7 +146,6 @@ impl ShardingPartialEncoder {
             }
         }
 
-        let mut shard_index = shard_index_guard.clone();
 
         // Get the maximum offset of existing encoded chunks
         let max_data_offset = shard_index
@@ -182,6 +211,8 @@ impl ShardingPartialEncoder {
             }
         }
 
+        // A failed write may have changed storage; reload its index before reuse.
+        *shard_index_guard = None;
         if shard_index.par_iter().all(|&x| x == u64::MAX) {
             // Erase the shard if all chunks are empty
             self.input_output_handle.erase()?;
@@ -268,7 +299,7 @@ impl ShardingPartialEncoder {
                 }
             }
         }
-        *shard_index_guard = shard_index;
+        *shard_index_guard = Some(shard_index);
         Ok(())
     }
 }
@@ -304,12 +335,14 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
+        let mut shard_index = self.shard_index.lock().unwrap();
+        let shard_index = self.loaded_shard_index(&mut shard_index, options, resources)?;
         super::sharding_partial_decoder_sync::partial_decode(
             &handle,
             &self.chunk_grid,
             &self.subchunk_shape,
             &self.inner_codecs,
-            Some(self.shard_index.lock().unwrap().as_slice()),
+            Some(shard_index.as_slice()),
             indexer,
             options,
             resources,
@@ -324,9 +357,17 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     fn erase(&self) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
-        self.input_output_handle.erase()?;
-        shard_index.fill(u64::MAX);
-        Ok(())
+        let result = self.input_output_handle.erase();
+        if result.is_ok() {
+            if let Some(index) = shard_index.as_mut() {
+                index.fill(u64::MAX);
+            } else {
+                *shard_index = Some(vec![u64::MAX; self.index_shape.num_elements_usize()]);
+            }
+        } else {
+            *shard_index = None;
+        }
+        result
     }
 
     #[allow(clippy::too_many_lines)]
@@ -344,6 +385,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .fill_value()
             .ok_or(CodecError::UndefinedFillValue)?;
         let mut shard_index_guard = self.shard_index.lock().unwrap();
+        let shard_index = self.loaded_shard_index(&mut shard_index_guard, options, resources)?;
 
         // Validate the indexer and bytes
         chunk_subset_indexer.validate(self.chunk_grid.array_shape())?;
@@ -369,7 +411,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .filter(|update| !update.fully_covered)
             .filter_map(|update| {
                 let (offset, size) = super::subchunk_offset_size(
-                    &shard_index_guard,
+                    shard_index,
                     usize::try_from(update.subchunk_index).unwrap(),
                 )?;
                 Some((
