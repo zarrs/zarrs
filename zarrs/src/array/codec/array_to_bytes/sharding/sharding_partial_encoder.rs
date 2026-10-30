@@ -104,7 +104,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     }
 
     fn size_held(&self) -> usize {
-        self.shard_index.lock().unwrap().len()
+        self.input_output_handle.size_held()
+            + self.index_shape.num_elements_usize() * size_of::<u64>()
     }
 
     fn partial_decode(
