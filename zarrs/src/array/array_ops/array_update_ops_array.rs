@@ -6,13 +6,13 @@ use rayon::iter::ParallelIterator;
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
-    Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
+    Array, ArrayError, ArrayOps, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
     ReadableStorageTraits, ReadableWritableStorageTraits, WritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::codec::{InMemoryBytesEncoder, InMemoryBytesUpdate};
-use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
+use crate::array::{ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, update_array_bytes};
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
 use zarrs_storage::ReadableWritableStorage;
 
@@ -216,22 +216,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             update(encoder.as_ref(), &local_indices, options)?;
             Ok(())
         } else {
-            let buffer = Arc::new(InMemoryBytesEncoder::new(
-                self.retrieve_encoded_chunk(&chunk_indices)?
-                    .map(|bytes| bytes.to_vec()),
-            ));
-            let encoder = self.codecs_bound().partial_encoder(
-                buffer.clone(),
-                &self.chunk_shape(&chunk_indices)?,
-                options,
-            )?;
-            let local_indices = super::local_subchunk_indices(
-                encoder.local_subchunk_grid_at_level(level, options)?,
-                &subset,
-            )?;
-            update(encoder.as_ref(), &local_indices, options)?;
-            drop(encoder);
-            match buffer.take_update() {
+            let existing = self
+                .retrieve_encoded_chunk(&chunk_indices)?
+                .map(|bytes| bytes.to_vec());
+            let in_memory =
+                InMemoryChunkUpdate::new(self, chunk_indices, level, &subset, existing)?;
+            update(in_memory.encoder.as_ref(), &in_memory.indices, options)?;
+            let (chunk_indices, update) = in_memory.finish();
+            match update {
                 // SAFETY: The bytes were encoded by the codecs of the array.
                 InMemoryBytesUpdate::Stored(updated) => unsafe {
                     self.store_encoded_chunk(&chunk_indices, updated.into())
@@ -345,5 +337,51 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             &self.chunk_shape(chunk_indices)?,
             options,
         )?)
+    }
+}
+
+/// An encoded chunk updated in memory by a partial encoder, for a store without partial writes.
+pub(super) struct InMemoryChunkUpdate {
+    chunk_indices: ArrayIndices,
+    buffer: Arc<InMemoryBytesEncoder>,
+    /// The partial encoder of the chunk in memory.
+    pub(super) encoder: Arc<dyn ArrayPartialEncoderTraits>,
+    /// The indices of the subchunk in the `level` chunk-local subchunk grid of [`encoder`](Self::encoder).
+    pub(super) indices: ArrayIndices,
+}
+
+impl InMemoryChunkUpdate {
+    /// Create a partial encoder of the `existing` encoded chunk at `chunk_indices`, and locate the subchunk at the
+    /// chunk-local `subset` in its `level` subchunk grid.
+    pub(super) fn new<A: ArrayOps + ?Sized>(
+        array: &A,
+        chunk_indices: ArrayIndices,
+        level: usize,
+        subset: &ArraySubset,
+        existing: Option<Vec<u8>>,
+    ) -> Result<Self, ArrayError> {
+        let options = array.codec_options();
+        let buffer = Arc::new(InMemoryBytesEncoder::new(existing));
+        let encoder = array.codecs_bound().partial_encoder(
+            buffer.clone(),
+            &array.chunk_shape(&chunk_indices)?,
+            options,
+        )?;
+        let indices = super::local_subchunk_indices(
+            encoder.local_subchunk_grid_at_level(level, options)?,
+            subset,
+        )?;
+        Ok(Self {
+            chunk_indices,
+            buffer,
+            encoder,
+            indices,
+        })
+    }
+
+    /// Finish the update, returning the chunk indices and the update of the encoded chunk to store.
+    pub(super) fn finish(self) -> (ArrayIndices, InMemoryBytesUpdate) {
+        drop(self.encoder);
+        (self.chunk_indices, self.buffer.take_update())
     }
 }

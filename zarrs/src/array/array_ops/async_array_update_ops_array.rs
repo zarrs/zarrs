@@ -4,12 +4,13 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::array_update_ops_array::InMemoryChunkUpdate;
 use super::{
     Array, ArrayError, ArraySubsetTraits, AsyncArrayUpdateOps, AsyncReadableStorageTraits,
     AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits, CodecOptions, Indexer,
     IntoArrayBytes, MaybeSend, recommended_codec_concurrency,
 };
-use crate::array::codec::{InMemoryBytesEncoder, InMemoryBytesUpdate};
+use crate::array::codec::InMemoryBytesUpdate;
 use crate::array::{ArrayIndices, update_array_bytes};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits,
@@ -261,26 +262,17 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             )?;
             Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
         } else {
-            let buffer = Arc::new(InMemoryBytesEncoder::new(
-                self.async_retrieve_encoded_chunk(&chunk_indices)
-                    .await?
-                    .map(|bytes| bytes.to_vec()),
-            ));
-            let encoder = self.codecs_bound().partial_encoder(
-                buffer.clone(),
-                &self.chunk_shape(&chunk_indices)?,
-                options,
-            )?;
-            let indices = super::local_subchunk_indices(
-                encoder.local_subchunk_grid_at_level(level, options)?,
-                &subset,
-            )?;
-            Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate {
+            let existing = self
+                .async_retrieve_encoded_chunk(&chunk_indices)
+                .await?
+                .map(|bytes| bytes.to_vec());
+            Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate::new(
+                self,
                 chunk_indices,
-                buffer,
-                encoder,
-                indices,
-            }))
+                level,
+                &subset,
+                existing,
+            )?))
         }
     }
 
@@ -289,14 +281,8 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         &self,
         update: InMemoryChunkUpdate,
     ) -> Result<(), ArrayError> {
-        let InMemoryChunkUpdate {
-            chunk_indices,
-            buffer,
-            encoder,
-            ..
-        } = update;
-        drop(encoder);
-        match buffer.take_update() {
+        let (chunk_indices, update) = update.finish();
+        match update {
             // SAFETY: The bytes were encoded by the codecs of the array.
             InMemoryBytesUpdate::Stored(updated) => unsafe {
                 self.async_store_encoded_chunk(&chunk_indices, updated.into())
@@ -433,12 +419,4 @@ enum EncodedSubchunkEncoder {
     Storage(Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayIndices),
     /// A partial encoder of the chunk in memory, for a store without partial writes.
     Memory(InMemoryChunkUpdate),
-}
-
-/// An encoded chunk updated in memory by a partial encoder.
-struct InMemoryChunkUpdate {
-    chunk_indices: ArrayIndices,
-    buffer: Arc<InMemoryBytesEncoder>,
-    encoder: Arc<dyn zarrs_codec::ArrayPartialEncoderTraits>,
-    indices: ArrayIndices,
 }
