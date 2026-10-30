@@ -105,17 +105,17 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
-                let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
-                chunks_bytes.validate(0, self.data_type())?;
+                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
+                subset_bytes.validate(0, self.data_type())?;
             }
             1 => {
                 let chunk_indices = chunks.start();
                 self.store_chunk_with_options(&chunk_indices, chunks_data, options)?;
             }
             _ => {
-                let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
+                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
                 let array_subset = self.chunks_subset(chunks)?;
-                chunks_bytes.validate(array_subset.num_elements(), self.data_type())?;
+                subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
                 // Calculate chunk/codec concurrency
                 let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
@@ -129,7 +129,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
                 let store_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_bytes = chunks_bytes.extract_array_subset(
+                    let chunk_bytes = subset_bytes.extract_array_subset(
                         &chunk_subset.relative_to(array_subset.start())?,
                         array_subset.shape(),
                         self.data_type(),

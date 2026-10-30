@@ -314,9 +314,9 @@ async fn exercise_async_write_update_ops<A: AsyncArrayUpdateOps>(array: &A) -> T
         [3, 3, 3, 3, 9, 3, 3, 3, 3]
     );
 
-    let encoder = array.async_partial_encoder(&[0, 0]).await?;
-    let _ = encoder.supports_partial_encode();
-    encoder
+    let partial_encoder = array.async_partial_encoder(&[0, 0]).await?;
+    let _ = partial_encoder.supports_partial_encode();
+    partial_encoder
         .partial_encode(
             &ArraySubset::new_with_ranges(&[0..1, 2..3]),
             &vec![10u8].into(),

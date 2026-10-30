@@ -1405,14 +1405,14 @@ mod tests {
         let elements: Vec<u16> = (0..48).collect();
         array.async_store_chunk(&[0, 0], &elements).await.unwrap();
         let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
-        let decoder = array.async_partial_decoder(&[0, 0]).await.unwrap();
-        let decoded = decoder
+        let partial_decoder = array.async_partial_decoder(&[0, 0]).await.unwrap();
+        let decoded = partial_decoder
             .partial_decode(&empty, &CodecOptions::default())
             .await
             .unwrap();
         assert_eq!(decoded.size(), 0);
-        let encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
-        encoder
+        let partial_encoder = array.async_partial_encoder(&[0, 0]).await.unwrap();
+        partial_encoder
             .partial_encode(
                 &empty,
                 &ArrayBytes::new_flen(vec![]),

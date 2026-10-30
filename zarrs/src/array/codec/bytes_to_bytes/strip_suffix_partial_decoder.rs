@@ -370,7 +370,7 @@ mod tests {
     #[tokio::test]
     async fn zero_concurrency_strip_suffix_partial_decoder() {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
-        let decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        let partial_decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         let options = CodecOptions::default().with_concurrent_target(0);
         let ranges = [
             ByteRange::Suffix(2),
@@ -379,7 +379,7 @@ mod tests {
         ];
         let decoded = tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            decoder.partial_decode_many(Box::new(ranges.into_iter()), &options),
+            partial_decoder.partial_decode_many(Box::new(ranges.into_iter()), &options),
         )
         .await
         .unwrap()
