@@ -98,7 +98,7 @@ where
     let mut elements = Vec::with_capacity(bytes_fixed.len() / length_bytes);
     for elem_bytes in bytes_fixed.chunks_exact(length_bytes) {
         let (code_units, remainder) = elem_bytes.as_chunks::<4>();
-        debug_assert!(remainder.is_empty());
+        debug_assert_eq!(remainder, &[] as &[u8]);
         elements.push(decode(code_units));
     }
     Ok(elements)

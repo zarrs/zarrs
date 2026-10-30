@@ -1380,7 +1380,10 @@ mod tests {
         let elements: Vec<u16> = (0..48).collect();
         let empty = ArraySubset::new_with_ranges(&[0..0, 0..0]);
         let decoder = partial_decoder_u16(codec.clone(), &shape, elements.clone());
-        assert!(partial_decode_u16(decoder.as_ref(), &empty).is_empty());
+        assert_eq!(
+            partial_decode_u16(decoder.as_ref(), &empty),
+            Vec::<u16>::new()
+        );
         assert_eq!(
             partial_encode_u16(codec, &shape, elements.clone(), &empty, vec![]),
             elements

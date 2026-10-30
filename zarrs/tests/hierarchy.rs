@@ -184,7 +184,7 @@ fn child_group_paths() {
     // In /a, there are no child group paths (only arrays)
     let group = Group::open(store, "/a").unwrap();
     let paths = group.child_group_paths().unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn child_array_paths() {
     // At root, there are no array paths (only groups)
     let group = Group::open(store.clone(), "/").unwrap();
     let paths = group.child_array_paths().unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 
     // In /a, there are two array paths: baz and foo
     let group = Group::open(store, "/a").unwrap();
@@ -291,7 +291,7 @@ async fn async_child_group_paths() {
     // In /a, there are no child group paths (only arrays)
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
     let paths = group.async_child_group_paths().await.unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 }
 
 #[cfg(feature = "async")]
@@ -304,7 +304,7 @@ async fn async_child_array_paths() {
     // At root, there are no array paths (only groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
     let paths = group.async_child_array_paths().await.unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 
     // In /a, there are two array paths: baz and foo
     let group = Group::async_open(store.clone(), "/a").await.unwrap();

@@ -1033,10 +1033,9 @@ mod tests {
             [2, 3, 4, 5, 10, 11, 12, 13]
         );
         let empty_subset = ArraySubset::new_with_shape(vec![0, 4]);
-        assert!(
-            extract_elements(&[], &empty_subset, &[3, 4], 2)
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            extract_elements(&[], &empty_subset, &[3, 4], 2).unwrap(),
+            Vec::<u8>::new()
         );
     }
 
