@@ -15,6 +15,7 @@ use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, FillValue, data_type};
 use zarrs::storage::ReadableStorageTraits;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
     // let store = Arc::new(zarrs::filesystem::FilesystemStore::new(

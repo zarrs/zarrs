@@ -386,6 +386,7 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();

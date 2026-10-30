@@ -29,6 +29,7 @@ fn try_numpy_to_jiff_unit(unit: NumpyTimeUnit) -> Result<jiff::Unit, NumpyTimeUn
 
 #[cfg(any(feature = "chrono", feature = "jiff"))]
 #[test]
+#[allow(clippy::too_many_lines)]
 fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
     for (path, unit) in [
         (

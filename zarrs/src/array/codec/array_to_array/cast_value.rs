@@ -438,6 +438,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn codec_cast_value_kernel_matches_scalar_path() {
         use zarrs_data_type::codec_traits::cast_value::{
             CastValueDataTypeExt, CastValueOutOfRangeMode as DtOutOfRange,

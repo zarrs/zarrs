@@ -161,6 +161,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
 }
 
 /// Test async partial encoding for bytes-to-bytes codecs in isolation  
+#[allow(clippy::too_many_lines)]
 async fn test_bytes_to_bytes_codec_async_partial_encoding<
     T: BytesToBytesCodecTraits + Send + Sync + 'static,
 >(

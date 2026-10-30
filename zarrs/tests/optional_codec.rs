@@ -343,6 +343,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 

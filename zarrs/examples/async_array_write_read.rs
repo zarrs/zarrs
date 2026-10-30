@@ -5,6 +5,7 @@ use ndarray::ArrayD;
 use zarrs::storage::AsyncReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 

@@ -5,6 +5,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 

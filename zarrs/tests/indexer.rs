@@ -456,6 +456,7 @@ async fn async_indexer_array_subsets_fixed() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn async_indexer_array_subsets_variable() {
     let shape: ChunkShape = vec![
         NonZeroU64::new(1).unwrap(),

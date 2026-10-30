@@ -677,6 +677,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn codec_reshape_encoded_chunk_grid() {
         struct TestCase {
             name: &'static str,

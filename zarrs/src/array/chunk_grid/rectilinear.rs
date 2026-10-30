@@ -881,6 +881,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn chunk_grid_rectilinear_comprehensive() {
         // Test from_metadata, array_shape, chunk_shape_u64, array_indices_inbounds,
         // and error paths for chunk_indices, chunk_origin, chunk_shape, chunk_shape_u64

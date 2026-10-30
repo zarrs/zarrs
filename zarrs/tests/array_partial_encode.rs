@@ -11,6 +11,7 @@ use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStor
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
 
+#[allow(clippy::too_many_lines)]
 fn array_partial_encode_sharding(
     sharding_index_location: ShardingIndexLocation,
     inner_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,

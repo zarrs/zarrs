@@ -97,6 +97,7 @@ async fn retrieve_chunk_into<A: AsyncArrayReadOps>(
     Ok(output)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     populate(array).await?;
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
