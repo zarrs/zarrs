@@ -160,11 +160,19 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         };
 
         // FIXME: Bound concurrency
-        let chunk_indices = chunks.iter_indices().collect::<Vec<_>>();
         #[cfg(not(target_arch = "wasm32"))]
-        chunk_indices.into_par_iter().try_for_each(erase_chunk)?;
+        if let Some(chunks) = chunks.as_array_subset() {
+            chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+        } else {
+            // `Indexer::iter_indices` is a sequential iterator, so collect it for parallel iteration.
+            chunks
+                .iter_indices()
+                .collect::<Vec<_>>()
+                .into_par_iter()
+                .try_for_each(erase_chunk)?;
+        }
         #[cfg(target_arch = "wasm32")]
-        chunk_indices.into_iter().try_for_each(erase_chunk)?;
+        chunks.iter_indices().try_for_each(erase_chunk)?;
 
         Ok(())
     }
