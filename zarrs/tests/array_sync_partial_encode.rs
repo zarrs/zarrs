@@ -17,7 +17,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     codec: Arc<T>,
     codec_name: &str,
     supports_partial_encoding: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
@@ -126,8 +126,6 @@ fn test_array_to_array_codec_sync_partial_encoding<
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().unwrap();
     assert!(!partial_encoder.exists().unwrap());
-
-    Ok(())
 }
 
 /// Test sync partial encoding for bytes-to-bytes codecs in isolation  
@@ -137,7 +135,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     codec: Arc<T>,
     codec_name: &str,
     supports_partial_encoding: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) {
     let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
@@ -271,8 +269,6 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().unwrap();
     assert!(!partial_encoder.exists().unwrap());
-
-    Ok(())
 }
 
 // Array-to-Array Codec Tests
@@ -294,7 +290,7 @@ fn test_cast_value_sync_partial_encoding() {
     .unwrap();
     let codec = Arc::new(CastValueCodec::new_with_configuration(&config).unwrap());
 
-    test_array_to_array_codec_sync_partial_encoding(codec, "cast_value", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "cast_value", true);
 }
 
 #[cfg(feature = "bitround")]
@@ -307,7 +303,7 @@ fn test_bitround_sync_partial_encoding() {
     let codec = Arc::new(BitroundCodec::new_with_configuration(&config).unwrap());
 
     // Bitround supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "bitround", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "bitround", true);
 }
 
 #[cfg(feature = "transpose")]
@@ -320,7 +316,7 @@ fn test_transpose_sync_partial_encoding() {
     let codec = Arc::new(TransposeCodec::new(order));
 
     // Transpose supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "transpose", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "transpose", true);
 }
 
 #[test]
@@ -337,7 +333,7 @@ fn test_reshape_sync_partial_encoding() {
     let codec = Arc::new(ReshapeCodec::new(reshape_shape));
 
     // Reshape supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "reshape", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "reshape", true);
 }
 
 #[test]
@@ -347,7 +343,7 @@ fn test_squeeze_sync_partial_encoding() {
     let codec = Arc::new(SqueezeCodec::default());
 
     // Squeeze supports partial encoding (confirmed from codec implementation)
-    test_array_to_array_codec_sync_partial_encoding(codec, "squeeze", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "squeeze", true);
 }
 
 #[test]
@@ -361,7 +357,7 @@ fn test_fixedscaleoffset_sync_partial_encoding() {
             .unwrap();
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(&config).unwrap());
 
-    test_array_to_array_codec_sync_partial_encoding(codec, "fixedscaleoffset", true).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "fixedscaleoffset", true);
 }
 
 // Bytes-to-Bytes Codec Tests
@@ -374,7 +370,7 @@ fn test_gzip_sync_partial_encoding() {
     let codec = Arc::new(GzipCodec::new(5).unwrap());
 
     // Gzip does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gzip", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gzip", false);
 }
 
 #[cfg(feature = "zstd")]
@@ -385,7 +381,7 @@ fn test_zstd_sync_partial_encoding() {
     let codec = Arc::new(ZstdCodec::new(5, true));
 
     // Zstd does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zstd", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zstd", false);
 }
 
 #[cfg(feature = "blosc")]
@@ -408,7 +404,7 @@ fn test_blosc_sync_partial_encoding() {
     );
 
     // Blosc does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "blosc", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "blosc", false);
 }
 
 #[cfg(feature = "bz2")]
@@ -420,7 +416,7 @@ fn test_bz2_sync_partial_encoding() {
     let codec = Arc::new(Bz2Codec::new(Bz2CompressionLevel::try_from(5u8).unwrap()));
 
     // Bz2 does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "bz2", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "bz2", false);
 }
 
 #[cfg(feature = "crc32c")]
@@ -431,7 +427,7 @@ fn test_crc32c_sync_partial_encoding() {
     let codec = Arc::new(Crc32cCodec::new());
 
     // CRC32C is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "crc32c", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "crc32c", false);
 }
 
 #[cfg(feature = "adler32")]
@@ -442,7 +438,7 @@ fn test_adler32_sync_partial_encoding() {
     let codec = Arc::new(Adler32Codec::default());
 
     // Adler32 is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "adler32", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "adler32", false);
 }
 
 #[cfg(feature = "fletcher32")]
@@ -453,7 +449,7 @@ fn test_fletcher32_sync_partial_encoding() {
     let codec = Arc::new(Fletcher32Codec);
 
     // Fletcher32 is a checksum codec - does not support partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "fletcher32", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "fletcher32", false);
 }
 
 #[test]
@@ -465,7 +461,7 @@ fn test_shuffle_sync_partial_encoding() {
     let codec = Arc::new(ShuffleCodec::new_with_configuration(&config).unwrap());
 
     // TODO: Shuffle rearranges bytes - may not support efficient partial encoding
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "shuffle", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "shuffle", false);
 }
 
 #[cfg(feature = "zlib")]
@@ -476,7 +472,7 @@ fn test_zlib_sync_partial_encoding() {
     let codec = Arc::new(ZlibCodec::new(ZlibCompressionLevel::try_from(5u8).unwrap()));
 
     // Zlib does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zlib", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zlib", false);
 }
 
 #[cfg(feature = "gdeflate")]
@@ -487,7 +483,7 @@ fn test_gdeflate_sync_partial_encoding() {
     let codec = Arc::new(GDeflateCodec::new(5).unwrap());
 
     // Gdeflate does not support partial encoding due to compression
-    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gdeflate", false).unwrap();
+    test_bytes_to_bytes_codec_sync_partial_encoding(codec, "gdeflate", false);
 }
 
 // Combined codec chain test
