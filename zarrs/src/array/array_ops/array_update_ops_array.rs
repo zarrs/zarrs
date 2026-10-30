@@ -186,7 +186,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
         if options.experimental_partial_encoding()
             && self.codecs.partial_encoder_capability().partial_encode
-            && self.storage.supports_set_partial()
+            && self.readable_writable_storage()?.supports_set_partial()
         {
             let partial_encoder = self.partial_encoder_with_options(chunk_indices, options)?;
             debug_assert!(

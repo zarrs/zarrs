@@ -196,7 +196,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
 
         if options.experimental_partial_encoding()
             && self.codecs.partial_encoder_capability().partial_encode
-            && self.storage.supports_set_partial()
+            && self
+                .async_readable_writable_storage()
+                .await?
+                .supports_set_partial()
         {
             let partial_encoder = self
                 .async_partial_encoder_with_options(chunk_indices, options)
