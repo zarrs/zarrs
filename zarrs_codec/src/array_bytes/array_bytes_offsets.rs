@@ -319,6 +319,9 @@ impl ArrayBytesOffsets {
     }
 
     /// Returns the last offset.
+    ///
+    /// # Panics
+    /// Panics if the offset exceeds [`usize::MAX`].
     #[must_use]
     pub fn last(&self) -> usize {
         self.as_slice()

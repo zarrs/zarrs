@@ -60,6 +60,16 @@ pub(super) const fn compressor_as_cstr(compressor: BloscCompressor) -> *const u8
     }
 }
 
+/// The number of blosc internal threads to use for `len` bytes, clamped to [`BLOSC_MAX_THREADS`].
+fn internal_threads(len: usize, numinternalthreads: usize) -> c_int {
+    if len >= MIN_PARALLEL_LENGTH {
+        // `BLOSC_MAX_THREADS` fits in a `c_int`
+        c_int::try_from(numinternalthreads.min(BLOSC_MAX_THREADS as usize)).unwrap_or(1)
+    } else {
+        1
+    }
+}
+
 /// Compress bytes using blosc.
 ///
 /// # Errors
@@ -73,11 +83,7 @@ pub fn blosc_compress_bytes(
     blocksize: usize,
     numinternalthreads: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let numinternalthreads = if src.len() >= MIN_PARALLEL_LENGTH {
-        std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
-    } else {
-        1
-    };
+    let numinternalthreads = internal_threads(src.len(), numinternalthreads);
 
     // let mut dest = vec![0; src.len() + BLOSC_MAX_OVERHEAD as usize];
     let destsize = src.len() + BLOSC_MAX_OVERHEAD as usize;
@@ -94,7 +100,7 @@ pub fn blosc_compress_bytes(
             destsize,
             compressor_as_cstr(compressor).cast::<c_char>(),
             blocksize,
-            i32::try_from(numinternalthreads).unwrap(),
+            numinternalthreads,
         )
     };
     if destsize > 0 {
@@ -170,11 +176,7 @@ pub fn blosc_decompress_bytes(
     destsize: usize,
     numinternalthreads: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let numinternalthreads = if destsize >= MIN_PARALLEL_LENGTH {
-        std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
-    } else {
-        1
-    };
+    let numinternalthreads = internal_threads(destsize, numinternalthreads);
 
     let mut dest: Vec<u8> = Vec::with_capacity(destsize);
     let destsize = unsafe {
@@ -182,7 +184,7 @@ pub fn blosc_decompress_bytes(
             src.as_ptr().cast::<c_void>(),
             dest.as_mut_ptr().cast::<c_void>(),
             destsize,
-            i32::try_from(numinternalthreads).unwrap(),
+            numinternalthreads,
         )
     };
     if destsize > 0 {
@@ -206,8 +208,12 @@ pub fn blosc_decompress_bytes_partial(
     length: usize,
     typesize: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let start = i32::try_from(offset / typesize).unwrap();
-    let nitems = i32::try_from(length / typesize).unwrap();
+    let to_items = |bytes: usize| {
+        c_int::try_from(bytes / typesize)
+            .map_err(|_| BloscError::from("blosc_getitem item index exceeds c_int::MAX"))
+    };
+    let start = to_items(offset)?;
+    let nitems = to_items(length)?;
     let mut dest: Vec<u8> = Vec::with_capacity(length);
     let destsize = unsafe {
         blosc_getitem(

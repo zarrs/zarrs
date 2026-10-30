@@ -199,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `zarrs.gdeflate`: `gdeflate` (unregistered, 0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
     - `numcodecs.fletcher32`: `fletcher32` (unregistered, 0.19)
     - `zarrs.vlen_v2`: `vlen_v2` (unregistered, 0.19)
+- `blosc_decompress_bytes_partial` returns an error rather than panicking if the requested item range exceeds `c_int::MAX`
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

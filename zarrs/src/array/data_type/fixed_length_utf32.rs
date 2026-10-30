@@ -152,6 +152,8 @@ impl zarrs_plugin::ExtensionName for FixedLengthUTF32DataType {
     }
 }
 
+const FOUR: NonZeroU64 = NonZeroU64::new(4).unwrap();
+
 impl FixedLengthUTF32DataType {
     /// Create a new `FixedLengthUTF32DataType` with the given size in bytes.
     ///
@@ -178,7 +180,7 @@ impl FixedLengthUTF32DataType {
     /// Returns the number of code points each element can hold (`length_bytes` / 4).
     #[must_use]
     pub const fn capacity_code_points(&self) -> NonZeroU64 {
-        NonZeroU64::new(self.length_bytes.get() / 4).unwrap()
+        self.length_bytes.div_ceil(FOUR) // `length_bytes` is a multiple of 4
     }
 }
 
