@@ -1,4 +1,8 @@
-#![allow(missing_docs, clippy::cast_possible_truncation)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 use ndarray::ArrayD;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};

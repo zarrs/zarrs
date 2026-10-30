@@ -1,5 +1,5 @@
 //! Everyday sharded-read scenarios with one shared 32 MiB in-memory fixture.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_precision_loss)]
 
 use std::cell::LazyCell;
 use std::sync::Arc;

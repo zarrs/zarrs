@@ -1,6 +1,6 @@
 //! Tests for generic indexers.
 #![cfg(feature = "async")]
-#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};

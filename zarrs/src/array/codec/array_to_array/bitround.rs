@@ -82,6 +82,7 @@ fn round_bytes(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_precision_loss)]
 mod tests {
     use std::num::NonZeroU64;
     use std::sync::Arc;
