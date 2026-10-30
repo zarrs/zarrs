@@ -158,10 +158,7 @@ pub(crate) fn build_nested_optional_target<'a>(
 ///
 /// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
 /// [`build_nested_optional_target`].
-pub(crate) fn wrap_optional_masks<'a>(
-    bytes: ArrayBytes<'a>,
-    masks: Vec<Vec<u8>>,
-) -> ArrayBytes<'a> {
+pub(crate) fn wrap_optional_masks(bytes: ArrayBytes<'_>, masks: Vec<Vec<u8>>) -> ArrayBytes<'_> {
     masks
         .into_iter()
         .rev()
