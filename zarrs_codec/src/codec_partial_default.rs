@@ -147,22 +147,6 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
 }
 
 impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits> {
-    /// Map the chunk-local subchunk grids of the encoded chunk to the decoded chunk.
-    fn decoded_local_subchunk_grids(
-        &self,
-        encoded_subchunk_grids: Vec<Option<super::ChunkGrid>>,
-    ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        let shape = self.decoded_representation.shape();
-        encoded_subchunk_grids
-            .into_iter()
-            .map(|grid| {
-                grid.map_or(Ok(None), |grid| {
-                    self.codec.decoded_local_subchunk_grid(shape, &grid)
-                })
-            })
-            .collect()
-    }
-
     /// Map subchunk indices of the `level` decoded local subchunk grid to the `encoded_subchunk_grid` at that level.
     fn encoded_subchunk_indices(
         &self,
@@ -192,7 +176,10 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.decoded_local_subchunk_grids(self.input_output_handle.local_subchunk_grids(options)?)
+        self.codec.decoded_local_subchunk_grids(
+            self.decoded_representation.shape(),
+            self.input_output_handle.local_subchunk_grids(options)?,
+        )
     }
 
     fn retrieve_encoded_subchunk_at_level(
@@ -614,7 +601,8 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.decoded_local_subchunk_grids(
+        self.codec.decoded_local_subchunk_grids(
+            self.decoded_representation.shape(),
             self.input_output_handle
                 .local_subchunk_grids(options)
                 .await?,

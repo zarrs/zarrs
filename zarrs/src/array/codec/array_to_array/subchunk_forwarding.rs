@@ -3,10 +3,10 @@
 //! An array-to-array partial codec exposes the subchunks of the partial codec it wraps: the encoded subchunks are
 //! those of the wrapped codec, and only their *addressing* changes, because the codec may map coordinates between its
 //! decoded and encoded domains. The subchunk grids of the wrapped codec are mapped outward with
-//! [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grid`], and subchunk indices are mapped back inward
+//! [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids`], and subchunk indices are mapped back inward
 //! with [`ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices`].
 //!
-//! [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grid`]: zarrs_codec::ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grid
+//! [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids`]: zarrs_codec::ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids
 //! [`ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices`]: zarrs_codec::ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices
 
 use std::num::NonZeroU64;
@@ -14,22 +14,6 @@ use std::num::NonZeroU64;
 use zarrs_codec::{ArrayToArrayCodecTraits, CodecError};
 
 use crate::array::{ArrayIndices, ChunkGrid};
-
-/// Map the chunk-local subchunk grids of a wrapped partial codec through `codec`.
-pub(super) fn decoded_local_subchunk_grids(
-    codec: &dyn ArrayToArrayCodecTraits,
-    decoded_shape: &[NonZeroU64],
-    encoded_subchunk_grids: Vec<Option<ChunkGrid>>,
-) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-    encoded_subchunk_grids
-        .into_iter()
-        .map(|grid| {
-            grid.map_or(Ok(None), |grid| {
-                codec.decoded_local_subchunk_grid(decoded_shape, &grid)
-            })
-        })
-        .collect()
-}
 
 /// Map subchunk indices of the `level` chunk-local subchunk grid to the `encoded_subchunk_grid` of a wrapped partial
 /// codec at that level.
@@ -105,7 +89,7 @@ macro_rules! impl_subchunk_forwarding {
                 &self,
                 options: &zarrs_codec::CodecOptions,
             ) -> Result<Vec<Option<$crate::array::ChunkGrid>>, zarrs_codec::CodecError> {
-                $crate::array::codec::array_to_array::subchunk_forwarding::decoded_local_subchunk_grids(
+                zarrs_codec::ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids(
                     self.$codec.as_ref(),
                     &self.$shape,
                     self.$inner.local_subchunk_grids(options)?,
@@ -136,7 +120,7 @@ macro_rules! impl_subchunk_forwarding {
                 &self,
                 options: &zarrs_codec::CodecOptions,
             ) -> Result<Vec<Option<$crate::array::ChunkGrid>>, zarrs_codec::CodecError> {
-                $crate::array::codec::array_to_array::subchunk_forwarding::decoded_local_subchunk_grids(
+                zarrs_codec::ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids(
                     self.$codec.as_ref(),
                     &self.$shape,
                     self.$inner.local_subchunk_grids(options).await?,
