@@ -144,6 +144,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             Ok(false)
         }
     }
+    #[allow(clippy::must_use_candidate)]
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }

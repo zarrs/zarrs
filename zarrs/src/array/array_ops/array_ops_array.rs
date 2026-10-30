@@ -24,81 +24,96 @@ use zarrs_plugin::ZarrVersion;
 impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     type Storage = TStorage;
 
+    #[allow(clippy::must_use_candidate)]
     pub fn storage(&self) -> Arc<TStorage> {
         self.storage.clone()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn path(&self) -> &NodePath {
         &self.path
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn data_type(&self) -> &DataType {
         &self.data_type
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn fill_value(&self) -> &FillValue {
         &self.fill_value
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn shape(&self) -> &[u64] {
         self.chunk_grid().array_shape()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn dimensionality(&self) -> usize {
         self.shape().len()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn codecs(&self) -> Arc<CodecChain> {
         self.codecs.clone()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn codecs_bound(&self) -> Arc<CodecChainBound> {
         self.codecs_bound.clone()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn chunk_grid(&self) -> &ChunkGrid {
         &self.chunk_grid
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn chunk_key_encoding(&self) -> &ChunkKeyEncoding {
         &self.chunk_key_encoding
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn storage_transformers(&self) -> &StorageTransformerChain {
         &self.storage_transformers
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn codec_options(&self) -> &CodecOptions {
         &self.codec_options
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn codec_specific_options(&self) -> &CodecSpecificOptions {
         &self.codec_specific_options
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn metadata_options(&self) -> &ArrayMetadataOptions {
         &self.metadata_options
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
         self.metadata_erase_version
     }
 
-    #[allow(clippy::return_self_not_must_use)]
+    #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
     pub fn with_codec_options(&self, codec_options: CodecOptions) -> Self {
         let mut array = self.clone();
         array.codec_options = codec_options;
         array
     }
 
-    #[allow(clippy::return_self_not_must_use)]
+    #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
     pub fn with_metadata_options(&self, metadata_options: ArrayMetadataOptions) -> Self {
         let mut array = self.clone();
         array.metadata_options = metadata_options;
         array
     }
 
-    #[allow(clippy::return_self_not_must_use)]
+    #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
     pub fn with_metadata_erase_version(
         &self,
         metadata_erase_version: MetadataEraseVersion,
@@ -108,10 +123,12 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         array
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {
         &self.dimension_names
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value> {
         match &*self.metadata {
             ArrayMetadata::V3(metadata) => &metadata.attributes,
@@ -119,11 +136,12 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         }
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn metadata(&self) -> &ArrayMetadata {
         &self.metadata
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::must_use_candidate, clippy::too_many_lines)]
     pub fn metadata_opt(&self) -> ArrayMetadata {
         let options = self.metadata_options();
         use ArrayMetadata as AM;
@@ -269,32 +287,39 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         metadata
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn builder(&self) -> ArrayBuilder {
         ArrayBuilder::from_array(self)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn chunk_grid_shape(&self) -> &[u64] {
         self.chunk_grid().grid_shape()
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
         self.subchunk_shape_at_level(0)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subchunk_shape_at_level(&self, level: usize) -> Option<ChunkShape> {
         self.subchunk_grid_at_level(level)
             .as_chunk_grid()
             .and_then(maybe_regular_chunk_grid_shape)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subchunk_grid(&self) -> ChunkGridDecodedRef<'_> {
         self.subchunk_grid_at_level(0)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subchunk_grids(&self) -> &[ChunkGridDecoded] {
         &self.subchunk_grids
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_> {
         self.subchunk_grids
             .get(level)
@@ -323,6 +348,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn subset_all(&self) -> ArraySubset {
         ArraySubset::new_with_shape(self.shape())
     }

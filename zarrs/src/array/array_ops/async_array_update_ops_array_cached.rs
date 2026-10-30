@@ -150,6 +150,7 @@ where
         Ok(compacted)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
         self.array().async_readable()
     }

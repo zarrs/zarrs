@@ -137,6 +137,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         }
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }

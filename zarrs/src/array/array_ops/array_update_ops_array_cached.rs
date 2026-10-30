@@ -139,6 +139,7 @@ where
         Ok(compacted)
     }
 
+    #[allow(clippy::must_use_candidate)]
     pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
         self.array().readable()
     }
