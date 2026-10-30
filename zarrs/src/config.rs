@@ -409,7 +409,7 @@ mod tests {
 
     use super::*;
 
-    #[ignore]
+    #[ignore = "mutates the global config, which other tests read concurrently"]
     #[test]
     #[serial]
     fn config_validate_checksums() {
@@ -421,7 +421,7 @@ mod tests {
         *global_config_mut() = Config::default();
     }
 
-    #[ignore]
+    #[ignore = "mutates the global config, which other tests read concurrently"]
     #[test]
     #[serial]
     fn config_serialize_deserialize_update() {
