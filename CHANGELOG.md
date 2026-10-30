@@ -221,6 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix async `partial_decode_into` to use the same subchunk-aware path as sync decoding
 - Fix `decode_into` and `partial_decode_into` failing if the output target has the same number of elements as the decoded shard or subset, but a different shape or dimensionality
 - Reject shard-index byte ranges that overflow or lie outside encoded subchunks when compacting or decoding, and skip compactions that would not shrink the shard
+  - Validate index entries when decoding the index, and reject partial subchunks whose size differs from the fixed encoded size of their inner codecs
 - Fix the partial encoder
   - Rewrite the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
   - Replace a rewritten shard rather than erasing it first, so a failed write leaves the shard intact

@@ -223,10 +223,14 @@ fn compute_index_encoded_size(
     }
 }
 
+/// Decode and validate a shard index.
+///
+/// Returns an error if the shard index does not have an entry for each element of `index_shape`, or a subchunk span overflows or overlaps the shard index at the start of the shard.
 fn decode_shard_index(
     encoded_shard_index: &[u8],
     index_shape: &[NonZeroU64],
     index_codecs: &CodecChainBound,
+    index_location: ShardingIndexLocation,
     options: &CodecOptions,
     resources: &ComputeResources,
 ) -> Result<Vec<u64>, CodecError> {
@@ -238,12 +242,36 @@ fn decode_shard_index(
         resources,
     )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
-    Ok(decoded_shard_index
+    let shard_index: Vec<u64> = decoded_shard_index
         .as_chunks::<8>()
         .0
         .iter()
         .map(|v| u64::from_ne_bytes(*v))
-        .collect())
+        .collect();
+    let num_entries = index_shape.iter().try_fold(1usize, |num_entries, length| {
+        num_entries.checked_mul(usize::try_from(length.get()).ok()?)
+    });
+    if num_entries != Some(shard_index.len()) {
+        return Err(CodecError::Other(
+            "The decoded shard index has the wrong number of entries. The chunk may be corrupted."
+                .to_string(),
+        ));
+    }
+
+    // Validate the subchunk spans
+    let data_start = match index_location {
+        ShardingIndexLocation::Start => encoded_shard_index.len() as u64,
+        ShardingIndexLocation::End => 0,
+    };
+    for &[offset, size] in shard_index.as_chunks::<2>().0 {
+        let empty = offset == u64::MAX && size == u64::MAX;
+        let overflows = offset.checked_add(size).is_none();
+        let overlaps_index = offset < data_start && size > 0;
+        if !empty && (overflows || overlaps_index) {
+            return Err(shard_index_out_of_bounds());
+        }
+    }
+    Ok(shard_index)
 }
 
 fn get_index_byte_range(
@@ -272,14 +300,8 @@ fn subchunk_byte_range(
             ))
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        subchunk_offset_size(shard_index, shard_index_idx)
-            .map(|(offset, size)| {
-                offset
-                    .checked_add(size)
-                    .ok_or_else(shard_index_out_of_bounds)?;
-                Ok(ByteRange::FromStart(offset, Some(size)))
-            })
-            .transpose()
+        Ok(subchunk_offset_size(shard_index, shard_index_idx)
+            .map(|(offset, size)| ByteRange::FromStart(offset, Some(size))))
     } else {
         Ok(None)
     }
@@ -288,6 +310,7 @@ fn subchunk_byte_range(
 /// Returns the byte offset and size of the subchunk at `subchunk_index` in a shard index.
 ///
 /// Returns [`None`] if the subchunk is empty.
+/// The span of a subchunk in a shard index from [`decode_shard_index`] does not overflow.
 fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u64, u64)> {
     let offset = shard_index[subchunk_index * 2];
     let size = shard_index[subchunk_index * 2 + 1];
@@ -296,6 +319,39 @@ fn subchunk_offset_size(shard_index: &[u64], subchunk_index: usize) -> Option<(u
     } else {
         Some((offset, size))
     }
+}
+
+/// Returns the byte range of the subchunk at `subchunk_index` in an encoded shard.
+///
+/// Returns [`None`] if the subchunk is empty.
+///
+/// # Safety
+/// `shard_index` must be from [`ShardingCodecBound::decode_index`] for the encoded shard, so each subchunk span lies within it, and `subchunk_index` must be less than half its length.
+/// Otherwise this may panic, or return a range that is not in the encoded shard.
+unsafe fn subchunk_range_usize(shard_index: &[u64], subchunk_index: usize) -> Option<Range<usize>> {
+    subchunk_offset_size(shard_index, subchunk_index).map(|(offset, size)| {
+        let offset = usize::try_from(offset).unwrap();
+        offset..offset + usize::try_from(size).unwrap()
+    })
+}
+
+/// Check the encoded size of a subchunk in a shard index against the inner codecs.
+///
+/// Returns an error if the inner codecs have a fixed encoded size that differs from `size`.
+fn validate_subchunk_encoded_size(
+    inner_codecs: &CodecChainBound,
+    subchunk_shape: &[NonZeroU64],
+    size: u64,
+) -> Result<(), CodecError> {
+    if let BytesRepresentation::FixedSize(fixed_size) =
+        inner_codecs.encoded_representation(subchunk_shape)?
+        && fixed_size != size
+    {
+        return Err(CodecError::Other(format!(
+            "The shard index has an encoded subchunk of {size} bytes, but its encoded size is {fixed_size} bytes. The chunk may be corrupted."
+        )));
+    }
+    Ok(())
 }
 
 fn partial_decode_empty_shard<'a>(
@@ -612,7 +668,6 @@ fn subchunk_updates<'a>(
     }
 }
 
-/// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
 /// Return the indices and byte ranges of the stored subchunks of a shard that are not in `updated_subchunks`.
 fn retained_subchunks<T>(
     shard_index: &[u64],
@@ -635,6 +690,11 @@ fn missing_retained_subchunks() -> CodecError {
 
 fn invalid_shard_index() -> CodecError {
     CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
+}
+
+/// The compacted shard is too large to allocate.
+fn compacted_shard_too_large() -> CodecError {
+    CodecError::from("the compacted shard is too large to allocate")
 }
 
 /// The shard index references bytes outside of the encoded subchunks of a shard.
@@ -724,6 +784,7 @@ fn decode_shard_index_partial_decoder(
             &encoded_shard_index,
             &index_shape,
             index_codecs,
+            index_location,
             options,
             resources.compute(),
         )?),
@@ -753,6 +814,7 @@ async fn decode_shard_index_async_partial_decoder(
             &encoded_shard_index,
             &index_shape,
             index_codecs,
+            index_location,
             options,
             resources.compute(),
         )?),
