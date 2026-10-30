@@ -1208,7 +1208,7 @@ mod tests {
             let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
             let fill_value = data_type.fill_value_v3(&metadata).unwrap();
             assert_eq!(fill_value.as_ne_bytes(), [170]);
-            assert_eq!(microfloat::f8e5m2::from_bits(170).to_f32(), -0.046875);
+            assert_eq!(microfloat::f8e5m2::from_bits(170).to_f32(), -0.046_875);
             assert_eq!(
                 serde_json::from_str::<FillValueMetadata>(r"-0.046875").unwrap(),
                 data_type.metadata_fill_value(&fill_value).unwrap()

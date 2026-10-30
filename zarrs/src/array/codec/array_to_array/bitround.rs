@@ -160,7 +160,7 @@ mod tests {
         let shape = vec![NonZeroU64::new(7).unwrap()];
         let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
-        let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
+        let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123_145_182, 4_294_967_295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
 
@@ -182,7 +182,7 @@ mod tests {
         }
         assert_eq!(
             decoded_elements,
-            &[0, 1024, 1280, 1536, 1792, 117440512, 3758096384]
+            &[0, 1024, 1280, 1536, 1792, 117_440_512, 3_758_096_384]
         );
     }
 

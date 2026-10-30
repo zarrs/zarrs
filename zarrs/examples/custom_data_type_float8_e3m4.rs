@@ -101,7 +101,7 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
         sign
     } else if biased_to_exponent > 7 {
         // Overflow: return ±Infinity
-        sign | 0b01110000
+        sign | 0b0111_0000
     } else {
         sign | ((biased_to_exponent as u8) << 4) | mantissa
     }
@@ -109,7 +109,7 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float8_e3m4_to_float32(val: u8) -> f32 {
-    let sign = u32::from(val & 0b10000000);
+    let sign = u32::from(val & 0b1000_0000);
     let biased_exponent = i16::from((val >> 4) & 0b111);
     let mantissa = u32::from(val & 0b1111);
 
@@ -119,9 +119,9 @@ fn float8_e3m4_to_float32(val: u8) -> f32 {
     } else if biased_exponent == 7 {
         // Infinity or NaN
         if mantissa == 0 {
-            (sign << 24) | 0x7F800000 // ±Infinity
+            (sign << 24) | 0x7F80_0000 // ±Infinity
         } else {
-            (sign << 24) | 0x7F800000 | (mantissa << 19) // NaN
+            (sign << 24) | 0x7F80_0000 | (mantissa << 19) // NaN
         }
     } else {
         let unbiased_exponent = biased_exponent - 3;

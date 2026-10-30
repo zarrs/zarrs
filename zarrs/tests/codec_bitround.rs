@@ -26,11 +26,11 @@ fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
         // Format IEEE 754 as sign_exponent_mantissa
         let orig_sign = (orig_bits >> 31) & 1;
         let orig_exp = (orig_bits >> 23) & 0xFF;
-        let orig_mant = orig_bits & 0x7FFFFF;
+        let orig_mant = orig_bits & 0x007F_FFFF;
 
         let round_sign = (round_bits >> 31) & 1;
         let round_exp = (round_bits >> 23) & 0xFF;
-        let round_mant = round_bits & 0x7FFFFF;
+        let round_mant = round_bits & 0x007F_FFFF;
 
         println!(
             "| {orig:>18.6} | {round:>17.6} | {orig_sign:01b}_{orig_exp:08b}_{orig_mant:023b} | {round_sign:01b}_{round_exp:08b}_{round_mant:023b} |"

@@ -235,30 +235,35 @@ fn array(
 /// Allocation baselines: `(name, allocations, allocated bytes, peak bytes)`.
 /// Re-measure with `cargo +nightly test -p zarrs --all-features --test allocations -- --nocapture`.
 const BASELINE: &[(&str, usize, usize, usize)] = &[
-    ("async_retrieve_chunk_zstd", 11, 131348, 131258),
+    ("async_retrieve_chunk_zstd", 11, 131_348, 131_258),
     (
         "async_store_array_subset_many_chunks_zstd",
         566,
-        327506,
-        145603,
+        327_506,
+        145_603,
     ),
     ("partial_decoder_sharded_zstd", 746, 92578, 16340),
     (
         "retrieve_array_subset_many_chunks_zstd",
         438,
-        271346,
-        139994,
+        271_346,
+        139_994,
     ),
     ("retrieve_chunk_uncompressed", 8, 172, 162),
-    ("retrieve_chunk_zstd", 8, 131236, 131226),
+    ("retrieve_chunk_zstd", 8, 131_236, 131_226),
     ("retrieve_sharded_all_zstd", 1329, 291_048, 134_940),
     ("retrieve_sharded_partial_zstd", 1096, 155_920, 26692),
     ("sharding_decode_borrowed_shard", 1252, 158_646, 132_676),
-    ("store_array_subset_many_chunks_zstd", 502, 304802, 16948),
-    ("store_array_subset_partial_chunks_zstd", 696, 341618, 21012),
+    ("store_array_subset_many_chunks_zstd", 502, 304_802, 16948),
+    (
+        "store_array_subset_partial_chunks_zstd",
+        696,
+        341_618,
+        21012,
+    ),
     ("store_array_subset_sharded", 1380, 462_966, 139_675),
-    ("store_chunk_uncompressed_borrowed", 5, 131138, 131122),
-    ("store_chunk_zstd", 6, 131674, 131658),
+    ("store_chunk_uncompressed_borrowed", 5, 131_138, 131_122),
+    ("store_chunk_zstd", 6, 131_674, 131_658),
     ("store_chunks_sharded", 1372, 462_790, 139_579),
 ];
 

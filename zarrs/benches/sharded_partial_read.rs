@@ -37,12 +37,12 @@ fn data_path() -> PathBuf {
 
 /// Generate pseudo-random f64 values via a simple LCG (no external crate needed).
 fn random_data(n: usize) -> Vec<f64> {
-    let mut state: u64 = 0x123456789abcdef0;
+    let mut state: u64 = 0x1234_5678_9abc_def0;
     (0..n)
         .map(|_| {
             state = state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
             (state >> 11) as f64 * (1.0 / (1u64 << 53) as f64) * 2.0 - 1.0
         })
         .collect()
