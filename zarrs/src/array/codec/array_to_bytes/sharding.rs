@@ -1295,7 +1295,7 @@ mod tests {
     }
 
     #[cfg(feature = "async")]
-    async fn codec_sharding_async_round_trip_impl(
+    fn codec_sharding_async_round_trip_impl(
         options: &CodecOptions,
         unbounded: bool,
         index_at_end: bool,
@@ -1350,8 +1350,7 @@ mod tests {
                             all_fill_value,
                             index_at_end,
                             vec![],
-                        )
-                        .await;
+                        );
                     }
                 }
             }

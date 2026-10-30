@@ -44,7 +44,7 @@ fn sync_store() -> Arc<FilesystemStore> {
 }
 
 #[cfg(feature = "async")]
-async fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableStorageTraits> {
+fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableStorageTraits> {
     Arc::new(SyncToAsyncStorageAdapter::new(
         sync_store(),
         TokioSpawnBlocking,
@@ -213,7 +213,7 @@ fn child_array_paths() {
 #[serial]
 async fn async_child_arrays() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // Two arrays in /a
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
@@ -232,7 +232,7 @@ async fn async_child_arrays() {
 #[serial]
 async fn async_child_groups() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two groups: a and b
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -251,7 +251,7 @@ async fn async_child_groups() {
 #[serial]
 async fn async_child_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two child paths: a and b (both groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -277,7 +277,7 @@ async fn async_child_paths() {
 #[serial]
 async fn async_child_group_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two group paths: a and b
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -299,7 +299,7 @@ async fn async_child_group_paths() {
 #[serial]
 async fn async_child_array_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are no array paths (only groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
