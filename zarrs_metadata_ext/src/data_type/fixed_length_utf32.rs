@@ -30,6 +30,6 @@ mod tests {
 
     #[test]
     fn missing_length_bytes() {
-        assert!(serde_json::from_str::<FixedLengthUTF32DataTypeConfigurationV1>(r#"{}"#).is_err());
+        assert!(serde_json::from_str::<FixedLengthUTF32DataTypeConfigurationV1>(r"{}").is_err());
     }
 }
