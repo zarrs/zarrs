@@ -355,12 +355,12 @@ mod tests {
 
     #[cfg(feature = "async")]
     impl SyncToAsyncSpawnBlocking for InlineSpawnBlocking {
-        async fn spawn_blocking<F, R>(&self, f: F) -> R
+        fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
         where
             F: FnOnce() -> R + Send + 'static,
             R: Send + 'static,
         {
-            f()
+            std::future::ready(f())
         }
     }
 
