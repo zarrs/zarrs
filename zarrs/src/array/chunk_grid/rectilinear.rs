@@ -669,9 +669,8 @@ mod tests {
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = config;
 
         // First dimension should be compressed: [[5, 3], [15, 2], 20, 35]
-        let elements = match &chunk_shapes[0] {
-            ChunkEdgeLengths::Varying(elements) => elements,
-            _ => panic!("Expected Varying"),
+        let ChunkEdgeLengths::Varying(elements) = &chunk_shapes[0] else {
+            panic!("Expected Varying");
         };
         assert_eq!(elements.len(), 4);
         assert!(
