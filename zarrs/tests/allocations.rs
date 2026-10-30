@@ -1,4 +1,4 @@
-#![allow(missing_docs, clippy::cast_sign_loss)]
+#![allow(missing_docs, clippy::cast_sign_loss, clippy::cast_possible_wrap)]
 #![cfg(all(feature = "zstd", not(miri)))]
 
 //! Heap allocation counts of representative array operations.
