@@ -416,7 +416,7 @@ fn extract_elements(
         // The selected bytes are within `bytes`, so neither their offsets nor their total size overflow
         let mut out =
             Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
-        for (index, elements) in runs.iter() {
+        for (index, elements) in &runs {
             let range = index * element_size..(index + elements) * element_size;
             let run = usize::try_from(range.start)
                 .ok()

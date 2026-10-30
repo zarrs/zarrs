@@ -192,7 +192,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len);
         // NOTE: Could memcpy here
-        for byte in bytes.iter() {
+        for byte in &bytes {
             elements.push(CustomDataTypeFloat8e3m4Element(*byte));
         }
         Ok(elements)

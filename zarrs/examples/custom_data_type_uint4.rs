@@ -184,7 +184,7 @@ impl ElementOwned for CustomDataTypeUInt4Element {
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt4Element>());
-        for byte in bytes.iter() {
+        for byte in &bytes {
             elements.push(CustomDataTypeUInt4Element(*byte));
         }
         Ok(elements)
