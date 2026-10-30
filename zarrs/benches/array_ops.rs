@@ -8,7 +8,7 @@
 //! - `sharded_read`: whole reads of 1, 4 and 16 shards of 32 x 32 subchunks.
 //! - `partial_decoder`: creating a partial decoder of a chunk, and decoding regions with it.
 //! - `chunk_cache`: reading a region through each type of chunk cache, empty and filled.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 mod common;
 

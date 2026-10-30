@@ -554,6 +554,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use std::num::NonZeroU64;

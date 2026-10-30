@@ -5,7 +5,7 @@
 //!
 //! Set [`USE_MEMORY_STORE`] to `true` to benchmark with an in-memory store instead of the
 //! filesystem store.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use std::path::PathBuf;
 use std::sync::Arc;

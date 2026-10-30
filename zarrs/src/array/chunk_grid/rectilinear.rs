@@ -246,7 +246,11 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
         }
         match &self.chunks[dimension] {
             RectilinearChunkGridDimension::Fixed(size) => {
-                Ok(vec![*size; self.grid_shape[dimension] as usize])
+                Ok(vec![
+                    *size;
+                    usize::try_from(self.grid_shape[dimension])
+                        .expect("the chunk edge lengths fit in memory")
+                ])
             }
             RectilinearChunkGridDimension::Varying(offsets_sizes) => {
                 Ok(offsets_sizes.iter().map(|os| os.size).collect())

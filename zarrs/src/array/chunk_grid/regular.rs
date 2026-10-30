@@ -152,7 +152,11 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             return Ok(Vec::new());
         }
         let edge_length = self.chunk_shape.as_slice()[dimension];
-        Ok(vec![edge_length; self.grid_shape[dimension] as usize])
+        Ok(vec![
+            edge_length;
+            usize::try_from(self.grid_shape[dimension])
+                .expect("the chunk edge lengths fit in memory")
+        ])
     }
 
     fn subset(

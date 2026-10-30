@@ -135,7 +135,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             return Ok(Vec::new());
         }
         let chunk_size = self.chunk_shape.as_slice()[dimension];
-        let n_chunks = self.grid_shape[dimension] as usize;
+        let n_chunks = usize::try_from(self.grid_shape[dimension])
+            .expect("the chunk edge lengths fit in memory");
         let mut result = Vec::with_capacity(n_chunks);
         result.resize(n_chunks - 1, chunk_size);
         let last_edge = self.array_shape[dimension] - (n_chunks - 1) as u64 * chunk_size.get();

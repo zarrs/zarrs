@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use itertools::Itertools;
 use ndarray::ArrayD;

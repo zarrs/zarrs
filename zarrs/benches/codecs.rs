@@ -1,5 +1,5 @@
 //! Benchmark various codecs.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use zarrs::array::{ArrayBytes, ArraySubset, CodecSpecificOptions, CowBytes};
 

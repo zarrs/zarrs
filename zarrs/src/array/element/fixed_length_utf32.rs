@@ -198,7 +198,7 @@ impl<const N: usize> Element for &[char; N] {
             let fixed_length_utf32 = data_type
                 .downcast_ref::<data_type::FixedLengthUTF32DataType>()
                 .unwrap();
-            if fixed_length_utf32.capacity_code_points().get() as usize == N {
+            if fixed_length_utf32.capacity_code_points().get() == N as u64 {
                 return Ok(());
             }
         }

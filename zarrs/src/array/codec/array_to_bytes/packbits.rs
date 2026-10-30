@@ -366,6 +366,7 @@ fn unpack_components<const N: usize, const MSB_FIRST: bool>(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use std::mem::MaybeUninit;
     use std::num::NonZeroU64;

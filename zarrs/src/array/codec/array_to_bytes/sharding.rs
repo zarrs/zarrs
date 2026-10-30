@@ -660,6 +660,7 @@ async fn decode_shard_index_async_partial_decoder(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use std::sync::{Arc, Mutex};
 

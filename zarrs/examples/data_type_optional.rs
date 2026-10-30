@@ -8,6 +8,7 @@
 //! - The mask is compressed with the packbits codec
 //! - The data uses the bytes codec for actual values
 //! - More efficient storage for arrays with many null/missing values
+#![allow(clippy::cast_possible_truncation)]
 
 use std::sync::Arc;
 

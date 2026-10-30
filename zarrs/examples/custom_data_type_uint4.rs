@@ -1,6 +1,7 @@
 //! A custom data type for `uint4`.
 //!
 //! It accepts uint compatible fill values.
+#![allow(clippy::cast_possible_truncation)]
 
 use std::any::Any;
 use std::sync::Arc;

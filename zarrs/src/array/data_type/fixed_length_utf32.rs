@@ -160,7 +160,8 @@ impl FixedLengthUTF32DataType {
     /// `length_bytes` must be at least 4 and a multiple of 4.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if `length_bytes` is not a multiple of 4 or is less than 4.
+    /// Returns [`PluginCreateError`] if `length_bytes` is not a multiple of 4, is less than 4, or
+    /// exceeds [`usize::MAX`].
     pub fn new(length_bytes: NonZeroU64) -> Result<Self, PluginCreateError> {
         if length_bytes.get() < 4 || !length_bytes.get().is_multiple_of(4) {
             return Err(PluginCreateError::Other(format!(
@@ -168,7 +169,18 @@ impl FixedLengthUTF32DataType {
                 length_bytes.get()
             )));
         }
+        if usize::try_from(length_bytes.get()).is_err() {
+            return Err(PluginCreateError::Other(format!(
+                "length_bytes {} exceeds usize::MAX",
+                length_bytes.get()
+            )));
+        }
         Ok(Self { length_bytes })
+    }
+
+    /// The size of each element in bytes, which [`new`](Self::new) ensures fits in a `usize`.
+    fn length_bytes_usize(self) -> usize {
+        usize::try_from(self.length_bytes.get()).expect("checked in new")
     }
 
     /// Returns the size of each element in bytes.
@@ -192,7 +204,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
     }
 
     fn size(&self) -> DataTypeSize {
-        DataTypeSize::Fixed(self.length_bytes.get() as usize)
+        DataTypeSize::Fixed(self.length_bytes_usize())
     }
 
     fn fill_value(
@@ -206,7 +218,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         };
 
         let chars: Vec<char> = s.chars().collect();
-        let capacity = self.capacity_code_points().get() as usize;
+        let capacity = self.length_bytes_usize() / 4;
 
         // Check that the string fits
         if chars.len() > capacity {
@@ -214,7 +226,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         }
 
         // Encode as native-endian UTF-32, padded with U+0000
-        let mut bytes = Vec::with_capacity(self.length_bytes.get() as usize);
+        let mut bytes = Vec::with_capacity(self.length_bytes_usize());
         for &ch in &chars {
             bytes.extend_from_slice(&(ch as u32).to_ne_bytes());
         }
@@ -231,12 +243,12 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
         let bytes = fill_value.as_ne_bytes();
-        if bytes.len() != self.length_bytes.get() as usize {
+        if bytes.len() != self.length_bytes_usize() {
             return Err(zarrs_data_type::DataTypeFillValueError);
         }
 
         // Decode all UTF-32 code units (native-endian)
-        let capacity = self.capacity_code_points().get() as usize;
+        let capacity = self.length_bytes_usize() / 4;
         let mut chars = Vec::with_capacity(capacity);
 
         for i in 0..capacity {

@@ -661,6 +661,7 @@ impl ArrayBuilder {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use std::num::NonZeroU64;
 

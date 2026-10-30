@@ -1,6 +1,7 @@
 //! A custom data type for `uint12`.
 //!
 //! It accepts uint compatible fill values.
+#![allow(clippy::cast_possible_truncation)]
 
 use std::sync::Arc;
 use zarrs::array::CowBytes;

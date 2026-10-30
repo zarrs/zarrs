@@ -132,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `lru` to 0.18.2
   - Bump `quick_cache` to 0.7.0
   - Bump `serial_test` to 3.5.0
+- `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 
 ### Removed
 - **Breaking**: Remove `SubchunkWriteOrder::Random` variant; use `SubchunkWriteOrder::Unordered` for the same behaviour

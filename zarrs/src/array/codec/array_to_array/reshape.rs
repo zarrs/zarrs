@@ -198,6 +198,7 @@ impl CodecTraitsV3 for ReshapeCodec {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use std::num::NonZeroU64;
     use std::sync::Mutex;

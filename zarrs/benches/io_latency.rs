@@ -2,7 +2,7 @@
 //!
 //! This measures how well array operations overlap I/O with each other and with decoding.
 //! Each benchmark prints the peak number of in-flight requests it achieved.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 mod common;
 

@@ -5,7 +5,7 @@
 //! 2. Sharded partial read — subchunk slicing out of a shard.
 //! 3. `store_chunk` from a borrowed slice on a pass-through chain.
 //! 4. `retrieve_chunk` as `Vec<T>` — the bytemuck path that cannot avoid a copy.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use std::sync::Arc;
 
