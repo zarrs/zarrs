@@ -366,6 +366,15 @@ impl PartialEq for ArrayBytesOffsets {
 
 impl Eq for ArrayBytesOffsets {}
 
+impl<'a> IntoIterator for &'a ArrayBytesOffsets {
+    type Item = usize;
+    type IntoIter = ArrayBytesOffsetsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl<'a> ArrayBytesOffsetsSlice<'a> {
     /// Returns the number of offsets.
     #[must_use]
@@ -434,6 +443,15 @@ impl<'a> ArrayBytesOffsetsSlice<'a> {
             front: 0,
             back: self.len().saturating_sub(1),
         }
+    }
+}
+
+impl<'a> IntoIterator for &ArrayBytesOffsetsSlice<'a> {
+    type Item = usize;
+    type IntoIter = ArrayBytesOffsetsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

@@ -456,7 +456,7 @@ fn validate_bytes_vlen(
     }
     let len = bytes.len();
     let mut offset_last = 0;
-    for offset in offsets.iter() {
+    for offset in offsets {
         if offset < offset_last || offset > len {
             return Err(CodecError::InvalidVariableSizedArrayOffsets);
         }
