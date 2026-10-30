@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use zarrs_storage::StorageError;
-use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator};
+use zarrs_storage::byte_range::{
+    ByteLength, ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError,
+};
 
 use crate::{CodecError, CodecOptions, CowBytes};
 
@@ -9,9 +11,32 @@ use crate::{CodecError, CodecOptions, CowBytes};
 use crate::AsyncBytesPartialDecoderTraits;
 use crate::BytesPartialDecoderTraits;
 
+/// Map byte ranges within the interval `byte_offset..byte_offset + byte_length` to byte ranges of the whole input.
+///
+/// Returns an [`InvalidByteRangeError`] if a byte range is not within the interval, or the interval end overflows.
+fn interval_byte_ranges(
+    byte_ranges: ByteRangeIterator,
+    byte_offset: ByteOffset,
+    byte_length: ByteLength,
+) -> Result<Vec<ByteRange>, InvalidByteRangeError> {
+    let interval_valid = byte_offset.checked_add(byte_length).is_some();
+    byte_ranges
+        .map(|byte_range| {
+            byte_range
+                .checked_range(byte_length)
+                .filter(|_| interval_valid)
+                .map(|range| {
+                    ByteRange::FromStart(byte_offset + range.start, Some(range.end - range.start))
+                })
+                .ok_or_else(|| InvalidByteRangeError::new(byte_range, byte_length))
+        })
+        .collect()
+}
+
 /// A partial decoder for a byte interval of a [`BytesPartialDecoderTraits`] partial decoder.
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
+/// Requests outside of the interval return a [`CodecError::InvalidByteRangeError`].
 pub struct ByteIntervalPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
     byte_offset: ByteOffset,
@@ -47,19 +72,9 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
-        let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
-            ByteRange::FromStart(offset, None) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length - offset))
-            }
-            ByteRange::FromStart(offset, Some(length)) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(length))
-            }
-            ByteRange::Suffix(length) => {
-                ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
-            }
-        });
+        let byte_ranges = interval_byte_ranges(byte_ranges, self.byte_offset, self.byte_length)?;
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -71,6 +86,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 /// A partial decoder for a byte interval of a [`AsyncBytesPartialDecoderTraits`] partial decoder.
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
+/// Requests outside of the interval return a [`CodecError::InvalidByteRangeError`].
 pub struct AsyncByteIntervalPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     byte_offset: ByteOffset,
@@ -110,19 +126,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
-        let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
-            ByteRange::FromStart(offset, None) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length - offset))
-            }
-            ByteRange::FromStart(offset, Some(length)) => {
-                ByteRange::FromStart(self.byte_offset + offset, Some(length))
-            }
-            ByteRange::Suffix(length) => {
-                ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
-            }
-        });
+        let byte_ranges = interval_byte_ranges(byte_ranges, self.byte_offset, self.byte_length)?;
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
             .await
     }
 
@@ -151,6 +157,38 @@ mod tests {
         assert_eq!(decode(ByteRange::FromStart(1, None)), vec![3, 4, 5, 6]);
         assert_eq!(decode(ByteRange::FromStart(1, Some(2))), vec![3, 4]);
         assert_eq!(decode(ByteRange::Suffix(2)), vec![5, 6]);
+        assert_eq!(decode(ByteRange::FromStart(5, None)), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn byte_interval_partial_decoder_out_of_bounds() {
+        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new((0..10u8).collect::<Vec<u8>>());
+        let options = CodecOptions::default();
+        let decoder = ByteIntervalPartialDecoder::new(input.clone(), 2, 5);
+        for byte_range in [
+            ByteRange::FromStart(6, None),
+            ByteRange::FromStart(4, Some(2)),
+            ByteRange::FromStart(u64::MAX, Some(1)),
+            ByteRange::Suffix(6),
+        ] {
+            assert!(matches!(
+                decoder.partial_decode(byte_range, &options),
+                Err(CodecError::InvalidByteRangeError(_))
+            ));
+        }
+
+        // The interval end overflows
+        let decoder = ByteIntervalPartialDecoder::new(input, u64::MAX - 1, 2);
+        for byte_range in [
+            ByteRange::FromStart(0, Some(1)),
+            ByteRange::FromStart(1, None),
+            ByteRange::Suffix(1),
+        ] {
+            assert!(matches!(
+                decoder.partial_decode(byte_range, &options),
+                Err(CodecError::InvalidByteRangeError(_))
+            ));
+        }
     }
 
     #[cfg(feature = "async")]
