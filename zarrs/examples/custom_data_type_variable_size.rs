@@ -49,7 +49,7 @@ impl Element for CustomDataTypeVariableSizeElement {
             }
         }
         offsets.push(bytes.len());
-        let offsets = if bytes.len() <= u32::MAX as usize {
+        let offsets = if u32::try_from(bytes.len()).is_ok() {
             ArrayBytesOffsets::new(
                 offsets
                     .into_iter()

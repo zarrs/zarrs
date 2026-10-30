@@ -23,7 +23,7 @@ pub use array_bytes_offsets::{
 fn offsets_from_usize(
     offsets: Vec<usize>,
 ) -> Result<ArrayBytesOffsets, ArrayBytesOffsetsCreateError> {
-    if offsets.iter().copied().max().unwrap_or(0) <= u32::MAX as usize {
+    if u32::try_from(offsets.iter().copied().max().unwrap_or(0)).is_ok() {
         #[cfg(target_pointer_width = "32")]
         let offsets = bytemuck::allocation::cast_vec::<usize, u32>(offsets);
         #[cfg(not(target_pointer_width = "32"))]
