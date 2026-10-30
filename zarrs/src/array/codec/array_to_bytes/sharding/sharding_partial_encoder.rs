@@ -528,7 +528,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 options,
             )?;
         }
-        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        let Some(updated) = enclosing.take_updated() else {
+            // The enclosing subchunk is unchanged
+            return Ok(());
+        };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
     }
 
@@ -552,14 +555,17 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Update the enclosing level zero subchunk in memory
         let enclosing =
             self.enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)?;
-        if enclosing.buffer.lock().unwrap().is_none() {
+        if !enclosing.exists() {
             // The enclosing subchunk is not stored
             return Ok(());
         }
         enclosing
             .encoder
             .erase_subchunk_at_level(level - 1, &enclosing.nested_indices, options)?;
-        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        let Some(updated) = enclosing.take_updated() else {
+            // The enclosing subchunk is unchanged
+            return Ok(());
+        };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
     }
 }

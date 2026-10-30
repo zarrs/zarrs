@@ -1,15 +1,18 @@
 //! Encoded subchunk access for the sharding codec.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    BytesPartialDecoderTraits, CodecError, CodecOptions, EncodedSubchunk,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes,
+    EncodedSubchunk,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits};
-use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
+use zarrs_storage::{OffsetBytesIterator, StorageError};
 
 use super::{nested_local_subchunk_grids, subchunk_byte_range};
 use crate::array::array_ops::{enclosing_chunk_indices, subset_chunk_indices};
@@ -98,12 +101,65 @@ pub(crate) fn enclosing_subchunk(
     })
 }
 
+/// The in-memory encoded bytes of a level zero subchunk, tracking whether they have been written.
+struct EnclosingSubchunkBuffer {
+    bytes: Mutex<Option<Vec<u8>>>,
+    written: AtomicBool,
+}
+
+impl BytesPartialDecoderTraits for EnclosingSubchunkBuffer {
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.bytes.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.bytes.size_held()
+    }
+
+    fn partial_decode_many(
+        &self,
+        decoded_regions: ByteRangeIterator,
+        options: &CodecOptions,
+    ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
+        self.bytes.partial_decode_many(decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.bytes.supports_partial_decode()
+    }
+}
+
+impl BytesPartialEncoderTraits for EnclosingSubchunkBuffer {
+    fn erase(&self) -> Result<(), CodecError> {
+        self.written.store(true, Ordering::Relaxed);
+        self.bytes.erase()
+    }
+
+    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        self.written.store(true, Ordering::Relaxed);
+        self.bytes.encode(bytes, options)
+    }
+
+    fn partial_encode_many(
+        &self,
+        offset_values: OffsetBytesIterator<CowBytes<'_>>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.written.store(true, Ordering::Relaxed);
+        self.bytes.partial_encode_many(offset_values, options)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.bytes.supports_partial_encode()
+    }
+}
+
 /// An in-memory partial encoder of the level zero subchunk of a shard enclosing a subchunk at a deeper level.
 pub(crate) struct EnclosingSubchunkEncoder {
     /// The linear index of the level zero subchunk in the shard index.
     pub(crate) index: u64,
     /// The encoded bytes of the level zero subchunk, updated in place by [`encoder`](Self::encoder).
-    pub(crate) buffer: Arc<Mutex<Option<Vec<u8>>>>,
+    buffer: Arc<EnclosingSubchunkBuffer>,
     /// The partial encoder of the level zero subchunk.
     pub(crate) encoder: Arc<dyn ArrayPartialEncoderTraits>,
     /// The indices of the subchunk in the subchunk grid one level below of [`encoder`](Self::encoder).
@@ -120,7 +176,10 @@ impl EnclosingSubchunkEncoder {
         level: usize,
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
-        let buffer = Arc::new(Mutex::new(existing));
+        let buffer = Arc::new(EnclosingSubchunkBuffer {
+            bytes: Mutex::new(existing),
+            written: AtomicBool::new(false),
+        });
         let encoder =
             inner_codecs
                 .clone()
@@ -135,6 +194,22 @@ impl EnclosingSubchunkEncoder {
             encoder,
             nested_indices,
         })
+    }
+
+    /// Returns whether the level zero subchunk is stored.
+    pub(crate) fn exists(&self) -> bool {
+        self.buffer.bytes.lock().unwrap().is_some()
+    }
+
+    /// Take the updated encoded bytes of the level zero subchunk, or [`None`] if [`encoder`](Self::encoder) did not
+    /// write them.
+    ///
+    /// The inner [`Option`] is [`None`] if the level zero subchunk was erased.
+    pub(crate) fn take_updated(&self) -> Option<Option<CowBytes<'static>>> {
+        self.buffer
+            .written
+            .load(Ordering::Relaxed)
+            .then(|| self.buffer.bytes.lock().unwrap().take().map(CowBytes::from))
     }
 }
 

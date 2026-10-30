@@ -1692,6 +1692,65 @@ fn partial_encoder_erase_nested_subchunks() -> TestResult {
     check(ChunkCachePartialDecoderLruChunkLimit::new(2))
 }
 
+#[test]
+fn partial_encoder_erase_unstored_nested_subchunk_leaves_shard_unchanged() -> TestResult {
+    let array =
+        transposed_nested_sharding_builder().build_arc(Arc::new(MemoryStore::default()), "/")?;
+    let encoder = array.partial_encoder(&[0, 0])?;
+    let options = CodecOptions::default();
+    let codec = array.subchunk_codecs_at_level(1).unwrap();
+    let bytes = codec.encode(
+        ArrayBytes::new_flen(bytemuck::cast_slice(&[7u16; 8]).to_vec()),
+        &[nz(2), nz(4)],
+        &options,
+    )?;
+    // [0, 0] and [1, 3] are in different level zero subchunks, so the shard is not rewritten from scratch
+    for indices in [[0, 0], [1, 3]] {
+        // SAFETY: The destination's subchunk codec and shape produced these bytes.
+        unsafe {
+            encoder.store_encoded_subchunk_at_level(1, &indices, bytes.clone(), &options)?;
+        }
+    }
+    let expected = array.retrieve_encoded_chunk(&[0, 0])?;
+    // [1, 2] shares the stored level zero subchunk of [1, 3] but is not stored itself
+    encoder.erase_subchunk_at_level(1, &[1, 2], &options)?;
+    assert_eq!(array.retrieve_encoded_chunk(&[0, 0])?, expected);
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_partial_encoder_erase_unstored_nested_subchunk_leaves_shard_unchanged() -> TestResult
+{
+    use zarrs::storage::store::AsyncMemoryStore;
+    let array = transposed_nested_sharding_builder()
+        .build_arc(Arc::new(AsyncMemoryStore::default()), "/")?;
+    let encoder = array.async_partial_encoder(&[0, 0]).await?;
+    let options = CodecOptions::default();
+    let codec = array.subchunk_codecs_at_level(1).unwrap();
+    let bytes = codec.encode(
+        ArrayBytes::new_flen(bytemuck::cast_slice(&[7u16; 8]).to_vec()),
+        &[nz(2), nz(4)],
+        &options,
+    )?;
+    // [0, 0] and [1, 3] are in different level zero subchunks, so the shard is not rewritten from scratch
+    for indices in [[0, 0], [1, 3]] {
+        // SAFETY: The destination's subchunk codec and shape produced these bytes.
+        unsafe {
+            encoder
+                .store_encoded_subchunk_at_level(1, &indices, bytes.clone(), &options)
+                .await?;
+        }
+    }
+    let expected = array.async_retrieve_encoded_chunk(&[0, 0]).await?;
+    // [1, 2] shares the stored level zero subchunk of [1, 3] but is not stored itself
+    encoder
+        .erase_subchunk_at_level(1, &[1, 2], &options)
+        .await?;
+    assert_eq!(array.async_retrieve_encoded_chunk(&[0, 0]).await?, expected);
+    Ok(())
+}
+
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_partial_encoder_erase_nested_subchunks() -> TestResult {

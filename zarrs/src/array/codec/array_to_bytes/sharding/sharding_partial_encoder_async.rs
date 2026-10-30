@@ -548,7 +548,10 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 options,
             )?;
         }
-        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        let Some(updated) = enclosing.take_updated() else {
+            // The enclosing subchunk is unchanged
+            return Ok(());
+        };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
             .await
     }
@@ -576,14 +579,17 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         let enclosing = self
             .enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)
             .await?;
-        if enclosing.buffer.lock().unwrap().is_none() {
+        if !enclosing.exists() {
             // The enclosing subchunk is not stored
             return Ok(());
         }
         enclosing
             .encoder
             .erase_subchunk_at_level(level - 1, &enclosing.nested_indices, options)?;
-        let updated = enclosing.buffer.lock().unwrap().take().map(CowBytes::from);
+        let Some(updated) = enclosing.take_updated() else {
+            // The enclosing subchunk is unchanged
+            return Ok(());
+        };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
             .await
     }
