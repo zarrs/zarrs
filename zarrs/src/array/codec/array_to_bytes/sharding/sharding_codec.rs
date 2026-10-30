@@ -1,5 +1,5 @@
 use std::num::NonZeroU64;
-use std::ops::{IndexMut, Range};
+use std::ops::IndexMut;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
@@ -18,9 +18,9 @@ use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
     CodecChain, RequireDivisibleSubchunks, ShardingCodecConfiguration,
     ShardingCodecConfigurationV1, ShardingCodecOptions, ShardingIndexLocation, SubchunkWriteOrder,
-    calculate_chunks_per_shard, checked_subchunk_range, compute_index_encoded_size,
-    decode_shard_index, shard_data_region, sharding_index_shape, sharding_partial_encoder,
-    subchunk_grid,
+    calculate_chunks_per_shard, checked_subchunk_range, compacted_shard_too_large,
+    compute_index_encoded_size, decode_shard_index, shard_data_region, sharding_index_shape,
+    sharding_partial_encoder, subchunk_grid, subchunk_range_usize,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
@@ -512,7 +512,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             options,
             resources,
         )?;
-        let data_region = self.data_region(encoded_shard.len(), chunks_per_shard.as_slice())?;
 
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, resources) = split_compute_resources(
@@ -527,19 +526,18 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let decode_subchunk = |chunk_index: usize| {
             let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
-            let chunk_bytes = if let Some(byte_range) =
-                checked_subchunk_range(&shard_index, chunk_index, &data_region)?
-            {
-                let encoded_chunk = encoded_shard.clone().slice(byte_range);
-                self.inner_codecs.decode(
-                    encoded_chunk,
-                    &chunk_subset.chunk_shape().expect("nonempty subchunk"),
-                    options,
-                    &resources,
-                )?
-            } else {
-                ArrayBytes::new_fill_value(data_type, chunk_subset.num_elements(), fill_value)?
-            };
+            let chunk_bytes =
+                if let Some(byte_range) = subchunk_range_usize(&shard_index, chunk_index) {
+                    let encoded_chunk = encoded_shard.clone().slice(byte_range);
+                    self.inner_codecs.decode(
+                        encoded_chunk,
+                        &chunk_subset.chunk_shape().expect("nonempty subchunk"),
+                        options,
+                        &resources,
+                    )?
+                } else {
+                    ArrayBytes::new_fill_value(data_type, chunk_subset.num_elements(), fill_value)?
+                };
             Ok::<_, CodecError>((chunk_bytes, chunk_subset))
         };
 
@@ -580,9 +578,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         // Validate the byte ranges of the encoded subchunks and sum their sizes
         let mut data_size = 0usize;
         for subchunk_index in 0..num_subchunks {
-            if let Some(byte_range) =
-                checked_subchunk_range(&shard_index, subchunk_index, &data_region)?
-            {
+            if let Some(byte_range) = subchunk_range_usize(&shard_index, subchunk_index) {
                 data_size = data_size.saturating_add(byte_range.len());
             }
         }
@@ -592,10 +588,17 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         if data_size >= data_region.len() {
             return Ok(None);
         }
-        let compact_size = data_size + index_encoded_size;
 
         // Build compacted shard
-        let mut compact_shard = vec![0u8; compact_size];
+        //   Subchunks that share bytes are copied separately, so the compacted shard can be larger than the shard
+        let compact_size = data_size
+            .checked_add(index_encoded_size)
+            .ok_or_else(compacted_shard_too_large)?;
+        let mut compact_shard = Vec::new();
+        compact_shard
+            .try_reserve_exact(compact_size)
+            .map_err(|_| compacted_shard_too_large())?;
+        compact_shard.resize(compact_size, 0u8);
         let mut new_index = vec![u64::MAX; shard_index.len()];
 
         let mut write_offset = match self.index_location {
@@ -604,9 +607,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         };
 
         for subchunk_index in 0..num_subchunks {
-            if let Some(byte_range) =
-                checked_subchunk_range(&shard_index, subchunk_index, &data_region)?
-            {
+            if let Some(byte_range) = subchunk_range_usize(&shard_index, subchunk_index) {
                 // Copy chunk data
                 let size = byte_range.len();
                 compact_shard[write_offset..write_offset + size]
@@ -668,7 +669,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             options,
             resources,
         )?;
-        let data_region = self.data_region(encoded_shard.len(), chunks_per_shard.as_slice())?;
 
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, resources) = split_compute_resources(
@@ -707,9 +707,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             let output_target_subchunk =
                 build_nested_optional_target(&mut output_view_subchunk, &mut mask_views_subchunk);
 
-            if let Some(byte_range) =
-                checked_subchunk_range(&shard_index, chunk_index, &data_region)?
-            {
+            if let Some(byte_range) = subchunk_range_usize(&shard_index, chunk_index) {
                 let encoded_chunk = encoded_shard.clone().slice(byte_range);
                 self.inner_codecs.decode_into(
                     encoded_chunk.into(),
@@ -1277,28 +1275,10 @@ impl ShardingCodecBound {
     /// Decode the shard index inside the given encoded shard.
     ///
     /// # Errors
-    /// Returns [`CodecError`] if the decoded shard index is not valid.
+    /// Returns [`CodecError`] if the decoded shard index is not valid, or references bytes outside of the encoded shard data.
     ///
     /// # Panics
     /// Panics if the encoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
-    /// Return the byte range of the encoded subchunks in an encoded shard of `shard_len` bytes.
-    ///
-    /// `shard_len` must be at least the encoded size of the shard index.
-    fn data_region(
-        &self,
-        shard_len: usize,
-        chunks_per_shard: &[NonZeroU64],
-    ) -> Result<Range<usize>, CodecError> {
-        let index_shape = sharding_index_shape(chunks_per_shard);
-        let index_encoded_size =
-            compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
-        Ok(shard_data_region(
-            shard_len,
-            usize::try_from(index_encoded_size).unwrap(),
-            self.index_location,
-        ))
-    }
-
     pub(crate) fn decode_index(
         &self,
         encoded_shard: &[u8],
@@ -1330,12 +1310,22 @@ impl ShardingCodecBound {
         };
 
         // Decode the shard index
-        decode_shard_index(
+        let shard_index = decode_shard_index(
             encoded_shard_index,
             &index_shape,
             self.index_codecs.as_ref(),
+            self.index_location,
             options,
             resources,
-        )
+        )?;
+        let data_region = shard_data_region(
+            encoded_shard.len(),
+            usize::try_from(index_encoded_size).unwrap(),
+            self.index_location,
+        );
+        for subchunk_index in 0..shard_index.len() / 2 {
+            checked_subchunk_range(&shard_index, subchunk_index, &data_region)?;
+        }
+        Ok(shard_index)
     }
 }

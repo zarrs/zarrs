@@ -972,10 +972,13 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let array_representations = self.get_array_representations(shape)?;
-        let mut bytes_representation = self
-            .array_to_bytes
-            .encoded_representation(&array_representations.last().unwrap().0)?;
+        let mut bytes_representation = if self.array_to_array.is_empty() {
+            self.array_to_bytes.encoded_representation(shape)?
+        } else {
+            let array_representations = self.get_array_representations(shape)?;
+            self.array_to_bytes
+                .encoded_representation(&array_representations.last().unwrap().0)?
+        };
         for codec in &self.bytes_to_bytes {
             bytes_representation = codec.encoded_representation(&bytes_representation);
         }

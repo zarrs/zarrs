@@ -290,9 +290,7 @@ fn get_subchunk_partial_decoder(
     byte_offset: ByteOffset,
     byte_length: ByteLength,
 ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-    byte_offset
-        .checked_add(byte_length)
-        .ok_or_else(super::shard_index_out_of_bounds)?;
+    super::validate_subchunk_encoded_size(inner_codecs, subchunk_shape, byte_length)?;
     inner_codecs
         .clone()
         .partial_decoder(

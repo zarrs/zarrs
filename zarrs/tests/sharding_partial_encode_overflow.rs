@@ -12,6 +12,7 @@ use zarrs::storage::{ReadableStorageTraits, WritableStorageTraits};
 use zarrs_codec::CodecOptions;
 
 fn indexes(location: ShardingIndexLocation) -> Vec<Vec<u8>> {
+    // (u64::MAX - 1, 5) overflows, (u64::MAX - 2, 1) only overflows when appending a subchunk
     let mut spans = vec![(u64::MAX - 1, 5), (u64::MAX - 2, 1)];
     if location == ShardingIndexLocation::End {
         spans.push((u64::MAX - 10, 1)); // Only the appended index overflows.
@@ -48,10 +49,12 @@ fn partial_encode_rejects_overflowing_shard_index() {
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]).unwrap();
             store.set(&key, encoded.clone().into()).unwrap();
-            let encoder = array
-                .partial_encoder(&[0, 0], &Resources::default())
-                .unwrap();
             store.reset();
+            // An overflowing subchunk span is rejected when the shard index is decoded
+            let Ok(encoder) = array.partial_encoder(&[0, 0], &Resources::default()) else {
+                assert_eq!(store.writes(), 0);
+                continue;
+            };
             // Reusing the encoder after an error must still reject its original corrupt index.
             for _ in 0..2 {
                 assert!(
@@ -84,11 +87,15 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]).unwrap();
             store.set(&key, encoded.clone().into()).await.unwrap();
-            let encoder = array
+            store.reset();
+            // An overflowing subchunk span is rejected when the shard index is decoded
+            let Ok(encoder) = array
                 .async_partial_encoder(&[0, 0], &Resources::default())
                 .await
-                .unwrap();
-            store.reset();
+            else {
+                assert_eq!(store.writes(), 0);
+                continue;
+            };
             for _ in 0..2 {
                 assert!(
                     encoder
