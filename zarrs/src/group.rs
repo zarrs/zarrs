@@ -450,7 +450,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
         options: &GroupOpenOptions,
     ) -> Result<Self, GroupCreateError> {
         let version = options.version();
-        let metadata = Self::open_metadata(&storage, path, &version)?;
+        let metadata = Self::open_metadata(&storage, path, version)?;
         Self::validate_metadata(&metadata)?;
         Self::new_with_metadata_opt(storage, path, metadata, options)
     }
@@ -458,7 +458,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     fn open_metadata(
         storage: &Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        version: MetadataRetrieveVersion,
     ) -> Result<GroupMetadata, GroupCreateError> {
         let node_path = path.try_into()?;
         if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V3 = version {
@@ -539,7 +539,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
         )? {
             return expand_consolidated_metadata(&self.path, consolidated);
         }
-        get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
+        get_all_nodes_of(&self.storage, &self.path, MetadataRetrieveVersion::Default)
     }
 
     /// Return the children of the group that are [`Group`]s

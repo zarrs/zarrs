@@ -26,7 +26,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         path: &str,
         version: &MetadataRetrieveVersion,
     ) -> Result<Self, ArrayCreateError> {
-        let metadata = Self::open_metadata(&storage, path, version)?;
+        let metadata = Self::open_metadata(&storage, path, *version)?;
         Self::validate_metadata(&metadata)?;
         Self::new_with_metadata(storage, path, metadata)
     }
@@ -34,7 +34,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     fn open_metadata(
         storage: &Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        version: MetadataRetrieveVersion,
     ) -> Result<ArrayMetadata, ArrayCreateError> {
         let node_path = NodePath::new(path)?;
 

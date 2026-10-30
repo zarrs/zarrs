@@ -38,7 +38,7 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = match Node::get_metadata(storage, &path, version) {
+        let child_metadata = match Node::get_metadata(storage, &path, *version) {
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata(_)) => {
                 log::warn!(
@@ -71,10 +71,10 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
 pub(crate) fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
-    version: &MetadataRetrieveVersion,
+    version: MetadataRetrieveVersion,
 ) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
     let mut nodes: Vec<(NodePath, NodeMetadata)> = Vec::new();
-    for child in get_child_nodes_opt(storage, path, false, version)? {
+    for child in get_child_nodes_opt(storage, path, false, &version)? {
         if let NodeMetadata::Group(_) = child.metadata() {
             nodes.extend(get_all_nodes_of(storage, child.path(), version)?);
         }

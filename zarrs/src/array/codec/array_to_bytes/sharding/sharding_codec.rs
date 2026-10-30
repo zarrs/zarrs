@@ -52,7 +52,7 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// Return the linearised (lexicographic) subchunk indices in the requested write order.
 fn subchunk_order_iterator(
-    subchunks_write_order: &SubchunkWriteOrder,
+    subchunks_write_order: SubchunkWriteOrder,
     n_chunks: usize,
     subchunk_grid: &RegularBoundedChunkGrid,
 ) -> Vec<usize> {
@@ -1011,7 +1011,7 @@ impl ShardingCodecBound {
             | SubchunkWriteOrder::Colexicographic
             | SubchunkWriteOrder::Morton => {
                 let chunk_order =
-                    subchunk_order_iterator(&subchunks_write_order, n_chunks, &subchunk_grid);
+                    subchunk_order_iterator(subchunks_write_order, n_chunks, &subchunk_grid);
                 let encoded_chunk_ids_and_chunks: Vec<(usize, Bytes)> = chunk_order
                     .concurrent_limit(shard_concurrent_limit)
                     .filter_map(|chunk_index: usize| {
@@ -1128,7 +1128,7 @@ impl ShardingCodecBound {
 
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = subchunk_order_iterator(
-            &self.options.subchunk_write_order(),
+            self.options.subchunk_write_order(),
             n_chunks,
             &subchunk_grid,
         )
