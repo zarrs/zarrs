@@ -386,7 +386,10 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(
-            decoded.iter().map(|b| b.as_ref()).collect::<Vec<_>>(),
+            decoded
+                .iter()
+                .map(std::convert::AsRef::as_ref)
+                .collect::<Vec<_>>(),
             vec![&[4, 5][..], &[2, 3, 4, 5][..], &[1, 2][..]]
         );
     }

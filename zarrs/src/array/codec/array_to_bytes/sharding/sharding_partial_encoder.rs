@@ -329,7 +329,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             let encoded_subchunks_size = updated_subchunks
                 .iter()
                 .filter_map(|(_, subchunk_encoded)| {
-                    subchunk_encoded.as_ref().map(|bytes| bytes.len())
+                    subchunk_encoded.as_ref().map(zarrs_codec::CowBytes::len)
                 })
                 .sum::<usize>();
 

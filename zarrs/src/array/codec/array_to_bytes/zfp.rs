@@ -327,7 +327,9 @@ mod tests {
     fn codec_zfp_header_round_trip() {
         let shape = chunk_shape();
         let data_type = data_type::float32();
-        let elements: Vec<f32> = (0..shape.num_elements_u64()).map(|i| i.as_()).collect();
+        let elements: Vec<f32> = (0..shape.num_elements_u64())
+            .map(num::traits::AsPrimitive::as_)
+            .collect();
         let bytes = f32::to_array_bytes(&data_type, &elements).unwrap();
         let codec = ZfpCodec::new_reversible()
             .with_write_header(true)

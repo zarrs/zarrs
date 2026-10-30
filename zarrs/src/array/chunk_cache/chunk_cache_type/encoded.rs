@@ -19,7 +19,7 @@ use zarrs_storage::ReadableStorageTraits;
 
 impl ChunkCacheType for ChunkCacheTypeEncoded {
     fn size(&self) -> usize {
-        self.as_ref().map_or(0, |value| value.len())
+        self.as_ref().map_or(0, bytes::Bytes::len)
     }
 }
 
