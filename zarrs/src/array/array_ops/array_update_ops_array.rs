@@ -217,8 +217,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         // Input/output
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.readable_writable_storage()?;
-        let input_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
+        let input_handle = Arc::new((storage_transformer, chunk_key));
         Ok(self.codecs_bound().partial_encoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,

@@ -238,8 +238,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         let chunk_shape = self.chunk_shape(chunk_indices)?;
 
         // Input/output
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.async_readable_writable_storage().await?;
-        let input_output_handle = Arc::new((storage_transformer, self.chunk_key(chunk_indices)?));
+        let input_output_handle = Arc::new((storage_transformer, chunk_key));
         Ok(self
             .codecs_bound()
             .async_partial_encoder(input_output_handle, &chunk_shape, options)

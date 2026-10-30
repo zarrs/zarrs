@@ -1236,3 +1236,32 @@ mod async_cached {
         Ok(())
     }
 }
+
+/// Chunk operations reject chunk indices with the wrong dimensionality rather than storing,
+/// erasing, or retrieving a key that does not belong to the chunk grid.
+#[test]
+fn chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
+    use zarrs::array::ArrayError;
+    use zarrs::storage::ListableStorageTraits;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .build(store.clone(), "/array")?;
+    let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);
+
+    let is_invalid = |result: Result<_, ArrayError>| {
+        matches!(result, Err(ArrayError::InvalidChunkGridIndicesError(_)))
+    };
+    for chunk_indices in [&[0][..], &[0, 0, 0]] {
+        assert!(is_invalid(array.chunk_key(chunk_indices).map(|_| ())));
+        assert!(is_invalid(unsafe {
+            array.store_encoded_chunk(chunk_indices, encoded.clone())
+        }));
+        assert!(is_invalid(array.erase_chunk(chunk_indices)));
+        assert!(is_invalid(
+            array.retrieve_encoded_chunk(chunk_indices).map(|_| ())
+        ));
+    }
+    assert!(store.list()?.is_empty());
+    Ok(())
+}

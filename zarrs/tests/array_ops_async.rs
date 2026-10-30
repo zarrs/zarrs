@@ -504,3 +504,36 @@ async fn zero_concurrency_retrieve_encoded_chunks() -> TestResult {
     assert_eq!(decoded, (1..=25).collect::<Vec<u8>>());
     Ok(())
 }
+
+/// Chunk operations reject chunk indices with the wrong dimensionality rather than storing,
+/// erasing, or retrieving a key that does not belong to the chunk grid.
+#[tokio::test]
+async fn async_chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
+    use zarrs::array::ArrayError;
+    use zarrs::storage::AsyncListableStorageTraits;
+
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .build(store.clone(), "/array")?;
+    let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);
+
+    let is_invalid = |result: Result<_, ArrayError>| {
+        matches!(result, Err(ArrayError::InvalidChunkGridIndicesError(_)))
+    };
+    for chunk_indices in [&[0][..], &[0, 0, 0]] {
+        assert!(is_invalid(unsafe {
+            array
+                .async_store_encoded_chunk(chunk_indices, encoded.clone())
+                .await
+        }));
+        assert!(is_invalid(array.async_erase_chunk(chunk_indices).await));
+        assert!(is_invalid(
+            array
+                .async_retrieve_encoded_chunk(chunk_indices)
+                .await
+                .map(|_| ())
+        ));
+    }
+    assert!(store.list().await?.is_empty());
+    Ok(())
+}

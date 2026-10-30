@@ -165,10 +165,9 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.async_writable_storage().await?;
-        Ok(storage_transformer
-            .erase(&self.chunk_key(chunk_indices)?)
-            .await?)
+        Ok(storage_transformer.erase(&chunk_key).await?)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -202,9 +201,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.async_writable_storage().await?;
         storage_transformer
-            .set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)
+            .set(&chunk_key, encoded_chunk_bytes)
             .await?;
         Ok(())
     }

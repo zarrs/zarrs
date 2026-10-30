@@ -144,8 +144,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.writable_storage()?;
-        Ok(storage_transformer.erase(&self.chunk_key(chunk_indices)?)?)
+        Ok(storage_transformer.erase(&chunk_key)?)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -174,8 +175,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.writable_storage()?;
-        storage_transformer.set(&self.chunk_key(chunk_indices)?, encoded_chunk_bytes)?;
+        storage_transformer.set(&chunk_key, encoded_chunk_bytes)?;
 
         Ok(())
     }
