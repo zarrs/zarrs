@@ -14,8 +14,8 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    fill_value_bytes,
+    AsyncChunkCache, Sealed as _, SealedAsync, async_retrieve_chunk_bytes,
+    async_retrieve_chunk_overlap_bytes, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
@@ -448,7 +448,20 @@ where
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
+        if C::Value::ENCODED_SUBCHUNKS {
+            super::async_array_read_ops_common::async_retrieve_encoded_subchunk_at_level(
+                self,
+                level,
+                subchunk_indices,
+            )
+            .await
+        } else {
+            self.array()
+                .async_retrieve_encoded_subchunk_at_level(level, subchunk_indices)
+                .await
+        }
+    }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(

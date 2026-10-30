@@ -1,16 +1,37 @@
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
+use crate::array::{
+    ArrayError, ArrayIndices, ArrayOps, ArrayReadOps, ArraySubset, ArraySubsetTraits, Indexer,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, EncodedSubchunk,
+    InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
+
+/// Shared implementation of `ArrayReadOps::retrieve_encoded_subchunk_at_level`.
+///
+/// Locates the chunk holding the subchunk, then defers to its partial decoder.
+pub(super) fn retrieve_encoded_subchunk_at_level<A: ArrayReadOps + ?Sized>(
+    array: &A,
+    level: usize,
+    subchunk_indices: &[u64],
+) -> Result<Option<EncodedSubchunk>, ArrayError> {
+    let (chunk_indices, subset) =
+        super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
+    let options = array.codec_options();
+    let partial_decoder = array.partial_decoder(&chunk_indices)?;
+    let local_indices = super::local_subchunk_indices(
+        partial_decoder.local_subchunk_grid_at_level(level, options)?,
+        &subset,
+    )?;
+    Ok(partial_decoder.retrieve_encoded_subchunk_at_level(level, &local_indices, options)?)
+}
 
 /// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
 ///

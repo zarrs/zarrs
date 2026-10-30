@@ -133,10 +133,18 @@ mod chunk_cache_type_sealed {
         ChunkCacheTypeAsyncPartialDecoder,
     };
 
-    pub trait Sealed {}
+    pub trait Sealed {
+        /// Whether encoded subchunks can be retrieved through a cached value.
+        ///
+        /// If `false`, encoded subchunks are retrieved from the array, bypassing the cache.
+        const ENCODED_SUBCHUNKS: bool = true;
+    }
 
     impl Sealed for ChunkCacheTypeEncoded {}
-    impl Sealed for ChunkCacheTypeDecoded {}
+    impl Sealed for ChunkCacheTypeDecoded {
+        // A decoded chunk does not hold its encoded subchunks
+        const ENCODED_SUBCHUNKS: bool = false;
+    }
     impl Sealed for ChunkCacheTypePartialDecoder {}
     #[cfg(feature = "async")]
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
@@ -222,7 +230,7 @@ mod chunk_cache_type_sealed {
 
 #[cfg(feature = "async")]
 pub(crate) use chunk_cache_type_sealed::SealedAsync;
-pub(crate) use chunk_cache_type_sealed::SealedSync;
+pub(crate) use chunk_cache_type_sealed::{Sealed, SealedSync};
 
 /// A chunk cache.
 ///

@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Returns an `EncodedSubchunk`, which holds the encoded domain shape needed to decode the bytes alongside them
   - Encoded subchunks are exposed through array-to-array codecs, which map subchunk indices into the domain they wrap
     - The bytes remain in the encoded domain: the data type is that of the subchunk codec, and the shape can differ in extent and dimensionality from the subchunk grid (e.g. `[3]` rather than `[1, 3]` for a `reshape` codec)
+  - `ArrayCached` retrieves encoded subchunks through caches of encoded chunks and partial decoders, and from the array for caches of decoded chunks
 - Re-export `EncodedSubchunk` from `zarrs::array`
 - Add `[Async]ArrayUpdateOps::[async_]store_encoded_subchunk[_at_level]` and `[async_]erase_subchunk[_at_level]`, including for cached arrays
   - Encoded subchunks are stored verbatim without decoding, through array-to-array codecs and at nested subchunk levels, where enclosing subchunks are rewritten without decoding

@@ -14,7 +14,7 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+    Sealed as _, SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
@@ -374,7 +374,18 @@ where
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
+        if C::Value::ENCODED_SUBCHUNKS {
+            super::array_read_ops_common::retrieve_encoded_subchunk_at_level(
+                self,
+                level,
+                subchunk_indices,
+            )
+        } else {
+            self.array()
+                .retrieve_encoded_subchunk_at_level(level, subchunk_indices)
+        }
+    }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(

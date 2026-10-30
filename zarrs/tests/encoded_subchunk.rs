@@ -109,9 +109,14 @@ fn sharded_array_retrieve_encoded_subchunk() -> TestResult {
         array.retrieve_encoded_subchunk(&[1, 2])?
     );
 
-    // ... but not through a cache of decoded chunks
+    // ... and a cache of decoded chunks retrieves them from the array without decoding the chunk
+    use zarrs::array::chunk_cache::ChunkCache;
     let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(2));
-    assert!(cached.retrieve_encoded_subchunk(&[1, 2]).is_err());
+    assert_eq!(
+        cached.retrieve_encoded_subchunk(&[1, 2])?,
+        array.retrieve_encoded_subchunk(&[1, 2])?
+    );
+    assert!(cached.cache().is_empty());
 
     Ok(())
 }
@@ -988,7 +993,7 @@ async fn async_cached_nested_encoded_subchunk_matches_uncached() -> TestResult {
     // A cache of encoded chunks exposes nested encoded subchunks asynchronously, forwarding the
     // byte interval reads of the synchronous partial decoder it wraps.
     use zarrs::array::chunk_cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
     };
     use zarrs::storage::store::AsyncMemoryStore;
 
@@ -1024,14 +1029,17 @@ async fn async_cached_nested_encoded_subchunk_matches_uncached() -> TestResult {
         );
     }
 
-    // ... but a cache of decoded chunks does not
+    // ... and a cache of decoded chunks retrieves them from the array without decoding the chunk
     let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
-    assert!(
+    assert_eq!(
         cached
             .async_retrieve_encoded_subchunk_at_level(1, &[0, 0])
-            .await
-            .is_err()
+            .await?,
+        array
+            .async_retrieve_encoded_subchunk_at_level(1, &[0, 0])
+            .await?
     );
+    assert!(cached.cache().is_empty().await);
 
     Ok(())
 }

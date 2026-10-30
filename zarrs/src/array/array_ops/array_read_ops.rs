@@ -205,16 +205,11 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<Option<EncodedSubchunk>, ArrayError> {
-        // Locate the chunk holding the subchunk, then defer to its partial decoder
-        let (chunk_indices, subset) =
-            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
-        let options = self.codec_options();
-        let partial_decoder = self.partial_decoder(&chunk_indices)?;
-        let local_indices = super::local_subchunk_indices(
-            partial_decoder.local_subchunk_grid_at_level(level, options)?,
-            &subset,
-        )?;
-        Ok(partial_decoder.retrieve_encoded_subchunk_at_level(level, &local_indices, options)?)
+        super::array_read_ops_common::retrieve_encoded_subchunk_at_level(
+            self,
+            level,
+            subchunk_indices,
+        )
     }
 
     /// Read and decode the subchunk at `subchunk_indices`.

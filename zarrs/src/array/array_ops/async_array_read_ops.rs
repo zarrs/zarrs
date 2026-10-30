@@ -110,20 +110,12 @@ pub trait AsyncArrayReadOps: ArrayOps {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<Option<EncodedSubchunk>, ArrayError> {
-        // Locate the chunk holding the subchunk, then defer to its partial decoder
-        let (chunk_indices, subset) =
-            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
-        let options = self.codec_options();
-        let partial_decoder = self.async_partial_decoder(&chunk_indices).await?;
-        let local_indices = super::local_subchunk_indices(
-            partial_decoder
-                .local_subchunk_grid_at_level(level, options)
-                .await?,
-            &subset,
-        )?;
-        Ok(partial_decoder
-            .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
-            .await?)
+        super::async_array_read_ops_common::async_retrieve_encoded_subchunk_at_level(
+            self,
+            level,
+            subchunk_indices,
+        )
+        .await
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
