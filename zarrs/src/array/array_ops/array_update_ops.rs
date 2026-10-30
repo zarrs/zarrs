@@ -77,7 +77,8 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// Initialises a partial encoder for the chunk at `chunk_indices`.
     ///
     /// Only one partial encoder should be created for a chunk at a time because:
-    /// - partial encoders can hold internal state that may become out of sync, and
+    /// - partial encoders can hold internal state that may become out of sync,
+    /// - partial encoders may cache chunk state (e.g. the `sharding_indexed` shard index), so the chunk must not be modified by other means (e.g. [`store_chunk`](crate::array::ArrayWriteOps::store_chunk), [`store_partial_chunk`](Self::store_partial_chunk), or [`erase_chunk`](crate::array::ArrayWriteOps::erase_chunk)) while a partial encoder for it is in use, and
     /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
     ///
     /// Partial encoding with [`ArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
