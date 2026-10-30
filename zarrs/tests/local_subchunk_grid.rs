@@ -447,10 +447,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
         match decoded_chunk_grid {
             ChunkGridDecodedRef::None => Ok(ChunkGridEncoded::None),
             ChunkGridDecodedRef::Array(_) => Ok(ChunkGridEncoded::ChunkLocal),
-            ChunkGridDecodedRef::ChunkLocal if self.reject_chunk_local => {
-                Ok(ChunkGridEncoded::None)
-            }
-            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridEncoded::ChunkLocal),
+            ChunkGridDecodedRef::ChunkLocal => Ok(if self.reject_chunk_local {
+                ChunkGridEncoded::None
+            } else {
+                ChunkGridEncoded::ChunkLocal
+            }),
         }
     }
 
