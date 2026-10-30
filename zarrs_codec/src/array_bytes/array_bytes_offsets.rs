@@ -649,7 +649,7 @@ mod tests {
         let pointer = misaligned.as_ptr();
         let offsets = ArrayBytesOffsets::from_ne_bytes::<u32>(misaligned).unwrap();
         assert_eq!(offsets.as_u32().unwrap(), &[0, 1, 2]);
-        if !pointer.cast::<u32>().is_aligned() {
+        if !pointer.addr().is_multiple_of(align_of::<u32>()) {
             assert_ne!(offsets.as_ne_bytes().as_ptr(), pointer);
         }
 
