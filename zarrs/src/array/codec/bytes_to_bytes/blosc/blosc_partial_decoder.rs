@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use super::{
-    blosc_decompress_bytes, blosc_decompress_bytes_partial, blosc_nbytes, blosc_typesize,
-    blosc_validate,
+    blosc_decompress_bytes, blosc_decompress_bytes_partial, blosc_typesize, blosc_validate,
 };
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
@@ -20,10 +19,10 @@ fn blosc_partial_decode<'a>(
     encoded_value: &[u8],
     decoded_regions: ByteRangeIterator,
 ) -> Result<Vec<CowBytes<'a>>, CodecError> {
-    let invalid = || CodecError::from("blosc encoded value is invalid");
-    blosc_validate(encoded_value).ok_or_else(invalid)?;
-    let nbytes = blosc_nbytes(encoded_value).ok_or_else(invalid)?;
-    let typesize = blosc_typesize(encoded_value).ok_or_else(invalid)?;
+    let nbytes = blosc_validate(encoded_value)
+        .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
+    let typesize = blosc_typesize(encoded_value)
+        .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
     let blosc_error = |err: super::BloscError| CodecError::from(err.to_string());
     let mut decoded_value: Option<Vec<u8>> = None;
     decoded_regions
