@@ -527,7 +527,7 @@ fn validate_bytes(
                 )
                 .into());
             }
-            if mask.iter().fold(0u8, |acc, &b| acc | b) > 1 {
+            if !optional_bytes.is_mask_binary() {
                 return Err(CodecError::Other(
                     "optional mask values must be 0 (null) or 1 (present)".to_string(),
                 ));

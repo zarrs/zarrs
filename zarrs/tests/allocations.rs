@@ -529,6 +529,33 @@ fn optional_fill_value_checks() {
     }
 }
 
+#[test]
+fn optional_equality() {
+    for depth in 1..=3 {
+        let payload = |value: u16| ArrayBytes::new_flen(value.to_ne_bytes().repeat(32));
+        let (mut present, mut visible) = (payload(0x1234), payload(0x4321));
+        let (mut null, mut hidden) = (payload(0x1234), payload(0x4321));
+        for level in 0..depth {
+            present = present.with_optional_mask(vec![1; 32]);
+            visible = visible.with_optional_mask(vec![1; 32]);
+            // Only the outermost mask is null, hiding the differing payload and inner masks
+            let mask = vec![u8::from(level + 1 != depth); 32];
+            null = null.with_optional_mask(mask.clone());
+            hidden = hidden.with_optional_mask(mask);
+        }
+        for (name, a, b, expected) in [
+            ("optional_eq_present", &present, &present.clone(), true),
+            ("optional_eq_hidden", &null, &hidden, true),
+            ("optional_ne_visible", &present, &visible, false),
+        ] {
+            let (equal, stats) =
+                measure(name, || std::hint::black_box(a) == std::hint::black_box(b));
+            assert_eq!(equal, expected, "{name}, depth {depth}");
+            assert_eq!(stats.allocations, 0, "{name}, depth {depth}: {stats:?}");
+        }
+    }
+}
+
 // Before reservation, 1,024 one-byte ranges used 1,033 allocations / 50,080 bytes
 // for both helpers. The outer vector now allocates once: 1,025 / 25,600 total.
 #[test]
