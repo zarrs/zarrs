@@ -462,6 +462,14 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             .clone()
             .decode(encoded_mask.into(), shape, options)?;
         let mask = decoded_mask.into_fixed()?.into_vec();
+        let (mask_or, valid_count) = mask
+            .iter()
+            .fold((0u8, 0usize), |(o, n), &b| (o | b, n + usize::from(b)));
+        if mask_or > 1 {
+            return Err(CodecError::Other(
+                "optional mask values must be 0 (null) or 1 (present)".to_string(),
+            ));
+        }
 
         // Decode data
         let opt = self.data_type.as_optional().ok_or_else(|| {
@@ -469,7 +477,6 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Decode sparse data (only valid elements)
-        let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
             let sparse_data = {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
@@ -1133,5 +1140,38 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn codec_optional_decode_rejects_nonbinary_mask() {
+        let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(
+            r#"{
+                "mask_codecs": [{"name": "bytes", "configuration": {}}],
+                "data_codecs": [{"name": "bytes", "configuration": {}}]
+            }"#,
+        )
+        .unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(
+                data_type::uint8().to_optional(),
+                FillValue::from(None::<u8>),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let shape = [NonZeroU64::new(3).unwrap()];
+        let encoded = |mask: [u8; 3]| {
+            let data = [10u8, 20];
+            [&3u64.to_le_bytes()[..], &2u64.to_le_bytes(), &mask, &data].concat()
+        };
+        assert!(
+            codec
+                .decode(encoded([1, 1, 0]).into(), &shape, &CodecOptions::default())
+                .is_ok()
+        );
+        assert!(
+            codec
+                .decode(encoded([1, 2, 0]).into(), &shape, &CodecOptions::default())
+                .is_err()
+        );
     }
 }
