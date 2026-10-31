@@ -595,4 +595,64 @@ mod tests {
             assert_eq!(offsets.as_u32().unwrap().as_ptr(), input_ptr);
         }
     }
+
+    #[test]
+    fn validate_optional_masks() {
+        use crate::array::ArrayBytesOffsets;
+
+        let fixed = || ArrayBytes::new_flen(vec![7u8; 3]);
+        let variable = || {
+            ArrayBytes::new_vlen(b"abc", ArrayBytesOffsets::new(vec![0u32, 1, 2, 3]).unwrap())
+                .unwrap()
+        };
+        let payloads: [(fn() -> ArrayBytes<'static>, DataType); 2] =
+            [(fixed, data_type::uint8()), (variable, data_type::string())];
+        for (payload, data_type) in payloads {
+            let depth1 = data_type.to_optional();
+            let depth2 = depth1.to_optional();
+            assert!(
+                payload()
+                    .with_optional_mask(vec![1, 0, 1])
+                    .validate(3, &depth1)
+                    .is_ok()
+            );
+            assert!(
+                payload()
+                    .with_optional_mask(vec![1, 0, 1])
+                    .with_optional_mask(vec![0, 1, 1])
+                    .validate(3, &depth2)
+                    .is_ok()
+            );
+            // Short, long, empty and nonbinary masks
+            for mask in [vec![0u8; 2], vec![0; 4], vec![], vec![1, 2, 1]] {
+                assert!(
+                    payload()
+                        .with_optional_mask(mask.clone())
+                        .validate(3, &depth1)
+                        .is_err(),
+                    "{mask:?}"
+                );
+                // At the outer layer
+                assert!(
+                    payload()
+                        .with_optional_mask(vec![1, 0, 1])
+                        .with_optional_mask(mask.clone())
+                        .validate(3, &depth2)
+                        .is_err()
+                );
+                // At the inner layer, including beneath null outer elements
+                for outer_mask in [[1, 1, 1], [1, 0, 1], [0, 0, 0]] {
+                    assert!(
+                        payload()
+                            .with_optional_mask(mask.clone())
+                            .with_optional_mask(outer_mask.to_vec())
+                            .validate(3, &depth2)
+                            .is_err()
+                    );
+                }
+            }
+        }
+        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(vec![]);
+        assert!(empty.validate(0, &data_type::uint8().to_optional()).is_ok());
+    }
 }

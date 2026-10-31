@@ -9,7 +9,7 @@ use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
     FillValue, data_type,
 };
@@ -378,6 +378,61 @@ async fn partial_encode_fill_value() -> TestResult {
                 array.async_retrieve_chunk::<Vec<u16>>(&[1]).await?,
                 [0, 0, 0, 0]
             );
+        }
+    }
+    Ok(())
+}
+
+/// Optional bytes of `len` elements with a short all-zero mask, and with a mask containing `2`.
+fn malformed_optional_bytes(len: usize) -> [ArrayBytes<'static>; 2] {
+    let mut nonbinary = vec![0; len];
+    nonbinary[1] = 2;
+    [vec![0; len - 1], nonbinary]
+        .map(|mask| ArrayBytes::new_flen(vec![0; len]).with_optional_mask(mask))
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn optional_malformed_masks_are_rejected() -> TestResult {
+    for partial_encoding in [false, true] {
+        let array = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            FillValue::from(None::<u8>),
+        )
+        .build(Arc::new(AsyncStore::new()), "/array")?
+        .with_codec_options(
+            CodecOptions::default().with_experimental_partial_encoding(partial_encoding),
+        );
+        array
+            .async_store_chunk(&[0], &[Some(1u8), None, Some(3), Some(4)])
+            .await?;
+        let existing = array.async_retrieve_encoded_chunk(&[0]).await?;
+        assert!(existing.is_some());
+
+        for bytes in malformed_optional_bytes(4) {
+            assert!(array.async_store_chunk(&[0], bytes.clone()).await.is_err());
+            assert!(array.async_store_chunk(&[1], bytes).await.is_err());
+            assert_eq!(array.async_retrieve_encoded_chunk(&[0]).await?, existing);
+            assert!(array.async_retrieve_encoded_chunk(&[1]).await?.is_none());
+        }
+        for bytes in malformed_optional_bytes(3) {
+            let subset = |range| ArraySubset::new_with_ranges(&[range]);
+            assert!(
+                array
+                    .async_store_array_subset(&subset(1..4), bytes.clone())
+                    .await
+                    .is_err()
+            );
+            assert!(
+                array
+                    .async_store_array_subset(&subset(5..8), bytes)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(array.async_retrieve_encoded_chunk(&[0]).await?, existing);
+            assert!(array.async_retrieve_encoded_chunk(&[1]).await?.is_none());
         }
     }
     Ok(())

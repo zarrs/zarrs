@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
+- `ArrayBytes::validate` rejects optional masks of the wrong length or with values other than 0/1
 
 ## [0.2.1] - 2026-03-21
 

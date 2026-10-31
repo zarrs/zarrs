@@ -177,6 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
 - Partial encoding checks whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
 - `[async_]erase_metadata` erases array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`
+- Reject storing optional masks of the wrong length or with values other than 0/1, which could erase chunks or store values as null
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`

@@ -14,9 +14,9 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 };
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    ChunkGridDecodedRef, CodecOptions, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    ArrayCached, ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps,
+    ArrayWriteOps, ChunkGridDecodedRef, CodecOptions, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -413,6 +413,52 @@ fn partial_encode_lossy_fill_value() -> TestResult {
     array.store_partial_chunk(&[0], &ArraySubset::new_with_ranges(&[0..1]), &[1.2f32])?;
     assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
     assert_eq!(array.retrieve_chunk::<Vec<f32>>(&[0])?[0], 1.0);
+    Ok(())
+}
+
+/// Optional bytes of `len` elements with a short all-zero mask, and with a mask containing `2`.
+fn malformed_optional_bytes(len: usize) -> [ArrayBytes<'static>; 2] {
+    let mut nonbinary = vec![0; len];
+    nonbinary[1] = 2;
+    [vec![0; len - 1], nonbinary]
+        .map(|mask| ArrayBytes::new_flen(vec![0; len]).with_optional_mask(mask))
+}
+
+#[test]
+fn optional_malformed_masks_are_rejected() -> TestResult {
+    for partial_encoding in [false, true] {
+        let array = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            zarrs::array::FillValue::from(None::<u8>),
+        )
+        .build(Arc::new(MemoryStore::default()), "/array")?
+        .with_codec_options(
+            CodecOptions::default().with_experimental_partial_encoding(partial_encoding),
+        );
+        array.store_chunk(&[0], &[Some(1u8), None, Some(3), Some(4)])?;
+        let existing = array.retrieve_encoded_chunk(&[0])?;
+        assert!(existing.is_some());
+
+        for bytes in malformed_optional_bytes(4) {
+            assert!(array.store_chunk(&[0], bytes.clone()).is_err());
+            assert!(array.store_chunk(&[1], bytes).is_err());
+            assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
+            assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+        }
+        for bytes in malformed_optional_bytes(3) {
+            let subset = |range| ArraySubset::new_with_ranges(&[range]);
+            assert!(
+                array
+                    .store_array_subset(&subset(1..4), bytes.clone())
+                    .is_err()
+            );
+            assert!(array.store_array_subset(&subset(5..8), bytes).is_err());
+            assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
+            assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+        }
+    }
     Ok(())
 }
 

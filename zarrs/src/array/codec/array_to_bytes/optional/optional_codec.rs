@@ -11,7 +11,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::codec::{CodecChain, CodecChainBound};
-use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
+use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType,
+};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
@@ -395,20 +397,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let ArrayBytes::Optional(optional_bytes) = bytes else {
-            return Err(CodecError::Other(
-                "expected optional array bytes for optional codec".to_string(),
-            ));
-        };
-        let (dense_data, mask) = optional_bytes.into_parts();
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        if mask.len() != usize::try_from(num_elements).unwrap() {
-            return Err(CodecError::Other(format!(
-                "mask length {} does not match number of elements {}",
-                mask.len(),
-                num_elements
-            )));
-        }
+        bytes.validate(shape.num_elements_u64(), &self.data_type)?;
+        let (dense_data, mask) = bytes.into_optional()?.into_parts();
 
         let opt = self.data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
@@ -1115,6 +1105,33 @@ mod tests {
             }
         } else {
             panic!("Expected Optional ArrayBytes");
+        }
+    }
+
+    #[test]
+    fn codec_optional_encode_rejects_malformed_mask() {
+        let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(
+            r#"{
+                "mask_codecs": [{"name": "packbits", "configuration": {}}],
+                "data_codecs": [{"name": "bytes", "configuration": {}}]
+            }"#,
+        )
+        .unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(
+                data_type::uint8().to_optional(),
+                FillValue::from(None::<u8>),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let shape = [NonZeroU64::new(3).unwrap()];
+        for mask in [vec![1u8, 2, 0], vec![1, 0]] {
+            let input = ArrayBytes::new_flen(vec![1u8, 2, 3]).with_optional_mask(mask);
+            assert!(
+                codec
+                    .encode(input, &shape, &CodecOptions::default())
+                    .is_err()
+            );
         }
     }
 }

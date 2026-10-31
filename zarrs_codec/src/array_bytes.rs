@@ -297,6 +297,9 @@ impl<'a> ArrayBytes<'a> {
 
     /// Returns [`true`] if the array is empty for the given fill value.
     ///
+    /// The array bytes are expected to be [validated](Self::validate).
+    /// An optional array with a mask value other than 0 or 1 is not the fill value.
+    ///
     /// For variable-length arrays, every element must exactly equal the fill value,
     /// respecting element boundaries and ignoring bytes outside the element ranges.
     /// A variable-length array with no elements matches any fill value.
@@ -515,8 +518,21 @@ fn validate_bytes(
                     "Used optional array bytes with a non-optional data type.".to_string(),
                 ));
             };
-            // Mask validation is already done at construction time
-            // Just validate the underlying data with the inner type
+            // The mask has one byte per element, strictly 0 (null) or 1 (present)
+            let mask = optional_bytes.mask();
+            if mask.len() as u64 != num_elements {
+                return Err(InvalidBytesLengthError::new(
+                    mask.len(),
+                    usize::try_from(num_elements).unwrap(),
+                )
+                .into());
+            }
+            if mask.iter().fold(0u8, |acc, &b| acc | b) > 1 {
+                return Err(CodecError::Other(
+                    "optional mask values must be 0 (null) or 1 (present)".to_string(),
+                ));
+            }
+            // Inner layers are dense, so they are validated with the same number of elements
             validate_bytes(optional_bytes.data(), num_elements, opt.data_type())
         }
     }

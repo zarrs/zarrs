@@ -2,8 +2,11 @@ use crate::{ArrayBytes, CowBytes};
 
 /// Optional array bytes composed of data and a validity mask.
 ///
-/// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
-/// The mask length is validated at construction to ensure it matches the number of elements.
+/// The mask is 1 byte per element where 0 = null/missing and 1 = present.
+/// Other mask values are invalid.
+///
+/// The mask is not checked at construction.
+/// [`ArrayBytes::validate`] checks that every mask has one byte per element and contains only 0 or 1.
 ///
 /// # Equality Semantics
 ///
@@ -20,7 +23,9 @@ pub struct ArrayBytesOptional<'a> {
 }
 
 impl<'a> ArrayBytesOptional<'a> {
-    /// Create a new `ArrayBytesOptional` with validation.
+    /// Create a new `ArrayBytesOptional`.
+    ///
+    /// The mask is not validated, see [`ArrayBytes::validate`].
     pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<CowBytes<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();
