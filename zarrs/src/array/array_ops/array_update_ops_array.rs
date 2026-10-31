@@ -12,7 +12,7 @@ use super::{
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
-use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecTraits};
+use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
 
 #[inherent]
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
@@ -174,20 +174,40 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             if chunk_subset.is_whole(&chunk_shape) {
                 return self.store_chunk_with_options(chunk_indices, indexer_data, options);
             }
+        } else {
+            indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
         indexer_bytes.validate(indexer.len(), self.data_type())?;
+        if indexer.is_empty() {
+            return Ok(());
+        }
 
         // Lock the chunk
         // let key = self.chunk_key(chunk_indices);
         // let mutex = self.storage.mutex(&key)?;
         // let _lock = mutex.lock();
 
-        if options.experimental_partial_encoding()
+        let partial_encoding_storage = if options.experimental_partial_encoding()
             && self.codecs.partial_encoder_capability().partial_encode
-            && self.readable_writable_storage()?.supports_set_partial()
         {
+            let storage = self.readable_writable_storage()?;
+            storage.supports_set_partial().then_some(storage)
+        } else {
+            None
+        };
+
+        if let Some(storage) = partial_encoding_storage {
+            // A write of only the fill value to a missing chunk leaves it missing.
+            // The read-modify-write path does this (and erases a chunk that becomes all fill) in `store_chunk_with_options`.
+            if !options.store_empty_chunks()
+                && indexer_bytes.is_fill_value(self.fill_value())
+                && storage.size_key(&self.chunk_key(chunk_indices)?)?.is_none()
+            {
+                return Ok(());
+            }
+
             let partial_encoder = self.partial_encoder_with_options(chunk_indices, options)?;
             debug_assert!(
                 partial_encoder.supports_partial_encode(),

@@ -10,7 +10,9 @@ use super::{
     IntoArrayBytes, MaybeSend, recommended_codec_concurrency,
 };
 use crate::array::{ArrayIndices, update_array_bytes};
-use zarrs_codec::{ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits};
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits,
+};
 
 #[cfg(feature = "async")]
 #[inherent]
@@ -189,18 +191,38 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     .async_store_chunk_with_options(chunk_indices, indexer_data, options)
                     .await;
             }
+        } else {
+            indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
         indexer_bytes.validate(indexer.len(), self.data_type())?;
+        if indexer.is_empty() {
+            return Ok(());
+        }
 
-        if options.experimental_partial_encoding()
+        let partial_encoding_storage = if options.experimental_partial_encoding()
             && self.codecs.partial_encoder_capability().partial_encode
-            && self
-                .async_readable_writable_storage()
-                .await?
-                .supports_set_partial()
         {
+            let storage = self.async_readable_writable_storage().await?;
+            storage.supports_set_partial().then_some(storage)
+        } else {
+            None
+        };
+
+        if let Some(storage) = partial_encoding_storage {
+            // A write of only the fill value to a missing chunk leaves it missing.
+            // The read-modify-write path does this (and erases a chunk that becomes all fill) in `async_store_chunk_with_options`.
+            if !options.store_empty_chunks()
+                && indexer_bytes.is_fill_value(self.fill_value())
+                && storage
+                    .size_key(&self.chunk_key(chunk_indices)?)
+                    .await?
+                    .is_none()
+            {
+                return Ok(());
+            }
+
             let partial_encoder = self
                 .async_partial_encoder_with_options(chunk_indices, options)
                 .await?;

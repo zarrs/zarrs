@@ -14,6 +14,7 @@ use zarrs::array::{
     FillValue, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
 
 type AsyncStore = zarrs_storage::store::AsyncMemoryStore;
@@ -264,6 +265,80 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
         .await?;
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1]).await?, None);
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn partial_encode_fill_value() -> TestResult {
+    for partial_encoding in [false, true] {
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+            AsyncStore::new(),
+        )));
+        let options = CodecOptions::default().with_experimental_partial_encoding(partial_encoding);
+        let array = ArrayBuilder::new(vec![12], vec![4], data_type::uint16(), 0u16)
+            .bytes_to_bytes_codecs(vec![])
+            .build(store.clone(), "/array")?
+            .with_codec_options(options);
+        let array_store_empty = array.with_codec_options(options.with_store_empty_chunks(true));
+        let subset = |range| ArraySubset::new_with_ranges(&[range]);
+
+        // Writing only the fill value does not store a missing chunk
+        array
+            .async_store_partial_chunk(&[0], &subset(0..1), &[0u16])
+            .await?;
+        assert!(array.async_retrieve_encoded_chunk(&[0]).await?.is_none());
+
+        // An empty write does not store a missing chunk, even if empty chunks are stored
+        array_store_empty
+            .async_store_partial_chunk(&[0], &subset(0..0), &[0u16; 0])
+            .await?;
+        assert!(array.async_retrieve_encoded_chunk(&[0]).await?.is_none());
+
+        // Writing only the fill value stores a missing chunk if empty chunks are stored
+        array_store_empty
+            .async_store_partial_chunk(&[0], &subset(0..1), &[0u16])
+            .await?;
+        assert_eq!(
+            array.async_retrieve_chunk::<Vec<u16>>(&[0]).await?,
+            [0, 0, 0, 0]
+        );
+
+        // A partial write of other values stores a missing chunk
+        array
+            .async_store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5])
+            .await?;
+        assert_eq!(
+            array.async_retrieve_chunk::<Vec<u16>>(&[1]).await?,
+            [1, 0, 5, 0]
+        );
+
+        // An out-of-bounds write of only the fill value to a missing chunk is an error
+        let out_of_bounds: Vec<Vec<u64>> = vec![vec![4]];
+        assert!(
+            array
+                .async_store_partial_chunk(&[2], &out_of_bounds, &[0u16])
+                .await
+                .is_err()
+        );
+
+        if partial_encoding {
+            // Writing the fill value into an existing chunk writes it in place without reading the chunk
+            store.reset();
+            for range in [0..1, 2..3] {
+                array
+                    .async_store_partial_chunk(&[1], &subset(range), &[0u16])
+                    .await?;
+            }
+            assert_eq!(store.reads(), 0);
+            assert_eq!(store.bytes_written(), 4);
+            assert_eq!(store.keys_erased(), 0);
+            assert_eq!(
+                array.async_retrieve_chunk::<Vec<u16>>(&[1]).await?,
+                [0, 0, 0, 0]
+            );
+        }
+    }
     Ok(())
 }
 

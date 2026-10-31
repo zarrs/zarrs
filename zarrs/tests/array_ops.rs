@@ -311,6 +311,79 @@ fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
 }
 
 #[test]
+fn partial_encode_fill_value() -> TestResult {
+    for partial_encoding in [false, true] {
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+            MemoryStore::default(),
+        )));
+        let options = CodecOptions::default().with_experimental_partial_encoding(partial_encoding);
+        let array = ArrayBuilder::new(vec![12], vec![4], data_type::uint16(), 0u16)
+            .bytes_to_bytes_codecs(vec![])
+            .build(store.clone(), "/array")?
+            .with_codec_options(options);
+        let array_store_empty = array.with_codec_options(options.with_store_empty_chunks(true));
+        let subset = |range| ArraySubset::new_with_ranges(&[range]);
+
+        // Writing only the fill value does not store a missing chunk
+        array.store_partial_chunk(&[0], &subset(0..1), &[0u16])?;
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+
+        // An empty write does not store a missing chunk, even if empty chunks are stored
+        array_store_empty.store_partial_chunk(&[0], &subset(0..0), &[0u16; 0])?;
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+
+        // Writing only the fill value stores a missing chunk if empty chunks are stored
+        array_store_empty.store_partial_chunk(&[0], &subset(0..1), &[0u16])?;
+        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0])?, [0, 0, 0, 0]);
+
+        // A partial write of other values stores a missing chunk
+        array.store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5])?;
+        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[1])?, [1, 0, 5, 0]);
+
+        // An out-of-bounds write of only the fill value to a missing chunk is an error
+        let out_of_bounds: Vec<Vec<u64>> = vec![vec![4]];
+        assert!(
+            array
+                .store_partial_chunk(&[2], &out_of_bounds, &[0u16])
+                .is_err()
+        );
+
+        if partial_encoding {
+            // Writing the fill value into an existing chunk writes it in place without reading the chunk
+            store.reset();
+            for range in [0..1, 2..3] {
+                array.store_partial_chunk(&[1], &subset(range), &[0u16])?;
+            }
+            assert_eq!(store.reads(), 0);
+            assert_eq!(store.bytes_written(), 4);
+            assert_eq!(store.keys_erased(), 0);
+            assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[1])?, [0, 0, 0, 0]);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "bitround")]
+#[test]
+fn partial_encode_lossy_fill_value() -> TestResult {
+    use zarrs::array::codec::BitroundCodec;
+
+    // With no mantissa bits kept, both the fill value 1.1 and the written value 1.2 encode as 1.0
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![2], vec![2], data_type::float32(), 1.1f32)
+        .array_to_array_codecs(vec![Arc::new(BitroundCodec::new(0))])
+        .bytes_to_bytes_codecs(vec![])
+        .build(store, "/array")?
+        .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
+
+    // The written value is not the fill value, so the chunk is stored
+    array.store_partial_chunk(&[0], &ArraySubset::new_with_ranges(&[0..1]), &[1.2f32])?;
+    assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
+    assert_eq!(array.retrieve_chunk::<Vec<f32>>(&[0])?[0], 1.0);
+    Ok(())
+}
+
+#[test]
 fn array_ops_subchunks_with_reshape_codec() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();
