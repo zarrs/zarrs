@@ -184,8 +184,12 @@ pub fn blosc_decompress_bytes_partial(
     length: usize,
     typesize: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let start = i32::try_from(offset / typesize).unwrap();
-    let nitems = i32::try_from(length / typesize).unwrap();
+    let to_items = |bytes: usize| {
+        i32::try_from(bytes / typesize)
+            .map_err(|_| BloscError::from("blosc_getitem item index exceeds i32::MAX"))
+    };
+    let start = to_items(offset)?;
+    let nitems = to_items(length)?;
     let mut dest: Vec<u8> = vec![0; length];
     let destsize = blosc1_getitem(src, start, nitems, &mut dest);
     if destsize <= 0 {
