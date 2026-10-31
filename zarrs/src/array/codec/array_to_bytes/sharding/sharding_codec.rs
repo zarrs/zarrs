@@ -1135,7 +1135,7 @@ impl ShardingCodecBound {
         .into_par_iter();
         #[cfg(target_arch = "wasm32")]
         let iterator = subchunk_order_iterator(
-            &self.options.subchunk_write_order(),
+            self.options.subchunk_write_order(),
             n_chunks,
             &subchunk_grid,
         );
