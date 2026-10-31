@@ -430,15 +430,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
         let data_type = self.data_type();
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        bytes.validate(num_elements, data_type)?;
+        bytes.validate(shape.num_elements_u64(), data_type)?;
 
         // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
         let chunk_bytes_representation = self
             .inner_codecs
             .encoded_representation(&self.subchunk_shape)?;
 
-        bytes.validate(shape.num_elements_u64(), data_type)?;
         let bytes = match chunk_bytes_representation {
             BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
                 self.encode_bounded(&bytes, shape, &self.subchunk_shape, size, options)
