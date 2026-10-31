@@ -683,3 +683,31 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
 
     Ok(())
 }
+
+/// The inner data type `configuration` of the `optional` data type is optional in metadata.
+#[test]
+fn optional_data_type_missing_inner_configuration() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs_metadata::v3::MetadataV3;
+
+    let metadata: MetadataV3 =
+        serde_json::from_str(r#"{"name": "zarrs.optional", "configuration": {"name": "uint8"}}"#)?;
+    assert_eq!(
+        DataType::from_metadata(&metadata)?,
+        data_type::uint8().to_optional()
+    );
+
+    let metadata: MetadataV3 = serde_json::from_str(
+        r#"{
+            "name": "zarrs.optional",
+            "configuration": {
+                "name": "zarrs.optional",
+                "configuration": {"name": "uint8"}
+            }
+        }"#,
+    )?;
+    assert_eq!(
+        DataType::from_metadata(&metadata)?,
+        data_type::uint8().to_optional().to_optional()
+    );
+    Ok(())
+}

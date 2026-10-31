@@ -12,6 +12,9 @@ pub struct OptionalDataTypeConfigurationV1 {
     /// The inner data type name.
     pub name: String,
     /// The configuration of the inner data type.
+    ///
+    /// Optional in metadata, defaulting to an empty configuration.
+    #[serde(default)]
     pub configuration: Configuration,
 }
 
@@ -42,6 +45,7 @@ mod tests {
     #[test]
     fn optional_missing_configuration() {
         let config = r#"{"name":"int32"}"#;
-        assert!(serde_json::from_str::<OptionalDataTypeConfigurationV1>(config).is_err());
+        let config = serde_json::from_str::<OptionalDataTypeConfigurationV1>(config).unwrap();
+        assert!(config.configuration.is_empty());
     }
 }

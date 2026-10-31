@@ -17,6 +17,9 @@ struct OptionalDataTypeConfigurationV1 {
     /// The inner data type name.
     pub name: String,
     /// The configuration of the inner data type.
+    ///
+    /// Optional in metadata, defaulting to an empty configuration.
+    #[serde(default)]
     pub configuration: Configuration,
 }
 
