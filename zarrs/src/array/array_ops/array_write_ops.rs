@@ -9,7 +9,8 @@ use zarrs_codec::CowBytes;
 pub trait ArrayWriteOps: ArrayOps {
     /// Store the array metadata.
     ///
-    /// The metadata is created with [`ArrayOps::metadata_opt`].
+    /// The metadata is created with [`ArrayOps::metadata_opt`] and stored through the storage
+    /// transformers of the array.
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
@@ -17,6 +18,7 @@ pub trait ArrayWriteOps: ArrayOps {
 
     /// Erase the array metadata.
     ///
+    /// The metadata is erased through the storage transformers of the array.
     /// Succeeds if the metadata does not exist.
     ///
     /// # Errors

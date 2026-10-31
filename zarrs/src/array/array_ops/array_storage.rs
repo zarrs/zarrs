@@ -1,4 +1,10 @@
 //! The storage of an array, transformed by its storage transformers.
+//!
+//! All array I/O, including storing and erasing metadata, goes through the transformed storage.
+//! The untransformed [`storage_handle`](Array::storage_handle) only exists to create it.
+//! The one exception is reading metadata in `Array::[async_]open`, because the storage
+//! transformers of an array are only known after its metadata is read.
+//! A storage transformer that remaps metadata keys therefore makes the array unopenable.
 
 use std::sync::Arc;
 

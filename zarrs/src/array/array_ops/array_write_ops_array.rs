@@ -59,24 +59,24 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         let options = self.metadata_erase_version();
-        let storage_handle = self.storage_handle();
+        let storage_transformer = self.writable_storage()?;
         match options {
             MetadataEraseVersion::Default => match &*self.metadata {
-                ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),
+                ArrayMetadata::V3(_) => storage_transformer.erase(&meta_key_v3(self.path())),
                 ArrayMetadata::V2(_) => {
-                    storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                    storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                    storage_transformer.erase(&meta_key_v2_array(self.path()))?;
+                    storage_transformer.erase(&meta_key_v2_attributes(self.path()))
                 }
             },
             MetadataEraseVersion::All => {
-                storage_handle.erase(&meta_key_v3(self.path()))?;
-                storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                storage_transformer.erase(&meta_key_v3(self.path()))?;
+                storage_transformer.erase(&meta_key_v2_array(self.path()))?;
+                storage_transformer.erase(&meta_key_v2_attributes(self.path()))
             }
-            MetadataEraseVersion::V3 => storage_handle.erase(&meta_key_v3(self.path())),
+            MetadataEraseVersion::V3 => storage_transformer.erase(&meta_key_v3(self.path())),
             MetadataEraseVersion::V2 => {
-                storage_handle.erase(&meta_key_v2_array(self.path()))?;
-                storage_handle.erase(&meta_key_v2_attributes(self.path()))
+                storage_transformer.erase(&meta_key_v2_array(self.path()))?;
+                storage_transformer.erase(&meta_key_v2_attributes(self.path()))
             }
         }
     }

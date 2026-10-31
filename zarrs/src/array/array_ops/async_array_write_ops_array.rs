@@ -62,34 +62,34 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
         let options = self.metadata_erase_version();
-        let storage_handle = self.storage_handle();
+        let storage_transformer = self.async_writable_storage().await?;
         match options {
             MetadataEraseVersion::Default => match &*self.metadata {
-                ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())).await,
+                ArrayMetadata::V3(_) => storage_transformer.erase(&meta_key_v3(self.path())).await,
                 ArrayMetadata::V2(_) => {
-                    storage_handle
+                    storage_transformer
                         .erase(&meta_key_v2_array(self.path()))
                         .await?;
-                    storage_handle
+                    storage_transformer
                         .erase(&meta_key_v2_attributes(self.path()))
                         .await
                 }
             },
             MetadataEraseVersion::All => {
-                storage_handle.erase(&meta_key_v3(self.path())).await?;
-                storage_handle
+                storage_transformer.erase(&meta_key_v3(self.path())).await?;
+                storage_transformer
                     .erase(&meta_key_v2_array(self.path()))
                     .await?;
-                storage_handle
+                storage_transformer
                     .erase(&meta_key_v2_attributes(self.path()))
                     .await
             }
-            MetadataEraseVersion::V3 => storage_handle.erase(&meta_key_v3(self.path())).await,
+            MetadataEraseVersion::V3 => storage_transformer.erase(&meta_key_v3(self.path())).await,
             MetadataEraseVersion::V2 => {
-                storage_handle
+                storage_transformer
                     .erase(&meta_key_v2_array(self.path()))
                     .await?;
-                storage_handle
+                storage_transformer
                     .erase(&meta_key_v2_attributes(self.path()))
                     .await
             }
