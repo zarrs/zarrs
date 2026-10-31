@@ -170,7 +170,7 @@ pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
 /// Decompress a blosc buffer.
 ///
 /// # Errors
-/// Returns a [`BloscError`] if decompression fails.
+/// Returns a [`BloscError`] if decompression fails or does not yield `destsize` bytes.
 pub fn blosc_decompress_bytes(
     src: &[u8],
     destsize: usize,
@@ -179,7 +179,7 @@ pub fn blosc_decompress_bytes(
     let numinternalthreads = internal_threads(destsize, numinternalthreads);
 
     let mut dest: Vec<u8> = Vec::with_capacity(destsize);
-    let destsize = unsafe {
+    let decompressed = unsafe {
         blosc_decompress_ctx(
             src.as_ptr().cast::<c_void>(),
             dest.as_mut_ptr().cast::<c_void>(),
@@ -187,21 +187,25 @@ pub fn blosc_decompress_bytes(
             numinternalthreads,
         )
     };
-    if destsize > 0 {
+    if decompressed <= 0 {
+        Err(BloscError::from("blosc_decompress_ctx failed"))
+    } else if usize::try_from(decompressed) != Ok(destsize) {
+        Err(BloscError::from(format!(
+            "blosc_decompress_ctx returned {decompressed} bytes, expected {destsize}"
+        )))
+    } else {
+        // SAFETY: blosc initialised `destsize` bytes, which is the capacity of `dest`
         unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
+            dest.set_len(destsize);
         }
         Ok(dest)
-    } else {
-        Err(BloscError::from("blosc_decompress_ctx failed"))
     }
 }
 
 /// Partially decompress a blosc buffer at a given byte offset and length.
 ///
 /// # Errors
-/// Returns a [`BloscError`] if decompression fails.
+/// Returns a [`BloscError`] if decompression fails or does not yield `length` bytes.
 pub fn blosc_decompress_bytes_partial(
     src: &[u8],
     offset: usize,
@@ -228,10 +232,14 @@ pub fn blosc_decompress_bytes_partial(
             "blosc_getitem(src: len {}, start: {start}, nitems: {nitems}) -> {destsize} (failure)",
             src.len()
         )))
+    } else if usize::try_from(destsize) != Ok(length) {
+        Err(BloscError::from(format!(
+            "blosc_getitem returned {destsize} bytes, expected {length}"
+        )))
     } else {
+        // SAFETY: blosc initialised `length` bytes, which is the capacity of `dest`
         unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
+            dest.set_len(length);
         }
         Ok(dest)
     }

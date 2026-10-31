@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use super::{
-    blosc_decompress_bytes, blosc_decompress_bytes_partial, blosc_nbytes, blosc_typesize,
-    blosc_validate,
+    blosc_decompress_bytes, blosc_decompress_bytes_partial, blosc_typesize, blosc_validate,
 };
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use zarrs_storage::StorageError;
-use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
+use zarrs_storage::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 
 /// Decode byte ranges of a blosc encoded value.
 ///
@@ -20,31 +19,27 @@ fn blosc_partial_decode<'a>(
     encoded_value: &[u8],
     decoded_regions: ByteRangeIterator,
 ) -> Result<Vec<CowBytes<'a>>, CodecError> {
-    let invalid = || CodecError::from("blosc encoded value is invalid");
-    blosc_validate(encoded_value).ok_or_else(invalid)?;
-    let nbytes = blosc_nbytes(encoded_value).ok_or_else(invalid)?;
-    let typesize = blosc_typesize(encoded_value).ok_or_else(invalid)?;
+    let nbytes = blosc_validate(encoded_value)
+        .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
+    let typesize = blosc_typesize(encoded_value)
+        .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
     let blosc_error = |err: super::BloscError| CodecError::from(err.to_string());
     let mut decoded_value: Option<Vec<u8>> = None;
     decoded_regions
         .map(|byte_range| {
-            let in_bounds = match byte_range {
-                ByteRange::FromStart(offset, length) => offset
-                    .checked_add(length.unwrap_or(0))
-                    .is_some_and(|end| end <= nbytes as u64),
-                ByteRange::Suffix(length) => length <= nbytes as u64,
-            };
-            if !in_bounds {
-                return Err(InvalidByteRangeError::new(byte_range, nbytes as u64).into());
-            }
-            let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
-            let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
-            if start == end {
+            let range = byte_range
+                .checked_range_usize(nbytes)
+                .ok_or_else(|| InvalidByteRangeError::new(byte_range, nbytes as u64))?;
+            if range.is_empty() {
                 // `blosc_getitem` fails to retrieve zero items
                 Ok(CowBytes::from(Vec::new()))
-            } else if start.is_multiple_of(typesize) && end.is_multiple_of(typesize) {
-                let decoded =
-                    blosc_decompress_bytes_partial(encoded_value, start, end - start, typesize);
+            } else if range.start.is_multiple_of(typesize) && range.end.is_multiple_of(typesize) {
+                let decoded = blosc_decompress_bytes_partial(
+                    encoded_value,
+                    range.start,
+                    range.len(),
+                    typesize,
+                );
                 decoded.map(CowBytes::from).map_err(blosc_error)
             } else {
                 if decoded_value.is_none() {
@@ -53,7 +48,7 @@ fn blosc_partial_decode<'a>(
                     );
                 }
                 let decoded_value = decoded_value.as_ref().expect("decoded above");
-                Ok(CowBytes::from(decoded_value[start..end].to_vec()))
+                Ok(CowBytes::from(decoded_value[range].to_vec()))
             }
         })
         .collect()

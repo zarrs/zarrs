@@ -280,6 +280,28 @@ mod tests {
         }
     }
 
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_decompress_length_mismatch() {
+        let bytes: Vec<u8> = (0..32).collect();
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
+        let encoded = codec
+            .encode(CowBytes::from(bytes.clone()), &CodecOptions::default())
+            .unwrap();
+
+        assert_eq!(blosc_decompress_bytes(&encoded, 32, 1).unwrap(), bytes);
+        assert_eq!(
+            blosc_decompress_bytes_partial(&encoded, 4, 6, 2).unwrap(),
+            &bytes[4..10]
+        );
+
+        // Fewer bytes are decompressed than requested
+        assert!(blosc_decompress_bytes(&encoded, 33, 1).is_err());
+        assert!(blosc_decompress_bytes_partial(&encoded, 4, 7, 2).is_err());
+    }
+
     #[cfg(feature = "async")]
     #[tokio::test]
     #[cfg_attr(miri, ignore)]

@@ -161,20 +161,20 @@ pub fn blosc_decompress_bytes(
     };
 
     let mut dest: Vec<u8> = vec![0; destsize];
-    let destsize = {
+    let decompressed = {
         let mut dparams = BLOSC2_DPARAMS_DEFAULTS;
         dparams.nthreads = numinternalthreads as i16;
         let context = blosc2_create_dctx(dparams);
         blosc2_decompress_ctx(&context, src, &mut dest)
     };
-    if destsize > 0 {
-        unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
-        }
-        Ok(dest)
-    } else {
+    if decompressed <= 0 {
         Err(BloscError::from("blosc_decompress_ctx failed"))
+    } else if usize::try_from(decompressed) != Ok(destsize) {
+        Err(BloscError::from(format!(
+            "blosc_decompress_ctx returned {decompressed} bytes, expected {destsize}"
+        )))
+    } else {
+        Ok(dest)
     }
 }
 
@@ -184,8 +184,12 @@ pub fn blosc_decompress_bytes_partial(
     length: usize,
     typesize: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let start = i32::try_from(offset / typesize).unwrap();
-    let nitems = i32::try_from(length / typesize).unwrap();
+    let to_items = |bytes: usize| {
+        i32::try_from(bytes / typesize)
+            .map_err(|_| BloscError::from("blosc_getitem item index exceeds i32::MAX"))
+    };
+    let start = to_items(offset)?;
+    let nitems = to_items(length)?;
     let mut dest: Vec<u8> = vec![0; length];
     let destsize = blosc1_getitem(src, start, nitems, &mut dest);
     if destsize <= 0 {
@@ -193,11 +197,11 @@ pub fn blosc_decompress_bytes_partial(
             "blosc_getitem(src: len {}, start: {start}, nitems: {nitems}) -> {destsize} (failure)",
             src.len()
         )))
+    } else if usize::try_from(destsize) != Ok(length) {
+        Err(BloscError::from(format!(
+            "blosc_getitem returned {destsize} bytes, expected {length}"
+        )))
     } else {
-        unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
-        }
         Ok(dest)
     }
 }
