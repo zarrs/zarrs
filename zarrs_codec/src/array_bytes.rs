@@ -296,6 +296,10 @@ impl<'a> ArrayBytes<'a> {
     }
 
     /// Returns [`true`] if the array is empty for the given fill value.
+    ///
+    /// For variable-length arrays, every element must exactly equal the fill value,
+    /// respecting element boundaries and ignoring bytes outside the element ranges.
+    /// A variable-length array with no elements matches any fill value.
     #[must_use]
     pub fn is_fill_value(&self, fill_value: &FillValue) -> bool {
         self.is_fill_value_bytes(fill_value.as_ne_bytes())
@@ -304,9 +308,9 @@ impl<'a> ArrayBytes<'a> {
     fn is_fill_value_bytes(&self, fill_value_bytes: &[u8]) -> bool {
         match self {
             Self::Fixed(bytes) => FillValue::equals_all_bytes(fill_value_bytes, bytes),
-            Self::Variable(ArrayBytesVariableLength { bytes, offsets: _ }) => {
-                FillValue::equals_all_bytes(fill_value_bytes, bytes)
-            }
+            Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => offsets
+                .element_ranges()
+                .all(|range| &bytes[range] == fill_value_bytes),
             Self::Optional(optional_bytes) => {
                 if fill_value_bytes.last() == Some(&0) {
                     optional_bytes.mask().iter().all(|&b| b == 0)
@@ -1056,6 +1060,43 @@ mod tests {
             let offsets = offsets_from_usize(input).unwrap();
             assert!(offsets.is_u64());
             assert_eq!(offsets.as_u64().unwrap().as_ptr(), input_ptr);
+        }
+    }
+
+    #[test]
+    fn variable_is_fill_value() {
+        let cases: &[(&[u8], &[u32], &str, bool)] = &[
+            (b"abab", &[0, 2, 4], "ab", true),
+            (b"abac", &[0, 2, 4], "ab", false),
+            (b"ab", &[0, 1, 2], "ab", false),
+            (b"abab", &[0, 4, 4], "ab", false),
+            (b"", &[0, 0, 0], "", true),
+            (b"a", &[0, 0, 1], "", false),
+            (b"", &[0, 0], "ab", false),
+            (b"xababz", &[1, 3, 5], "ab", true),
+            (b"", &[0], "ab", true),
+            (b"", &[0], "", true),
+        ];
+        for &(bytes, offsets, fill, expected) in cases {
+            for offsets in [
+                ArrayBytesOffsets::new(offsets.to_vec()).unwrap(),
+                ArrayBytesOffsets::new(offsets.iter().copied().map(u64::from).collect::<Vec<_>>())
+                    .unwrap(),
+            ] {
+                let mask = vec![1; offsets.num_elements()];
+                let array_bytes = ArrayBytes::new_vlen(bytes, offsets).unwrap();
+                assert_eq!(
+                    array_bytes.is_fill_value(&FillValue::from(fill)),
+                    expected,
+                    "{array_bytes:?}, fill {fill:?}"
+                );
+                assert_eq!(
+                    array_bytes
+                        .with_optional_mask(mask)
+                        .is_fill_value(&FillValue::from(Some(fill))),
+                    expected
+                );
+            }
         }
     }
 

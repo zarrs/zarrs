@@ -311,6 +311,39 @@ fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
 }
 
 #[test]
+fn partial_encode_variable_fill_value() -> TestResult {
+    for partial_encoding in [true, false] {
+        for store_empty_chunks in [false, true] {
+            let options = CodecOptions::default()
+                .with_experimental_partial_encoding(partial_encoding)
+                .with_store_empty_chunks(store_empty_chunks);
+            let array = ArrayBuilder::new(vec![8], vec![4], data_type::string(), "ab")
+                .subchunk_shape(vec![1])
+                .build(Arc::new(MemoryStore::default()), "/array")?
+                .with_codec_options(options);
+            let subset = ArraySubset::new_with_ranges(&[0..2]);
+
+            // Concatenated bytes match the fill, but the individual strings do not.
+            array.store_partial_chunk(&[0], &subset, &["a", "b"])?;
+            assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
+            assert_eq!(
+                array.retrieve_chunk::<Vec<String>>(&[0])?,
+                ["a", "b", "ab", "ab"]
+            );
+
+            // Actual fill strings still read back correctly and leave missing shards
+            // missing when empty chunks are disabled.
+            array.store_partial_chunk(&[1], &subset, &["ab", "ab"])?;
+            if !store_empty_chunks {
+                assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+            }
+            assert_eq!(array.retrieve_chunk::<Vec<String>>(&[1])?, ["ab"; 4]);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn partial_encode_fill_value() -> TestResult {
     for partial_encoding in [false, true] {
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
