@@ -1296,7 +1296,7 @@ mod tests {
     }
 
     #[cfg(feature = "async")]
-    fn codec_sharding_async_round_trip_impl(
+    async fn codec_sharding_async_round_trip_impl(
         options: &CodecOptions,
         unbounded: bool,
         index_at_end: bool,
@@ -1317,7 +1317,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec =
+        let codec = Arc::new(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
@@ -1325,12 +1325,23 @@ mod tests {
                     ShardingIndexLocation::Start
                 })
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build()
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-                .unwrap();
+                .build(),
+        )
+        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .unwrap();
 
         let encoded = codec.encode(bytes.clone(), &shape, options).unwrap();
-        let decoded = codec.decode(encoded.clone(), &shape, options).unwrap();
+        let partial_decoder = codec
+            .async_partial_decoder(Arc::new(encoded.clone()), &shape, options)
+            .await
+            .unwrap();
+        let decoded = partial_decoder
+            .partial_decode(
+                &ArraySubset::new_with_shape(shape.to_array_shape()),
+                options,
+            )
+            .await
+            .unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
     }
@@ -1348,10 +1359,11 @@ mod tests {
                         codec_sharding_async_round_trip_impl(
                             &options,
                             unbounded,
-                            all_fill_value,
                             index_at_end,
+                            all_fill_value,
                             vec![],
-                        );
+                        )
+                        .await;
                     }
                 }
             }
@@ -1435,8 +1447,8 @@ mod tests {
                         codec_sharding_partial_decode(
                             &options,
                             unbounded,
-                            all_fill_value,
                             index_at_end,
+                            all_fill_value,
                         );
                     }
                 }
@@ -1520,8 +1532,8 @@ mod tests {
                         codec_sharding_async_partial_decode(
                             &options,
                             unbounded,
-                            all_fill_value,
                             index_at_end,
+                            all_fill_value,
                         )
                         .await;
                     }
