@@ -1,8 +1,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-#[cfg(not(target_arch = "wasm32"))]
 use futures::{StreamExt, TryStreamExt};
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
 use unsafe_cell_slice::UnsafeCellSlice;
