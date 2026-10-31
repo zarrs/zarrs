@@ -2,7 +2,8 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
-use super::{BytesCodec, BytesDataTypeExt, Endianness};
+use super::bytes_codec::{decoded_len, fixed_size};
+use super::{BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -13,7 +14,6 @@ use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
@@ -53,6 +53,61 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     fn encode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
         Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
     }
+
+    /// Validate `indexer` against the chunk, returning the data type size.
+    fn validate_indexer(&self, indexer: &dyn crate::array::Indexer) -> Result<usize, CodecError> {
+        let data_type_size = fixed_size(&self.data_type)?;
+
+        if indexer.dimensionality() != self.shape.len() {
+            return Err(IndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
+                self.shape.len(),
+            )
+            .into());
+        }
+
+        Ok(data_type_size)
+    }
+
+    /// Pair the `encoded` elements at `indexer` with their byte offsets, for writing in place into an existing chunk.
+    fn offset_bytes_in_place<'b>(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        data_type_size: usize,
+        encoded: &'b [u8],
+    ) -> Result<Vec<(u64, CowBytes<'b>)>, CodecError> {
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
+        let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
+        Ok(byte_ranges
+            .scan(0usize, |offset_in, range_out| {
+                let len = usize::try_from(range_out.end - range_out.start).unwrap();
+                let value = CowBytes::from(&encoded[*offset_in..*offset_in + len]);
+                *offset_in += len;
+                Some((range_out.start, value))
+            })
+            .collect())
+    }
+
+    /// Encode a missing chunk initialised with the fill value and updated with `bytes` at `indexer`.
+    fn encode_missing<'a>(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        bytes: &ArrayBytes<'_>,
+    ) -> Result<CowBytes<'a>, CodecError> {
+        let (num_elements, _) = decoded_len(&self.data_type, &self.shape)?;
+        let chunk_bytes =
+            ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
+        let chunk_bytes = update_array_bytes(
+            chunk_bytes,
+            chunk_shape,
+            indexer,
+            bytes,
+            self.data_type.size(),
+        )?;
+        let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
+        self.encode_bytes(chunk_bytes)
+    }
 }
 
 /// The `bytes` codec encodes a chunk as a whole, so it has no subchunks.
@@ -79,20 +134,7 @@ where
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
-
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
+        let data_type_size = self.validate_indexer(indexer)?;
 
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         // Get byte ranges
@@ -143,20 +185,7 @@ where
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
-
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
+        let data_type_size = self.validate_indexer(indexer)?;
 
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
 
@@ -199,59 +228,18 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
+        let data_type_size = self.validate_indexer(indexer)?;
+        bytes.validate(indexer.len(), &self.data_type)?;
 
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
-
-        // If the chunk is empty, initialise the chunk with the fill value and update
+        // Only the written elements are encoded, so an existing chunk is never read.
+        // A chunk left holding only the fill value is therefore not erased.
         if self.input_output_handle.exists()? {
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
-
-            let bytes_to_encode = self.encode_bytes(bytes.clone().into_fixed()?)?;
-
-            let offset_bytes: Vec<_> = byte_ranges
-                .scan(0usize, |offset_in, range_out| {
-                    let len = usize::try_from(range_out.end - range_out.start).unwrap();
-                    let range_in = *offset_in..*offset_in + len;
-                    *offset_in += len;
-                    Some((
-                        range_out.start,
-                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
-                    ))
-                })
-                .collect();
-
+            let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
+            let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
             self.input_output_handle
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
-            // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let chunk_bytes = update_array_bytes(
-                chunk_bytes,
-                chunk_shape,
-                indexer,
-                bytes,
-                self.data_type.size(),
-            )?;
-            let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
-
-            let chunk_bytes = self.encode_bytes(chunk_bytes)?;
-
+            let chunk_bytes = self.encode_missing(indexer, bytes)?;
             self.input_output_handle
                 .partial_encode(0, chunk_bytes, options)
         }
@@ -279,60 +267,19 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let Some(data_type_size) = self.data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            ));
-        };
+        let data_type_size = self.validate_indexer(indexer)?;
+        bytes.validate(indexer.len(), &self.data_type)?;
 
-        if indexer.dimensionality() != self.shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                self.shape.len(),
-            )
-            .into());
-        }
-
-        // If the chunk is empty, initialise the chunk with the fill value and update
+        // Only the written elements are encoded, so an existing chunk is never read.
+        // A chunk left holding only the fill value is therefore not erased.
         if self.input_output_handle.exists().await? {
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
-
-            let bytes_to_encode = self.encode_bytes(bytes.clone().into_fixed()?)?;
-
-            let offset_bytes: Vec<_> = byte_ranges
-                .scan(0usize, |offset_in, range_out| {
-                    let len = usize::try_from(range_out.end - range_out.start).unwrap();
-                    let range_in = *offset_in..*offset_in + len;
-                    *offset_in += len;
-                    Some((
-                        range_out.start,
-                        crate::array::CowBytes::from(&bytes_to_encode[range_in]),
-                    ))
-                })
-                .collect();
-
+            let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
+            let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
             self.input_output_handle
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
                 .await
         } else {
-            // Create a chunk filled with the fill value
-            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
-            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-            let chunk_bytes = update_array_bytes(
-                chunk_bytes,
-                chunk_shape,
-                indexer,
-                bytes,
-                self.data_type.size(),
-            )?;
-            let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
-
-            let chunk_bytes = self.encode_bytes(chunk_bytes)?;
-
+            let chunk_bytes = self.encode_missing(indexer, bytes)?;
             self.input_output_handle
                 .partial_encode(0, chunk_bytes, options)
                 .await

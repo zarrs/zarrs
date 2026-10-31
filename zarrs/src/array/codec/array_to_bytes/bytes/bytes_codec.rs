@@ -138,30 +138,38 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
     }
 }
 
-impl BytesCodecBound {
-    fn decoded_size(&self, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
-        let data_type_size = self.data_type.fixed_size().ok_or_else(|| {
-            CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                BytesCodec::aliases_v3().default_name.to_string(),
-            )
-        })?;
-        let num_elements = shape
-            .iter()
-            .try_fold(1u64, |count, d| count.checked_mul(d.get()))
-            .ok_or("the decoded chunk element count overflows u64")?;
-        let num_bytes = num_elements
-            .checked_mul(data_type_size as u64)
-            .ok_or("the decoded chunk size in bytes overflows u64")?;
-        Ok((num_elements, num_bytes))
-    }
+/// Return the size of `data_type`, which must be fixed-size for the `bytes` codec.
+pub(super) fn fixed_size(data_type: &DataType) -> Result<usize, CodecError> {
+    data_type.fixed_size().ok_or_else(|| {
+        CodecError::UnsupportedDataType(
+            data_type.clone(),
+            BytesCodec::aliases_v3().default_name.to_string(),
+        )
+    })
+}
 
-    fn decoded_len(&self, shape: &[NonZeroU64]) -> Result<(u64, usize), CodecError> {
-        let (num_elements, num_bytes) = self.decoded_size(shape)?;
-        let len = usize::try_from(num_bytes)
-            .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
-        Ok((num_elements, len))
-    }
+/// Return the decoded element count and size in bytes of a chunk with `shape`.
+fn decoded_size(data_type: &DataType, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
+    let data_type_size = fixed_size(data_type)?;
+    let num_elements = shape
+        .iter()
+        .try_fold(1u64, |count, d| count.checked_mul(d.get()))
+        .ok_or("the decoded chunk element count overflows u64")?;
+    let num_bytes = num_elements
+        .checked_mul(data_type_size as u64)
+        .ok_or("the decoded chunk size in bytes overflows u64")?;
+    Ok((num_elements, num_bytes))
+}
+
+/// Return the decoded element count and size in bytes of a chunk with `shape`, with the size checked to fit a `usize`.
+pub(super) fn decoded_len(
+    data_type: &DataType,
+    shape: &[NonZeroU64],
+) -> Result<(u64, usize), CodecError> {
+    let (num_elements, num_bytes) = decoded_size(data_type, shape)?;
+    let len = usize::try_from(num_bytes)
+        .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
+    Ok((num_elements, len))
 }
 
 impl ArrayCodecTraits for BytesCodecBound {
@@ -226,7 +234,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let (num_elements, _) = self.decoded_len(shape)?;
+        let (num_elements, _) = decoded_len(&self.data_type, shape)?;
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
@@ -239,7 +247,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let (num_elements, _) = self.decoded_len(shape)?;
+        let (num_elements, _) = decoded_len(&self.data_type, shape)?;
         let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
@@ -314,7 +322,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let (_, size) = self.decoded_size(shape)?;
+        let (_, size) = decoded_size(&self.data_type, shape)?;
         Ok(BytesRepresentation::FixedSize(size))
     }
 }
