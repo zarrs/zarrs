@@ -181,6 +181,10 @@ name = "fill_value"
 harness = false
 
 [[bench]]
+name = "array_bytes_eq"
+harness = false
+
+[[bench]]
 name = "sharded_partial_read"
 harness = false
 required-features = ["filesystem"]
