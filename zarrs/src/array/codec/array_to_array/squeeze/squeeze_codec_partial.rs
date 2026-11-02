@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, DataType, FillValue};
+use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
@@ -29,7 +29,6 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Self {
         Self {
             input_output_handle,

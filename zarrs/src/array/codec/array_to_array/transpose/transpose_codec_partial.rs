@@ -5,7 +5,7 @@ use super::{
     permute,
 };
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -36,7 +36,6 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
-        _fill_value: &FillValue,
         order: Vec<usize>,
     ) -> Self {
         let order_inverse = inverse_permutation(&order);

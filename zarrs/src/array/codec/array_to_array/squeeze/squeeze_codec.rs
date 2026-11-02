@@ -306,7 +306,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_handle,
                 shape,
                 &self.data_type,
-                &self.fill_value,
             ),
         ))
     }
@@ -322,7 +321,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_output_handle,
                 shape,
                 &self.data_type,
-                &self.fill_value,
             ),
         ))
     }
@@ -339,7 +337,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_handle,
                 shape,
                 &self.data_type,
-                &self.fill_value,
             ),
         ))
     }
@@ -356,7 +353,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
                 input_output_handle,
                 shape,
                 &self.data_type,
-                &self.fill_value,
             ),
         ))
     }
