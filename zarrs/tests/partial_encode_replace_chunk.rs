@@ -36,7 +36,11 @@ fn bind(codecs: &[&str], data_type: DataType, fill_value: FillValue) -> Arc<Code
         .collect();
     CodecChain::from_metadata(&metadata)
         .unwrap()
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap()
 }
 

@@ -84,7 +84,7 @@ impl UnboundArrayToBytesCodecTraits for CountingCodec<dyn UnboundArrayToBytesCod
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(CountingCodec {
@@ -103,7 +103,7 @@ impl ArrayCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
     fn data_type(&self) -> &DataType {
         self.inner.data_type()
     }
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.inner.fill_value()
     }
     fn recommended_concurrency(
@@ -283,7 +283,11 @@ fn fixture(variable: bool, nested: bool, index_location: ShardingIndexLocation) 
         .array_to_bytes_codec(inner)
         .index_location(index_location)
         .build_arc()
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
     Fixture {
         codec,
@@ -337,7 +341,7 @@ fn expected(fixture: &Fixture, indices: &[Vec<u64>], absent: bool) -> ArrayBytes
         ArrayBytes::new_fill_value(
             fixture.codec.data_type(),
             indices.len() as u64,
-            fixture.codec.fill_value(),
+            fixture.codec.fill_value().unwrap(),
         )
         .unwrap()
     } else {

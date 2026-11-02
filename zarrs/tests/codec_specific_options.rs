@@ -55,7 +55,7 @@ impl UnboundArrayToBytesCodecTraits for ProbeCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if codec_specific_options
@@ -87,7 +87,11 @@ fn codec_specific_options_reach_nested_codecs() -> Result<(), CodecCreateError> 
                 fill_value: FillValue|
      -> Result<usize, CodecCreateError> {
         bound_with_options.store(0, Ordering::SeqCst);
-        CodecChain::new(vec![], codec, vec![]).with_context(data_type, fill_value, &options)?;
+        CodecChain::new(vec![], codec, vec![]).with_context(
+            data_type,
+            Some(fill_value),
+            &options,
+        )?;
         Ok(bound_with_options.load(Ordering::SeqCst))
     };
     let little = Some(Endianness::Little);

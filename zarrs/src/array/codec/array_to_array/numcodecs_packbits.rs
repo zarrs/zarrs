@@ -133,7 +133,7 @@ impl UnboundArrayToArrayCodecTraits for NumcodecsPackBitsCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         if !data_type.is::<BoolDataType>() {
@@ -144,10 +144,12 @@ impl UnboundArrayToArrayCodecTraits for NumcodecsPackBitsCodec {
         }
         // The packed bytes of elements that are all the fill value, so that the encoded fill value of a missing chunk
         // unpacks to the fill value without checking whether the chunk exists
-        let encoded_fill_value = FillValue::from(if fill_value.as_ne_bytes() == [0] {
-            0u8
-        } else {
-            u8::MAX
+        let encoded_fill_value = fill_value.as_ref().map(|fill_value| {
+            FillValue::from(if fill_value.as_ne_bytes() == [0] {
+                0u8
+            } else {
+                u8::MAX
+            })
         });
         let packbits = PackBitsCodec::new(PackBitsPaddingEncoding::FirstByte, None, None)?.bind(
             data_type,
@@ -167,7 +169,7 @@ impl UnboundArrayToArrayCodecTraits for NumcodecsPackBitsCodec {
 struct NumcodecsPackBitsCodecBound {
     packbits: Arc<PackBitsCodecBound>,
     encoded_data_type: DataType,
-    encoded_fill_value: FillValue,
+    encoded_fill_value: Option<FillValue>,
 }
 
 impl NumcodecsPackBitsCodecBound {
@@ -193,7 +195,7 @@ impl ArrayCodecTraits for NumcodecsPackBitsCodecBound {
         self.packbits.data_type()
     }
 
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.packbits.fill_value()
     }
 
@@ -236,8 +238,8 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         &self.encoded_data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.encoded_fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.encoded_fill_value.as_ref()
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
@@ -345,7 +347,7 @@ mod tests {
         let options = CodecOptions::default();
         let codec = Arc::new(NumcodecsPackBitsCodec::new()).with_context(
             data_type::bool(),
-            FillValue::from(false),
+            Some(FillValue::from(false)),
             &CodecSpecificOptions::default(),
         )?;
         let shape = [NonZeroU64::new(4).unwrap()];
@@ -371,7 +373,7 @@ mod tests {
         assert!(codec.configuration_v3(&options).unwrap().is_empty());
         let bound = codec.with_context(
             data_type::bool(),
-            FillValue::from(false),
+            Some(FillValue::from(false)),
             &CodecSpecificOptions::default(),
         )?;
         assert_eq!(bound.encoded_data_type(), &data_type::uint8());
@@ -379,7 +381,7 @@ mod tests {
         for data_type in [data_type::uint8(), data_type::int16(), data_type::float32()] {
             let result = codec.with_context(
                 data_type.clone(),
-                FillValue::from(false),
+                Some(FillValue::from(false)),
                 &CodecSpecificOptions::default(),
             );
             assert!(matches!(
@@ -469,7 +471,7 @@ mod tests {
             assert!(codec.configuration_v2(&options).unwrap().is_empty());
             let bound = codec.with_context(
                 data_type::bool(),
-                FillValue::from(false),
+                Some(FillValue::from(false)),
                 &CodecSpecificOptions::default(),
             )?;
             assert_eq!(bound.encoded_data_type(), &data_type::uint8());
@@ -486,7 +488,7 @@ mod tests {
                 assert!(matches!(
                     codec.with_context(
                         data_type.clone(),
-                        FillValue::from(false),
+                        Some(FillValue::from(false)),
                         &CodecSpecificOptions::default(),
                     ),
                     Err(CodecCreateError::UnsupportedDataType(rejected, _)) if rejected == data_type
@@ -551,7 +553,7 @@ mod tests {
         };
         let codec = codec.with_context(
             data_type::bool(),
-            FillValue::from(false),
+            Some(FillValue::from(false)),
             &CodecSpecificOptions::default(),
         )?;
         let elements: Vec<bool> = (0..72).map(|i| i * 7 % 11 < 4).collect();
@@ -568,7 +570,7 @@ mod tests {
         let input_handle = Arc::new(BytesCodec::default())
             .with_context(
                 data_type::uint8(),
-                FillValue::from(0u8),
+                Some(FillValue::from(0u8)),
                 &CodecSpecificOptions::default(),
             )?
             .partial_decoder(input.clone(), &encoded_shape, &options)?;

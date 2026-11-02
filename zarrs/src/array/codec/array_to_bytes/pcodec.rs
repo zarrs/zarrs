@@ -158,7 +158,7 @@ mod tests {
 
         let codec = Arc::new(codec.clone()).with_context(
             data_type,
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )?;
         let max_encoded_size = codec.encoded_representation(chunk_shape.as_slice())?;
@@ -358,7 +358,11 @@ mod tests {
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
         )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec
@@ -402,7 +406,7 @@ mod tests {
         )
         .with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &CodecSpecificOptions::default(),
         )
         .unwrap();

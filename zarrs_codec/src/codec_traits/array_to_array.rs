@@ -82,12 +82,16 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// Binding eagerly validates and derives the encoded context.
     /// A codec may read its own options type from `codec_specific_options`, and must bind any codecs it contains with the same `codec_specific_options`.
     ///
+    /// A `fill_value` of [`None`] means the fill value is undefined (e.g. within the `data_codecs` of an `optional` codec with a `null` fill value).
+    /// A codec must then bind the codecs that follow it with an undefined fill value, rather than one derived from a placeholder.
+    ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
+    /// Codecs whose encoded representation depends on the fill value must return an error if it is undefined.
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError>;
 }
@@ -105,8 +109,8 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
     /// Return the encoded data type.
     fn encoded_data_type(&self) -> &DataType;
 
-    /// Return the encoded fill value.
-    fn encoded_fill_value(&self) -> &FillValue;
+    /// Return the encoded fill value, or [`None`] if it is undefined.
+    fn encoded_fill_value(&self) -> Option<&FillValue>;
 
     /// Returns the shape of the encoded chunk for a given decoded chunk shape.
     ///
@@ -170,7 +174,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
             input_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -190,7 +194,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
             input_output_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -211,7 +215,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
             input_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -232,7 +236,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
             input_output_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }

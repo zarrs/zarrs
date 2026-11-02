@@ -35,7 +35,7 @@ pub struct BytesCodec {
 struct BytesCodecBound {
     endian: Option<Endianness>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl Default for BytesCodec {
@@ -120,7 +120,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
@@ -181,8 +181,8 @@ impl ArrayCodecTraits for BytesCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(
@@ -266,7 +266,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             self.endian,
         )))
     }
@@ -281,7 +281,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             self.endian,
         )))
     }
@@ -297,7 +297,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             self.endian,
         )))
     }
@@ -313,7 +313,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             self.endian,
         )))
     }
@@ -337,7 +337,7 @@ mod tests {
         let codec = BytesCodec::default()
             .with_context(
                 data_type::uint16(),
-                FillValue::from(0u16),
+                Some(FillValue::from(0u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -366,14 +366,14 @@ mod tests {
         let options = CodecSpecificOptions::default();
         assert!(
             BytesCodec::new(None)
-                .with_context(data_type::uint8(), FillValue::from(0u8), &options)
+                .with_context(data_type::uint8(), Some(FillValue::from(0u8)), &options)
                 .unwrap()
                 .is_decode_passthrough(&shape)
                 .unwrap()
         );
         assert!(
             BytesCodec::new(Some(Endianness::native()))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
+                .with_context(data_type::uint16(), Some(FillValue::from(0u16)), &options)
                 .unwrap()
                 .is_decode_passthrough(&shape)
                 .unwrap()
@@ -385,7 +385,7 @@ mod tests {
         };
         assert!(
             !BytesCodec::new(Some(non_native))
-                .with_context(data_type::uint16(), FillValue::from(0u16), &options)
+                .with_context(data_type::uint16(), Some(FillValue::from(0u16)), &options)
                 .unwrap()
                 .is_decode_passthrough(&shape)
                 .unwrap()
@@ -394,7 +394,7 @@ mod tests {
             BytesCodec::new(None)
                 .with_context(
                     data_type::uint8().to_optional(),
-                    FillValue::from(0u8).into_optional(),
+                    Some(FillValue::from(0u8).into_optional()),
                     &options
                 )
                 .is_err()
@@ -403,7 +403,7 @@ mod tests {
             BytesCodec::new(None)
                 .with_context(
                     data_type::bytes(),
-                    FillValue::from(Vec::<u8>::new()),
+                    Some(FillValue::from(Vec::<u8>::new())),
                     &options
                 )
                 .is_err()

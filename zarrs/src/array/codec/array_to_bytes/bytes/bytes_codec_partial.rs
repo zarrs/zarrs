@@ -22,7 +22,7 @@ pub(crate) struct BytesCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     endian: Option<Endianness>,
 }
 
@@ -32,16 +32,26 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
-        fill_value: &FillValue,
+        fill_value: Option<&FillValue>,
         endian: Option<Endianness>,
     ) -> Self {
         Self {
             input_output_handle,
             shape: shape.to_vec(),
             data_type: data_type.clone(),
-            fill_value: fill_value.clone(),
+            fill_value: fill_value.cloned(),
             endian,
         }
+    }
+
+    /// Return the fill value.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UndefinedFillValue`] if the fill value is undefined.
+    fn fill_value(&self) -> Result<&FillValue, CodecError> {
+        self.fill_value
+            .as_ref()
+            .ok_or(CodecError::UndefinedFillValue)
     }
 
     /// Decode bytes, applying endianness conversion if required.
@@ -96,7 +106,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = decoded_len(&self.data_type, &self.shape)?;
         let chunk_bytes =
-            ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
+            ArrayBytes::new_fill_value(&self.data_type, num_elements, self.fill_value()?)?;
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         let chunk_bytes = update_array_bytes(
             chunk_bytes,
@@ -150,7 +160,7 @@ where
         let decoded = if let Some(decoded) = decoded {
             ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
         } else {
-            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
+            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), self.fill_value()?)?
         };
 
         Ok(decoded)
@@ -203,7 +213,7 @@ where
         let decoded = if let Some(decoded) = decoded {
             ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
         } else {
-            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
+            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), self.fill_value()?)?
         };
 
         Ok(decoded)

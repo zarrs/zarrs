@@ -135,7 +135,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let inner_bound =
@@ -153,7 +153,7 @@ impl ArrayCodecTraits for ZfpyCodecBound {
         self.inner.data_type()
     }
 
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.inner.fill_value()
     }
 

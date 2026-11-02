@@ -128,7 +128,7 @@ macro_rules! vlen_v2_codec {
             fn with_context(
                 &self,
                 data_type: crate::array::DataType,
-                fill_value: crate::array::FillValue,
+                fill_value: Option<crate::array::FillValue>,
                 codec_specific_options: &zarrs_codec::CodecSpecificOptions,
             ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
                 // NON-CONFORMANT: Other data types are read for backwards compatibility (zarrs prior to 0.24 created such arrays)
@@ -164,7 +164,7 @@ macro_rules! vlen_v2_codec {
                 self.inner.data_type()
             }
 
-            fn fill_value(&self) -> &crate::array::FillValue {
+            fn fill_value(&self) -> Option<&crate::array::FillValue> {
                 self.inner.fill_value()
             }
 

@@ -19,7 +19,7 @@ pub(crate) struct VlenPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     index_codecs: Arc<CodecChainBound>,
     data_codecs: Arc<CodecChainBound>,
     index_location: VlenIndexLocation,
@@ -32,7 +32,7 @@ impl VlenPartialDecoder {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         index_codecs: Arc<CodecChainBound>,
         data_codecs: Arc<CodecChainBound>,
         index_location: VlenIndexLocation,
@@ -57,7 +57,7 @@ fn decode_vlen_bytes<'a>(
     bytes: Option<CowBytes>,
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
-    fill_value: &FillValue,
+    fill_value: Option<&FillValue>,
     shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -77,6 +77,7 @@ fn decode_vlen_bytes<'a>(
         // Chunk is empty, all decoded regions are empty. The fill value does not touch the
         // indexer, so validate it here.
         indexer.validate(bytemuck::must_cast_slice(shape))?;
+        let fill_value = fill_value.ok_or(CodecError::UndefinedFillValue)?;
         ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
     }
 }
@@ -111,7 +112,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
             bytes,
             indexer,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             &self.shape,
             options,
         )
@@ -128,7 +129,7 @@ pub(crate) struct AsyncVlenPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     index_codecs: Arc<CodecChainBound>,
     data_codecs: Arc<CodecChainBound>,
     index_location: VlenIndexLocation,
@@ -142,7 +143,7 @@ impl AsyncVlenPartialDecoder {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         index_codecs: Arc<CodecChainBound>,
         data_codecs: Arc<CodecChainBound>,
         index_location: VlenIndexLocation,
@@ -192,7 +193,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
             bytes,
             indexer,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             &self.shape,
             options,
         )

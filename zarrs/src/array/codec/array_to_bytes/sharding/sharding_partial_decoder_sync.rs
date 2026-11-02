@@ -43,7 +43,7 @@ impl ShardingPartialDecoder {
     /// Create a new partial decoder for the sharding codec.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the shard index cannot be retrieved or decoded.
+    /// Returns a [`CodecError`] if the fill value of `inner_codecs` is undefined, or the shard index cannot be retrieved or decoded.
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
@@ -55,6 +55,10 @@ impl ShardingPartialDecoder {
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
+        // Subchunks consisting entirely of the fill value are omitted
+        inner_codecs
+            .fill_value()
+            .ok_or(CodecError::UndefinedFillValue)?;
         let shard_index = super::decode_shard_index_partial_decoder(
             &*input_handle,
             index_codecs,
@@ -306,7 +310,9 @@ fn partial_decode_fixed_array_subset_into(
     output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
-    let fill_value = inner_codecs.fill_value();
+    let fill_value = inner_codecs
+        .fill_value()
+        .ok_or(CodecError::UndefinedFillValue)?;
     if array_subset.len() != output_target.num_elements() {
         return Err(InvalidNumberOfElementsError::new(
             array_subset.len(),
@@ -399,7 +405,9 @@ fn partial_decode_merged_array_subset(
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let data_type = inner_codecs.data_type();
-    let fill_value = inner_codecs.fill_value();
+    let fill_value = inner_codecs
+        .fill_value()
+        .ok_or(CodecError::UndefinedFillValue)?;
     let Some(shard_index) = &shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
     };
@@ -477,7 +485,9 @@ fn partial_decode_indexer(
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let data_type = inner_codecs.data_type();
-    let fill_value = inner_codecs.fill_value();
+    let fill_value = inner_codecs
+        .fill_value()
+        .ok_or(CodecError::UndefinedFillValue)?;
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, indexer);
     };
@@ -529,7 +539,9 @@ fn partial_decode_fixed_indexer_into<'a>(
     options: &CodecOptions,
     output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
 ) -> Result<(), CodecError> {
-    let fill_value = inner_codecs.fill_value();
+    let fill_value = inner_codecs
+        .fill_value()
+        .ok_or(CodecError::UndefinedFillValue)?;
     let Some(shard_index) = shard_index else {
         return output_view
             .fill(fill_value.as_ne_bytes())

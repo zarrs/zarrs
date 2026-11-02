@@ -712,7 +712,7 @@ mod tests {
                 )?)
                 .with_context(
                     data_type.clone(),
-                    FillValue::new(vec![0; data_type_size]),
+                    Some(FillValue::new(vec![0; data_type_size])),
                     &CodecSpecificOptions::default(),
                 )?;
                 let layout = super::PackBitsLayout::new(
@@ -787,7 +787,7 @@ mod tests {
             assert!(codec.configuration_v2(&options).is_none());
             codec.with_context(
                 data_type::float32(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )?;
         }
@@ -807,7 +807,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -861,7 +861,11 @@ mod tests {
                 None,
                 None,
             )?)
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())?;
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )?;
             let encoded = codec.encode(
                 ArrayBytes::new_flen(bytes.clone()),
                 &shape,
@@ -909,7 +913,11 @@ mod tests {
 
         assert!(
             codec
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default()
+                )
                 .is_err()
         );
     }
@@ -919,7 +927,7 @@ mod tests {
     fn codec_packbits_rejects_overflowing_shape() -> Result<(), Box<dyn std::error::Error>> {
         let codec = Arc::new(super::PackBitsCodec::default()).with_context(
             data_type::uint4(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )?;
         let options = CodecOptions::default();
@@ -959,7 +967,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -987,7 +995,7 @@ mod tests {
             let decoded = Arc::new(BytesCodec::little())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?
                 .decode(
@@ -1066,7 +1074,7 @@ mod tests {
             let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
             let codec = PackBitsCodec::default().bind(
                 data_type.clone(),
-                fill_value,
+                Some(fill_value),
                 PackBitsBitOrder::LsbFirst,
             )?;
             assert!(!codec.convert_bytes, "{data_type}");
@@ -1092,7 +1100,7 @@ mod tests {
             let codec =
                 PackBitsCodec::new(PackBitsPaddingEncoding::FirstByte, first_bit, last_bit)?.bind(
                     data_type.clone(),
-                    FillValue::from(0i16),
+                    Some(FillValue::from(0i16)),
                     PackBitsBitOrder::LsbFirst,
                 )?;
             // Convert to the other byte order, so that bytes are swapped on any host
@@ -1149,7 +1157,7 @@ mod tests {
             ] {
                 let codec = Arc::new(PackBitsCodec::new(encoding, None, None)?).with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
                 let encoded = codec
@@ -1231,7 +1239,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None)?).with_context(
                 data_type.clone(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )?;
             let encoded = codec.encode(
@@ -1276,7 +1284,7 @@ mod tests {
                     )
                     .with_context(
                         data_type.clone(),
-                        fill_value.clone(),
+                        Some(fill_value.clone()),
                         &CodecSpecificOptions::default(),
                     )?;
                     let elements: Vec<i16> = (-20..20).map(|i| (i as i16) << first_bit).collect();
@@ -1329,7 +1337,7 @@ mod tests {
         )
         .with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &CodecSpecificOptions::default(),
         )?;
         let elements: Vec<i8> = (-8..8).map(|i| i << 2).collect();
@@ -1367,7 +1375,7 @@ mod tests {
             )
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )?;
             let max = 1i16 << last_bit;
@@ -1407,7 +1415,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1440,7 +1448,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1473,7 +1481,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1518,7 +1526,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1563,7 +1571,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1595,7 +1603,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 
@@ -1627,7 +1635,7 @@ mod tests {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap())
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )?;
 

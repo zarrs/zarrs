@@ -25,12 +25,16 @@ use zarrs_storage::{OffsetBytesIterator, StorageError};
 pub(super) struct ArrayDecodedRepresentation {
     shape: ChunkShape,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl ArrayDecodedRepresentation {
     /// Create a new array decoded representation.
-    pub(super) fn new(shape: ChunkShape, data_type: DataType, fill_value: FillValue) -> Self {
+    pub(super) fn new(
+        shape: ChunkShape,
+        data_type: DataType,
+        fill_value: Option<FillValue>,
+    ) -> Self {
         Self {
             shape,
             data_type,
@@ -54,8 +58,24 @@ impl ArrayDecodedRepresentation {
     }
 
     /// Return the fill value.
-    pub(super) fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    ///
+    /// # Errors
+    /// Returns [`CodecError::UndefinedFillValue`] if the fill value is undefined.
+    pub(super) fn fill_value(&self) -> Result<&FillValue, CodecError> {
+        self.fill_value
+            .as_ref()
+            .ok_or(CodecError::UndefinedFillValue)
+    }
+
+    /// Returns true if `bytes` is entirely the fill value and the chunk can be omitted.
+    ///
+    /// Always false if the fill value is undefined.
+    pub(super) fn is_omittable(&self, bytes: &ArrayBytes<'_>, options: &CodecOptions) -> bool {
+        !options.store_empty_chunks()
+            && self
+                .fill_value
+                .as_ref()
+                .is_some_and(|fill_value| bytes.is_fill_value(fill_value))
     }
 
     /// Return the number of elements.
@@ -94,7 +114,7 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, C>
         input_output_handle: Arc<T>,
         shape: ChunkShape,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec: Arc<C>,
     ) -> Self {
         Self {
@@ -231,8 +251,9 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        let is_fill_value = !options.store_empty_chunks()
-            && decoded_value.is_fill_value(self.decoded_representation.fill_value());
+        let is_fill_value = self
+            .decoded_representation
+            .is_omittable(&decoded_value, options);
         if is_fill_value {
             self.input_output_handle.erase()
         } else {
@@ -303,7 +324,7 @@ where
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),
-                self.decoded_representation.fill_value(),
+                self.decoded_representation.fill_value()?,
             )
             .map_err(CodecError::from)
         }
@@ -341,7 +362,7 @@ where
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value(),
+                self.decoded_representation.fill_value()?,
             )?
         };
 
@@ -362,8 +383,9 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        let is_fill_value = !options.store_empty_chunks()
-            && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
+        let is_fill_value = self
+            .decoded_representation
+            .is_omittable(&chunk_bytes, options);
         if is_fill_value {
             self.input_output_handle.erase()
         } else {
@@ -592,8 +614,9 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        let is_fill_value = !options.store_empty_chunks()
-            && decoded_value.is_fill_value(self.decoded_representation.fill_value());
+        let is_fill_value = self
+            .decoded_representation
+            .is_omittable(&decoded_value, options);
         if is_fill_value {
             self.input_output_handle.erase().await
         } else {
@@ -661,7 +684,7 @@ where
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 indexer.len(),
-                self.decoded_representation.fill_value(),
+                self.decoded_representation.fill_value()?,
             )
             .map_err(CodecError::from)
         }
@@ -702,7 +725,7 @@ where
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value(),
+                self.decoded_representation.fill_value()?,
             )?
         };
 
@@ -723,8 +746,9 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        let is_fill_value = !options.store_empty_chunks()
-            && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
+        let is_fill_value = self
+            .decoded_representation
+            .is_omittable(&chunk_bytes, options);
         if is_fill_value {
             self.input_output_handle.erase().await
         } else {

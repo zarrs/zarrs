@@ -219,6 +219,7 @@ pub struct ShardingCodec {
 pub struct ShardingCodecBound {
     pub(crate) subchunk_shape: ChunkShape,
     pub(crate) inner_codecs: Arc<CodecChainBound>,
+    pub(crate) fill_value: FillValue,
     pub(crate) index_codecs: Arc<CodecChainBound>,
     pub(crate) index_location: ShardingIndexLocation,
     pub(crate) options: ShardingCodecOptions,
@@ -332,15 +333,23 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        let inner_codecs =
-            self.inner_codecs
-                .with_context(data_type, fill_value, codec_specific_options)?;
+        // Subchunks consisting entirely of the fill value are omitted
+        let fill_value = fill_value.ok_or_else(|| {
+            CodecCreateError::Other(
+                "the sharding_indexed codec requires a defined fill value, so it is not supported in the data_codecs of an optional codec with a null fill value".to_string(),
+            )
+        })?;
+        let inner_codecs = self.inner_codecs.with_context(
+            data_type,
+            Some(fill_value.clone()),
+            codec_specific_options,
+        )?;
         let index_codecs = self.index_codecs.with_context(
             crate::array::data_type::uint64(),
-            FillValue::from(u64::MAX),
+            Some(FillValue::from(u64::MAX)),
             codec_specific_options,
         )?;
         let options = codec_specific_options
@@ -350,6 +359,7 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
         Ok(Arc::new(ShardingCodecBound {
             subchunk_shape: self.subchunk_shape.clone(),
             inner_codecs,
+            fill_value,
             index_codecs,
             index_location: self.index_location,
             options,
@@ -369,8 +379,8 @@ impl ArrayCodecTraits for ShardingCodecBound {
         self.inner_codecs.data_type()
     }
 
-    fn fill_value(&self) -> &FillValue {
-        self.inner_codecs.fill_value()
+    fn fill_value(&self) -> Option<&FillValue> {
+        Some(&self.fill_value)
     }
 
     fn recommended_concurrency(
@@ -455,7 +465,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let data_type = self.data_type();
-        let fill_value = self.fill_value();
+        let fill_value = &self.fill_value;
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
 
         // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
@@ -638,7 +648,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let data_type = self.data_type();
-        let fill_value = self.fill_value();
+        let fill_value = &self.fill_value;
 
         // Optional data is decoded into views of its inner data and each validity mask
         let (output_view, mask_views) = extract_target_views(&output_target);
@@ -884,7 +894,7 @@ impl ShardingCodecBound {
         options_inner: &CodecOptions,
     ) -> Option<Result<(usize, Bytes), CodecError>> {
         let data_type = self.inner_codecs.data_type();
-        let fill_value = self.inner_codecs.fill_value();
+        let fill_value = &self.fill_value;
         let chunk_subset = subchunk_subset(subchunk_grid, chunk_index);
 
         let bytes = decoded_value.extract_array_subset(

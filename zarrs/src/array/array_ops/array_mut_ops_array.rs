@@ -22,9 +22,11 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         &mut self,
         opts: &CodecSpecificOptions,
     ) -> Result<&mut Self, CodecCreateError> {
-        let codecs_bound =
-            self.codecs
-                .with_context(self.data_type.clone(), self.fill_value.clone(), opts)?;
+        let codecs_bound = self.codecs.with_context(
+            self.data_type.clone(),
+            Some(self.fill_value.clone()),
+            opts,
+        )?;
         let subchunk_grids = codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())
             .map_err(|err| CodecCreateError::from(err.to_string()))?;

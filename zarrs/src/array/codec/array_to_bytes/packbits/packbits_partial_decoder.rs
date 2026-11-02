@@ -123,6 +123,7 @@ fn partial_decode<'a>(
     let encoded_bytes = retrieve_packed(input_handle, &bit_ranges, packed_start, options)?;
 
     let Some(encoded_bytes) = encoded_bytes else {
+        let fill_value = fill_value.as_ref().ok_or(CodecError::UndefinedFillValue)?;
         return Ok(ArrayBytes::new_fill_value(
             data_type,
             indexer.len(),

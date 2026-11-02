@@ -140,7 +140,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     .build_arc()
     .with_context(
         data_type.clone(),
-        FillValue::new_optional_null(),
+        Some(FillValue::new_optional_null()),
         &CodecSpecificOptions::default(),
     )?;
     let options = CodecOptions::default();

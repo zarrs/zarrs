@@ -18,7 +18,7 @@ pub(crate) struct VlenV2PartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl VlenV2PartialDecoder {
@@ -27,7 +27,7 @@ impl VlenV2PartialDecoder {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
     ) -> Self {
         Self {
             input_handle,
@@ -42,7 +42,7 @@ fn decode_vlen_bytes<'a>(
     bytes: Option<CowBytes>,
     indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
-    fill_value: &FillValue,
+    fill_value: Option<&FillValue>,
     shape: &[NonZeroU64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
@@ -56,6 +56,7 @@ fn decode_vlen_bytes<'a>(
         // Chunk is empty, all decoded regions are empty. The fill value does not touch the
         // indexer, so validate it here.
         indexer.validate(bytemuck::must_cast_slice(shape))?;
+        let fill_value = fill_value.ok_or(CodecError::UndefinedFillValue)?;
         ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
     }
 }
@@ -87,7 +88,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
             bytes,
             indexer,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             &self.shape,
         )
     }
@@ -103,7 +104,7 @@ pub(crate) struct AsyncVlenV2PartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 #[cfg(feature = "async")]
@@ -113,7 +114,7 @@ impl AsyncVlenV2PartialDecoder {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
     ) -> Self {
         Self {
             input_handle,
@@ -154,7 +155,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
             bytes,
             indexer,
             &self.data_type,
-            &self.fill_value,
+            self.fill_value.as_ref(),
             &self.shape,
         )
     }
