@@ -438,6 +438,11 @@ where
         self.input_output_handle.erase()
     }
 
+    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options)?;
+        self.input_output_handle.encode(bytes_encoded, options)
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -807,6 +812,13 @@ where
 {
     async fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase().await
+    }
+
+    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options)?;
+        self.input_output_handle
+            .encode(bytes_encoded, options)
+            .await
     }
 
     async fn partial_encode_many<'a>(

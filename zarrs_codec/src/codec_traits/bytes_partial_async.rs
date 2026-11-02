@@ -86,6 +86,14 @@ pub trait AsyncBytesPartialEncoderTraits:
     /// Returns an error if there is an underlying store error.
     async fn erase(&self) -> Result<(), CodecError>;
 
+    /// Encode the entire chunk, replacing any existing chunk.
+    ///
+    /// Unlike [`erase`](Self::erase) followed by [`partial_encode`](Self::partial_encode) at offset 0, this leaves no bytes of the existing chunk beyond `bytes`, and does not remove the existing chunk if it fails before writing.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or there is an underlying store error.
+    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError>;
+
     /// Partially encode a chunk.
     ///
     /// # Errors
@@ -218,6 +226,10 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
 {
     async fn erase(&self) -> Result<(), CodecError> {
         Ok(self.0.erase(&self.1).await?)
+    }
+
+    async fn encode(&self, bytes: CowBytes<'_>, _options: &CodecOptions) -> Result<(), CodecError> {
+        Ok(self.0.set(&self.1, bytes).await?)
     }
 
     async fn partial_encode_many<'a>(

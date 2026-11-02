@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 
 ### Changed
+- **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
 - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
 - Extract subset elements without boxed contiguous-run iterators

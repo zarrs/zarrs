@@ -36,6 +36,16 @@ impl<T: ?Sized> NumcodecsPackBitsPartial<T> {
         Ok(ArraySubset::new_with_ranges(&[range]))
     }
 
+    /// The subset of the entire packed `uint8` array, validating that `bytes` fill it.
+    fn subset_all(&self, bytes: &CowBytes<'_>) -> Result<ArraySubset, CodecError> {
+        let expected_len = usize::try_from(self.encoded_size)
+            .map_err(|_| CodecError::from("the packed chunk size overflows usize"))?;
+        if bytes.len() != expected_len {
+            return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
+        }
+        Ok(ArraySubset::new_with_ranges(&[0..self.encoded_size]))
+    }
+
     /// The subsets of the packed `uint8` array with `ranges`, which are retrieved together.
     fn subsets(&self, ranges: ByteRangeIterator) -> Result<Vec<ArraySubset>, CodecError> {
         ranges.map(|range| self.subset(range)).collect()
@@ -108,6 +118,13 @@ impl<T: ArrayPartialEncoderTraits + ?Sized> BytesPartialEncoderTraits
         self.input_handle.erase()
     }
 
+    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        // The whole-chunk subset replaces every element, so the existing chunk is not read
+        let subset = self.subset_all(&bytes)?;
+        self.input_handle
+            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -178,6 +195,14 @@ impl<T: AsyncArrayPartialEncoderTraits + ?Sized> AsyncBytesPartialEncoderTraits
 {
     async fn erase(&self) -> Result<(), CodecError> {
         self.input_handle.erase().await
+    }
+
+    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        // The whole-chunk subset replaces every element, so the existing chunk is not read
+        let subset = self.subset_all(&bytes)?;
+        self.input_handle
+            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)
+            .await
     }
 
     async fn partial_encode_many<'a>(

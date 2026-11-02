@@ -78,6 +78,14 @@ pub trait BytesPartialEncoderTraits:
     /// Returns an error if there is an underlying store error.
     fn erase(&self) -> Result<(), CodecError>;
 
+    /// Encode the entire chunk, replacing any existing chunk.
+    ///
+    /// Unlike [`erase`](Self::erase) followed by [`partial_encode`](Self::partial_encode) at offset 0, this leaves no bytes of the existing chunk beyond `bytes`, and does not remove the existing chunk if it fails before writing.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or there is an underlying store error.
+    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError>;
+
     /// Partially encode a chunk.
     ///
     /// # Errors
@@ -199,6 +207,11 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
         Ok(())
     }
 
+    fn encode(&self, bytes: CowBytes<'_>, _options: &CodecOptions) -> Result<(), CodecError> {
+        *self.lock().unwrap() = Some(bytes.into_vec());
+        Ok(())
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -261,6 +274,10 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
         Ok(self.0.erase(&self.1)?)
     }
 
+    fn encode(&self, bytes: CowBytes<'_>, _options: &CodecOptions) -> Result<(), CodecError> {
+        Ok(self.0.set(&self.1, bytes)?)
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -280,6 +297,45 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `encode` replaces a longer existing chunk entirely, leaving none of its bytes.
+    #[test]
+    fn mutex_option_vec_encode_replaces() {
+        let encoder = Mutex::new(Some((0u8..10).collect::<Vec<u8>>()));
+        let options = CodecOptions::default();
+        encoder
+            .encode(CowBytes::from(vec![7, 8]), &options)
+            .unwrap();
+        assert_eq!(*encoder.lock().unwrap(), Some(vec![7, 8]));
+
+        // Unlike a partial encode at offset 0, which keeps the tail
+        encoder
+            .encode(CowBytes::from(vec![1, 2, 3]), &options)
+            .unwrap();
+        encoder
+            .partial_encode(0, CowBytes::from(vec![9]), &options)
+            .unwrap();
+        assert_eq!(*encoder.lock().unwrap(), Some(vec![9, 2, 3]));
+    }
+
+    /// `encode` replaces a longer existing value in storage with a single `set`.
+    #[test]
+    fn storage_encode_replaces() {
+        use std::sync::Arc;
+        use zarrs_storage::WritableStorageTraits;
+        use zarrs_storage::store::MemoryStore;
+
+        let store = Arc::new(MemoryStore::new());
+        let key = StoreKey::new("c").unwrap();
+        store
+            .set(&key, CowBytes::from((0u8..10).collect::<Vec<u8>>()))
+            .unwrap();
+        let encoder = (store.clone(), key.clone());
+        encoder
+            .encode(CowBytes::from(vec![7, 8]), &CodecOptions::default())
+            .unwrap();
+        assert_eq!(store.get(&key).unwrap().unwrap(), [7, 8].as_slice());
+    }
 
     #[test]
     fn mutex_option_vec_partial_decode() {
