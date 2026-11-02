@@ -63,6 +63,7 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
         self.bytes_written.store(0, Ordering::Relaxed);
         self.reads.store(0, Ordering::Relaxed);
         self.writes.store(0, Ordering::Relaxed);
+        self.keys_erased.store(0, Ordering::Relaxed);
     }
 
     /// Returns the number of bytes read.
@@ -379,6 +380,10 @@ mod tests {
         assert!(store.keys_erased() >= 4);
         store.reset();
         assert_eq!(store.bytes_read(), 0);
+        assert_eq!(store.bytes_written(), 0);
+        assert_eq!(store.reads(), 0);
+        assert_eq!(store.writes(), 0);
+        assert_eq!(store.keys_erased(), 0);
     }
 
     #[cfg(feature = "async")]
