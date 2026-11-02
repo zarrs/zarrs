@@ -466,10 +466,9 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
+        // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
         let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
-
-        self.input_output_handle
-            .partial_encode(0, bytes_encoded, options)
+        self.input_output_handle.encode(bytes_encoded, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -844,10 +843,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
+        // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
         let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
-
         self.input_output_handle
-            .partial_encode(0, bytes_encoded, options)
+            .encode(bytes_encoded, options)
             .await
     }
 
