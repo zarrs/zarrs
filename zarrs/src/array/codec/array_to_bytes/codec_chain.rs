@@ -27,7 +27,7 @@ use zarrs_codec::{
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 
-type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
+type ArrayRepresentations = Vec<(ChunkShape, DataType)>;
 type BytesRepresentations = Vec<BytesRepresentation>;
 
 fn cumulative_boundaries(edge_lengths: &[NonZeroU64]) -> Vec<u64> {
@@ -309,17 +309,12 @@ impl CodecChainBound {
         shape: &[NonZeroU64],
     ) -> Result<ArrayRepresentations, CodecError> {
         let mut array_representations = Vec::with_capacity(self.array_to_array.len() + 1);
-        array_representations.push((
-            shape.to_vec(),
-            self.data_type().clone(),
-            self.fill_value().clone(),
-        ));
+        array_representations.push((shape.to_vec(), self.data_type().clone()));
         for codec in &self.array_to_array {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
+            let (shape, _data_type) = array_representations.last().unwrap();
             array_representations.push((
                 codec.encoded_shape(shape)?,
                 codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
             ));
         }
         Ok(array_representations)
@@ -575,14 +570,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 .decode(bytes, &array_representations.last().unwrap().0, options)?;
 
         // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
             bytes = codec.decode(bytes, shape, options)?;
         }
 
-        let (shape, data_type, _) = array_representations.first().unwrap();
+        let (shape, data_type) = array_representations.first().unwrap();
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
 
         Ok(bytes)
@@ -631,14 +626,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 .decode(bytes, &array_representations.last().unwrap().0, options)?;
 
         // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
             bytes = codec.decode(bytes, shape, options)?;
         }
 
-        let (shape, data_type, _) = array_representations.first().unwrap();
+        let (shape, data_type) = array_representations.first().unwrap();
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
 
         decode_into_array_bytes_target(&bytes, output_target)
@@ -705,7 +700,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         let mut input_handle = {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
+            let (shape, _data_type) = array_representations.last().unwrap();
             codec_index += 1;
             self.array_to_bytes
                 .clone()
@@ -716,7 +711,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             self.array_to_array.iter().rev(),
             array_representations.windows(2).rev(),
         ) {
-            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
+            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
                 unreachable!()
             };
             if Some(codec_index) == self.cache_index {
@@ -735,7 +730,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         if Some(codec_index) == self.cache_index {
-            let (shape, data_type, _fill_value) = array_representations.first().unwrap();
+            let (shape, data_type) = array_representations.first().unwrap();
             input_handle = Arc::new(ArrayPartialDecoderCache::new(
                 &*input_handle,
                 shape.clone(),
@@ -772,7 +767,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             options,
         )?;
 
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
@@ -815,7 +810,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         let mut input_handle = {
-            let (shape, _data_type, _fill_value) = array_representations.last().unwrap();
+            let (shape, _data_type) = array_representations.last().unwrap();
             codec_index += 1;
             self.array_to_bytes
                 .clone()
@@ -827,7 +822,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             self.array_to_array.iter().rev(),
             array_representations.windows(2).rev(),
         ) {
-            let [(shape, _, _), (encoded_shape, encoded_data_type, _)] = representations else {
+            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
                 unreachable!()
             };
             if Some(codec_index) == self.cache_index {
@@ -850,7 +845,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         }
 
         if Some(codec_index) == self.cache_index {
-            let (shape, data_type, _fill_value) = array_representations.first().unwrap();
+            let (shape, data_type) = array_representations.first().unwrap();
             input_handle = Arc::new(
                 ArrayPartialDecoderCache::async_new(
                     &*input_handle,
@@ -894,7 +889,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             )
             .await?;
 
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
@@ -972,7 +967,7 @@ impl ArrayCodecTraits for CodecChainBound {
         concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
 
         // array->array
-        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
