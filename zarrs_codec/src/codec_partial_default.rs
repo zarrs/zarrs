@@ -231,15 +231,12 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
         let is_fill_value = !options.store_empty_chunks()
             && decoded_value.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase()
         } else {
-            // Store the updated chunk
+            // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
             let encoded_value =
                 self.codec
                     .encode(decoded_value, self.decoded_representation.shape(), options)?;
@@ -365,20 +362,16 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
         let is_fill_value = !options.store_empty_chunks()
             && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase()
         } else {
-            // Store the updated chunk
+            // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
             let chunk_bytes =
                 self.codec
                     .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
+            self.input_output_handle.encode(chunk_bytes, options)
         }
     }
 
@@ -599,15 +592,12 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase().await?;
-
         let is_fill_value = !options.store_empty_chunks()
             && decoded_value.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase().await
         } else {
-            // Store the updated chunk
+            // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
             let encoded_value =
                 self.codec
                     .encode(decoded_value, self.decoded_representation.shape(), options)?;
@@ -733,21 +723,16 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase().await?;
-
         let is_fill_value = !options.store_empty_chunks()
             && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase().await
         } else {
-            // Store the updated chunk
+            // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
             let chunk_bytes =
                 self.codec
                     .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
-                .await
+            self.input_output_handle.encode(chunk_bytes, options).await
         }
     }
 

@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
 - The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter
   - The existing chunk is also read once rather than once per stacked bytes-to-bytes codec
+- The default array-to-array and array-to-bytes partial encoders replace an existing chunk rather than erasing it first, so a failed encode or write leaves it intact
 
 ## [0.2.1] - 2026-03-21
 
