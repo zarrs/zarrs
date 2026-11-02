@@ -879,7 +879,7 @@ mod tests {
         let data_type: DataType = data_type::uint8().to_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         // Use a non-null fill value of 255 for missing elements
-        let fill_value = FillValue::new(vec![255u8]);
+        let fill_value = FillValue::from(Some(255u8));
 
         // Create test data:
         // Element 0: Some(10)  - valid=1, data=10
