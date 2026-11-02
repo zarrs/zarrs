@@ -360,35 +360,54 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
             }
 
             if rewrite {
-                self.input_output_handle.erase().await?;
-            }
-
-            // Write the encoded index and updated subchunks
-            match self.index_location {
-                ShardingIndexLocation::Start => {
-                    self.input_output_handle
-                        .partial_encode_many(
-                            Box::new(
-                                [
-                                    (0, encoded_array_index),
-                                    (offset_new_chunks, CowBytes::from(encoded_output)),
-                                ]
-                                .into_iter(),
-                            ),
-                            options,
-                        )
-                        .await?;
-                }
-                ShardingIndexLocation::End => {
-                    encoded_output.extend_from_slice(&encoded_array_index);
-                    self.input_output_handle
-                        .partial_encode_many(
-                            Box::new(
-                                [(offset_new_chunks, CowBytes::from(encoded_output))].into_iter(),
-                            ),
-                            options,
-                        )
-                        .await?;
+                // Replace the shard rather than erasing it first, so a failure leaves it intact
+                let shard = match self.index_location {
+                    ShardingIndexLocation::Start => {
+                        debug_assert_eq!(offset_new_chunks, encoded_array_index.len() as u64);
+                        let mut shard =
+                            Vec::with_capacity(encoded_array_index.len() + encoded_output.len());
+                        shard.extend_from_slice(&encoded_array_index);
+                        shard.extend_from_slice(&encoded_output);
+                        shard
+                    }
+                    ShardingIndexLocation::End => {
+                        debug_assert_eq!(offset_new_chunks, 0);
+                        encoded_output.extend_from_slice(&encoded_array_index);
+                        encoded_output
+                    }
+                };
+                self.input_output_handle
+                    .encode(CowBytes::from(shard), options)
+                    .await?;
+            } else {
+                // Write the encoded index and updated subchunks
+                match self.index_location {
+                    ShardingIndexLocation::Start => {
+                        self.input_output_handle
+                            .partial_encode_many(
+                                Box::new(
+                                    [
+                                        (0, encoded_array_index),
+                                        (offset_new_chunks, CowBytes::from(encoded_output)),
+                                    ]
+                                    .into_iter(),
+                                ),
+                                options,
+                            )
+                            .await?;
+                    }
+                    ShardingIndexLocation::End => {
+                        encoded_output.extend_from_slice(&encoded_array_index);
+                        self.input_output_handle
+                            .partial_encode_many(
+                                Box::new(
+                                    [(offset_new_chunks, CowBytes::from(encoded_output))]
+                                        .into_iter(),
+                                ),
+                                options,
+                            )
+                            .await?;
+                    }
                 }
             }
         }

@@ -20,7 +20,6 @@ use zarrs::storage::{
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
-#[cfg(all(feature = "zstd", feature = "crc32c"))]
 const BYTES: &str = r#"{"name": "bytes", "configuration": {"endian": "little"}}"#;
 #[cfg(feature = "zstd")]
 const ZSTD: &str = r#"{"name": "zstd", "configuration": {"level": 1, "checksum": false}}"#;
@@ -201,6 +200,8 @@ struct FailedWriteCase {
     existing: ArrayBytes<'static>,
     subset: ArraySubset,
     update: ArrayBytes<'static>,
+    /// `existing` updated with `update`.
+    updated: ArrayBytes<'static>,
 }
 
 impl FailedWriteCase {
@@ -234,6 +235,7 @@ fn failed_write_cases() -> Vec<FailedWriteCase> {
         existing: string_bytes(&["a", "bb", "ccc", "dddd"]),
         subset: ArraySubset::new_with_ranges(&[1..3]),
         update: string_bytes(&["x", "y"]),
+        updated: string_bytes(&["a", "x", "y", "dddd"]),
     }];
     cases.push(FailedWriteCase {
         // The default array-to-array partial encoder
@@ -250,7 +252,23 @@ fn failed_write_cases() -> Vec<FailedWriteCase> {
         existing: f32_bytes(&[1.0, 2.0, 3.0, 4.0]),
         subset: ArraySubset::new_with_ranges(&[1..3]),
         update: f32_bytes(&[5.0, 6.0]),
+        updated: f32_bytes(&[1.0, 5.0, 6.0, 4.0]),
     });
+    // The sharding partial encoder rewrites a shard if the update replaces every subchunk in it
+    for (name, index_location) in [("sharding-start", "start"), ("sharding-end", "end")] {
+        let sharding = format!(
+            r#"{{"name": "sharding_indexed", "configuration": {{"chunk_shape": [4], "codecs": [{BYTES}], "index_codecs": [{BYTES}], "index_location": "{index_location}"}}}}"#
+        );
+        cases.push(FailedWriteCase {
+            name,
+            codec: bind(&[&sharding], data_type::uint8(), FillValue::from(0u8)),
+            shape: vec![NonZeroU64::new(8).unwrap()],
+            existing: ArrayBytes::from((1u8..=8).collect::<Vec<u8>>()),
+            subset: ArraySubset::new_with_ranges(&[2..6]),
+            update: ArrayBytes::from(vec![9u8; 4]),
+            updated: ArrayBytes::from(vec![1u8, 2, 9, 9, 9, 9, 7, 8]),
+        });
+    }
     cases
 }
 
@@ -271,31 +289,39 @@ fn failed_partial_encode_keeps_existing_chunk() {
         let name = case.name;
         let store = Arc::new(FailingWritesStorage::new(Arc::new(MemoryStore::new())));
         let key = StoreKey::new("c").unwrap();
-        let encoded = case
+        let existing_encoded = case
             .codec
             .encode(case.existing.clone(), &case.shape, &options)
             .unwrap();
-        store.set(&key, encoded).unwrap();
+        store.set(&key, existing_encoded).unwrap();
         let handle = Arc::new((store.clone(), key));
 
-        store.fail_writes(true);
-        let result = case
+        let decode = || {
+            case.codec
+                .clone()
+                .partial_decoder(handle.clone(), &case.shape, &options)
+                .unwrap()
+                .partial_decode(&case.whole(), &options)
+                .unwrap()
+                .into_owned()
+        };
+        let encoder = case
             .codec
             .clone()
             .partial_encoder(handle.clone(), &case.shape, &options)
-            .and_then(|encoder| encoder.partial_encode(&case.subset, &case.update, &options));
+            .unwrap();
+
+        store.fail_writes(true);
+        let result = encoder.partial_encode(&case.subset, &case.update, &options);
         assert!(result.is_err(), "{name}");
         store.fail_writes(false);
+        assert_eq!(decode(), case.existing, "{name}");
 
-        let decoded = case
-            .codec
-            .clone()
-            .partial_decoder(handle, &case.shape, &options)
-            .unwrap()
-            .partial_decode(&case.whole(), &options)
-            .unwrap()
-            .into_owned();
-        assert_eq!(decoded, case.existing, "{name}");
+        // The encoder remains usable, e.g. a cached shard index still matches the stored shard
+        encoder
+            .partial_encode(&case.subset, &case.update, &options)
+            .unwrap();
+        assert_eq!(decode(), case.updated, "{name}");
     }
 }
 
@@ -384,37 +410,45 @@ mod r#async {
                 TokioSpawnBlocking,
             ));
             let key = StoreKey::new("c").unwrap();
-            let encoded = case
+            let existing_encoded = case
                 .codec
                 .encode(case.existing.clone(), &case.shape, &options)
                 .unwrap();
-            store.set(&key, encoded).await.unwrap();
+            store.set(&key, existing_encoded).await.unwrap();
             let handle = Arc::new((store.clone(), key));
 
-            failing.fail_writes(true);
-            let result = async {
+            let decode = async || {
                 case.codec
                     .clone()
-                    .async_partial_encoder(handle.clone(), &case.shape, &options)
-                    .await?
-                    .partial_encode(&case.subset, &case.update, &options)
+                    .async_partial_decoder(handle.clone(), &case.shape, &options)
                     .await
-            }
-            .await;
-            assert!(result.is_err(), "{name}");
-            failing.fail_writes(false);
-
-            let decoded = case
+                    .unwrap()
+                    .partial_decode(&case.whole(), &options)
+                    .await
+                    .unwrap()
+                    .into_owned()
+            };
+            let encoder = case
                 .codec
                 .clone()
-                .async_partial_decoder(handle, &case.shape, &options)
+                .async_partial_encoder(handle.clone(), &case.shape, &options)
                 .await
-                .unwrap()
-                .partial_decode(&case.whole(), &options)
+                .unwrap();
+
+            failing.fail_writes(true);
+            let result = encoder
+                .partial_encode(&case.subset, &case.update, &options)
+                .await;
+            assert!(result.is_err(), "{name}");
+            failing.fail_writes(false);
+            assert_eq!(decode().await, case.existing, "{name}");
+
+            // The encoder remains usable, e.g. a cached shard index still matches the stored shard
+            encoder
+                .partial_encode(&case.subset, &case.update, &options)
                 .await
-                .unwrap()
-                .into_owned();
-            assert_eq!(decoded, case.existing, "{name}");
+                .unwrap();
+            assert_eq!(decode().await, case.updated, "{name}");
         }
     }
 }
