@@ -78,6 +78,11 @@ impl ArrayDecodedRepresentation {
                 .is_some_and(|fill_value| bytes.is_fill_value(fill_value))
     }
 
+    /// Returns true if `indexer` covers the entire chunk, so a write through it replaces every element.
+    pub(super) fn is_whole(&self, indexer: &dyn Indexer) -> bool {
+        indexer.covers_array(self.shape_u64())
+    }
+
     /// Return the number of elements.
     pub(super) fn num_elements(&self) -> u64 {
         self.shape.iter().map(|d| d.get()).product()
@@ -225,31 +230,36 @@ where
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
         let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
-        let encoded_value = self
-            .input_output_handle
-            .partial_decode(&array_subset_all, options)?;
-        let mut decoded_value =
-            self.codec
-                .decode(encoded_value, self.decoded_representation.shape(), options)?;
-
-        // Validate the bytes
-        decoded_value.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
-        decoded_value = update_array_bytes(
-            decoded_value,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
+        let decoded_value = if self.decoded_representation.is_whole(indexer) {
+            // The entire chunk is replaced, so the existing chunk is not read
+            bytes.clone()
+        } else {
+            // Read the entire chunk
+            let encoded_value = self
+                .input_output_handle
+                .partial_decode(&array_subset_all, options)?;
+            let decoded_value =
+                self.codec
+                    .decode(encoded_value, self.decoded_representation.shape(), options)?;
+
+            // Validate the bytes
+            decoded_value.validate(
+                self.decoded_representation.num_elements(),
+                self.decoded_representation.data_type(),
+            )?;
+
+            update_array_bytes(
+                decoded_value,
+                chunk_shape,
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?
+        };
 
         let is_fill_value = self
             .decoded_representation
@@ -350,38 +360,43 @@ where
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let chunk_bytes = self.input_output_handle.decode(options)?;
-
-        // Handle a missing chunk
-        let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec
-                .decode(chunk_bytes, self.decoded_representation.shape(), options)?
-        } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value()?,
-            )?
-        };
-
-        // Validate the bytes
-        chunk_bytes.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
-        // Update the chunk
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
-        chunk_bytes = update_array_bytes(
-            chunk_bytes,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
+        let chunk_bytes = if self.decoded_representation.is_whole(indexer) {
+            // The entire chunk is replaced, so the existing chunk is not read
+            bytes.clone()
+        } else {
+            // Read the entire chunk
+            let chunk_bytes = self.input_output_handle.decode(options)?;
+
+            // Handle a missing chunk
+            let chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
+                self.codec
+                    .decode(chunk_bytes, self.decoded_representation.shape(), options)?
+            } else {
+                ArrayBytes::new_fill_value(
+                    self.decoded_representation.data_type(),
+                    self.decoded_representation.num_elements(),
+                    self.decoded_representation.fill_value()?,
+                )?
+            };
+
+            // Validate the bytes
+            chunk_bytes.validate(
+                self.decoded_representation.num_elements(),
+                self.decoded_representation.data_type(),
+            )?;
+
+            // Update the chunk
+            update_array_bytes(
+                chunk_bytes,
+                chunk_shape,
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?
+        };
 
         let is_fill_value = self
             .decoded_representation
@@ -587,32 +602,37 @@ where
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
         let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
-        let encoded_value = self
-            .input_output_handle
-            .partial_decode(&array_subset_all, options)
-            .await?;
-        let mut decoded_value =
-            self.codec
-                .decode(encoded_value, self.decoded_representation.shape(), options)?;
-
-        // Validate the bytes
-        decoded_value.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
-        decoded_value = update_array_bytes(
-            decoded_value,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
+        let decoded_value = if self.decoded_representation.is_whole(indexer) {
+            // The entire chunk is replaced, so the existing chunk is not read
+            bytes.clone()
+        } else {
+            // Read the entire chunk
+            let encoded_value = self
+                .input_output_handle
+                .partial_decode(&array_subset_all, options)
+                .await?;
+            let decoded_value =
+                self.codec
+                    .decode(encoded_value, self.decoded_representation.shape(), options)?;
+
+            // Validate the bytes
+            decoded_value.validate(
+                self.decoded_representation.num_elements(),
+                self.decoded_representation.data_type(),
+            )?;
+
+            update_array_bytes(
+                decoded_value,
+                chunk_shape,
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?
+        };
 
         let is_fill_value = self
             .decoded_representation
@@ -713,38 +733,43 @@ where
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let chunk_bytes = self.input_output_handle.decode(options).await?;
-
-        // Handle a missing chunk
-        let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec
-                .decode(chunk_bytes, self.decoded_representation.shape(), options)?
-        } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value()?,
-            )?
-        };
-
-        // Validate the bytes
-        chunk_bytes.validate(
-            self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type(),
-        )?;
-
-        // Update the chunk
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
-        chunk_bytes = update_array_bytes(
-            chunk_bytes,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.decoded_representation.data_type().size(),
-        )?;
+        let chunk_bytes = if self.decoded_representation.is_whole(indexer) {
+            // The entire chunk is replaced, so the existing chunk is not read
+            bytes.clone()
+        } else {
+            // Read the entire chunk
+            let chunk_bytes = self.input_output_handle.decode(options).await?;
+
+            // Handle a missing chunk
+            let chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
+                self.codec
+                    .decode(chunk_bytes, self.decoded_representation.shape(), options)?
+            } else {
+                ArrayBytes::new_fill_value(
+                    self.decoded_representation.data_type(),
+                    self.decoded_representation.num_elements(),
+                    self.decoded_representation.fill_value()?,
+                )?
+            };
+
+            // Validate the bytes
+            chunk_bytes.validate(
+                self.decoded_representation.num_elements(),
+                self.decoded_representation.data_type(),
+            )?;
+
+            // Update the chunk
+            update_array_bytes(
+                chunk_bytes,
+                chunk_shape,
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?
+        };
 
         let is_fill_value = self
             .decoded_representation
