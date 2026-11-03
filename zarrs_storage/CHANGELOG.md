@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `ByteRange::{checked_range,checked_range_usize}`, the range of a byte range within bytes of a given length, or `None` if it is out of bounds or overflows
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
+- Add `PerformanceMetricsStorageAdapter::size_queries`, the number of key size requests
 
 ### Changed
 - **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data

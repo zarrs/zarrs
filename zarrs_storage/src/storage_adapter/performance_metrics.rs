@@ -32,6 +32,7 @@ use crate::{
 /// // assert_eq!(store.reads(), ...);
 /// // assert_eq!(store.writes(), ...);
 /// // assert_eq!(store.keys_erased(), ...);
+/// // assert_eq!(store.size_queries(), ...);
 /// ```
 #[derive(Debug)]
 pub struct PerformanceMetricsStorageAdapter<TStorage: ?Sized> {
@@ -41,6 +42,7 @@ pub struct PerformanceMetricsStorageAdapter<TStorage: ?Sized> {
     reads: AtomicUsize,
     writes: AtomicUsize,
     keys_erased: AtomicUsize,
+    size_queries: AtomicUsize,
 }
 
 impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
@@ -54,6 +56,7 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
             reads: AtomicUsize::default(),
             writes: AtomicUsize::default(),
             keys_erased: AtomicUsize::default(),
+            size_queries: AtomicUsize::default(),
         }
     }
 
@@ -64,6 +67,7 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
         self.reads.store(0, Ordering::Relaxed);
         self.writes.store(0, Ordering::Relaxed);
         self.keys_erased.store(0, Ordering::Relaxed);
+        self.size_queries.store(0, Ordering::Relaxed);
     }
 
     /// Returns the number of bytes read.
@@ -91,6 +95,13 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
     /// Includes keys erased that may not have existed, and excludes prefix erase requests.
     pub fn keys_erased(&self) -> usize {
         self.keys_erased.load(Ordering::Relaxed)
+    }
+
+    /// Returns the number of key size requests.
+    ///
+    /// Excludes prefix size requests.
+    pub fn size_queries(&self) -> usize {
+        self.size_queries.load(Ordering::Relaxed)
     }
 }
 
@@ -133,6 +144,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+        self.size_queries.fetch_add(1, Ordering::Relaxed);
         self.storage.size_key(key)
     }
 
@@ -254,6 +266,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+        self.size_queries.fetch_add(1, Ordering::Relaxed);
         self.storage.size_key(key).await
     }
 
@@ -378,12 +391,14 @@ mod tests {
         assert!(store.reads() >= 8);
         assert!(store.writes() >= 14);
         assert!(store.keys_erased() >= 4);
+        assert!(store.size_queries() >= 4);
         store.reset();
         assert_eq!(store.bytes_read(), 0);
         assert_eq!(store.bytes_written(), 0);
         assert_eq!(store.reads(), 0);
         assert_eq!(store.writes(), 0);
         assert_eq!(store.keys_erased(), 0);
+        assert_eq!(store.size_queries(), 0);
     }
 
     #[cfg(feature = "async")]

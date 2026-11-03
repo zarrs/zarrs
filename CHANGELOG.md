@@ -276,7 +276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Storage
 
-`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
+`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `set`/`set_partial` take `CowBytes`; size-query metrics; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
 
 - Fix partial encoding to check whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
 - Fix `[async_]erase_metadata` to erase array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`
