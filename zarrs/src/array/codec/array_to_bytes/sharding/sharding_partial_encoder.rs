@@ -305,13 +305,18 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .unzip();
 
         // Read the straddling and kept subchunks
-        let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)?
-            .map(|bytes| {
-                std::iter::zip(subchunks_read, bytes.into_iter().map(CowBytes::into_vec)).collect()
-            })
-            .unwrap_or_default();
+        //   The read is skipped if there are none, since a handle without partial decoding would decode the whole shard
+        let mut subchunks_encoded: HashMap<u64, Vec<u8>> = if byte_ranges.is_empty() {
+            HashMap::new()
+        } else {
+            self.input_output_handle
+                .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)?
+                .map(|bytes| {
+                    std::iter::zip(subchunks_read, bytes.into_iter().map(CowBytes::into_vec))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
 
         // Decode, update and encode all of the intersecting subchunks
         let updates = updates
