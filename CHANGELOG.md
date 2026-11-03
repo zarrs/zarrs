@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
 
 ### Changed
+- The `optional` codec binds its `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
+  - *Behavioural Change*: this changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
+  - **Breaking**: codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) are rejected within the `data_codecs` of an `optional` codec with a `null` fill value (unless the inner data type is `optional`), since the fill value of the data codecs is undefined
+    - Such arrays created by `zarrs` 0.23 fail to be opened
 - Reserve capacity for fallible array, chunk-grid, codec, fill-value, and async result collections
 - Build chunk store keys directly with `ChunkKeyEncodingTraits::encode_into`
 - Encode chunk keys in one allocation, rather than allocating per index and growing the key
@@ -82,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: Apply codec-specific options when binding a codec chain rather than by reconfiguring its codecs
-  - `CodecChain::with_context` takes `CodecSpecificOptions`
+  - `CodecChain::with_context` takes `CodecSpecificOptions`, and an `Option<FillValue>` that is `None` if the fill value is undefined
   - `Array::{with,set}_codec_specific_options` replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
   - `ArrayBuilder::from_array` retains the codec-specific options of the array
 - **Breaking**: Bump `zarrs_codec` to 0.3.0

@@ -33,7 +33,7 @@ pub struct ReshapeCodec {
 struct ReshapeCodecBound {
     shape: ReshapeShape,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl ReshapeCodec {
@@ -116,7 +116,7 @@ impl UnboundArrayToArrayCodecTraits for ReshapeCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(ReshapeCodecBound {
@@ -136,8 +136,8 @@ impl ArrayCodecTraits for ReshapeCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(
@@ -179,8 +179,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         &self.data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {

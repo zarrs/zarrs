@@ -35,7 +35,7 @@ struct OptionalCodecBound {
     mask_codecs: Arc<CodecChainBound>,
     data_codecs: Arc<CodecChainBound>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl OptionalCodec {
@@ -235,29 +235,6 @@ impl OptionalCodecBound {
         }
     }
 
-    /// Creates a fill value for the inner type of an optional data type.
-    ///
-    /// For nested optional types, returns a null fill value (just the `[0]` suffix).
-    /// For fixed-size types, returns a zero-filled fill value.
-    /// For variable-size types, returns an empty fill value.
-    fn create_fill_value_for_inner_type(inner_type: &DataType) -> FillValue {
-        if inner_type.is_optional() {
-            // For nested optional types, the fill value is null (single 0x00 byte)
-            FillValue::new_optional_null()
-        } else {
-            match inner_type.size() {
-                DataTypeSize::Fixed(size) => {
-                    // For fixed-size types, create a zero-filled fill value
-                    FillValue::new(vec![0u8; size])
-                }
-                DataTypeSize::Variable => {
-                    // For variable-size types, use empty fill value
-                    FillValue::new(vec![])
-                }
-            }
-        }
-    }
-
     /// Creates empty dense data when there are no valid elements.
     /// The mask contains all zeros, so all elements are invalid/null.
     fn create_empty_dense_data(
@@ -332,7 +309,7 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if !data_type.is_optional() {
@@ -343,12 +320,22 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let inner_type = data_type.as_optional().ok_or_else(|| {
             CodecCreateError::Other("optional codec requires an optional data type".to_string())
         })?;
-        let inner_fill_value =
-            OptionalCodecBound::create_fill_value_for_inner_type(inner_type.data_type());
+        // See "Data Codecs Fill Value" in the module docs
+        let inner_fill_value = fill_value.as_ref().and_then(|fill_value| {
+            if !inner_type.is_fill_value_null(fill_value) {
+                Some(FillValue::new(
+                    inner_type.fill_value_inner_bytes(fill_value).to_vec(),
+                ))
+            } else if inner_type.data_type().is_optional() {
+                Some(FillValue::new_optional_null())
+            } else {
+                None
+            }
+        });
         Ok(Arc::new(OptionalCodecBound {
             mask_codecs: self.mask_codecs.with_context(
                 crate::array::data_type::bool(),
-                FillValue::from(0u8),
+                Some(FillValue::from(false)),
                 codec_specific_options,
             )?,
             data_codecs: self.data_codecs.with_context(
@@ -371,8 +358,8 @@ impl ArrayCodecTraits for OptionalCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(
@@ -641,7 +628,7 @@ mod tests {
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration)?)
             .with_context(
                 data_type.clone(),
-                fill_value,
+                Some(fill_value),
                 &CodecSpecificOptions::default(),
             )?;
 
@@ -837,7 +824,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -902,7 +893,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -995,7 +990,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1064,7 +1063,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1127,7 +1130,7 @@ mod tests {
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(
                 data_type::uint8().to_optional(),
-                FillValue::from(None::<u8>),
+                Some(FillValue::from(None::<u8>)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -1154,7 +1157,7 @@ mod tests {
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(
                 data_type::uint8().to_optional(),
-                FillValue::from(None::<u8>),
+                Some(FillValue::from(None::<u8>)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

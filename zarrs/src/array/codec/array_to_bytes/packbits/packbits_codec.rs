@@ -43,7 +43,7 @@ pub(crate) struct PackBitsCodecBound {
     /// The number of packed bits of an element.
     pub(super) element_size_bits: u64,
     pub(super) data_type: DataType,
-    pub(super) fill_value: FillValue,
+    pub(super) fill_value: Option<FillValue>,
 }
 
 impl Default for PackBitsCodec {
@@ -175,7 +175,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(self.bind(
@@ -196,7 +196,7 @@ impl PackBitsCodec {
     pub(crate) fn bind(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         bit_order: PackBitsBitOrder,
     ) -> Result<PackBitsCodecBound, CodecCreateError> {
         let components = pack_bits_components(&data_type)?;
@@ -334,8 +334,8 @@ impl ArrayCodecTraits for PackBitsCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(

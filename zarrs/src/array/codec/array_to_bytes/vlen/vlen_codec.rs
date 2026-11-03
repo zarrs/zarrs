@@ -35,7 +35,7 @@ struct VlenCodecBound {
     data_codecs: Arc<CodecChainBound>,
     index_location: VlenIndexLocation,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl Default for VlenCodec {
@@ -162,7 +162,7 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
@@ -180,18 +180,18 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
         let index_codecs = match self.index_data_type {
             VlenIndexDataType::UInt32 => self.index_codecs.with_context(
                 crate::array::data_type::uint32(),
-                FillValue::from(0u32),
+                Some(FillValue::from(0u32)),
                 codec_specific_options,
             )?,
             VlenIndexDataType::UInt64 => self.index_codecs.with_context(
                 crate::array::data_type::uint64(),
-                FillValue::from(0u64),
+                Some(FillValue::from(0u64)),
                 codec_specific_options,
             )?,
         };
         let data_codecs = self.data_codecs.with_context(
             crate::array::data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             codec_specific_options,
         )?;
         Ok(Arc::new(VlenCodecBound {
@@ -213,8 +213,8 @@ impl ArrayCodecTraits for VlenCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(

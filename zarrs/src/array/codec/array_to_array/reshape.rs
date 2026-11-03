@@ -267,7 +267,7 @@ mod tests {
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
         let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?).with_context(
             data_type,
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
@@ -473,7 +473,7 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(reshape_shape))
             .with_context(
                 data_type::uint8(),
-                FillValue::from(0u8),
+                Some(FillValue::from(0u8)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -580,7 +580,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -604,7 +604,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -652,7 +652,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -847,7 +847,7 @@ mod tests {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
                 .with_context(
                     data_type::uint8(),
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -910,7 +910,7 @@ mod tests {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
                 .with_context(
                     data_type::uint8(),
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -937,7 +937,7 @@ mod tests {
         ))])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -968,7 +968,11 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
@@ -977,7 +981,7 @@ mod tests {
         let bytes_codec = Arc::new(BytesCodec::default());
         let encoded_shape = codec.encoded_shape(shape).unwrap();
         let encoded_data_type = codec.encoded_data_type().clone();
-        let encoded_fill_value = codec.encoded_fill_value().clone();
+        let encoded_fill_value = codec.encoded_fill_value().cloned();
         let bytes_codec = bytes_codec
             .with_context(
                 encoded_data_type,
@@ -1015,7 +1019,11 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes, shape, &CodecOptions::default())
@@ -1024,7 +1032,7 @@ mod tests {
         let bytes_codec = Arc::new(BytesCodec::default());
         let encoded_shape = codec.encoded_shape(shape).unwrap();
         let encoded_data_type = codec.encoded_data_type().clone();
-        let encoded_fill_value = codec.encoded_fill_value().clone();
+        let encoded_fill_value = codec.encoded_fill_value().cloned();
         let bytes_codec = bytes_codec
             .with_context(
                 encoded_data_type,

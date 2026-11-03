@@ -122,7 +122,11 @@ mod tests {
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -146,13 +150,13 @@ mod tests {
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(
                 data_type,
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
 
-        assert_eq!(codec.fill_value(), &fill_value);
-        assert_eq!(codec.encoded_fill_value(), &FillValue::from(1.25f32));
+        assert_eq!(codec.fill_value(), Some(&fill_value));
+        assert_eq!(codec.encoded_fill_value(), Some(&FillValue::from(1.25f32)));
     }
 
     #[test]
@@ -167,7 +171,11 @@ mod tests {
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -199,7 +207,11 @@ mod tests {
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -227,7 +239,11 @@ mod tests {
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -239,7 +255,7 @@ mod tests {
         let bytes_codec = bytes_codec
             .with_context(
                 codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
+                codec.encoded_fill_value().cloned(),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -283,7 +299,7 @@ mod tests {
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -296,7 +312,7 @@ mod tests {
         let bytes_codec = bytes_codec
             .with_context(
                 codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
+                codec.encoded_fill_value().cloned(),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

@@ -307,7 +307,7 @@ mod tests {
         ))
         .with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -336,7 +336,7 @@ mod tests {
             .with_write_header(true)
             .with_context(
                 data_type.clone(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -518,7 +518,11 @@ mod tests {
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -574,7 +578,7 @@ mod tests {
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

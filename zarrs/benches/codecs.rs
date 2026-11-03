@@ -35,7 +35,7 @@ fn codec_bytes(c: &mut Criterion) {
     let codec = codec
         .with_context(
             data_type::uint16(),
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -124,7 +124,7 @@ fn codec_sharding(c: &mut Criterion) {
             .build_arc()
             .with_context(
                 data_type::uint16(),
-                FillValue::from(0u16),
+                Some(FillValue::from(0u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -182,7 +182,11 @@ fn codec_packbits(c: &mut Criterion) {
         let codec = std::sync::Arc::new(
             PackBitsCodec::new(PackBitsPaddingEncoding::FirstByte, None, last_bit).unwrap(),
         )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
         let bytes = bytes.into_fixed().unwrap();
         let encoded = codec

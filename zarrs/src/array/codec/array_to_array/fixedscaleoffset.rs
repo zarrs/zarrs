@@ -135,7 +135,11 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
 
         let encoded = codec
@@ -167,7 +171,11 @@ mod tests {
         let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
         let encoded = codec
             .encode(ArrayBytes::from(elements), &shape, &CodecOptions::default())
@@ -270,7 +278,7 @@ mod tests {
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
                 .with_context(
                     data_type,
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -287,9 +295,13 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
 
-        assert_eq!(codec.encoded_fill_value(), &FillValue::from(3u8));
+        assert_eq!(codec.encoded_fill_value(), Some(&FillValue::from(3u8)));
     }
 }

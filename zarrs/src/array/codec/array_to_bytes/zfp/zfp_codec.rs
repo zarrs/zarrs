@@ -29,7 +29,7 @@ pub struct ZfpCodec {
 #[derive(Clone, Debug)]
 pub(crate) struct ZfpCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     encoding: ZfpEncoding,
     scalar_type: ZfpScalarType,
     config: ZfpConfig,
@@ -165,7 +165,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let encoding = data_type.codec_zfp()?.zfp_encoding();
@@ -191,8 +191,8 @@ impl ArrayCodecTraits for ZfpCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(

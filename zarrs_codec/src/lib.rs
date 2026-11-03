@@ -689,6 +689,13 @@ pub enum CodecError {
     /// Codec create error.
     #[error(transparent)]
     CodecCreateError(#[from] CodecCreateError),
+    /// Missing input cannot be decoded, or partially updated, because the fill value is undefined.
+    ///
+    /// See [`UnboundArrayToBytesCodecTraits::with_context`].
+    #[error(
+        "missing input cannot be decoded or partially updated because the fill value is undefined"
+    )]
+    UndefinedFillValue,
 }
 
 impl From<zarrs_data_type::DataTypeCodecError> for CodecError {

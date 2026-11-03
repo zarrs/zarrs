@@ -36,7 +36,7 @@ struct PcodecCodecBound {
     element_type: PcodecElementType,
     elements_per_element: usize,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 fn mode_spec_config_to_pco(mode_spec: PcodecModeSpecConfiguration) -> ModeSpec {
@@ -163,7 +163,7 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         let pcodec = data_type.codec_pcodec()?;
@@ -188,8 +188,8 @@ impl ArrayCodecTraits for PcodecCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(

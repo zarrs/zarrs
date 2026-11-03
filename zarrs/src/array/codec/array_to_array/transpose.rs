@@ -299,7 +299,11 @@ mod tests {
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -342,7 +346,11 @@ mod tests {
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -396,7 +404,7 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
             .with_context(
                 data_type,
-                FillValue::new_optional_null(),
+                Some(FillValue::new_optional_null()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -455,7 +463,11 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let encoded = codec
             .encode(bytes, &shape, &CodecOptions::default())
@@ -465,7 +477,7 @@ mod tests {
         let bytes_codec = bytes_codec
             .with_context(
                 codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
+                codec.encoded_fill_value().cloned(),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -512,7 +524,7 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -525,7 +537,7 @@ mod tests {
         let bytes_codec = bytes_codec
             .with_context(
                 codec.encoded_data_type().clone(),
-                codec.encoded_fill_value().clone(),
+                codec.encoded_fill_value().cloned(),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

@@ -604,7 +604,7 @@ impl ArrayBuilder {
         // Reject codecs that are incompatible with the data type, e.g. `vlen-bytes` with the `string` data type
         let codec_chain_bound = codec_chain.with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &self.creation_options(),
         )?;
 

@@ -28,6 +28,13 @@
 //! - N bytes: encoded mask
 //! - M bytes: encoded data (only valid elements)
 //!
+//! #### Data Codecs Fill Value
+//!
+//! The `data_codecs` are bound with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`, `[null]` -> `null`).
+//! If the fill value is `null`, the `data_codecs` are bound with a `null` fill value if the inner data type is `optional`.
+//! Otherwise, the fill value of the `data_codecs` is undefined, and they must not contain codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`).
+//! This excludes nested codecs bound with a fill value of their own (e.g. the `mask_codecs` of a nested `optional` codec).
+//!
 //! #### Fill Value Encoding
 //!
 //! The `"fill_value"` metadata for optional types is encoded as follows:

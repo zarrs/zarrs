@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde_json::Value;
 use zarrs::array::codec::PackBitsDataTypeExt;
-use zarrs::array::{Codec, CodecSpecificOptions, DataType, FillValue};
+use zarrs::array::{Codec, CodecSpecificOptions, DataType};
 use zarrs::metadata::v3::MetadataV3;
 use zarrs_regression_testing::schema::{FLETCHER32_ODD_LENGTH, PACKBITS_PADDING_BYTE_OMITTED};
 
@@ -167,9 +167,8 @@ fn encoded_data_type(codec: &Value, data_type: DataType) -> Option<DataType> {
         return Some(data_type);
     };
     // The fill value does not affect the encoded data type
-    let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap_or_default()]);
     let codec = codec
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(data_type, None, &CodecSpecificOptions::default())
         .ok()?;
     Some(codec.encoded_data_type().clone())
 }

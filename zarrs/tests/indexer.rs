@@ -255,7 +255,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     let bound_codec = codec
         .with_context(
             data_type.clone(),
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -310,7 +310,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let bound_codec = codec
         .with_context(
             data_type.clone(),
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )
         .unwrap();

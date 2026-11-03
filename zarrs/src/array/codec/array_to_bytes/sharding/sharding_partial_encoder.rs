@@ -143,7 +143,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let data_type = self.inner_codecs.data_type();
-        let fill_value = self.inner_codecs.fill_value();
+        let fill_value = self
+            .inner_codecs
+            .fill_value()
+            .ok_or(CodecError::UndefinedFillValue)?;
         let mut shard_index_guard = self.shard_index.lock().unwrap();
         let mut shard_index = shard_index_guard.clone();
 

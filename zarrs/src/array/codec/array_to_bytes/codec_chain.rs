@@ -101,13 +101,14 @@ impl CodecChain {
     /// Bind this codec chain to a decoded data type, fill value, and codec-specific options.
     ///
     /// Each codec in the chain may read its own options type from `codec_specific_options`.
+    /// A `fill_value` of [`None`] means the fill value is undefined (see [`UnboundArrayToBytesCodecTraits::with_context`]).
     ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if any codec cannot be bound to the derived context.
     pub fn with_context(
         &self,
         mut data_type: DataType,
-        mut fill_value: FillValue,
+        mut fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<CodecChainBound>, CodecCreateError> {
         let mut array_to_array = Vec::with_capacity(self.array_to_array.len());
@@ -118,7 +119,7 @@ impl CodecChain {
                 codec_specific_options,
             )?;
             data_type = bound.encoded_data_type().clone();
-            fill_value = bound.encoded_fill_value().clone();
+            fill_value = bound.encoded_fill_value().cloned();
             array_to_array.push(bound);
         }
         let array_to_bytes =
@@ -439,7 +440,7 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(CodecChain::with_context(
@@ -928,7 +929,7 @@ impl ArrayCodecTraits for CodecChainBound {
         )
     }
 
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.array_to_array.first().map_or_else(
             || self.array_to_bytes.fill_value(),
             |codec| codec.fill_value(),
@@ -1206,7 +1207,7 @@ mod tests {
             .unwrap()
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -1294,7 +1295,11 @@ mod tests {
                 expected_decoded_representation,
             })],
         )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded_input: Arc<dyn BytesPartialDecoderTraits> =
@@ -1302,6 +1307,77 @@ mod tests {
         codec
             .partial_decoder(encoded_input, &shape, &CodecOptions::default())
             .unwrap();
+    }
+
+    /// Missing input cannot be decoded or partially encoded if the fill value is undefined.
+    #[test]
+    fn codec_chain_undefined_fill_value_missing_input() {
+        use zarrs_storage::store::MemoryStore;
+        use zarrs_storage::{ListableStorageTraits, StoreKey};
+
+        let shape = vec![NonZeroU64::new(4).unwrap()];
+        let options = CodecOptions::default();
+        let codec_chain =
+            |json: &str| CodecChain::from_metadata(&[serde_json::from_str(json).unwrap()]).unwrap();
+        #[allow(unused_mut)]
+        let mut cases = vec![
+            (
+                "bytes",
+                data_type::uint16(),
+                codec_chain(r#"{"name": "bytes", "configuration": {"endian": "little"}}"#),
+            ),
+            (
+                "vlen",
+                data_type::string(),
+                CodecChain::new(
+                    vec![],
+                    Arc::new(crate::array::codec::array_to_bytes::vlen::VlenCodec::default()),
+                    vec![],
+                ),
+            ),
+            (
+                "vlen-utf8",
+                data_type::string(),
+                codec_chain(r#"{"name": "vlen-utf8"}"#),
+            ),
+        ];
+        #[cfg(feature = "pcodec")]
+        cases.push(("pcodec", data_type::float32(), codec_chain(JSON_PCODEC)));
+        for (name, data_type, codec) in cases {
+            let codec = codec
+                .with_context(data_type.clone(), None, &CodecSpecificOptions::default())
+                .unwrap();
+            assert!(codec.fill_value().is_none());
+            let store = Arc::new(MemoryStore::new());
+            let input = Arc::new((store.clone(), StoreKey::new("c").unwrap()));
+
+            // The error is returned when creating the partial decoder if it caches the decoded chunk
+            let subset = ArraySubset::new_with_ranges(&[1..3]);
+            let decoded = codec
+                .clone()
+                .partial_decoder(input.clone(), &shape, &options)
+                .and_then(|decoder| decoder.partial_decode(&subset, &options).map(|_| ()));
+            assert!(
+                matches!(decoded, Err(CodecError::UndefinedFillValue)),
+                "{name}"
+            );
+
+            let bytes = ArrayBytes::new_fill_value(
+                &data_type,
+                2,
+                &FillValue::new(vec![0; data_type.fixed_size().unwrap_or(0)]),
+            )
+            .unwrap();
+            let encoded = codec
+                .clone()
+                .partial_encoder(input, &shape, &options)
+                .and_then(|encoder| encoder.partial_encode(&subset, &bytes, &options));
+            assert!(
+                matches!(encoded, Err(CodecError::UndefinedFillValue)),
+                "{name}"
+            );
+            assert_eq!(store.list().unwrap(), Vec::<StoreKey>::new());
+        }
     }
 
     #[cfg(feature = "pcodec")]

@@ -38,9 +38,9 @@ pub struct CastValueCodec {
 #[derive(Clone, Debug)]
 struct CastValueCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     encoded_data_type: DataType,
-    encoded_fill_value: FillValue,
+    encoded_fill_value: Option<FillValue>,
     encode_scalar_map: Option<ScalarMap>,
     decode_scalar_map: Option<ScalarMap>,
     rounding: DataTypeCastValueRoundingMode,
@@ -113,7 +113,7 @@ impl UnboundArrayToArrayCodecTraits for CastValueCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         let source = data_type.codec_castvalue()?;
@@ -153,36 +153,42 @@ impl UnboundArrayToArrayCodecTraits for CastValueCodec {
         let decode_kernel = source_repr.zip(target_repr).and_then(|(source, target)| {
             select_cast_kernel(target, source, rounding, out_of_range)
         });
-        let encoded = cast_element(
-            fill_value.as_ne_bytes(),
-            source,
-            target,
-            encode_scalar_map.as_ref(),
-            encode_kernel.as_ref(),
-            rounding,
-            out_of_range,
-        )
-        .map_err(CodecCreateError::other)?;
-        let decoded = cast_element(
-            &encoded,
-            target,
-            source,
-            decode_scalar_map.as_ref(),
-            decode_kernel.as_ref(),
-            rounding,
-            out_of_range,
-        )
-        .map_err(CodecCreateError::other)?;
-        if decoded != fill_value.as_ne_bytes() {
-            return Err(CodecCreateError::Other(
-                "cast_value fill value does not survive a round-trip cast".to_string(),
-            ));
-        }
+        let encoded_fill_value = fill_value
+            .as_ref()
+            .map(|fill_value| {
+                let encoded = cast_element(
+                    fill_value.as_ne_bytes(),
+                    source,
+                    target,
+                    encode_scalar_map.as_ref(),
+                    encode_kernel.as_ref(),
+                    rounding,
+                    out_of_range,
+                )
+                .map_err(CodecCreateError::other)?;
+                let decoded = cast_element(
+                    &encoded,
+                    target,
+                    source,
+                    decode_scalar_map.as_ref(),
+                    decode_kernel.as_ref(),
+                    rounding,
+                    out_of_range,
+                )
+                .map_err(CodecCreateError::other)?;
+                if decoded != fill_value.as_ne_bytes() {
+                    return Err(CodecCreateError::Other(
+                        "cast_value fill value does not survive a round-trip cast".to_string(),
+                    ));
+                }
+                Ok::<_, CodecCreateError>(FillValue::new(encoded))
+            })
+            .transpose()?;
         Ok(Arc::new(CastValueCodecBound {
             data_type,
             fill_value,
             encoded_data_type: self.target_data_type.clone(),
-            encoded_fill_value: FillValue::new(encoded),
+            encoded_fill_value,
             encode_scalar_map,
             decode_scalar_map,
             rounding,
@@ -202,8 +208,8 @@ impl ArrayCodecTraits for CastValueCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn recommended_concurrency(
@@ -230,8 +236,8 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         &self.encoded_data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.encoded_fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.encoded_fill_value.as_ref()
     }
 
     fn encode<'a>(

@@ -81,12 +81,16 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     ///
     /// A codec may read its own options type from `codec_specific_options`, and must bind any codecs it contains with the same `codec_specific_options`.
     ///
+    /// A `fill_value` of [`None`] means the fill value is undefined (e.g. within the `data_codecs` of an `optional` codec with a `null` fill value).
+    /// Partial decoders of a codec bound with an undefined fill value must return an error for missing input, and partial encoders must not omit chunks.
+    ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if the `data_type` or `fill_value` is not supported by this codec.
+    /// Codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) must return an error if it is undefined.
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError>;
 }
@@ -201,7 +205,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
             input_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -221,7 +225,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
             input_output_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -242,7 +246,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
             input_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
@@ -263,7 +267,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
             input_output_handle,
             shape.to_vec(),
             self.data_type().clone(),
-            self.fill_value().clone(),
+            self.fill_value().cloned(),
             self.into_dyn(),
         )))
     }
