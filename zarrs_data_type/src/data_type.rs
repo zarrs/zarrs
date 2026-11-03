@@ -315,7 +315,10 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// Create fill value metadata.
     ///
     /// # Errors
-    /// Returns an [`DataTypeFillValueError`] if the metadata cannot be created from the fill value.
+    /// Returns a [`DataTypeFillValueError`] if the metadata cannot be created from the fill value.
+    ///
+    /// An implementation must return an error if the fill value is invalid for the data type, including if its length differs from a fixed [`size`](Self::size).
+    /// Array builders and wrapping data types (e.g. `optional`) rely on this to validate fill values.
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,

@@ -193,20 +193,21 @@ impl crate::DataTypeTraits for OptionalDataType {
         }
     }
 
+    /// The fill value must be `[0]` (null) or a valid fill value of the inner data type with a `1` suffix.
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
     ) -> Result<zarrs_metadata::FillValueMetadata, crate::DataTypeFillValueError> {
-        if self.is_fill_value_null(fill_value) {
-            Ok(zarrs_metadata::FillValueMetadata::Null)
-        } else {
-            // Extract inner bytes and convert to metadata
-            let inner_bytes = self.fill_value_inner_bytes(fill_value);
-            let inner_fv = FillValue::new(inner_bytes.to_vec());
-            let inner_metadata = self.0.metadata_fill_value(&inner_fv)?;
-            Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                inner_metadata,
-            ]))
+        match fill_value.as_ne_bytes().split_last() {
+            Some((0, [])) => Ok(zarrs_metadata::FillValueMetadata::Null),
+            Some((1, inner_bytes)) => {
+                let inner_fv = FillValue::new(inner_bytes.to_vec());
+                let inner_metadata = self.0.metadata_fill_value(&inner_fv)?;
+                Ok(zarrs_metadata::FillValueMetadata::from(vec![
+                    inner_metadata,
+                ]))
+            }
+            _ => Err(crate::DataTypeFillValueError),
         }
     }
 
