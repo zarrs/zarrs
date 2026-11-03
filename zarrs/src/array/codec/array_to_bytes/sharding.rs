@@ -818,50 +818,47 @@ fn encode_shard_update(
         .filter_map(|(_, subchunk_encoded)| subchunk_encoded.as_ref().map(CowBytes::len))
         .sum::<usize>();
 
-    // Get the suffix write size
-    let suffix_write_size = match index_location {
-        ShardingIndexLocation::Start => encoded_subchunks_size,
-        ShardingIndexLocation::End => encoded_subchunks_size + encoded_array_index.len(),
-    };
+    // The index is written separately only if it precedes appended subchunks
+    let index_separate = !rewrite && index_location == ShardingIndexLocation::Start;
+    let mut encoded_output = Vec::with_capacity(if index_separate {
+        encoded_subchunks_size
+    } else {
+        encoded_subchunks_size + encoded_array_index.len()
+    });
+
+    // A rewritten shard with a leading index is built in one pass, rather than prepending the index
+    if rewrite && index_location == ShardingIndexLocation::Start {
+        debug_assert_eq!(offset_new_chunks, encoded_array_index.len() as u64);
+        encoded_output.extend_from_slice(&encoded_array_index);
+    }
 
     // Concatenate the updated subchunks
-    let mut encoded_output = Vec::with_capacity(suffix_write_size);
     for (_, subchunk_encoded) in updated_subchunks {
         if let Some(subchunk_encoded) = subchunk_encoded {
             encoded_output.extend_from_slice(&subchunk_encoded);
         }
     }
 
-    if rewrite {
+    match (rewrite, index_location) {
         // Replace the shard rather than erasing it first, so a failure leaves it intact
-        let shard = match index_location {
-            ShardingIndexLocation::Start => {
-                debug_assert_eq!(offset_new_chunks, encoded_array_index.len() as u64);
-                let mut shard =
-                    Vec::with_capacity(encoded_array_index.len() + encoded_output.len());
-                shard.extend_from_slice(&encoded_array_index);
-                shard.extend_from_slice(&encoded_output);
-                shard
-            }
-            ShardingIndexLocation::End => {
-                debug_assert_eq!(offset_new_chunks, 0);
-                encoded_output.extend_from_slice(&encoded_array_index);
-                encoded_output
-            }
-        };
-        Ok(ShardWrite::Replace(shard))
-    } else {
+        (true, ShardingIndexLocation::Start) => Ok(ShardWrite::Replace(encoded_output)),
+        (true, ShardingIndexLocation::End) => {
+            debug_assert_eq!(offset_new_chunks, 0);
+            encoded_output.extend_from_slice(&encoded_array_index);
+            Ok(ShardWrite::Replace(encoded_output))
+        }
         // Write the encoded index and updated subchunks
-        Ok(ShardWrite::Partial(match index_location {
-            ShardingIndexLocation::Start => vec![
-                (0, encoded_array_index),
-                (offset_new_chunks, CowBytes::from(encoded_output)),
-            ],
-            ShardingIndexLocation::End => {
-                encoded_output.extend_from_slice(&encoded_array_index);
-                vec![(offset_new_chunks, CowBytes::from(encoded_output))]
-            }
-        }))
+        (false, ShardingIndexLocation::Start) => Ok(ShardWrite::Partial(vec![
+            (0, encoded_array_index),
+            (offset_new_chunks, CowBytes::from(encoded_output)),
+        ])),
+        (false, ShardingIndexLocation::End) => {
+            encoded_output.extend_from_slice(&encoded_array_index);
+            Ok(ShardWrite::Partial(vec![(
+                offset_new_chunks,
+                CowBytes::from(encoded_output),
+            )]))
+        }
     }
 }
 
