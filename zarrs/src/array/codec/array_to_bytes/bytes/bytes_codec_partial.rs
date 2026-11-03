@@ -240,8 +240,7 @@ where
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
             let chunk_bytes = self.encode_missing(indexer, bytes)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
+            self.input_output_handle.encode(chunk_bytes, options)
         }
     }
 
@@ -280,9 +279,7 @@ where
                 .await
         } else {
             let chunk_bytes = self.encode_missing(indexer, bytes)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
-                .await
+            self.input_output_handle.encode(chunk_bytes, options).await
         }
     }
 

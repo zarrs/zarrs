@@ -231,15 +231,12 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
         let is_fill_value = !options.store_empty_chunks()
             && decoded_value.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase()
         } else {
-            // Store the updated chunk
+            // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
             let encoded_value =
                 self.codec
                     .encode(decoded_value, self.decoded_representation.shape(), options)?;
@@ -365,20 +362,16 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase()?;
-
         let is_fill_value = !options.store_empty_chunks()
             && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase()
         } else {
-            // Store the updated chunk
+            // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
             let chunk_bytes =
                 self.codec
                     .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
+            self.input_output_handle.encode(chunk_bytes, options)
         }
     }
 
@@ -438,6 +431,11 @@ where
         self.input_output_handle.erase()
     }
 
+    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options)?;
+        self.input_output_handle.encode(bytes_encoded, options)
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -461,10 +459,9 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
+        // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
         let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
-
-        self.input_output_handle
-            .partial_encode(0, bytes_encoded, options)
+        self.input_output_handle.encode(bytes_encoded, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -595,15 +592,12 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase().await?;
-
         let is_fill_value = !options.store_empty_chunks()
             && decoded_value.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase().await
         } else {
-            // Store the updated chunk
+            // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
             let encoded_value =
                 self.codec
                     .encode(decoded_value, self.decoded_representation.shape(), options)?;
@@ -729,21 +723,16 @@ where
             self.decoded_representation.data_type().size(),
         )?;
 
-        // Erase existing data
-        self.input_output_handle.erase().await?;
-
         let is_fill_value = !options.store_empty_chunks()
             && chunk_bytes.is_fill_value(self.decoded_representation.fill_value());
         if is_fill_value {
-            Ok(())
+            self.input_output_handle.erase().await
         } else {
-            // Store the updated chunk
+            // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
             let chunk_bytes =
                 self.codec
                     .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(0, chunk_bytes, options)
-                .await
+            self.input_output_handle.encode(chunk_bytes, options).await
         }
     }
 
@@ -809,6 +798,13 @@ where
         self.input_output_handle.erase().await
     }
 
+    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options)?;
+        self.input_output_handle
+            .encode(bytes_encoded, options)
+            .await
+    }
+
     async fn partial_encode_many<'a>(
         &'a self,
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
@@ -832,10 +828,10 @@ where
             decoded_value[offset..offset + value.len()].copy_from_slice(&value);
         }
 
+        // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
         let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
-
         self.input_output_handle
-            .partial_encode(0, bytes_encoded, options)
+            .encode(bytes_encoded, options)
             .await
     }
 

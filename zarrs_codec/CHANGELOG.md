@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 
 ### Changed
+- **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
 - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
 - Extract subset elements without boxed contiguous-run iterators
@@ -65,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
 - `ArrayBytes::validate` rejects optional masks of the wrong length or with values other than 0/1
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
+- The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter
+  - The existing chunk is also read once rather than once per stacked bytes-to-bytes codec
+- The default array-to-array and array-to-bytes partial encoders replace an existing chunk rather than erasing it first, so a failed encode or write leaves it intact
 
 ## [0.2.1] - 2026-03-21
 

@@ -61,10 +61,13 @@ fn array_partial_encode_sharding(
         store.get(&key)
     };
 
-    let expected_writes_per_shard = match sharding_index_location {
+    // Appending to a shard writes the subchunks and the index
+    let expected_writes_per_append = match sharding_index_location {
         ShardingIndexLocation::Start => 2, // Separate write for subchunks and index
         ShardingIndexLocation::End => 1,   // Combined write for subchunks and index
     };
+    // Rewriting a shard replaces it with a single write
+    let expected_writes_per_rewrite = 1;
 
     let chunks_per_shard = 2 * 2;
     let shard_index_size = size_of::<u64>() * 2 * chunks_per_shard;
@@ -76,7 +79,7 @@ fn array_partial_encode_sharding(
     // [0, 0]
     array.store_array_subset(&[0..1, 0..1], &[1u16])?;
     assert_eq!(store_perf.reads(), 1); // index
-    assert_eq!(store_perf.writes(), expected_writes_per_shard);
+    assert_eq!(store_perf.writes(), expected_writes_per_rewrite);
     assert_eq!(store_perf.bytes_read(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
@@ -101,7 +104,7 @@ fn array_partial_encode_sharding(
     // [0, 0]
     array.store_array_subset(&[0..1, 0..2], &[1u16, 2])?;
     assert_eq!(store_perf.reads(), 1); // index
-    assert_eq!(store_perf.writes(), expected_writes_per_shard);
+    assert_eq!(store_perf.writes(), expected_writes_per_rewrite);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),
@@ -116,7 +119,7 @@ fn array_partial_encode_sharding(
     // [0, 0]
     array.store_array_subset(&[0..1, 0..2], &[3u16, 4])?;
     assert_eq!(store_perf.reads(), 1); // index + 1x subchunk
-    assert_eq!(store_perf.writes(), expected_writes_per_shard);
+    assert_eq!(store_perf.writes(), expected_writes_per_rewrite);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(store_perf.bytes_read(), shard_index_size);
     }
@@ -133,7 +136,7 @@ fn array_partial_encode_sharding(
     // [5, 0]
     array.store_array_subset(&[0..2, 0..1], &[99u16, 5])?;
     assert_eq!(store_perf.reads(), 1); // index
-    assert_eq!(store_perf.writes(), expected_writes_per_shard);
+    assert_eq!(store_perf.writes(), expected_writes_per_append);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),
@@ -151,7 +154,7 @@ fn array_partial_encode_sharding(
     store_perf.reset();
     array.store_array_subset(&[1..2, 1..2], &[100u16])?;
     assert_eq!(store_perf.reads(), 1); // index
-    assert_eq!(store_perf.writes(), expected_writes_per_shard);
+    assert_eq!(store_perf.writes(), expected_writes_per_append);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),

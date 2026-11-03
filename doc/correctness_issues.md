@@ -21,6 +21,9 @@
   - `zarrs: 0.11-0.12` `numcodecs.pcodec` codec with the unregistered `pcodec` name (legacy configurations written by `zarrs` 0.11-0.15 are also read)
   - `zarrs: 0.11-0.12` `numcodecs.bz2` codec with the unregistered `bz2` name
   - `zarrs: 0.10-0.12` `zfp` codec with the non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (registered as `fixed_rate`, `fixed_precision`, and `fixed_accuracy`)
+- `zarrs: 0.18-0.23` partially encoding a chunk with `Array::[async_]partial_encoder` through a bytes-to-bytes codec (e.g. `zstd`) left trailing bytes of the previous chunk if the re-encoded chunk was shorter
+  - These chunks may fail to be decoded, depending on the codec and implementation (e.g. `zarrs` fails to decode them with `zstd`)
+  - `Array::store_chunk_subset` and similar methods were unaffected, since they only partially encode chunks if every codec supports partial encoding
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
 - `zarrs: 0.20-0.23` Data encoded with `packbits` with a `first_byte` or `last_byte` `padding_encoding` omitted the padding encoding byte if the components are whole bytes that are all packed (e.g. `float32`, or `int8` without `first_bit`/`last_bit`)
   - These chunks fail to be decoded by other Zarr implementations. `zarrs` 0.24+ reads them, as they are one byte shorter than conformant chunks
