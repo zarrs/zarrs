@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject shard-index byte ranges that overflow or lie outside encoded subchunks when compacting or decoding, and skip compactions that would not shrink the shard
   - Validate index entries when decoding the index, and reject partial subchunks whose size differs from the fixed encoded size of their inner codecs
 - Fix the partial encoder
+  - Keep a trailing index at the shard suffix when partially writing a shorter shard, querying the existing size only for partial writes to an existing shard with a trailing index
   - Reload the cached shard index after a failed write or erase, so subsequent operations reflect storage
   - Rewrite the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
   - Replace a rewritten shard rather than erasing it first, so a failed write leaves the shard intact

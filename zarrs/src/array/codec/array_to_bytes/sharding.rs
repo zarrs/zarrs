@@ -91,7 +91,7 @@ pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::ops::Range;
 use std::sync::Arc;
@@ -657,26 +657,6 @@ fn subchunk_updates<'a>(
     }
 }
 
-/// Return the indices and byte ranges of the stored subchunks of a shard that are not in `updated_subchunks`.
-fn retained_subchunks<T>(
-    shard_index: &[u64],
-    updated_subchunks: &[(u64, T)],
-) -> (Vec<u64>, Vec<ByteRange>) {
-    let updated: HashSet<u64> = updated_subchunks.iter().map(|(index, _)| *index).collect();
-    (0..shard_index.len() / 2)
-        .filter_map(|subchunk_index| {
-            let (offset, size) = subchunk_offset_size(shard_index, subchunk_index)?;
-            let subchunk_index = subchunk_index as u64;
-            (!updated.contains(&subchunk_index))
-                .then_some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
-        })
-        .unzip()
-}
-
-fn missing_retained_subchunks() -> CodecError {
-    CodecError::from("the shard is missing but its index references stored subchunks")
-}
-
 fn invalid_shard_index() -> CodecError {
     CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
 }
@@ -743,9 +723,15 @@ enum ShardWrite {
 /// An updated subchunk is [`None`] if it is entirely the fill value.
 /// New subchunks are appended after `max_data_offset`, the end of the encoded subchunks in `shard_index` before the update.
 /// The shard is replaced rather than appended to if no other subchunks remain.
+///
+/// `shard_size` is the size of the existing shard, and is only needed for in-place partial writes with the index at the end.
+/// Partial writes never truncate a shard, so a trailing index must end at or after the end of the existing shard to remain its suffix.
+/// It is not needed if `updated_subchunks` includes every subchunk in `shard_index`, since the shard is then replaced.
+#[expect(clippy::too_many_arguments)]
 fn encode_shard_update(
     shard_index: &mut [u64],
     max_data_offset: u64,
+    shard_size: Option<u64>,
     updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
     index_codecs: &CodecChainBound,
     index_shape: &[NonZeroU64],
@@ -766,7 +752,11 @@ fn encode_shard_update(
     let index_encoded_size = compute_index_encoded_size(index_codecs, index_shape)?;
     let offset_new_chunks = match index_location {
         ShardingIndexLocation::Start => max_data_offset.max(index_encoded_size),
-        ShardingIndexLocation::End => max_data_offset,
+        ShardingIndexLocation::End if rewrite => 0,
+        // Overwrite the existing index, which may follow removed subchunks
+        ShardingIndexLocation::End => max_data_offset.max(shard_size.map_or(0, |shard_size| {
+            shard_size.saturating_sub(index_encoded_size)
+        })),
     };
 
     // Validate the entire append before changing the cached index or storage.
@@ -813,18 +803,26 @@ fn encode_shard_update(
         .into_static();
 
     // Get the total size of the encoded subchunks
+    //   Kept subchunks that share bytes in a corrupt index are copied separately, so this can exceed the shard size
     let encoded_subchunks_size = updated_subchunks
         .iter()
         .filter_map(|(_, subchunk_encoded)| subchunk_encoded.as_ref().map(CowBytes::len))
-        .sum::<usize>();
+        .try_fold(0usize, usize::checked_add)
+        .ok_or_else(compacted_shard_too_large)?;
 
     // The index is written separately only if it precedes appended subchunks
     let index_separate = !rewrite && index_location == ShardingIndexLocation::Start;
-    let mut encoded_output = Vec::with_capacity(if index_separate {
+    let encoded_output_size = if index_separate {
         encoded_subchunks_size
     } else {
-        encoded_subchunks_size + encoded_array_index.len()
-    });
+        encoded_subchunks_size
+            .checked_add(encoded_array_index.len())
+            .ok_or_else(compacted_shard_too_large)?
+    };
+    let mut encoded_output = Vec::new();
+    encoded_output
+        .try_reserve_exact(encoded_output_size)
+        .map_err(|_| compacted_shard_too_large())?;
 
     // A rewritten shard with a leading index is built in one pass, rather than prepending the index
     if rewrite && index_location == ShardingIndexLocation::Start {
