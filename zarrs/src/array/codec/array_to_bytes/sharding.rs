@@ -2116,4 +2116,38 @@ mod tests {
             .unwrap();
         assert!(original_compacted.is_none());
     }
+
+    #[test]
+    fn sharding_partial_encoder_size_held() {
+        let options = CodecOptions::default();
+        let shape: ChunkShape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(4).unwrap()];
+        let codec =
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint8())
+                .build()
+                .with_context(
+                    data_type::uint8(),
+                    Some(FillValue::from(0u8)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+        let elements: Vec<u8> = (1..=8).collect();
+        let shard_bytes = codec
+            .encode(
+                elements.into(),
+                &shape,
+                &options,
+                &ComputeResources::default(),
+            )
+            .unwrap()
+            .into_vec();
+        let handle = Arc::new(Mutex::new(Some(shard_bytes)));
+        let encoder = codec
+            .partial_encoder(handle.clone(), &shape, &options, &Resources::default())
+            .unwrap();
+        // The encoder holds the input handle and a shard index of 2 subchunks x (offset, size)
+        assert_eq!(
+            encoder.size_held(),
+            BytesPartialDecoderTraits::size_held(handle.as_ref()) + 2 * 2 * size_of::<u64>()
+        );
+    }
 }
