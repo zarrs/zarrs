@@ -119,6 +119,43 @@ fn partial_encode_compressed_chunk_shrinks() {
     assert_eq!(reads[0], reads[1]);
 }
 
+#[cfg(all(feature = "zstd", feature = "crc32c"))]
+/// A partial encode of the entire chunk replaces it without reading it, so an undecodable chunk is repaired.
+#[test]
+fn partial_encode_whole_chunk_replaces_undecodable_chunk() {
+    let options = CodecOptions::default();
+    for codecs in [&[BYTES][..], &[BYTES, ZSTD], &[BYTES, ZSTD, CRC32C]] {
+        let codec = bind(codecs, data_type::uint8(), FillValue::from(0u8));
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+            MemoryStore::new(),
+        )));
+        let key = StoreKey::new("c").unwrap();
+        store.set(&key, CowBytes::from(vec![0xff; 16])).unwrap();
+        store.reset();
+
+        let handle = Arc::new((store.clone(), key.clone()));
+        let elements = incompressible();
+        codec
+            .clone()
+            .partial_encoder(handle.clone(), &shape(), &options)
+            .unwrap()
+            .partial_encode(
+                &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
+                &ArrayBytes::from(elements.clone()),
+                &options,
+            )
+            .unwrap();
+        assert_eq!(store.reads(), 0, "{codecs:?}");
+        assert_eq!(store.writes(), 1, "{codecs:?}");
+
+        let decoded = codec
+            .decode(store.get(&key).unwrap().unwrap().into(), &shape(), &options)
+            .unwrap()
+            .into_owned();
+        assert_eq!(decoded, ArrayBytes::from(elements), "{codecs:?}");
+    }
+}
+
 /// A store whose writes fail while `fail_writes` is set. Erasing succeeds, as it would if only the write after an erase failed.
 struct FailingWritesStorage<T> {
     storage: Arc<T>,
@@ -397,6 +434,48 @@ mod r#async {
         }
         // The checksum codec adds no read of the chunk
         assert_eq!(reads[0], reads[1]);
+    }
+
+    #[cfg(all(feature = "zstd", feature = "crc32c"))]
+    #[tokio::test]
+    async fn async_partial_encode_whole_chunk_replaces_undecodable_chunk() {
+        let options = CodecOptions::default();
+        for codecs in [&[BYTES][..], &[BYTES, ZSTD], &[BYTES, ZSTD, CRC32C]] {
+            let codec = bind(codecs, data_type::uint8(), FillValue::from(0u8));
+            let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+                SyncToAsyncStorageAdapter::new(Arc::new(MemoryStore::new()), TokioSpawnBlocking),
+            )));
+            let key = StoreKey::new("c").unwrap();
+            store
+                .set(&key, CowBytes::from(vec![0xff; 16]))
+                .await
+                .unwrap();
+            store.reset();
+
+            let handle = Arc::new((store.clone(), key.clone()));
+            let elements = incompressible();
+            codec
+                .clone()
+                .async_partial_encoder(handle.clone(), &shape(), &options)
+                .await
+                .unwrap()
+                .partial_encode(
+                    &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
+                    &ArrayBytes::from(elements.clone()),
+                    &options,
+                )
+                .await
+                .unwrap();
+            assert_eq!(store.reads(), 0, "{codecs:?}");
+            assert_eq!(store.writes(), 1, "{codecs:?}");
+
+            let encoded = store.get(&key).await.unwrap().unwrap();
+            let decoded = codec
+                .decode(encoded.into(), &shape(), &options)
+                .unwrap()
+                .into_owned();
+            assert_eq!(decoded, ArrayBytes::from(elements), "{codecs:?}");
+        }
     }
 
     #[tokio::test]

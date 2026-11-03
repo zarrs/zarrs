@@ -231,6 +231,16 @@ where
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
 
+        // An update of the entire chunk replaces it, so the existing chunk is not read
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
+        if indexer
+            .as_array_subset()
+            .is_some_and(|subset| subset.is_whole(chunk_shape))
+        {
+            let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
+            return self.input_output_handle.encode(chunk_bytes, options);
+        }
+
         // Only the written elements are encoded, so an existing chunk is never read.
         // A chunk left holding only the fill value is therefore not erased.
         if self.input_output_handle.exists()? {
@@ -268,6 +278,16 @@ where
     ) -> Result<(), CodecError> {
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
+
+        // An update of the entire chunk replaces it, so the existing chunk is not read
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
+        if indexer
+            .as_array_subset()
+            .is_some_and(|subset| subset.is_whole(chunk_shape))
+        {
+            let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
+            return self.input_output_handle.encode(chunk_bytes, options).await;
+        }
 
         // Only the written elements are encoded, so an existing chunk is never read.
         // A chunk left holding only the fill value is therefore not erased.
