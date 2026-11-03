@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
 
 ### Changed
+- The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
 - **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
 - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs

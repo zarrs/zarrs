@@ -54,6 +54,17 @@ impl<T: ?Sized> BytesCodecPartial<T> {
             .ok_or(CodecError::UndefinedFillValue)
     }
 
+    /// Returns true if `bytes` is entirely the fill value and the chunk can be omitted.
+    ///
+    /// Always false if the fill value is undefined.
+    fn is_omittable(&self, bytes: &ArrayBytes<'_>, options: &CodecOptions) -> bool {
+        !options.store_empty_chunks()
+            && self
+                .fill_value
+                .as_ref()
+                .is_some_and(|fill_value| bytes.is_fill_value(fill_value))
+    }
+
     /// Decode bytes, applying endianness conversion if required.
     fn decode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
         Ok(self.data_type.codec_bytes()?.decode(bytes, self.endian)?)
@@ -241,9 +252,13 @@ where
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
 
-        // An update of the entire chunk replaces it, so the existing chunk is not read
+        // An update of the entire chunk replaces it, so the existing chunk is not read.
+        // It is erased if it is entirely the fill value, as with other partial encoders.
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         if indexer.covers_array(chunk_shape) {
+            if self.is_omittable(bytes, options) {
+                return self.input_output_handle.erase();
+            }
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
             return self.input_output_handle.encode(chunk_bytes, options);
         }
@@ -286,9 +301,13 @@ where
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
 
-        // An update of the entire chunk replaces it, so the existing chunk is not read
+        // An update of the entire chunk replaces it, so the existing chunk is not read.
+        // It is erased if it is entirely the fill value, as with other partial encoders.
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         if indexer.covers_array(chunk_shape) {
+            if self.is_omittable(bytes, options) {
+                return self.input_output_handle.erase().await;
+            }
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
             return self.input_output_handle.encode(chunk_bytes, options).await;
         }

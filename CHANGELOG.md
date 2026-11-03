@@ -138,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bump `serial_test` to 3.5.0
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - The `bytes` codec partial encoder replaces the chunk without checking for or reading the existing chunk if an update covers the entire chunk
+  - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
   - Following bytes-to-bytes codecs (e.g. `zstd`) no longer decode the existing chunk, so an undecodable chunk can be replaced
 
 ### Removed
