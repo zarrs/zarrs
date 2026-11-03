@@ -515,6 +515,21 @@ where
             .encode(bytes_encoded, options, resources)
     }
 
+    fn size(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        if let BytesRepresentation::FixedSize(size) = self.decoded_representation {
+            Ok(self.input_output_handle.exists()?.then_some(size))
+        } else {
+            // This encoder does not support partial encoding, so the sharding partial encoder replaces the shard rather than calling this
+            Ok(self
+                .decode(options, resources)?
+                .map(|bytes| bytes.len() as u64))
+        }
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -940,6 +955,22 @@ where
         self.input_output_handle
             .encode(bytes_encoded, options, resources)
             .await
+    }
+
+    async fn size(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        if let BytesRepresentation::FixedSize(size) = self.decoded_representation {
+            Ok(self.input_output_handle.exists().await?.then_some(size))
+        } else {
+            // This encoder does not support partial encoding, so the sharding partial encoder replaces the shard rather than calling this
+            Ok(self
+                .decode(options, resources)
+                .await?
+                .map(|bytes| bytes.len() as u64))
+        }
     }
 
     async fn partial_encode_many<'a>(

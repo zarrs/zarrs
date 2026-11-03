@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
+- **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::size` method, returning the size of the existing bytes
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput`, resolving immediate or deferred encoded bytes without cloning them
 - **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; remove compute-target control and `chunk_concurrent_minimum` (including its getter, setter, and `with_` method) from `CodecOptions`
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time

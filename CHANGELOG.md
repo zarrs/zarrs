@@ -127,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; shared decode target helpers and transformed view copying; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources, deferred decoding, and partial-encoder size queries; codecs bind to a data type and fill value at array creation; shared decode target helpers and transformed view copying; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
 
 #### General
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries

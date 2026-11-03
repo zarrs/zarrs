@@ -136,6 +136,14 @@ impl<T: ArrayPartialEncoderTraits + ?Sized> BytesPartialEncoderTraits
             .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options, resources)
     }
 
+    fn size(
+        &self,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        Ok(self.input_handle.exists()?.then_some(self.encoded_size))
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -228,6 +236,18 @@ impl<T: AsyncArrayPartialEncoderTraits + ?Sized> AsyncBytesPartialEncoderTraits
         self.input_handle
             .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options, resources)
             .await
+    }
+
+    async fn size(
+        &self,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        Ok(self
+            .input_handle
+            .exists()
+            .await?
+            .then_some(self.encoded_size))
     }
 
     async fn partial_encode_many<'a>(

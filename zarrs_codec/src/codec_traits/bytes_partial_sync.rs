@@ -97,6 +97,19 @@ pub trait BytesPartialEncoderTraits:
         resources: &Resources,
     ) -> Result<(), CodecError>;
 
+    /// Returns the size of the existing encoded bytes, or [`None`] if they do not exist.
+    ///
+    /// This is for partial encoders that write at offsets, since [`partial_encode`](Self::partial_encode) never truncates the existing bytes.
+    /// Callers only need it when [`supports_partial_encode`](Self::supports_partial_encode) returns `true`.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or there is an underlying store error.
+    fn size(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<u64>, CodecError>;
+
     /// Partially encode a chunk.
     ///
     /// # Errors
@@ -233,6 +246,18 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
         Ok(())
     }
 
+    fn size(
+        &self,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        Ok(self
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|bytes| bytes.len() as u64))
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -306,6 +331,14 @@ impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTrait
         Ok(self.0.set(&self.1, bytes)?)
     }
 
+    fn size(
+        &self,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        Ok(self.0.size_key(&self.1)?)
+    }
+
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
@@ -372,6 +405,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(store.get(&key).unwrap().unwrap(), [7, 8].as_slice());
+    }
+
+    #[test]
+    fn size() {
+        use std::sync::Arc;
+        use zarrs_storage::WritableStorageTraits;
+        use zarrs_storage::store::MemoryStore;
+
+        let options = CodecOptions::default();
+        let store = Arc::new(MemoryStore::new());
+        let key = StoreKey::new("c").unwrap();
+        let encoder = (store.clone(), key.clone());
+        assert_eq!(encoder.size(&options, &Resources::default()).unwrap(), None);
+        store.set(&key, CowBytes::from(vec![0u8; 10])).unwrap();
+        assert_eq!(
+            encoder.size(&options, &Resources::default()).unwrap(),
+            Some(10)
+        );
+
+        assert_eq!(
+            Mutex::new(None::<Vec<u8>>)
+                .size(&options, &Resources::default())
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            Mutex::new(Some(vec![0u8; 3]))
+                .size(&options, &Resources::default())
+                .unwrap(),
+            Some(3)
+        );
     }
 
     #[test]
