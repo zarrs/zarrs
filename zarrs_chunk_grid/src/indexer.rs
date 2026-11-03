@@ -166,6 +166,19 @@ pub trait Indexer: MaybeSend + MaybeSync {
     fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         None
     }
+
+    /// Returns true if the indexer references every element of an array with `array_shape` exactly once, in C order.
+    ///
+    /// The indexer is then equivalent to the whole array, so callers may use bytes for the indexer as the bytes of the whole array.
+    /// An indexer that references every element in another order (e.g. a permutation) must return false.
+    ///
+    /// The default implementation only recognises indexers that represent an array subset (see [`Indexer::as_array_subset`]), and is otherwise false.
+    /// A false result is conservative: callers may still assume that some elements are not referenced.
+    #[must_use]
+    fn covers_array(&self, array_shape: &[u64]) -> bool {
+        self.as_array_subset()
+            .is_some_and(|subset| subset.is_whole(array_shape))
+    }
 }
 
 impl<T: Indexer> Indexer for &T {
@@ -205,6 +218,10 @@ impl<T: Indexer> Indexer for &T {
 
     fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         (**self).as_array_subset()
+    }
+
+    fn covers_array(&self, array_shape: &[u64]) -> bool {
+        (**self).covers_array(array_shape)
     }
 }
 
@@ -654,6 +671,20 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn covers_array() {
+        let whole = ArraySubset::new_with_ranges(&[0..2, 0..3]);
+        assert!(Indexer::covers_array(&whole, &[2, 3]));
+        assert!(Indexer::covers_array(&&whole, &[2, 3]));
+        assert!([0..2, 0..3].covers_array(&[2, 3]));
+        assert!(!Indexer::covers_array(&whole, &[2, 4]));
+        assert!(!ArraySubset::new_with_ranges(&[1..2, 0..3]).covers_array(&[2, 3]));
+
+        // Indexers that are not array subsets are conservatively not whole
+        let indices: Vec<Vec<u64>> = vec![vec![0], vec![1]];
+        assert!(!indices.covers_array(&[2]));
     }
 
     #[test]

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `ArraySubsetTraits::is_whole`, which returns true if a subset is all of an array of a shape
+- Add `Indexer::covers_array`, which returns true if an indexer references every element of an array of a shape exactly once in C order
 - Add `IncompatibleDimensionError`
 - Add `unravel_index`
 - Add `ChunkGridCreateError` for chunk grid creation and configuration failures
