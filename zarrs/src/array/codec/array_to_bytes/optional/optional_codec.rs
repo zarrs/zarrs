@@ -320,6 +320,14 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let inner_type = data_type.as_optional().ok_or_else(|| {
             CodecCreateError::Other("optional codec requires an optional data type".to_string())
         })?;
+        if let Some(fill_value) = &fill_value
+            && data_type.metadata_fill_value(fill_value).is_err()
+        {
+            return Err(CodecCreateError::Other(format!(
+                "the optional codec requires a fill value of [0] (null) or a fill value of the inner data type followed by 1, got {fill_value} for data type `{}`",
+                data_type.name_v3().unwrap_or_default()
+            )));
+        }
         // See "Data Codecs Fill Value" in the module docs
         let inner_fill_value = fill_value.as_ref().and_then(|fill_value| {
             if !inner_type.is_fill_value_null(fill_value) {
@@ -518,6 +526,62 @@ mod tests {
     use super::*;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
     use zarrs_codec::{CodecOptions, CodecTraits, UnboundArrayToBytesCodecTraits};
+
+    #[test]
+    fn codec_optional_malformed_fill_value() {
+        let bind = |data_type: &DataType, fill_value: Vec<u8>| {
+            let inner = data_type.as_optional().unwrap().data_type();
+            let data_codecs = if inner.is_fixed() {
+                build_codec_config_for_type(data_type)
+            } else {
+                r#"[{"name": "vlen-utf8"}]"#.to_string()
+            };
+            let configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
+                r#"{{"mask_codecs": [{{"name": "packbits"}}], "data_codecs": {data_codecs}}}"#
+            ))
+            .unwrap();
+            Arc::new(OptionalCodec::new_with_configuration(&configuration).unwrap()).with_context(
+                data_type.clone(),
+                Some(FillValue::new(fill_value)),
+                &CodecSpecificOptions::default(),
+            )
+        };
+        let opt_u16 = data_type::uint16().to_optional();
+        let opt_opt_u16 = opt_u16.clone().to_optional();
+        let opt_string = data_type::string().to_optional();
+        for (data_type, fill_value) in [
+            (&opt_u16, vec![0]),
+            (&opt_u16, vec![1, 2, 1]),
+            (&opt_opt_u16, vec![0]),
+            (&opt_opt_u16, vec![0, 1]),
+            (&opt_opt_u16, vec![1, 2, 1, 1]),
+            (&opt_string, vec![1]),
+            (&opt_string, vec![b'a', 1]),
+        ] {
+            if let Err(err) = bind(data_type, fill_value.clone()) {
+                panic!("{data_type:?} {fill_value:?}: {err}");
+            }
+        }
+        for (data_type, fill_value) in [
+            (&opt_u16, vec![]),
+            (&opt_u16, vec![2]),
+            (&opt_u16, vec![1, 2]),
+            (&opt_u16, vec![1, 2, 3, 1]),
+            (&opt_u16, vec![0, 0]),
+            (&opt_u16, vec![1, 2, 2]),
+            (&opt_opt_u16, vec![1, 2, 1]),
+            (&opt_opt_u16, vec![1]),
+            (&opt_string, vec![]),
+        ] {
+            let Err(err) = bind(data_type, fill_value.clone()) else {
+                panic!("{fill_value:?}");
+            };
+            assert!(
+                err.to_string().starts_with("the optional codec requires"),
+                "{fill_value:?}: {err}"
+            );
+        }
+    }
 
     #[test]
     fn codec_optional_configuration() {

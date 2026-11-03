@@ -531,7 +531,18 @@ impl ArrayBuilder {
     /// Build the fill value for a data type from the builder state.
     fn build_fill_value(&self, data_type: &DataType) -> Result<FillValue, ArrayCreateError> {
         match &self.fill_value.0 {
-            ArrayBuilderFillValueImpl::FillValue(fill_value) => Ok(fill_value.clone()),
+            ArrayBuilderFillValueImpl::FillValue(fill_value) => {
+                // Validate the fill value before it is used to bind the codecs
+                data_type.metadata_fill_value(fill_value).map_err(|_| {
+                    ArrayCreateError::InvalidFillValue {
+                        data_type_name: data_type
+                            .name_v3()
+                            .map_or_else(String::new, Cow::into_owned),
+                        fill_value: fill_value.clone(),
+                    }
+                })?;
+                Ok(fill_value.clone())
+            }
             ArrayBuilderFillValueImpl::Metadata(fill_value_metadata) => {
                 // ArrayBuilder is always for V3 arrays
                 data_type.fill_value_v3(fill_value_metadata).map_err(|_| {
@@ -838,6 +849,24 @@ mod tests {
             err.to_string(),
             "invalid fill value metadata for data type `string`: 123"
         );
+    }
+
+    #[test]
+    fn array_builder_invalid_fill_value_error() {
+        let storage = Arc::new(MemoryStore::new());
+        for fill_value in [vec![], vec![5], vec![5, 5, 5]] {
+            let result = ArrayBuilder::new(
+                vec![8],
+                vec![4],
+                data_type::raw_bits(2),
+                FillValue::new(fill_value.clone()),
+            )
+            .build(storage.clone(), "/");
+            assert!(
+                matches!(result, Err(ArrayCreateError::InvalidFillValue { .. })),
+                "{fill_value:?}: {result:?}",
+            );
+        }
     }
 
     #[test]

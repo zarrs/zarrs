@@ -1730,6 +1730,27 @@ mod tests {
     }
 
     #[test]
+    fn data_type_raw_bits_metadata_fill_value_size() {
+        let data_type = raw_bits(2);
+        assert!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1]))
+                .is_err()
+        );
+        assert!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1, 2, 3]))
+                .is_err()
+        );
+        assert_eq!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1, 2]))
+                .unwrap(),
+            serde_json::from_str::<FillValueMetadata>("[1, 2]").unwrap()
+        );
+    }
+
+    #[test]
     fn data_type_raw_bits_failure1() {
         let json = r#"
     {

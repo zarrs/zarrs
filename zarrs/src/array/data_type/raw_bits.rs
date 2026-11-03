@@ -198,6 +198,9 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
         // An array of bytes, as specified (not base64 encoded, as required by tensorstore)
         let bytes = fill_value.as_ne_bytes();
+        if bytes.len() != self.size_bytes {
+            return Err(zarrs_data_type::DataTypeFillValueError);
+        }
         let arr: Vec<zarrs_metadata::FillValueMetadata> = bytes
             .iter()
             .map(|&b| zarrs_metadata::FillValueMetadata::from(b))
