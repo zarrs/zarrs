@@ -28,6 +28,9 @@
 - `zarrs: 0.18-0.23` partially encoding a chunk with `Array::[async_]partial_encoder` through a bytes-to-bytes codec (e.g. `zstd`) left trailing bytes of the previous chunk if the re-encoded chunk was shorter
   - These chunks may fail to be decoded, depending on the codec and implementation (e.g. `zarrs` fails to decode them with `zstd`)
   - `Array::store_chunk_subset` and similar methods were unaffected, since they only partially encode chunks if every codec supports partial encoding
+- `zarrs: 0.18-0.23` partially encoding a `sharding_indexed` shard with a trailing index (`index_location: end`) could write a shorter shard than before if earlier partial encodes removed subchunks (e.g. by writing the fill value), leaving bytes of the previous index at the end of the shard
+  - Readers decode the shard index from the end of the shard, so these shards may fail to be decoded (e.g. with an invalid `crc32c` checksum) or return stale subchunks
+  - Only partial encoding with `Array::[async_]partial_encoder`, or with `Array::store_chunk_subset` and similar methods if experimental partial encoding was enabled, was affected
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
 - `zarrs: 0.20-0.23` Data encoded with `packbits` with a `first_byte` or `last_byte` `padding_encoding` omitted the padding encoding byte if the components are whole bytes that are all packed (e.g. `float32`, or `int8` without `first_bit`/`last_bit`)
   - These chunks fail to be decoded by other Zarr implementations and `zarrs` 0.24+
