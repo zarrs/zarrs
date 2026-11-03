@@ -233,10 +233,7 @@ where
 
         // An update of the entire chunk replaces it, so the existing chunk is not read
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-        if indexer
-            .as_array_subset()
-            .is_some_and(|subset| subset.is_whole(chunk_shape))
-        {
+        if indexer.covers_array(chunk_shape) {
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
             return self.input_output_handle.encode(chunk_bytes, options);
         }
@@ -281,10 +278,7 @@ where
 
         // An update of the entire chunk replaces it, so the existing chunk is not read
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-        if indexer
-            .as_array_subset()
-            .is_some_and(|subset| subset.is_whole(chunk_shape))
-        {
+        if indexer.covers_array(chunk_shape) {
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
             return self.input_output_handle.encode(chunk_bytes, options).await;
         }
