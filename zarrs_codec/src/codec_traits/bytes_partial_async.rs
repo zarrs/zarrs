@@ -102,6 +102,19 @@ pub trait AsyncBytesPartialEncoderTraits:
         resources: &Resources,
     ) -> Result<(), CodecError>;
 
+    /// Returns the size of the existing encoded bytes, or [`None`] if they do not exist.
+    ///
+    /// This is for partial encoders that write at offsets, since [`partial_encode`](Self::partial_encode) never truncates the existing bytes.
+    /// Callers only need it when [`supports_partial_encode`](Self::supports_partial_encode) returns `true`.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or there is an underlying store error.
+    async fn size(
+        &self,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<Option<u64>, CodecError>;
+
     /// Partially encode a chunk.
     ///
     /// # Errors
@@ -248,6 +261,14 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
         _resources: &Resources,
     ) -> Result<(), CodecError> {
         Ok(self.0.set(&self.1, bytes).await?)
+    }
+
+    async fn size(
+        &self,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<Option<u64>, CodecError> {
+        Ok(self.0.size_key(&self.1).await?)
     }
 
     async fn partial_encode_many<'a>(

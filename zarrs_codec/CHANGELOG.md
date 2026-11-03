@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, checking fixed, variable, and nested optional layouts against both the original bytes and update bytes
 - **Breaking**: Box `CodecError::CodecCreateError` to retain the error-size limits after `DataType` becomes an enum; conversion from `CodecCreateError` is retained
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `BytesDecodeInput`, resolving immediate or deferred encoded bytes without cloning them
+- **Breaking**: Add the required `{Sync,Async}BytesPartialEncoderTraits::size` method, returning the size of the existing bytes
 - **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; remove compute-target control and `chunk_concurrent_minimum` (including its getter, setter, and `with_` method) from `CodecOptions`
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time
   - Add `ArrayCodecTraits::{as_any,data_type,fill_value}`, and `ArrayCodecTraits` no longer requires `CodecTraits`

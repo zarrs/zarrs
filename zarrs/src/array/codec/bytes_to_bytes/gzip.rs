@@ -181,6 +181,59 @@ mod tests {
         assert_eq!(answer, decoded_partial_chunk);
     }
 
+    /// The default partial encoder knows the size of a fixed size representation without decoding.
+    #[test]
+    fn codec_gzip_partial_encoder_size() {
+        let options = CodecOptions::default();
+        let configuration: GzipCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = Arc::new(GzipCodec::new_with_configuration(&configuration).unwrap());
+        let encoded = codec
+            .encode(
+                CowBytes::from((0..16).collect::<Vec<u8>>()),
+                &options,
+                &zarrs_codec::ComputeResources::default(),
+            )
+            .unwrap()
+            .into_vec();
+
+        for bytes_representation in [
+            BytesRepresentation::FixedSize(16),
+            BytesRepresentation::UnboundedSize,
+        ] {
+            let partial_encoder = codec
+                .clone()
+                .partial_encoder(
+                    Arc::new(std::sync::Mutex::new(Some(encoded.clone()))),
+                    &bytes_representation,
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .unwrap();
+            assert_eq!(
+                partial_encoder
+                    .size(&options, &zarrs_codec::Resources::default())
+                    .unwrap(),
+                Some(16)
+            );
+
+            let partial_encoder = codec
+                .clone()
+                .partial_encoder(
+                    Arc::new(std::sync::Mutex::new(None)),
+                    &bytes_representation,
+                    &options,
+                    &zarrs_codec::Resources::default(),
+                )
+                .unwrap();
+            assert_eq!(
+                partial_encoder
+                    .size(&options, &zarrs_codec::Resources::default())
+                    .unwrap(),
+                None
+            );
+        }
+    }
+
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_gzip_async_partial_decode() {
