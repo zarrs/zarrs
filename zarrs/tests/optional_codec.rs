@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, ArraySubset, DataType, FillValue, data_type};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayCreateError, ArraySubset, DataType, FillValue, data_type,
+};
 use zarrs::storage::store::MemoryStore;
 
 /// Test helper to create an array with optional codec
@@ -710,4 +712,22 @@ fn optional_data_type_missing_inner_configuration() -> Result<(), Box<dyn std::e
         data_type::uint8().to_optional().to_optional()
     );
     Ok(())
+}
+
+#[test]
+fn optional_array_malformed_fill_value() {
+    let store = Arc::new(MemoryStore::new());
+    for fill_value in [vec![], vec![5, 0], vec![5], vec![5, 2], vec![5, 5, 1]] {
+        let result = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            FillValue::new(fill_value.clone()),
+        )
+        .build(store.clone(), "/");
+        assert!(
+            matches!(result, Err(ArrayCreateError::InvalidFillValue { .. })),
+            "{fill_value:?}: {result:?}",
+        );
+    }
 }

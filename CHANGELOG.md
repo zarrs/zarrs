@@ -161,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 - Accept `optional` data type metadata without an inner data type `configuration`, which is optional in the specification
 - Reject malformed fill values of the `optional` data type, rather than binding `data_codecs` with a fill value of the wrong size
+- `ArrayBuilder` validates a `FillValue` against the data type before binding the codecs, so an invalid fill value returns `ArrayCreateError::InvalidFillValue` rather than a codec error
 - Reject `r*` (raw bits) fill values whose length differs from the data type size
 - Fix `Array::[async_]partial_encoder` leaving trailing bytes of the previous chunk if a bytes-to-bytes codec (e.g. `zstd`) re-encoded the chunk shorter, which could make it undecodable
 - The `sharding_indexed` partial encoder replaces a rewritten shard rather than erasing it first, so a failed write leaves the shard intact
