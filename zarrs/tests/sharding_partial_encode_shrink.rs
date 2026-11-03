@@ -173,6 +173,27 @@ fn partial_encode_crc32c_reads() {
             [1, 2, 3, 9, 5, 6],
             "{location:?}"
         );
+
+        // Overwriting every subchunk reads only the index
+        store.reset();
+        array
+            .partial_encoder(&[0], &zarrs_codec::Resources::default())
+            .unwrap()
+            .partial_encode(
+                &ArraySubset::new_with_ranges(&[0..6]),
+                &ArrayBytes::new_flen(vec![6, 5, 4, 3, 2, 1]),
+                &CodecOptions::default(),
+                &zarrs_codec::Resources::default(),
+            )
+            .unwrap();
+        assert_eq!(store.reads(), 1, "{location:?}");
+        assert_eq!(
+            array
+                .retrieve_chunk::<Vec<u8>>(&[0], &zarrs_codec::Resources::default())
+                .unwrap(),
+            [6, 5, 4, 3, 2, 1],
+            "{location:?}"
+        );
     }
 }
 
@@ -221,6 +242,29 @@ async fn async_partial_encode_crc32c_reads() {
                 .await
                 .unwrap(),
             [1, 2, 3, 9, 5, 6],
+            "{location:?}"
+        );
+
+        store.reset();
+        array
+            .async_partial_encoder(&[0], &zarrs_codec::Resources::default())
+            .await
+            .unwrap()
+            .partial_encode(
+                &ArraySubset::new_with_ranges(&[0..6]),
+                &ArrayBytes::new_flen(vec![6, 5, 4, 3, 2, 1]),
+                &CodecOptions::default(),
+                &zarrs_codec::Resources::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(store.reads(), 1, "{location:?}");
+        assert_eq!(
+            array
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &zarrs_codec::Resources::default())
+                .await
+                .unwrap(),
+            [6, 5, 4, 3, 2, 1],
             "{location:?}"
         );
     }
