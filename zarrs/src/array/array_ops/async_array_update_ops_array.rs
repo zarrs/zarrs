@@ -186,13 +186,13 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     chunk_shape,
                 ));
             }
-            if chunk_subset.is_whole(&chunk_shape) {
-                return self
-                    .async_store_chunk_with_options(chunk_indices, indexer_data, options)
-                    .await;
-            }
         } else {
             indexer.validate(&chunk_shape).map_err(CodecError::from)?;
+        }
+        if indexer.covers_array(&chunk_shape) {
+            return self
+                .async_store_chunk_with_options(chunk_indices, indexer_data, options)
+                .await;
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
