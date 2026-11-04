@@ -272,6 +272,13 @@ impl ArrayToArrayCodecSubchunkingTraits for DefaultPartialTransposeCodecBound {
             .encoded_element_indices(decoded_shape, decoded_element_indices)
     }
 
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &zarrs::array::ArraySubset,
+    ) -> Result<Option<zarrs::array::ArraySubset>, CodecError> {
+        self.inner.encoded_subset(decoded_shape, decoded_subset)
+    }
 }
 
 #[cfg(feature = "transpose")]

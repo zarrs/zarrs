@@ -6,7 +6,8 @@ use zarrs_plugin::ZarrVersion;
 
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{
-    ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue, ravel_indices, unravel_index,
+    ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue, ravel_indices,
+    unravel_index,
 };
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -192,6 +193,35 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
             encoded_subchunk_grid,
         )
         .map_err(|err| CodecError::Other(err.to_string()))
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        let last = decoded_subset
+            .end_inc()
+            .expect("a validated subset is nonempty");
+        let start = reshape_element_indices(decoded_shape, &encoded_shape, decoded_subset.start());
+        let last = reshape_element_indices(decoded_shape, &encoded_shape, &last);
+        if std::iter::zip(&start, &last).any(|(start, last)| last < start) {
+            return Ok(None);
+        }
+        let candidate =
+            ArraySubset::from(std::iter::zip(start, last).map(|(start, last)| start..last + 1));
+        if candidate.num_elements() != decoded_subset.num_elements() {
+            return Ok(None);
+        }
+        // The corners alone do not determine the elements, so compare the selected linear indices.
+        // Runs are maximal, so equal selections yield equal runs.
+        let decoded_runs = decoded_subset
+            .contiguous_linearised_indices(bytemuck::must_cast_slice(decoded_shape))?;
+        let encoded_runs =
+            candidate.contiguous_linearised_indices(bytemuck::must_cast_slice(&encoded_shape))?;
+        Ok((decoded_runs == encoded_runs).then_some(candidate))
     }
 }
 

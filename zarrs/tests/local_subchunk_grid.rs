@@ -499,6 +499,16 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
         // Chunk-local grids are not exercised by this codec
         Ok(None)
     }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &zarrs::array::ArraySubset,
+    ) -> Result<Option<zarrs::array::ArraySubset>, CodecError> {
+        // Subsets are not exercised by this codec
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
+        Ok(None)
+    }
 }
 
 impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {

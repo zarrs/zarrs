@@ -5,10 +5,13 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
 use super::{
-    TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
+    TransposeCodecConfiguration, TransposeOrder, apply_permutation, get_transposed_array_subset,
+    inverse_permutation, permute,
 };
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ArrayBytes, ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{
+    ArrayBytes, ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue,
+};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -225,6 +228,16 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
         )
         .map(Some)
         .map_err(|err| CodecError::Other(err.to_string()))
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
+        self.validate(decoded_shape)?;
+        get_transposed_array_subset(&self.order.0, decoded_shape, decoded_subset).map(Some)
     }
 }
 
