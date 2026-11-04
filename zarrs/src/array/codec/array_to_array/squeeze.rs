@@ -220,6 +220,14 @@ mod tests {
     #[test]
     fn codec_squeeze_partial_decode_granularity() {
         test_squeeze_partial_decode_granularity(
+            vec![1, 1],
+            vec![nz(1), nz(1)],
+            vec![1],
+            vec![nz(1)],
+            vec![vec![nz(1)], vec![nz(1)]],
+        );
+
+        test_squeeze_partial_decode_granularity(
             vec![1, 10],
             vec![nz(1), nz(5)],
             vec![10],
@@ -234,6 +242,36 @@ mod tests {
             vec![nz(2), nz(10)],
             vec![vec![nz(2), nz(2)], vec![nz(1), nz(1)], vec![nz(10), nz(10)]],
         );
+    }
+
+    #[test]
+    fn codec_squeeze_decoded_subchunk_grid_rejects_incompatible_dimensionality() {
+        let codec = Arc::new(SqueezeCodec::new())
+            .with_context(
+                data_type::uint8(),
+                Some(FillValue::from(0u8)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        for (decoded_shape, encoded_shape, subchunk_shape) in [
+            (vec![1, 4], vec![4, 2], vec![nz(2), nz(1)]),
+            (vec![4, 4], vec![4], vec![nz(2)]),
+            (vec![1, 1], vec![1, 2], vec![nz(1), nz(1)]),
+        ] {
+            let chunk_shape = decoded_shape.iter().copied().map(nz).collect();
+            let decoded_chunk_grid =
+                ChunkGrid::new(RegularChunkGrid::new(decoded_shape, chunk_shape).unwrap());
+            let encoded_subchunk_grid =
+                ChunkGrid::new(RegularChunkGrid::new(encoded_shape, subchunk_shape).unwrap());
+            assert!(
+                codec
+                    .decoded_subchunk_grid(
+                        (&decoded_chunk_grid).into(),
+                        (&encoded_subchunk_grid).into(),
+                    )
+                    .is_err()
+            );
+        }
     }
 
     #[test]

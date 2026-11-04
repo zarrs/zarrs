@@ -1,11 +1,12 @@
 #![allow(missing_docs)]
+use zarrs::array::chunk_grid::RegularChunkGrid;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::{ReshapeCodec, ReshapeDim, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    ArrayBytes, ArraySubset, ChunkShapeTraits, FillValue, data_type, ravel_indices,
+    ArrayBytes, ArraySubset, ChunkGrid, ChunkShapeTraits, FillValue, data_type, ravel_indices,
 };
 use zarrs::metadata_ext::codec::reshape::ReshapeShape;
 use zarrs_codec::{
@@ -190,6 +191,175 @@ fn packbits_has_no_element_mapping() {
         assert!(
             codec
                 .encoded_element_indices(&shape(&[2, 3]), &element_indices)
+                .is_err()
+        );
+    }
+}
+
+/// Check that the decoded local subchunk grid addresses the same subchunks as `encoded_subchunk_shape` in the encoded
+/// chunk, with elements mapped by `encoded_element_indices`.
+fn check_decoded_local_subchunk_grid(
+    codec: &Arc<dyn ArrayToArrayCodecTraits>,
+    decoded_shape: &[u64],
+    encoded_subchunk_shape: &[u64],
+) {
+    let decoded_shape = shape(decoded_shape);
+    let encoded_shape = codec.encoded_shape(&decoded_shape).unwrap();
+    let encoded_grid = ChunkGrid::new(
+        RegularChunkGrid::new(
+            bytemuck::must_cast_slice(&encoded_shape).to_vec(),
+            shape(encoded_subchunk_shape),
+        )
+        .unwrap(),
+    );
+    check_grid(codec, &decoded_shape, &encoded_grid);
+}
+
+fn check_grid(
+    codec: &Arc<dyn ArrayToArrayCodecTraits>,
+    decoded_shape: &[NonZeroU64],
+    encoded_grid: &ChunkGrid,
+) {
+    let decoded_shape_u64: &[u64] = bytemuck::must_cast_slice(decoded_shape);
+    let decoded_grid = codec
+        .decoded_local_subchunk_grid(decoded_shape, encoded_grid)
+        .unwrap()
+        .unwrap();
+    assert_eq!(decoded_grid.array_shape(), decoded_shape_u64);
+
+    // Each decoded subchunk maps to exactly one encoded subchunk, and vice versa
+    let mut decoded_to_encoded = std::collections::HashMap::new();
+    let mut encoded_to_decoded = std::collections::HashMap::new();
+    for decoded_element_indices in ArraySubset::new_with_shape(decoded_shape_u64).indices() {
+        let decoded_subchunk = decoded_grid
+            .chunk_indices(&decoded_element_indices)
+            .unwrap()
+            .unwrap()
+            .to_vec();
+        let encoded_element_indices = codec
+            .encoded_element_indices(decoded_shape, &decoded_element_indices)
+            .unwrap()
+            .unwrap();
+        let encoded_subchunk = encoded_grid
+            .chunk_indices(&encoded_element_indices)
+            .unwrap()
+            .unwrap()
+            .to_vec();
+        assert_eq!(
+            decoded_to_encoded
+                .entry(decoded_subchunk.clone())
+                .or_insert_with(|| encoded_subchunk.clone()),
+            &encoded_subchunk
+        );
+        assert_eq!(
+            encoded_to_decoded
+                .entry(encoded_subchunk)
+                .or_insert_with(|| decoded_subchunk.clone()),
+            &decoded_subchunk
+        );
+    }
+}
+
+#[test]
+fn local_grid_mappings() {
+    check_decoded_local_subchunk_grid(
+        &bind(Arc::new(TransposeCodec::new(
+            TransposeOrder::new(&[2, 0, 1]).unwrap(),
+        ))),
+        &[2, 3, 4],
+        &[3, 1, 2],
+    );
+    check_decoded_local_subchunk_grid(&bind(Arc::new(SqueezeCodec::new())), &[1, 3, 1, 4], &[2, 3]);
+    check_decoded_local_subchunk_grid(&bind(Arc::new(SqueezeCodec::new())), &[1, 1], &[1]);
+    let reshape = bind(Arc::new(ReshapeCodec::new(
+        ReshapeShape::new(vec![ReshapeDim::from(shape(&[3])[0]), ReshapeDim::auto()]).unwrap(),
+    )));
+    check_decoded_local_subchunk_grid(&reshape, &[2, 3, 4], &[1, 4]);
+}
+
+#[test]
+fn local_grid_rectilinear_negative_and_identity_contracts() {
+    use zarrs::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
+    use zarrs::array::codec::{CastValueCodec, NumcodecsPackBitsCodec};
+    let grid = ChunkGrid::new(
+        RectilinearChunkGrid::new(
+            vec![4, 3],
+            &[
+                ChunkEdgeLengths::encode(&shape(&[1, 3])),
+                ChunkEdgeLengths::encode(&shape(&[2, 1])),
+            ],
+        )
+        .unwrap(),
+    );
+    let transpose = bind(Arc::new(TransposeCodec::new(
+        TransposeOrder::new(&[1, 0]).unwrap(),
+    )));
+    check_grid(&transpose, &shape(&[3, 4]), &grid);
+    let squeeze = bind(Arc::new(SqueezeCodec::new()));
+    check_grid(&squeeze, &shape(&[1, 4, 1, 3]), &grid);
+    let identity = bind(Arc::new(
+        CastValueCodec::new_with_configuration(
+            &serde_json::from_value(serde_json::json!({"data_type": "uint32"})).unwrap(),
+        )
+        .unwrap(),
+    ));
+    check_grid(&identity, &shape(&[4, 3]), &grid);
+    let wrong = ChunkGrid::new(RegularChunkGrid::new(vec![12], shape(&[2])).unwrap());
+    let wrong_shape = ChunkGrid::new(RegularChunkGrid::new(vec![2, 2], shape(&[2, 2])).unwrap());
+    for invalid_grid in [&wrong, &wrong_shape] {
+        assert!(
+            identity
+                .decoded_local_subchunk_grid(&shape(&[4, 3]), invalid_grid)
+                .is_err()
+        );
+        assert!(
+            transpose
+                .decoded_local_subchunk_grid(&shape(&[3, 4]), invalid_grid)
+                .is_err()
+        );
+        assert!(
+            squeeze
+                .decoded_local_subchunk_grid(&shape(&[1, 4, 1, 3]), invalid_grid)
+                .is_err()
+        );
+    }
+    let reshape = bind(Arc::new(ReshapeCodec::new(
+        ReshapeShape::new(vec![ReshapeDim::from(shape(&[3])[0]), ReshapeDim::auto()]).unwrap(),
+    )));
+    // Encoded columns do not become rectangles in [2,6].
+    let columns = ChunkGrid::new(RegularChunkGrid::new(vec![3, 4], shape(&[3, 1])).unwrap());
+    assert!(
+        reshape
+            .decoded_local_subchunk_grid(&shape(&[2, 6]), &columns)
+            .unwrap()
+            .is_none()
+    );
+    for invalid_grid in [&wrong, &wrong_shape] {
+        assert!(
+            reshape
+                .decoded_local_subchunk_grid(&shape(&[2, 6]), invalid_grid)
+                .is_err()
+        );
+    }
+    let packbits = NumcodecsPackBitsCodec::new()
+        .with_context(
+            data_type::bool(),
+            Some(false.into()),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    // [4, 3] booleans pack into 1 + ceil(12 / 8) = 3 bytes
+    let packed_grid = ChunkGrid::new(RegularChunkGrid::new(vec![3], shape(&[1])).unwrap());
+    assert!(
+        packbits
+            .decoded_local_subchunk_grid(&shape(&[4, 3]), &packed_grid)
+            .unwrap()
+            .is_none()
+    );
+    for invalid_grid in [&grid, &wrong] {
+        assert!(
+            packbits
+                .decoded_local_subchunk_grid(&shape(&[4, 3]), invalid_grid)
                 .is_err()
         );
     }

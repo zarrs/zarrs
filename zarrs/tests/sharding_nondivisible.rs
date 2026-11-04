@@ -94,6 +94,21 @@ fn sharding_nondivisible_subchunk_grid_rectilinear() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+#[test]
+fn sharding_nondivisible_subchunk_grid_squeezed() -> Result<(), Box<dyn std::error::Error>> {
+    let mut builder = ArrayBuilder::new(vec![20, 1, 17], vec![8, 1, 6], data_type::uint16(), 0u16);
+    builder.array_to_array_codecs(vec![Arc::new(zarrs::array::codec::SqueezeCodec::new())]);
+    builder.array_to_bytes_codec(
+        ShardingCodecBuilder::new(vec![nz(3), nz(4)], &data_type::uint16()).build_arc(),
+    );
+    let array = build_from_metadata(&builder, Arc::new(MemoryStore::default()))?;
+    let grid = array.subchunk_grid();
+    let grid = grid.as_chunk_grid().unwrap();
+    assert_eq!(grid.array_shape(), &[20, 1, 17]);
+    assert_eq!(grid.chunk_edge_lengths(1)?, vec![nz(1)]);
+    Ok(())
+}
+
 const SHAPE: [u64; 2] = [20, 17];
 const SHARD_SHAPE: [u64; 2] = [8, 6];
 

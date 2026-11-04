@@ -232,6 +232,29 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             super::squeeze_dims(decoded_element_indices.iter().copied(), decoded_shape, 0);
         Ok(Some(ArrayIndices::from(encoded_element_indices.as_slice())))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_subchunk_grid.array_shape()
+            != bytemuck::must_cast_slice::<NonZeroU64, u64>(&encoded_shape)
+        {
+            return Err(CodecError::from(
+                "encoded subchunk grid has an incompatible chunk shape",
+            ));
+        }
+        let squeeze: Vec<bool> = decoded_shape.iter().map(|dim| dim.get() == 1).collect();
+        decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(decoded_shape).to_vec(),
+            &squeeze,
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
 }
 
 #[cfg_attr(

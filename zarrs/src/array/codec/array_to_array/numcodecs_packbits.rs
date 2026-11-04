@@ -28,7 +28,7 @@ mod numcodecs_packbits_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_chunk_grid::ArrayIndices;
+use zarrs_chunk_grid::{ArrayIndices, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
@@ -224,13 +224,30 @@ impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
         Ok(ChunkGridDecoded::None)
     }
 
+    // Packed elements are not aligned to the encoded bytes
     fn encoded_element_indices(
         &self,
         decoded_shape: &[NonZeroU64],
         decoded_element_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, CodecError> {
         zarrs_codec::validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
-        // Packed elements are not aligned to the encoded bytes
+        Ok(None)
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_subchunk_grid.array_shape()
+            != bytemuck::must_cast_slice::<NonZeroU64, u64>(&encoded_shape)
+        {
+            return Err(CodecError::Other(format!(
+                "encoded subchunk grid array shape {:?} does not match encoded chunk shape {encoded_shape:?}",
+                encoded_subchunk_grid.array_shape()
+            )));
+        }
         Ok(None)
     }
 }

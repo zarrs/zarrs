@@ -495,11 +495,10 @@ pub(super) fn reshape_rectilinear_grid(
     target_shape: &[NonZeroU64],
     source_grid: &ChunkGrid,
 ) -> Result<Option<ChunkGrid>, ChunkGridCreateError> {
-    if source_grid.dimensionality() != source_shape.len() {
+    if source_grid.array_shape() != bytemuck::must_cast_slice::<NonZeroU64, u64>(source_shape) {
         return Err(ChunkGridCreateError::new(format!(
-            "source grid dimensionality {} is incompatible with reshape source dimensionality {}",
-            source_grid.dimensionality(),
-            source_shape.len()
+            "source grid array shape {:?} is incompatible with reshape source shape {source_shape:?}",
+            source_grid.array_shape(),
         )));
     }
     let Some(intervals) = rectilinear_grid_to_intervals(source_shape, source_grid)? else {
