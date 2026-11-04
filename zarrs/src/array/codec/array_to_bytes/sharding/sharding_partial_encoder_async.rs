@@ -15,6 +15,7 @@ use super::{
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
+use crate::array::codec::InMemoryBytesUpdate;
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size, subchunk_grid,
 };
@@ -548,9 +549,11 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 options,
             )?;
         }
-        let Some(updated) = enclosing.take_updated() else {
+        let updated = match enclosing.take_update() {
+            InMemoryBytesUpdate::Stored(bytes) => Some(CowBytes::from(bytes)),
+            InMemoryBytesUpdate::Erased => None,
             // The enclosing subchunk is unchanged
-            return Ok(());
+            InMemoryBytesUpdate::Unchanged => return Ok(()),
         };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
             .await
@@ -579,16 +582,18 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         let enclosing = self
             .enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)
             .await?;
-        if !enclosing.exists() {
+        if !enclosing.exists()? {
             // The enclosing subchunk is not stored
             return Ok(());
         }
         enclosing
             .encoder
             .erase_subchunk_at_level(level - 1, &enclosing.nested_indices, options)?;
-        let Some(updated) = enclosing.take_updated() else {
+        let updated = match enclosing.take_update() {
+            InMemoryBytesUpdate::Stored(bytes) => Some(CowBytes::from(bytes)),
+            InMemoryBytesUpdate::Erased => None,
             // The enclosing subchunk is unchanged
-            return Ok(());
+            InMemoryBytesUpdate::Unchanged => return Ok(()),
         };
         self.commit_subchunk_updates(&mut shard_index, vec![(enclosing.index, updated)], options)
             .await

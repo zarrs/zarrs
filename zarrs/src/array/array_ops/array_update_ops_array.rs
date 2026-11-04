@@ -11,6 +11,7 @@ use super::{
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
+use crate::array::codec::{InMemoryBytesEncoder, InMemoryBytesUpdate};
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
 use zarrs_storage::ReadableWritableStorage;
@@ -190,7 +191,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     /// Update the encoded subchunk at `subchunk_indices` of the `level` subchunk grid with the partial encoder of its
     /// chunk.
     ///
-    /// If the store does not support partial writes, the encoded chunk is updated in memory and stored whole.
+    /// If the store does not support partial writes, the encoded chunk is updated in memory and stored whole if it
+    /// changed.
     fn update_encoded_subchunk(
         &self,
         level: usize,
@@ -214,7 +216,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             update(encoder.as_ref(), &local_indices, options)?;
             Ok(())
         } else {
-            let buffer = Arc::new(std::sync::Mutex::new(
+            let buffer = Arc::new(InMemoryBytesEncoder::new(
                 self.retrieve_encoded_chunk(&chunk_indices)?
                     .map(|bytes| bytes.to_vec()),
             ));
@@ -229,12 +231,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             )?;
             update(encoder.as_ref(), &local_indices, options)?;
             drop(encoder);
-            let updated = buffer.lock().unwrap().take();
-            if let Some(updated) = updated {
+            match buffer.take_update() {
                 // SAFETY: The bytes were encoded by the codecs of the array.
-                unsafe { self.store_encoded_chunk(&chunk_indices, updated.into()) }
-            } else {
-                self.erase_chunk(&chunk_indices)
+                InMemoryBytesUpdate::Stored(updated) => unsafe {
+                    self.store_encoded_chunk(&chunk_indices, updated.into())
+                },
+                InMemoryBytesUpdate::Erased => self.erase_chunk(&chunk_indices),
+                // The chunk is unchanged
+                InMemoryBytesUpdate::Unchanged => Ok(()),
             }
         }
     }

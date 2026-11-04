@@ -9,12 +9,25 @@ use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{Crc32cCodec, GzipCodec};
+use zarrs::array::storage_transformer::{
+    StorageTransformer, StorageTransformerChain, StorageTransformerPlugin, StorageTransformerTraits,
+};
 use zarrs::array::{ArrayBuilder, CowBytes, data_type};
+use zarrs::metadata::Configuration;
+use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+use zarrs::node::NodePath;
+use zarrs::plugin::PluginCreateError;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
+#[cfg(feature = "async")]
 use zarrs::storage::{
-    MaybeBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
+use zarrs::storage::{
+    ListableStorage, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorage,
+    ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits, StorageError,
+    StoreKey, StorePrefix, WritableStorage, WritableStorageTraits,
 };
 use zarrs_storage::byte_range::ByteRangeIterator;
 
@@ -24,11 +37,16 @@ fn nz(n: u64) -> NonZeroU64 {
     NonZeroU64::new(n).unwrap()
 }
 
-/// A memory store that does not support partial writes.
-#[derive(Debug, Default)]
-struct NoPartialWriteStore(MemoryStore);
+/// A store that does not support partial writes, wrapping a memory store by default.
+struct NoPartialWriteStore<T: ?Sized = MemoryStore>(Arc<T>);
 
-impl ReadableStorageTraits for NoPartialWriteStore {
+impl Default for NoPartialWriteStore {
+    fn default() -> Self {
+        Self(Arc::default())
+    }
+}
+
+impl<T: ?Sized + ReadableStorageTraits> ReadableStorageTraits for NoPartialWriteStore<T> {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         self.0.get(key)
     }
@@ -50,7 +68,7 @@ impl ReadableStorageTraits for NoPartialWriteStore {
     }
 }
 
-impl WritableStorageTraits for NoPartialWriteStore {
+impl<T: ?Sized + WritableStorageTraits> WritableStorageTraits for NoPartialWriteStore<T> {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.0.set(key, value)
     }
@@ -75,6 +93,99 @@ impl WritableStorageTraits for NoPartialWriteStore {
 
     fn supports_set_partial(&self) -> bool {
         false
+    }
+}
+
+zarrs::plugin::impl_extension_aliases!(NoPartialWriteStorageTransformer,
+    v3: "zarrs.test_no_partial_write", []
+);
+
+inventory::submit! {
+    StorageTransformerPlugin::new::<NoPartialWriteStorageTransformer>()
+}
+
+/// A storage transformer that does not support partial writes, even if the transformed storage does.
+#[derive(Debug)]
+struct NoPartialWriteStorageTransformer;
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(
+    all(feature = "async", target_arch = "wasm32"),
+    async_trait::async_trait(?Send)
+)]
+impl StorageTransformerTraits for NoPartialWriteStorageTransformer {
+    fn create(
+        _metadata: &MetadataV3,
+        _path: &NodePath,
+    ) -> Result<StorageTransformer, PluginCreateError> {
+        Ok(Arc::new(Self))
+    }
+
+    fn configuration(&self) -> Configuration {
+        Configuration::default()
+    }
+
+    fn create_readable_transformer(
+        self: Arc<Self>,
+        storage: ReadableStorage,
+    ) -> Result<ReadableStorage, StorageError> {
+        Ok(storage)
+    }
+
+    fn create_writable_transformer(
+        self: Arc<Self>,
+        storage: WritableStorage,
+    ) -> Result<WritableStorage, StorageError> {
+        Ok(Arc::new(NoPartialWriteStore(storage)))
+    }
+
+    fn create_readable_writable_transformer(
+        self: Arc<Self>,
+        storage: ReadableWritableStorage,
+    ) -> Result<ReadableWritableStorage, StorageError> {
+        Ok(Arc::new(NoPartialWriteStore(storage)))
+    }
+
+    fn create_listable_transformer(
+        self: Arc<Self>,
+        storage: ListableStorage,
+    ) -> Result<ListableStorage, StorageError> {
+        Ok(storage)
+    }
+
+    #[cfg(feature = "async")]
+    async fn create_async_readable_transformer(
+        self: Arc<Self>,
+        storage: AsyncReadableStorage,
+    ) -> Result<AsyncReadableStorage, StorageError> {
+        Ok(storage)
+    }
+
+    #[cfg(feature = "async")]
+    async fn create_async_writable_transformer(
+        self: Arc<Self>,
+        _storage: AsyncWritableStorage,
+    ) -> Result<AsyncWritableStorage, StorageError> {
+        Err(StorageError::Unsupported("async".to_string()))
+    }
+
+    #[cfg(feature = "async")]
+    async fn create_async_readable_writable_transformer(
+        self: Arc<Self>,
+        _storage: AsyncReadableWritableStorage,
+    ) -> Result<AsyncReadableWritableStorage, StorageError> {
+        Err(StorageError::Unsupported("async".to_string()))
+    }
+
+    #[cfg(feature = "async")]
+    async fn create_async_listable_transformer(
+        self: Arc<Self>,
+        storage: AsyncListableStorage,
+    ) -> Result<AsyncListableStorage, StorageError> {
+        Ok(storage)
     }
 }
 
@@ -162,6 +273,89 @@ fn array_store_encoded_subchunks_three_levels_with_bytes_codecs() -> TestResult 
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn array_store_encoded_subchunks_repeatedly_compacts_shards() -> TestResult {
+    for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+        for partial_writes in [true, false] {
+            let builder = three_level_builder(location)?;
+            let source = builder.build(Arc::new(MemoryStore::default()), "/source")?;
+            source.store_chunk(&[0], (1..=32u8).collect::<Vec<_>>())?;
+            let store: Arc<dyn ReadableWritableStorageTraits> = if partial_writes {
+                Arc::new(MemoryStore::default())
+            } else {
+                Arc::new(NoPartialWriteStore::default())
+            };
+            let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
+            let target = builder.build(store.clone(), "/target")?;
+            target.store_chunk(&[0], (1..=32u8).collect::<Vec<_>>())?;
+
+            // Every shard is rewritten entirely, in memory or through a bytes-to-bytes codec, so none grow
+            let encoded = source
+                .retrieve_encoded_subchunk_at_level(2, &[3])?
+                .expect("the subchunk is stored");
+            let mut size = None;
+            for _ in 0..4 {
+                // SAFETY: Both arrays have the same codecs and shape.
+                unsafe {
+                    target.store_encoded_subchunk_at_level(
+                        2,
+                        &[3],
+                        encoded.bytes().clone().into(),
+                    )?;
+                }
+                let stored_size = target
+                    .retrieve_encoded_chunk(&[0])?
+                    .expect("the chunk is stored")
+                    .len();
+                assert_eq!(*size.get_or_insert(stored_size), stored_size);
+            }
+            assert_eq!(
+                target.retrieve_chunk::<Vec<u8>>(&[0])?,
+                (1..=32).collect::<Vec<_>>()
+            );
+
+            // Erasing a subchunk that is not stored does not write the chunk
+            target.erase_subchunk_at_level(2, &[3])?;
+            let (writes, keys_erased) = (store.writes(), store.keys_erased());
+            target.erase_subchunk_at_level(2, &[3])?;
+            assert_eq!((store.writes(), store.keys_erased()), (writes, keys_erased));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn array_store_encoded_subchunk_without_partial_writes_through_storage_transformer() -> TestResult {
+    // The store supports partial writes, but the storage transformer of the array does not
+    let mut builder = three_level_builder(ShardingIndexLocation::End)?;
+    let source = builder.build(Arc::new(MemoryStore::default()), "/source")?;
+    source.store_chunk(&[0], (1..=32u8).collect::<Vec<_>>())?;
+    builder.storage_transformers(StorageTransformerChain::new(vec![Arc::new(
+        NoPartialWriteStorageTransformer,
+    )]));
+    let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+        MemoryStore::default(),
+    )));
+    let target = builder.build(store.clone(), "/target")?;
+    target.store_chunk(&[0], (1..=32u8).collect::<Vec<_>>())?;
+
+    let encoded = source
+        .retrieve_encoded_subchunk_at_level(2, &[3])?
+        .expect("the subchunk is stored");
+    store.reset();
+    // SAFETY: Both arrays have the same codecs and shape.
+    unsafe {
+        target.store_encoded_subchunk_at_level(2, &[3], encoded.bytes().clone().into())?;
+    }
+    // The chunk is updated in memory, so it is read and written once
+    assert_eq!((store.reads(), store.writes()), (1, 1));
+    assert_eq!(
+        target.retrieve_chunk::<Vec<u8>>(&[0])?,
+        (1..=32).collect::<Vec<_>>()
+    );
     Ok(())
 }
 

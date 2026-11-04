@@ -9,6 +9,7 @@ use super::{
     AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits, CodecOptions, Indexer,
     IntoArrayBytes, MaybeSend, recommended_codec_concurrency,
 };
+use crate::array::codec::{InMemoryBytesEncoder, InMemoryBytesUpdate};
 use crate::array::{ArrayIndices, update_array_bytes};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits,
@@ -260,7 +261,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             )?;
             Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
         } else {
-            let buffer = Arc::new(std::sync::Mutex::new(
+            let buffer = Arc::new(InMemoryBytesEncoder::new(
                 self.async_retrieve_encoded_chunk(&chunk_indices)
                     .await?
                     .map(|bytes| bytes.to_vec()),
@@ -283,7 +284,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         }
     }
 
-    /// Store the encoded chunk updated by an in-memory partial encoder, or erase it if it is empty.
+    /// Store the encoded chunk updated by an in-memory partial encoder if it changed, or erase it if it is empty.
     async fn async_store_updated_chunk(
         &self,
         update: InMemoryChunkUpdate,
@@ -295,15 +296,15 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             ..
         } = update;
         drop(encoder);
-        let updated = buffer.lock().unwrap().take();
-        if let Some(updated) = updated {
+        match buffer.take_update() {
             // SAFETY: The bytes were encoded by the codecs of the array.
-            unsafe {
+            InMemoryBytesUpdate::Stored(updated) => unsafe {
                 self.async_store_encoded_chunk(&chunk_indices, updated.into())
                     .await
-            }
-        } else {
-            self.async_erase_chunk(&chunk_indices).await
+            },
+            InMemoryBytesUpdate::Erased => self.async_erase_chunk(&chunk_indices).await,
+            // The chunk is unchanged
+            InMemoryBytesUpdate::Unchanged => Ok(()),
         }
     }
 
@@ -437,7 +438,7 @@ enum EncodedSubchunkEncoder {
 /// An encoded chunk updated in memory by a partial encoder.
 struct InMemoryChunkUpdate {
     chunk_indices: ArrayIndices,
-    buffer: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    buffer: Arc<InMemoryBytesEncoder>,
     encoder: Arc<dyn zarrs_codec::ArrayPartialEncoderTraits>,
     indices: ArrayIndices,
 }

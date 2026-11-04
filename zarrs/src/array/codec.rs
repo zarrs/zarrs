@@ -69,8 +69,10 @@ pub use bytes_to_bytes::zstd::*;
 
 mod array_partial_decoder_cache;
 mod bytes_partial_decoder_cache;
+mod in_memory_bytes_encoder;
 pub(crate) use array_partial_decoder_cache::ArrayPartialDecoderCache;
 pub(crate) use bytes_partial_decoder_cache::BytesPartialDecoderCache;
+pub(crate) use in_memory_bytes_encoder::{InMemoryBytesEncoder, InMemoryBytesUpdate};
 
 /// Re-export the `zarrs_codec` API.
 ///
