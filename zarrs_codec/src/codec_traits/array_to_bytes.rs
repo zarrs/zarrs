@@ -13,13 +13,60 @@ use crate::{
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
+///
+/// A subchunking codec (such as `sharding_indexed`) splits chunks into independently encoded
+/// subchunks, which may themselves be encoded by nested subchunking codecs. Both
+/// [`decoded_subchunk_grids`](Self::decoded_subchunk_grids) and
+/// [`subchunk_codecs`](Self::subchunk_codecs) return one entry per nesting level, ordered from
+/// outermost (level 0) to innermost, or an empty vector when the codec exposes no subchunks.
+///
+/// Implement [`ArrayToBytesCodecNoSubchunkingTraits`] instead of this trait when the codec does
+/// not expose subchunks.
+///
+/// # Subchunk Domains
+///
+/// A subchunking codec splits its input array into subchunks *after* any preceding array-to-array
+/// codecs in an ancestor codec chain have been applied, and encodes each subchunk with its inner
+/// codec chain:
+/// - [`subchunk_codecs`](Self::subchunk_codecs) returns the inner codec chain for each level.
+///   Each codec decodes into the input domain of the subchunking codec that created its subchunks;
+///   any preceding array-to-array transforms in ancestor codec chains remain encoded.
+/// - [`decoded_subchunk_grids`](Self::decoded_subchunk_grids) maps subchunk grids back through
+///   those ancestor array-to-array transforms into the outer codec's decoded domain. A subchunk's
+///   decoded bytes can therefore differ in data type, shape, dimensionality, or element order from
+///   its grid representation.
+///
+/// For example, suppose an outer sharding codec's inner chain transposes each `[4, 6]` subchunk
+/// before encoding it with an inner sharding codec into `[3, 2]` subchunks:
+///
+/// ```text
+/// outer sharding
+///   |
+///   +-- level 0 subchunk [4, 6]
+///         |
+///         | transpose [1, 0]
+///         v
+///       [6, 4] -- inner sharding --> level 0 encoded bytes
+///                       |
+///                       +-- level 1 subchunk [3, 2]
+///                             |
+///                             | bytes codec
+///                             v
+///                           level 1 encoded bytes
+/// ```
+///
+/// With `codecs = self.subchunk_codecs()`:
+/// - `codecs[0]` (transpose + inner sharding) decodes level 0 bytes of shape `[4, 6]` into the
+///   outer shard's array domain.
+/// - `codecs[1]` (`bytes` codec) decodes level 1 bytes of shape `[3, 2]` into the transposed inner
+///   shard's domain. In the outer shard's [`decoded_subchunk_grids`](Self::decoded_subchunk_grids),
+///   that subchunk has shape `[2, 3]` because the transpose is mapped back to the outer domain.
 pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
-    /// Return the decoded subchunk grids created by this codec.
+    /// Return the decoded subchunk grids created by this codec, outermost first.
     ///
-    /// Grids are ordered from outermost to innermost. An empty vector indicates
-    /// that the codec does not expose subchunks. A [`ChunkGridDecoded::None`] or
-    /// [`ChunkGridDecoded::ChunkLocal`] entry preserves the level in the hierarchy
-    /// when it cannot be resolved globally.
+    /// An empty vector indicates that the codec does not expose subchunks. A
+    /// [`ChunkGridDecoded::None`] or [`ChunkGridDecoded::ChunkLocal`] entry preserves the level in
+    /// the hierarchy when it cannot be resolved globally.
     ///
     /// # Errors
     /// Returns a [`ChunkGridCreateError`] if the chunk grid is not supported by this codec.
@@ -27,6 +74,17 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
+
+    /// Return the codecs that encode the subchunks at each level, outermost first.
+    ///
+    /// There is one codec per level in [`decoded_subchunk_grids`](Self::decoded_subchunk_grids),
+    /// or an empty vector if the codec does not expose subchunks.
+    ///
+    /// Each returned codec is bound to its data type and fill value, but not to a fixed subchunk
+    /// shape; callers pass the concrete shape (which may vary across edge or rectilinear subchunks)
+    /// when encoding or decoding. See [Subchunk Domains](Self#subchunk-domains) for the domain each
+    /// codec operates in.
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
 
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
@@ -59,6 +117,10 @@ where
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         Ok(Vec::new())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 #[cfg(feature = "async")]

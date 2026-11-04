@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replace `ArrayCodecTraits::partial_decode_granularity` and `ArrayToArrayCodecTraits::decoded_shape` with `ArrayToArrayCodecTraits::partial_decode_granularity`, which maps an encoded granularity to the decoded representation
 - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits with `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` for resolving ordered subchunk-grid hierarchies
   - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
+  - `ArrayToBytesCodecSubchunkingTraits::{subchunk_codecs,subchunk_codecs_at_level}` return the shape-independent codec for each subchunk level (outermost first)
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible
