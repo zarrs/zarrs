@@ -364,3 +364,46 @@ fn local_grid_rectilinear_negative_and_identity_contracts() {
         );
     }
 }
+
+#[test]
+fn local_grid_hierarchy_preserves_order_none_and_errors() {
+    let codec = bind(Arc::new(TransposeCodec::new(
+        TransposeOrder::new(&[1, 0]).unwrap(),
+    )));
+    let outer = ChunkGrid::new(RegularChunkGrid::new(vec![4, 6], shape(&[3, 4])).unwrap());
+    let inner = ChunkGrid::new(RegularChunkGrid::new(vec![4, 6], shape(&[1, 2])).unwrap());
+    let mapped = codec
+        .decoded_local_subchunk_grids(
+            &shape(&[6, 4]),
+            vec![Some(outer.clone()), None, Some(inner.clone())],
+        )
+        .unwrap();
+    assert_eq!(mapped.len(), 3);
+    assert!(mapped[1].is_none());
+    for (level, grid) in [(0, &outer), (2, &inner)] {
+        let expected = codec
+            .decoded_local_subchunk_grid(&shape(&[6, 4]), grid)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            mapped[level]
+                .as_ref()
+                .unwrap()
+                .chunk_shape(&[0, 0])
+                .unwrap(),
+            expected.chunk_shape(&[0, 0]).unwrap()
+        );
+    }
+    assert!(
+        codec
+            .decoded_local_subchunk_grids(&shape(&[6, 4]), vec![])
+            .unwrap()
+            .is_empty()
+    );
+    let wrong = ChunkGrid::new(RegularChunkGrid::new(vec![24], shape(&[2])).unwrap());
+    assert!(
+        codec
+            .decoded_local_subchunk_grids(&shape(&[6, 4]), vec![None, Some(wrong)])
+            .is_err()
+    );
+}

@@ -46,7 +46,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
 
-use numcodecs_packbits_partial::NumcodecsPackBitsPartial;
+use numcodecs_packbits_partial::{NumcodecsPackBitsPartial, NumcodecsPackBitsPartialDecoder};
 
 use crate::array::codec::array_to_bytes::packbits::{
     PackBitsBitOrder, PackBitsCodec, PackBitsCodecBound,
@@ -303,10 +303,17 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let input_handle = self.packed_handle(input_handle, shape)?;
-        self.packbits
+        let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
+        let inner = self
+            .packbits
             .clone()
-            .partial_decoder(input_handle, shape, options)
+            .partial_decoder(packed_handle, shape, options)?;
+        Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self,
+            inner,
+        )))
     }
 
     fn partial_encoder(
@@ -328,11 +335,18 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let input_handle = self.packed_handle(input_handle, shape)?;
-        self.packbits
+        let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
+        let inner = self
+            .packbits
             .clone()
-            .async_partial_decoder(input_handle, shape, options)
-            .await
+            .async_partial_decoder(packed_handle, shape, options)
+            .await?;
+        Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self,
+            inner,
+        )))
     }
 
     #[cfg(feature = "async")]

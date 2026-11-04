@@ -26,7 +26,7 @@ pub struct SqueezeCodec {}
 
 /// A Squeeze codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
-struct SqueezeCodecBound {
+pub(super) struct SqueezeCodecBound {
     data_type: DataType,
     fill_value: Option<FillValue>,
 }
@@ -215,7 +215,7 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             squeeze.push(squeeze_dim);
         }
 
-        Ok(ChunkGridDecoded::Array(decoded_local_subchunk_grid(
+        Ok(ChunkGridDecoded::Array(unsqueeze_subchunk_grid(
             decoded_chunk_grid.array_shape().to_vec(),
             &squeeze,
             encoded_subchunk_grid,
@@ -247,7 +247,7 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             ));
         }
         let squeeze: Vec<bool> = decoded_shape.iter().map(|dim| dim.get() == 1).collect();
-        decoded_local_subchunk_grid(
+        unsqueeze_subchunk_grid(
             bytemuck::must_cast_slice(decoded_shape).to_vec(),
             &squeeze,
             encoded_subchunk_grid,
@@ -309,6 +309,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
+                self.clone(),
                 input_handle,
                 shape,
                 &self.data_type,
@@ -324,6 +325,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
+                self.clone(),
                 input_output_handle,
                 shape,
                 &self.data_type,
@@ -340,6 +342,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
+                self.clone(),
                 input_handle,
                 shape,
                 &self.data_type,
@@ -356,6 +359,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
+                self.clone(),
                 input_output_handle,
                 shape,
                 &self.data_type,
@@ -365,7 +369,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
 }
 
 /// Map the edge lengths of `encoded_subchunk_grid` to a grid over `array_shape`, with unit edges in `squeeze`d dimensions.
-pub(super) fn decoded_local_subchunk_grid(
+fn unsqueeze_subchunk_grid(
     array_shape: Vec<u64>,
     squeeze: &[bool],
     encoded_subchunk_grid: &ChunkGrid,

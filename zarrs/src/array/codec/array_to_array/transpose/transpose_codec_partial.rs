@@ -8,7 +8,7 @@ use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecError, CodecOptions,
+    ArrayToArrayCodecSubchunkingTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -17,8 +17,11 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
+use super::transpose_codec::TransposeCodecBound;
+
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {
+    codec: Arc<TransposeCodecBound>,
     input_output_handle: Arc<T>,
     shape: ChunkShape,
     data_type: DataType,
@@ -32,6 +35,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     /// Create a new [`TransposeCodecPartial`].
     #[must_use]
     pub(crate) fn new(
+        codec: Arc<TransposeCodecBound>,
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
@@ -39,6 +43,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     ) -> Self {
         let order_inverse = inverse_permutation(&order);
         Self {
+            codec,
             input_output_handle,
             shape: shape.to_vec(),
             data_type: data_type.clone(),
@@ -71,18 +76,6 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             &self.data_type,
         )
     }
-
-    fn map_local_subchunk_grid(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<ChunkGrid, CodecError> {
-        super::transpose_codec::decoded_local_subchunk_grid(
-            bytemuck::must_cast_slice(&self.shape).to_vec(),
-            &self.order_inverse,
-            encoded_subchunk_grid,
-        )
-        .map_err(|err| CodecError::Other(err.to_string()))
-    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
@@ -93,14 +86,10 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
+        self.codec.decoded_local_subchunk_grids(
+            &self.shape,
+            self.input_output_handle.local_subchunk_grids(options)?,
+        )
     }
 }
 
@@ -190,15 +179,12 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)
-            .await?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
+        self.codec.decoded_local_subchunk_grids(
+            &self.shape,
+            self.input_output_handle
+                .local_subchunk_grids(options)
+                .await?,
+        )
     }
 }
 

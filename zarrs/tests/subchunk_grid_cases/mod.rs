@@ -23,8 +23,10 @@ use zarrs::array::{
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits, CodecError, CodecSpecificOptions,
-    PartialDecoderCapability, PartialEncoderCapability,
+    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
+    ArrayToArrayCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecError, CodecSpecificOptions, PartialDecoderCapability,
+    PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
 
@@ -144,6 +146,174 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
     }
 }
 
+/// A non-identity array-to-array codec that deliberately does not implement `partial_decoder`.
+///
+/// It wraps [`TransposeCodec`] while resolving its partial decoder to
+/// [`CodecPartialDefault`](zarrs_codec::CodecPartialDefault), verifying that
+/// [`CodecPartialDefault`](zarrs_codec::CodecPartialDefault) maps chunk-local subchunk grids
+/// through [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids`].
+#[cfg(feature = "transpose")]
+#[derive(Debug)]
+pub(crate) struct DefaultPartialTransposeCodec {
+    inner: TransposeCodec,
+}
+
+#[cfg(feature = "transpose")]
+#[derive(Debug)]
+struct DefaultPartialTransposeCodecBound {
+    inner: Arc<dyn ArrayToArrayCodecTraits>,
+}
+
+#[cfg(feature = "transpose")]
+zarrs_plugin::impl_extension_aliases!(
+    DefaultPartialTransposeCodec,
+    v3: "zarrs.test.default_partial_transpose"
+);
+
+#[cfg(feature = "transpose")]
+impl CodecTraits for DefaultPartialTransposeCodec {
+    fn configuration(
+        &self,
+        version: ZarrVersion,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        self.inner.configuration(version, options)
+    }
+
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
+    }
+
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
+    }
+}
+
+#[cfg(feature = "transpose")]
+impl UnboundArrayToArrayCodecTraits for DefaultPartialTransposeCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: Option<FillValue>,
+        codec_specific_options: &CodecSpecificOptions,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        Ok(Arc::new(DefaultPartialTransposeCodecBound {
+            inner: self
+                .inner
+                .with_context(data_type, fill_value, codec_specific_options)?,
+        }))
+    }
+}
+
+#[cfg(feature = "transpose")]
+impl ArrayCodecTraits for DefaultPartialTransposeCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        self.inner.data_type()
+    }
+
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.inner.fill_value()
+    }
+
+    fn recommended_concurrency(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        self.inner.recommended_concurrency(shape)
+    }
+}
+
+#[cfg(feature = "transpose")]
+impl ArrayToArrayCodecSubchunkingTraits for DefaultPartialTransposeCodecBound {
+    fn encoded_chunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+    ) -> Result<ChunkGridEncoded, zarrs_chunk_grid::ChunkGridCreateError> {
+        self.inner.encoded_chunk_grid(decoded_chunk_grid)
+    }
+
+    fn decoded_subchunk_grid(
+        &self,
+        decoded_chunk_grid: ChunkGridDecodedRef<'_>,
+        encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
+    ) -> Result<ChunkGridDecoded, zarrs_chunk_grid::ChunkGridCreateError> {
+        self.inner
+            .decoded_subchunk_grid(decoded_chunk_grid, encoded_subchunk_grid)
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        self.inner
+            .decoded_local_subchunk_grid(decoded_shape, encoded_subchunk_grid)
+    }
+
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<zarrs::array::ArrayIndices>, CodecError> {
+        self.inner
+            .encoded_element_indices(decoded_shape, decoded_element_indices)
+    }
+
+}
+
+#[cfg(feature = "transpose")]
+impl ArrayToArrayCodecTraits for DefaultPartialTransposeCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self
+    }
+
+    fn encoded_data_type(&self) -> &DataType {
+        self.inner.encoded_data_type()
+    }
+
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.inner.encoded_fill_value()
+    }
+
+    fn encoded_shape(
+        &self,
+        decoded_shape: &[NonZeroU64],
+    ) -> Result<zarrs::array::ChunkShape, CodecError> {
+        self.inner.encoded_shape(decoded_shape)
+    }
+
+    fn encode<'a>(
+        &self,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        self.inner.encode(bytes, shape, options)
+    }
+
+    fn decode<'a>(
+        &self,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        self.inner.decode(bytes, shape, options)
+    }
+}
+
 pub(crate) struct Case {
     /// Identifies the case in assertion failures.
     pub(crate) name: &'static str,
@@ -234,6 +404,7 @@ pub(crate) fn plain_sharding() -> Case {
 }
 
 /// One case per array-to-array partial decoder that has to propagate a subchunk grid.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn cases() -> Vec<Case> {
     vec![
         plain_sharding(),
@@ -315,6 +486,22 @@ pub(crate) fn cases() -> Vec<Case> {
             chunk_indices: vec![1, 0],
             absent_chunk_indices: vec![0, 0],
             local_subchunk_shape: vec![nz(1), nz(2)],
+        },
+        #[cfg(feature = "transpose")]
+        Case {
+            name: "default_partial_transpose",
+            codec: Some(Arc::new(DefaultPartialTransposeCodec {
+                inner: TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()),
+            })),
+            data_type: data_type::uint16(),
+            fill_value: 1u16.into(),
+            encoded_data_type: data_type::uint16(),
+            array_shape: vec![8, 6],
+            chunk_shape: vec![4, 6],
+            encoded_subchunk_shape: vec![nz(3), nz(2)],
+            chunk_indices: vec![0, 0],
+            absent_chunk_indices: vec![1, 0],
+            local_subchunk_shape: vec![nz(2), nz(3)],
         },
         #[cfg(feature = "transpose")]
         Case {
