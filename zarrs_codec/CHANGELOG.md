@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add per-operation `Resources` and `ComputeResources`
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`, the codecs held by `Codec::ArrayTo{Array,Bytes}`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
   - The fill value is `None` if it is undefined (e.g. in the `data_codecs` of an `optional` codec with a `null` fill value), and codecs whose encoded representation depends on the fill value must reject it
