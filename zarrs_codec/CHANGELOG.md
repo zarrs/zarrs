@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
 
 ### Changed
+- **Breaking**: Append `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces/factories; move compute-target control out of `CodecOptions` while retaining `chunk_concurrent_minimum`
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
 - **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
 - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions

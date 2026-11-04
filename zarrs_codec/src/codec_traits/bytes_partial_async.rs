@@ -7,7 +7,7 @@ use zarrs_storage::{
     StorageError, StoreKey,
 };
 
-use crate::{CodecError, CodecOptions, CowBytes};
+use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 /// Asynchronous partial bytes decoder traits.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -34,9 +34,10 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &'a self,
         decoded_region: ByteRange,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
         Ok(self
-            .partial_decode_many(Box::new([decoded_region].into_iter()), options)
+            .partial_decode_many(Box::new([decoded_region].into_iter()), options, resources)
             .await?
             .map(|mut v| v.pop().expect("single byte range")))
     }
@@ -51,6 +52,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError>;
 
     /// Decode all bytes.
@@ -62,8 +64,9 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     async fn decode<'a>(
         &'a self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<CowBytes<'a>>, CodecError> {
-        self.partial_decode(ByteRange::FromStart(0, None), options)
+        self.partial_decode(ByteRange::FromStart(0, None), options, resources)
             .await
     }
 
@@ -92,7 +95,12 @@ pub trait AsyncBytesPartialEncoderTraits:
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or there is an underlying store error.
-    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError>;
+    async fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError>;
 
     /// Partially encode a chunk.
     ///
@@ -103,8 +111,9 @@ pub trait AsyncBytesPartialEncoderTraits:
         offset: u64,
         bytes: CowBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
-        self.partial_encode_many(Box::new([(offset, bytes)].into_iter()), options)
+        self.partial_encode_many(Box::new([(offset, bytes)].into_iter()), options, resources)
             .await
     }
 
@@ -116,6 +125,7 @@ pub trait AsyncBytesPartialEncoderTraits:
         &'a self,
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError>;
 
     /// Returns whether this encoder supports partial encoding.
@@ -140,6 +150,7 @@ impl AsyncBytesPartialDecoderTraits for CowBytes<'static> {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
@@ -169,6 +180,7 @@ impl AsyncBytesPartialDecoderTraits for Vec<u8> {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
@@ -200,6 +212,7 @@ impl<TStorage: AsyncReadableStorageTraits + 'static> AsyncBytesPartialDecoderTra
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let bytes = self.0.get_partial_many(&self.1, decoded_regions).await?;
         Ok(if let Some(mut bytes) = bytes {
@@ -228,7 +241,12 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
         Ok(self.0.erase(&self.1).await?)
     }
 
-    async fn encode(&self, bytes: CowBytes<'_>, _options: &CodecOptions) -> Result<(), CodecError> {
+    async fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        _options: &CodecOptions,
+        _resources: &Resources,
+    ) -> Result<(), CodecError> {
         Ok(self.0.set(&self.1, bytes).await?)
     }
 
@@ -236,6 +254,7 @@ impl<TStorage: AsyncReadableWritableStorageTraits + 'static> AsyncBytesPartialEn
         &'a self,
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<(), CodecError> {
         let offset_values = offset_values
             .into_iter()

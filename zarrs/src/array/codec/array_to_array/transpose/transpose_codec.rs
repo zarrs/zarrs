@@ -16,8 +16,8 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
     ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -265,6 +265,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 
@@ -278,6 +279,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.validate(shape)?;
 
@@ -297,6 +299,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
@@ -313,6 +316,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
@@ -330,6 +334,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
@@ -347,6 +352,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(

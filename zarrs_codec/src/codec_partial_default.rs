@@ -9,7 +9,7 @@ use super::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, CowBytes, DataType,
+    CodecError, CodecOptions, CowBytes, DataType, Resources,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -154,8 +154,10 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
     }
 }
 
@@ -180,6 +182,7 @@ where
         &self,
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         let output_shape = (|| {
             let output_shape = indexer.output_shape();
@@ -191,13 +194,15 @@ where
         })();
 
         // Read the subsets
-        let chunk_bytes = self.input_output_handle.partial_decode(indexer, options)?;
+        let chunk_bytes = self
+            .input_output_handle
+            .partial_decode(indexer, options, resources)?;
 
         // Decode the subsets
         if let Some(shape) = output_shape {
             let shape = ChunkShape::from(shape);
             self.codec
-                .decode(chunk_bytes, &shape, options)
+                .decode(chunk_bytes, &shape, options, resources.compute())
                 .map(ArrayBytes::into_owned)
         } else {
             Ok(match self.decoded_representation.data_type().size() {
@@ -229,6 +234,7 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
         let chunk_shape = self.decoded_representation.shape_u64();
         let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
@@ -239,12 +245,15 @@ where
             bytes.clone()
         } else {
             // Read the entire chunk
-            let encoded_value = self
-                .input_output_handle
-                .partial_decode(&array_subset_all, options)?;
-            let decoded_value =
-                self.codec
-                    .decode(encoded_value, self.decoded_representation.shape(), options)?;
+            let encoded_value =
+                self.input_output_handle
+                    .partial_decode(&array_subset_all, options, resources)?;
+            let decoded_value = self.codec.decode(
+                encoded_value,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
 
             // Validate the bytes
             decoded_value.validate(
@@ -268,11 +277,18 @@ where
             self.input_output_handle.erase()
         } else {
             // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
-            let encoded_value =
-                self.codec
-                    .encode(decoded_value, self.decoded_representation.shape(), options)?;
-            self.input_output_handle
-                .partial_encode(&array_subset_all, &encoded_value, options)
+            let encoded_value = self.codec.encode(
+                decoded_value,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
+            self.input_output_handle.partial_encode(
+                &array_subset_all,
+                &encoded_value,
+                options,
+                resources,
+            )
         }
     }
 
@@ -309,15 +325,19 @@ where
         &self,
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         // Read the entire chunk
-        let bytes_enc = self.input_output_handle.decode(options)?;
+        let bytes_enc = self.input_output_handle.decode(options, resources)?;
 
         if let Some(bytes_enc) = bytes_enc {
             // Decode the entire chunk
-            let bytes_dec =
-                self.codec
-                    .decode(bytes_enc, self.decoded_representation.shape(), options)?;
+            let bytes_dec = self.codec.decode(
+                bytes_enc,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
 
             // Extract the subsets
             let chunk_shape = self.decoded_representation.shape_u64();
@@ -359,6 +379,7 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
         let chunk_shape = self.decoded_representation.shape_u64();
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
@@ -368,12 +389,16 @@ where
             bytes.clone()
         } else {
             // Read the entire chunk
-            let chunk_bytes = self.input_output_handle.decode(options)?;
+            let chunk_bytes = self.input_output_handle.decode(options, resources)?;
 
             // Handle a missing chunk
             let chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-                self.codec
-                    .decode(chunk_bytes, self.decoded_representation.shape(), options)?
+                self.codec.decode(
+                    chunk_bytes,
+                    self.decoded_representation.shape(),
+                    options,
+                    resources.compute(),
+                )?
             } else {
                 ArrayBytes::new_fill_value(
                     self.decoded_representation.data_type(),
@@ -405,10 +430,14 @@ where
             self.input_output_handle.erase()
         } else {
             // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
-            let chunk_bytes =
-                self.codec
-                    .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle.encode(chunk_bytes, options)
+            let chunk_bytes = self.codec.encode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
+            self.input_output_handle
+                .encode(chunk_bytes, options, resources)
         }
     }
 
@@ -434,16 +463,20 @@ where
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
-        let encoded_value = self.input_output_handle.decode(options)?;
+        let encoded_value = self.input_output_handle.decode(options, resources)?;
 
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };
 
-        let decoded_value =
-            self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?;
+        let decoded_value = self.codec.decode(
+            encoded_value,
+            &self.decoded_representation,
+            options,
+            resources.compute(),
+        )?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
@@ -468,21 +501,33 @@ where
         self.input_output_handle.erase()
     }
 
-    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
-        let bytes_encoded = self.codec.encode(bytes, options)?;
-        self.input_output_handle.encode(bytes_encoded, options)
+    fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options, resources.compute())?;
+        self.input_output_handle
+            .encode(bytes_encoded, options, resources)
     }
 
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self.input_output_handle.decode(options)?;
+        let encoded_value = self.input_output_handle.decode(options, resources)?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?
+                .decode(
+                    encoded_value,
+                    &self.decoded_representation,
+                    options,
+                    resources.compute(),
+                )?
                 .into_vec()
         } else {
             vec![]
@@ -497,8 +542,11 @@ where
         }
 
         // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
-        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
-        self.input_output_handle.encode(bytes_encoded, options)
+        let bytes_encoded =
+            self.codec
+                .encode(CowBytes::from(decoded_value), options, resources.compute())?;
+        self.input_output_handle
+            .encode(bytes_encoded, options, resources)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -517,8 +565,11 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
+        self.input_output_handle
+            .local_subchunk_grids(options, resources)
+            .await
     }
 }
 
@@ -546,6 +597,7 @@ where
         &'a self,
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         let output_shape = (|| {
             let output_shape = indexer.output_shape();
@@ -559,14 +611,14 @@ where
         // Read the subsets
         let chunk_bytes = self
             .input_output_handle
-            .partial_decode(indexer, options)
+            .partial_decode(indexer, options, resources)
             .await?;
 
         // Decode the subsets
         if let Some(shape) = output_shape {
             let shape = ChunkShape::from(shape);
             self.codec
-                .decode(chunk_bytes, &shape, options)
+                .decode(chunk_bytes, &shape, options, resources.compute())
                 .map(ArrayBytes::into_owned)
         } else {
             Ok(match self.decoded_representation.data_type().size() {
@@ -601,6 +653,7 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
         let chunk_shape = self.decoded_representation.shape_u64();
         let array_subset_all = ArraySubset::new_with_shape(chunk_shape);
@@ -613,11 +666,14 @@ where
             // Read the entire chunk
             let encoded_value = self
                 .input_output_handle
-                .partial_decode(&array_subset_all, options)
+                .partial_decode(&array_subset_all, options, resources)
                 .await?;
-            let decoded_value =
-                self.codec
-                    .decode(encoded_value, self.decoded_representation.shape(), options)?;
+            let decoded_value = self.codec.decode(
+                encoded_value,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
 
             // Validate the bytes
             decoded_value.validate(
@@ -641,11 +697,14 @@ where
             self.input_output_handle.erase().await
         } else {
             // Overwrite the entire chunk rather than erasing it first, so a failure leaves the existing chunk intact
-            let encoded_value =
-                self.codec
-                    .encode(decoded_value, self.decoded_representation.shape(), options)?;
+            let encoded_value = self.codec.encode(
+                decoded_value,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
             self.input_output_handle
-                .partial_encode(&array_subset_all, &encoded_value, options)
+                .partial_encode(&array_subset_all, &encoded_value, options, resources)
                 .await
         }
     }
@@ -679,15 +738,19 @@ where
         &'a self,
         indexer: &dyn Indexer,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         // Read the entire chunk
-        let bytes_enc = self.input_output_handle.decode(options).await?;
+        let bytes_enc = self.input_output_handle.decode(options, resources).await?;
 
         if let Some(bytes_enc) = bytes_enc {
             // Decode the entire chunk
-            let bytes_dec =
-                self.codec
-                    .decode(bytes_enc, self.decoded_representation.shape(), options)?;
+            let bytes_dec = self.codec.decode(
+                bytes_enc,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
 
             // Extract the subsets
             let chunk_shape = self.decoded_representation.shape_u64();
@@ -732,6 +795,7 @@ where
         indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
         let chunk_shape = self.decoded_representation.shape_u64();
         bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
@@ -741,12 +805,16 @@ where
             bytes.clone()
         } else {
             // Read the entire chunk
-            let chunk_bytes = self.input_output_handle.decode(options).await?;
+            let chunk_bytes = self.input_output_handle.decode(options, resources).await?;
 
             // Handle a missing chunk
             let chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-                self.codec
-                    .decode(chunk_bytes, self.decoded_representation.shape(), options)?
+                self.codec.decode(
+                    chunk_bytes,
+                    self.decoded_representation.shape(),
+                    options,
+                    resources.compute(),
+                )?
             } else {
                 ArrayBytes::new_fill_value(
                     self.decoded_representation.data_type(),
@@ -778,10 +846,15 @@ where
             self.input_output_handle.erase().await
         } else {
             // Replace the existing chunk, rather than erasing it first, so a failure leaves it intact
-            let chunk_bytes =
-                self.codec
-                    .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
-            self.input_output_handle.encode(chunk_bytes, options).await
+            let chunk_bytes = self.codec.encode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                options,
+                resources.compute(),
+            )?;
+            self.input_output_handle
+                .encode(chunk_bytes, options, resources)
+                .await
         }
     }
 
@@ -810,16 +883,20 @@ where
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
-        let encoded_value = self.input_output_handle.decode(options).await?;
+        let encoded_value = self.input_output_handle.decode(options, resources).await?;
 
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
         };
 
-        let decoded_value =
-            self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?;
+        let decoded_value = self.codec.decode(
+            encoded_value,
+            &self.decoded_representation,
+            options,
+            resources.compute(),
+        )?;
 
         Ok(Some(
             extract_byte_ranges(&decoded_value, decoded_regions)
@@ -847,10 +924,15 @@ where
         self.input_output_handle.erase().await
     }
 
-    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
-        let bytes_encoded = self.codec.encode(bytes, options)?;
+    async fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        let bytes_encoded = self.codec.encode(bytes, options, resources.compute())?;
         self.input_output_handle
-            .encode(bytes_encoded, options)
+            .encode(bytes_encoded, options, resources)
             .await
     }
 
@@ -858,12 +940,18 @@ where
         &'a self,
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
-        let encoded_value = self.input_output_handle.decode(options).await?;
+        let encoded_value = self.input_output_handle.decode(options, resources).await?;
 
         let mut decoded_value = if let Some(encoded_value) = encoded_value {
             self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?
+                .decode(
+                    encoded_value,
+                    &self.decoded_representation,
+                    options,
+                    resources.compute(),
+                )?
                 .into_vec()
         } else {
             vec![]
@@ -878,9 +966,11 @@ where
         }
 
         // Replace the entire chunk, since the re-encoded chunk may be shorter than the existing chunk
-        let bytes_encoded = self.codec.encode(CowBytes::from(decoded_value), options)?;
+        let bytes_encoded =
+            self.codec
+                .encode(CowBytes::from(decoded_value), options, resources.compute())?;
         self.input_output_handle
-            .encode(bytes_encoded, options)
+            .encode(bytes_encoded, options, resources)
             .await
     }
 

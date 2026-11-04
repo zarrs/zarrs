@@ -271,6 +271,7 @@ pub(crate) fn apply_permutation<'a>(
 #[cfg(test)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -278,7 +279,7 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_codec::{
-        CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
+        CodecOptions, CodecSpecificOptions, ComputeResources, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
     };
 
@@ -307,10 +308,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -354,10 +365,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
 
         assert_eq!(bytes, decoded);
@@ -409,10 +430,20 @@ mod tests {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -470,7 +501,12 @@ mod tests {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
@@ -482,10 +518,20 @@ mod tests {
             )
             .unwrap();
         let input_handle = bytes_codec
-            .partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         let partial_decoder = codec
-            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
+            .partial_decoder(
+                input_handle.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
         let decoded_regions = [
@@ -503,7 +549,11 @@ mod tests {
         ];
         for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),
@@ -530,7 +580,12 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
@@ -542,11 +597,21 @@ mod tests {
             )
             .unwrap();
         let input_handle = bytes_codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .async_partial_decoder(
+                input_handle,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
         let partial_decoder = codec
-            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .async_partial_decoder(
+                input_handle,
+                &shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap();
         let decoded_regions = [
@@ -564,7 +629,11 @@ mod tests {
         ];
         for (decoded_region, answer) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .await
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(

@@ -5,7 +5,7 @@ use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -57,9 +57,10 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.input_output_handle
-            .local_subchunk_grids(options)?
+            .local_subchunk_grids(options, resources)?
             .into_iter()
             .map(|grid| {
                 grid.map(|grid| self.map_local_subchunk_grid(&grid))
@@ -89,15 +90,16 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
-                .partial_decode(&array_subset_squeezed, options)
+                .partial_decode(&array_subset_squeezed, options, resources)
         } else {
             let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
-                .partial_decode(&indexer_squeezed, options)
+                .partial_decode(&indexer_squeezed, options, resources)
         }
     }
 
@@ -119,15 +121,20 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
-            self.input_output_handle
-                .partial_encode(&array_subset_squeezed, bytes, options)
+            self.input_output_handle.partial_encode(
+                &array_subset_squeezed,
+                bytes,
+                options,
+                resources,
+            )
         } else {
             let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
-                .partial_encode(&indexer_squeezed, bytes, options)
+                .partial_encode(&indexer_squeezed, bytes, options, resources)
         }
     }
 
@@ -146,9 +153,10 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.input_output_handle
-            .local_subchunk_grids(options)
+            .local_subchunk_grids(options, resources)
             .await?
             .into_iter()
             .map(|grid| {
@@ -182,16 +190,17 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
-                .partial_decode(&array_subset_squeezed, options)
+                .partial_decode(&array_subset_squeezed, options, resources)
                 .await
         } else {
             let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
-                .partial_decode(&indexer_squeezed, options)
+                .partial_decode(&indexer_squeezed, options, resources)
                 .await
         }
     }
@@ -217,16 +226,17 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
-                .partial_encode(&array_subset_squeezed, bytes, options)
+                .partial_encode(&array_subset_squeezed, bytes, options, resources)
                 .await
         } else {
             let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
-                .partial_encode(&indexer_squeezed, bytes, options)
+                .partial_encode(&indexer_squeezed, bytes, options, resources)
                 .await
         }
     }

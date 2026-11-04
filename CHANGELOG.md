@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
 
 ### Changed
+- **Breaking**: Pass `Resources` per array/cache/partial-codec operation and `ComputeResources` per in-memory codec operation; move compute-target control out of `CodecOptions` and `Config`, retaining chunk scheduling preferences
 - The `optional` codec binds its `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
   - *Behavioural Change*: this changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
   - **Breaking**: codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) are rejected within the `data_codecs` of an `optional` codec with a `null` fill value (unless the inner data type is `optional`), since the fill value of the data codecs is undefined

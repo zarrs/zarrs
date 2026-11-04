@@ -3,6 +3,7 @@
 
 //! Asynchronous variant of `local_subchunk_grid_codecs.rs`, over the same scenarios.
 
+use zarrs::array::Resources;
 mod subchunk_grid_cases;
 
 use std::error::Error;
@@ -25,7 +26,11 @@ async fn build(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Erro
     let store = Arc::new(AsyncMemoryStore::new());
     let array = case.builder().build_arc(store, "/array")?;
     array
-        .async_store_chunk(&case.chunk_indices, case.zero_chunk_bytes())
+        .async_store_chunk(
+            &case.chunk_indices,
+            case.zero_chunk_bytes(),
+            &Resources::default(),
+        )
         .await?;
     Ok(array)
 }
@@ -34,13 +39,15 @@ async fn build(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Erro
 async fn async_local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
     for case in cases() {
         let array = build(&case).await?;
-        let grid = array.async_local_subchunk_grid(&case.chunk_indices).await?;
+        let grid = array
+            .async_local_subchunk_grid(&case.chunk_indices, &Resources::default())
+            .await?;
         case.assert_local_grid(grid.as_ref());
 
         // There is only one level of subchunking, so the next level down is absent.
         assert!(
             array
-                .async_local_subchunk_grid_at_level(1, &case.chunk_indices)
+                .async_local_subchunk_grid_at_level(1, &case.chunk_indices, &Resources::default())
                 .await?
                 .is_none(),
             "{}: expected no second subchunk level",
@@ -48,7 +55,9 @@ async fn async_local_subchunk_grid_propagates_through_partial_decoders() -> Test
         );
 
         // The partial decoder under test also has to report the decoded data type and existence.
-        let partial_decoder = array.async_partial_decoder(&case.chunk_indices).await?;
+        let partial_decoder = array
+            .async_partial_decoder(&case.chunk_indices, &Resources::default())
+            .await?;
         assert_eq!(
             partial_decoder.data_type(),
             &case.data_type,
@@ -72,22 +81,26 @@ async fn async_local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
     let encoders: [(&str, Arc<dyn AsyncArrayPartialEncoderTraits>); 2] = [
         (
             "sharding",
-            array.async_partial_encoder(&case.chunk_indices).await?,
+            array
+                .async_partial_encoder(&case.chunk_indices, &Resources::default())
+                .await?,
         ),
         (
             "cached",
-            cached.async_partial_encoder(&case.chunk_indices).await?,
+            cached
+                .async_partial_encoder(&case.chunk_indices, &Resources::default())
+                .await?,
         ),
     ];
     for (name, encoder) in encoders {
         let grids = encoder
-            .local_subchunk_grids(&CodecOptions::default())
+            .local_subchunk_grids(&CodecOptions::default(), &Resources::default())
             .await?;
         assert_eq!(grids.len(), 1, "{name}: one subchunk level");
         case.assert_local_grid(grids[0].as_ref());
         case.assert_local_grid(
             encoder
-                .local_subchunk_grid(&CodecOptions::default())
+                .local_subchunk_grid(&CodecOptions::default(), &Resources::default())
                 .await?
                 .as_ref(),
         );
@@ -104,7 +117,7 @@ async fn check_cache<C: AsyncChunkCache + 'static>(
 ) -> TestResult {
     let cached = ArrayCached::new(array.clone(), cache);
     let grid = cached
-        .async_local_subchunk_grid(&case.chunk_indices)
+        .async_local_subchunk_grid(&case.chunk_indices, &Resources::default())
         .await?;
     if expect_subchunks {
         case.assert_local_grid(grid.as_ref());
@@ -153,17 +166,24 @@ async fn async_local_subchunk_grid_absent_with_array_partial_decoder_cache() -> 
     let array =
         ArrayBuilder::new(vec![4], vec![4], data_type::string(), "").build(store, "/array")?;
     array
-        .async_store_chunk(&[0], vec!["a", "bb", "ccc", "dddd"])
+        .async_store_chunk(&[0], vec!["a", "bb", "ccc", "dddd"], &Resources::default())
         .await?;
 
-    let partial_decoder = array.async_partial_decoder(&[0]).await?;
+    let partial_decoder = array
+        .async_partial_decoder(&[0], &Resources::default())
+        .await?;
     assert!(partial_decoder.supports_partial_decode());
     assert!(
         partial_decoder
-            .local_subchunk_grids(&CodecOptions::default())
+            .local_subchunk_grids(&CodecOptions::default(), &Resources::default())
             .await?
             .is_empty()
     );
-    assert!(array.async_local_subchunk_grid(&[0]).await?.is_none());
+    assert!(
+        array
+            .async_local_subchunk_grid(&[0], &Resources::default())
+            .await?
+            .is_none()
+    );
     Ok(())
 }

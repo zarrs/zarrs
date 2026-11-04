@@ -19,7 +19,7 @@ use common::compressible_u16;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{Crc32cCodec, ShardingCodecBuilder, ZstdCodec};
-use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, data_type};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::storage::ReadableWritableListableStorageTraits;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
@@ -46,16 +46,22 @@ fn many_small_chunks(c: &mut Criterion) {
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
         let subset = array.subset_all();
         // The reads below do not depend on the writes being benchmarked
-        array.store_array_subset(&subset, data.as_slice()).unwrap();
+        array
+            .store_array_subset(&subset, data.as_slice(), &Resources::default())
+            .unwrap();
 
         group.bench_function(BenchmarkId::new("write", label), |b| {
             b.iter(|| {
-                array.store_array_subset(&subset, data.as_slice()).unwrap();
+                array
+                    .store_array_subset(&subset, data.as_slice(), &Resources::default())
+                    .unwrap();
             });
         });
         group.bench_function(BenchmarkId::new("read", label), |b| {
             b.iter(|| {
-                let _: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                let _: ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -83,16 +89,22 @@ fn single_chunk(c: &mut Criterion) {
         }
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
         // The reads below do not depend on the writes being benchmarked
-        array.store_chunk(&[0, 0], data.as_slice()).unwrap();
+        array
+            .store_chunk(&[0, 0], data.as_slice(), &Resources::default())
+            .unwrap();
 
         group.bench_function(BenchmarkId::new("store_chunk", label), |b| {
             b.iter(|| {
-                array.store_chunk(&[0, 0], data.as_slice()).unwrap();
+                array
+                    .store_chunk(&[0, 0], data.as_slice(), &Resources::default())
+                    .unwrap();
             });
         });
         group.bench_function(BenchmarkId::new("retrieve_chunk", label), |b| {
             b.iter(|| {
-                let _: ArrayBytes = array.retrieve_chunk(&[0, 0]).unwrap();
+                let _: ArrayBytes = array
+                    .retrieve_chunk(&[0, 0], &Resources::default())
+                    .unwrap();
             });
         });
         let mut output = vec![0u8; data.len() * 2];
@@ -112,6 +124,7 @@ fn single_chunk(c: &mut Criterion) {
                     .retrieve_array_subset_into(
                         &array.subset_all(),
                         ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                        &Resources::default(),
                     )
                     .unwrap();
             });
@@ -119,7 +132,9 @@ fn single_chunk(c: &mut Criterion) {
         let quarter = ArraySubset::new_with_ranges(&[64..192, 64..192]);
         group.bench_function(BenchmarkId::new("retrieve_chunk_subset", label), |b| {
             b.iter(|| {
-                let _: ArrayBytes = array.retrieve_array_subset(&quarter).unwrap();
+                let _: ArrayBytes = array
+                    .retrieve_array_subset(&quarter, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -152,7 +167,7 @@ fn partial_encode(c: &mut Criterion) {
                 CodecOptions::default().with_experimental_partial_encoding(partial_encoding),
             );
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         let label = if partial_encoding {
             "partial_encoding"
@@ -166,7 +181,7 @@ fn partial_encode(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("straddle", label), |b| {
             b.iter(|| {
                 array
-                    .store_array_subset(&subset, update.as_slice())
+                    .store_array_subset(&subset, update.as_slice(), &Resources::default())
                     .unwrap();
             });
         });
@@ -195,7 +210,7 @@ fn partial_write(c: &mut Criterion) {
             .unwrap()
             .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         for (label, ranges) in [
             // A contiguous range of each of 2 chunks
@@ -211,7 +226,7 @@ fn partial_write(c: &mut Criterion) {
             group.bench_function(BenchmarkId::new(label, store_label), |b| {
                 b.iter(|| {
                     array
-                        .store_array_subset(&subset, update.as_slice())
+                        .store_array_subset(&subset, update.as_slice(), &Resources::default())
                         .unwrap();
                 });
             });
@@ -238,7 +253,7 @@ fn nested_sharding(c: &mut Criterion) {
         .unwrap();
     let data = compressible_u16(shape.iter().product::<u64>() as usize);
     array
-        .store_array_subset(&array.subset_all(), data.as_slice())
+        .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
         .unwrap();
     for (label, subset) in [
         ("all", array.subset_all()),
@@ -254,7 +269,9 @@ fn nested_sharding(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(subset.num_elements() * 2));
         group.bench_function(BenchmarkId::new("read", label), |b| {
             b.iter(|| {
-                let _: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                let _: ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -279,14 +296,16 @@ fn sharded_read(c: &mut Criterion) {
         .build(Arc::new(MemoryStore::new()), "/")
         .unwrap();
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         let num_shards = (shape[0] / shard) * (shape[1] / shard);
         group.bench_function(
             BenchmarkId::new("all", format!("{num_shards}_shards")),
             |b| {
                 b.iter(|| {
-                    let _: ArrayBytes = array.retrieve_array_subset(&array.subset_all()).unwrap();
+                    let _: ArrayBytes = array
+                        .retrieve_array_subset(&array.subset_all(), &Resources::default())
+                        .unwrap();
                 });
             },
         );
@@ -307,13 +326,21 @@ fn partial_decoder(c: &mut Criterion) {
             builder.subchunk_shape(vec![32, 32]);
         }
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
-        array.store_chunk(&[0, 0], data.as_slice()).unwrap();
+        array
+            .store_chunk(&[0, 0], data.as_slice(), &Resources::default())
+            .unwrap();
 
         group.throughput(Throughput::Bytes(data.len() as u64 * 2));
         group.bench_function(BenchmarkId::new("create", label), |b| {
-            b.iter(|| array.partial_decoder(&[0, 0]).unwrap());
+            b.iter(|| {
+                array
+                    .partial_decoder(&[0, 0], &Resources::default())
+                    .unwrap()
+            });
         });
-        let decoder = array.partial_decoder(&[0, 0]).unwrap();
+        let decoder = array
+            .partial_decoder(&[0, 0], &Resources::default())
+            .unwrap();
         for (region, subset) in [
             (
                 "one_subchunk",
@@ -328,7 +355,7 @@ fn partial_decoder(c: &mut Criterion) {
             group.bench_function(BenchmarkId::new(region, label), |b| {
                 b.iter(|| {
                     decoder
-                        .partial_decode(&subset, &CodecOptions::default())
+                        .partial_decode(&subset, &CodecOptions::default(), &Resources::default())
                         .unwrap()
                         .into_owned()
                 });
@@ -356,14 +383,20 @@ fn chunk_cache(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("empty", label), |b| {
             b.iter(|| {
                 let cached = ArrayCached::new(array.clone(), cache());
-                let _: ArrayBytes = cached.retrieve_array_subset(&subset).unwrap();
+                let _: ArrayBytes = cached
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
         let cached = ArrayCached::new(array.clone(), cache());
-        let _: ArrayBytes = cached.retrieve_array_subset(&subset).unwrap();
+        let _: ArrayBytes = cached
+            .retrieve_array_subset(&subset, &Resources::default())
+            .unwrap();
         group.bench_function(BenchmarkId::new("filled", label), |b| {
             b.iter(|| {
-                let _: ArrayBytes = cached.retrieve_array_subset(&subset).unwrap();
+                let _: ArrayBytes = cached
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
             });
         });
     }
@@ -381,7 +414,7 @@ fn chunk_cache(c: &mut Criterion) {
         }
         let array = Arc::new(builder.build(Arc::new(MemoryStore::new()), "/").unwrap());
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         bench_cache(&mut group, &array, &format!("encoded/{codecs}"), || {
             ChunkCacheEncodedLruChunkLimit::new(16)

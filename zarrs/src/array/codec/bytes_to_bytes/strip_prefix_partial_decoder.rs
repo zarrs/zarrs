@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
@@ -39,6 +39,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
@@ -48,7 +49,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode_many(Box::new(decoded_regions), options)
+            .partial_decode_many(Box::new(decoded_regions), options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -93,6 +94,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
@@ -102,7 +104,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode_many(Box::new(decoded_regions), options)
+            .partial_decode_many(Box::new(decoded_regions), options, resources)
             .await
     }
 

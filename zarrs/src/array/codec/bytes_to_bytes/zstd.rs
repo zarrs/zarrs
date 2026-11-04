@@ -97,8 +97,9 @@ impl CodecTraitsV2 for ZstdCodec {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::sync::Arc;
-    use zarrs_codec::CowBytes;
+    use zarrs_codec::{ComputeResources, CowBytes};
 
     use super::*;
     use crate::array::BytesRepresentation;
@@ -143,10 +144,19 @@ mod tests {
         let codec = ZstdCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -162,7 +172,11 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -175,6 +189,7 @@ mod tests {
                 input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zstd partial decoder does not hold bytes
@@ -182,6 +197,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .unwrap()
@@ -209,7 +225,11 @@ mod tests {
         let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -222,6 +242,7 @@ mod tests {
                 input_handle,
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap();
@@ -229,6 +250,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap()
@@ -251,7 +273,11 @@ mod tests {
         let options = CodecOptions::default();
         let encode = |decoded: &[u8]| -> Vec<u8> {
             codec
-                .encode(CowBytes::from(decoded), &options)
+                .encode(
+                    CowBytes::from(decoded),
+                    &options,
+                    &ComputeResources::default(),
+                )
                 .unwrap()
                 .to_vec()
         };
@@ -261,6 +287,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::FixedSize(len as u64),
                     &options,
+                    &ComputeResources::default(),
                 )
                 .map(|decoded| decoded.to_vec())
         };
@@ -303,7 +330,11 @@ mod tests {
             (19, false, &small),
         ] {
             let encoded = ZstdCodec::new(level, checksum)
-                .encode(CowBytes::from(data.as_slice()), &CodecOptions::default())
+                .encode(
+                    CowBytes::from(data.as_slice()),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             let mut compressor = zstd::bulk::Compressor::new(level).unwrap();
             compressor.include_checksum(checksum).unwrap();

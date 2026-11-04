@@ -1,5 +1,5 @@
 use inherent::inherent;
-use zarrs_codec::CowBytes;
+use zarrs_codec::{CowBytes, Resources};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -86,8 +86,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options())
+        self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options(), resources)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -95,6 +96,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
@@ -105,7 +107,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_with_options(&chunk_indices, chunks_data, options)?;
+                self.store_chunk_with_options(&chunk_indices, chunks_data, options, resources)?;
             }
             _ => {
                 let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -115,10 +117,10 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 // Calculate chunk/codec concurrency
                 let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
                 let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
+                let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
                     num_chunks,
                     options,
+                    resources,
                     &codec_concurrency,
                 );
 
@@ -129,7 +131,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                         array_subset.shape(),
                         self.data_type(),
                     )?;
-                    self.store_chunk_with_options(&chunk_indices, chunk_bytes, &options)
+                    self.store_chunk_with_options(&chunk_indices, chunk_bytes, options, &resources)
                 };
 
                 let indices = chunks.indices();
@@ -150,7 +152,11 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn erase_chunks(&self, chunks: &dyn Indexer) -> Result<(), ArrayError> {
+    pub fn erase_chunks(
+        &self,
+        chunks: &dyn Indexer,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
         chunks
             .validate(self.chunk_grid_shape())
             .map_err(CodecError::from)?;
@@ -159,7 +165,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             Ok(storage_transformer.erase(&self.chunk_key(&chunk_indices)?)?)
         };
 
-        let concurrent_limit = self.codec_options().concurrent_target();
+        let concurrent_limit = resources.compute_target();
         if let Some(chunks) = chunks.as_array_subset() {
             chunks
                 .indices()
@@ -195,6 +201,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_data: T,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
@@ -209,7 +216,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         } else {
             let chunk_encoded = self
                 .codecs_bound()
-                .encode(chunk_bytes, &chunk_shape, options)
+                .encode(chunk_bytes, &chunk_shape, options, resources.compute())
                 .map_err(ArrayError::CodecError)?;
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
         }

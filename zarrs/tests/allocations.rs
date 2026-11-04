@@ -24,7 +24,10 @@ use std::num::NonZeroU64;
 use std::sync::{Arc, mpsc};
 
 use zarrs::array::codec::ZstdCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, CowBytes, FillValue, data_type};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayBytes, ArraySubset, ComputeResources, CowBytes, FillValue, Resources,
+    data_type,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
@@ -222,12 +225,13 @@ fn array(
     if let Some(subchunk_shape) = subchunk_shape {
         builder.subchunk_shape(subchunk_shape.to_vec());
     }
-    let array = builder
-        .build(Arc::new(MemoryStore::new()), "/")
-        .unwrap()
-        .with_codec_options(CodecOptions::default().with_concurrent_target(1));
+    let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
     array
-        .store_array_subset(&array.subset_all(), data())
+        .store_array_subset(
+            &array.subset_all(),
+            data(),
+            &Resources::default().with_compute_target(1),
+        )
         .unwrap();
     array
 }
@@ -323,7 +327,9 @@ fn measure_and_check<R: Send>(
 fn retrieve_chunk_uncompressed() {
     let array = array(&SHAPE, false, None);
     measure_and_check("retrieve_chunk_uncompressed", &array, |array| {
-        let bytes = array.retrieve_chunk::<ArrayBytes>(&[0, 0]).unwrap();
+        let bytes = array
+            .retrieve_chunk::<ArrayBytes>(&[0, 0], &Resources::default().with_compute_target(1))
+            .unwrap();
         assert_eq!(bytes.size(), DECODED_BYTES);
     });
 }
@@ -332,7 +338,9 @@ fn retrieve_chunk_uncompressed() {
 fn retrieve_chunk_zstd() {
     let array = array(&SHAPE, true, None);
     measure_and_check("retrieve_chunk_zstd", &array, |array| {
-        array.retrieve_chunk::<ArrayBytes>(&[0, 0]).unwrap()
+        array
+            .retrieve_chunk::<ArrayBytes>(&[0, 0], &Resources::default().with_compute_target(1))
+            .unwrap()
     });
 }
 
@@ -341,7 +349,10 @@ fn retrieve_array_subset_many_chunks_zstd() {
     let array = array(&[64, 64], true, None);
     measure_and_check("retrieve_array_subset_many_chunks_zstd", &array, |array| {
         array
-            .retrieve_array_subset::<ArrayBytes>(&array.subset_all())
+            .retrieve_array_subset::<ArrayBytes>(
+                &array.subset_all(),
+                &Resources::default().with_compute_target(1),
+            )
             .unwrap()
     });
 }
@@ -351,7 +362,10 @@ fn retrieve_sharded_all_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     measure_and_check("retrieve_sharded_all_zstd", &array, |array| {
         array
-            .retrieve_array_subset::<ArrayBytes>(&array.subset_all())
+            .retrieve_array_subset::<ArrayBytes>(
+                &array.subset_all(),
+                &Resources::default().with_compute_target(1),
+            )
             .unwrap()
     });
 }
@@ -361,7 +375,12 @@ fn retrieve_sharded_partial_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     let subset = ArraySubset::new_with_ranges(&[16..112, 16..112]);
     measure_and_check("retrieve_sharded_partial_zstd", &array, |array| {
-        array.retrieve_array_subset::<ArrayBytes>(&subset).unwrap()
+        array
+            .retrieve_array_subset::<ArrayBytes>(
+                &subset,
+                &Resources::default().with_compute_target(1),
+            )
+            .unwrap()
     });
 }
 
@@ -369,13 +388,19 @@ fn retrieve_sharded_partial_zstd() {
 fn partial_decoder_sharded_zstd() {
     let array = array(&SHAPE, true, Some(&[32, 32]));
     measure_and_check("partial_decoder_sharded_zstd", &array, |array| {
-        let decoder = array.partial_decoder(&[0, 0]).unwrap();
+        let decoder = array
+            .partial_decoder(&[0, 0], &Resources::default().with_compute_target(1))
+            .unwrap();
         for subset in [
             ArraySubset::new_with_ranges(&[40..60, 40..60]),
             ArraySubset::new_with_ranges(&[16..80, 16..80]),
         ] {
             decoder
-                .partial_decode(&subset, &CodecOptions::default().with_concurrent_target(1))
+                .partial_decode(
+                    &subset,
+                    &CodecOptions::default(),
+                    &Resources::default().with_compute_target(1),
+                )
                 .unwrap();
         }
     });
@@ -393,7 +418,8 @@ fn sharding_decode_borrowed_shard() {
             .decode(
                 CowBytes::Borrowed(&encoded),
                 &shape,
-                &CodecOptions::default().with_concurrent_target(1),
+                &CodecOptions::default(),
+                &ComputeResources::default().with_compute_target(1),
             )
             .unwrap()
             .into_owned()
@@ -407,7 +433,13 @@ fn store_chunk_uncompressed_borrowed() {
     let array = array(&SHAPE, false, None);
     let data = data();
     let ((), stats) = measure("store_chunk_uncompressed_borrowed", || {
-        array.store_chunk(&[0, 0], data.as_slice()).unwrap();
+        array
+            .store_chunk(
+                &[0, 0],
+                data.as_slice(),
+                &Resources::default().with_compute_target(1),
+            )
+            .unwrap();
     });
     check("store_chunk_uncompressed_borrowed", stats);
 }
@@ -417,7 +449,13 @@ fn store_chunk_zstd() {
     let array = array(&SHAPE, true, None);
     let data = data();
     let ((), stats) = measure("store_chunk_zstd", || {
-        array.store_chunk(&[0, 0], data.as_slice()).unwrap();
+        array
+            .store_chunk(
+                &[0, 0],
+                data.as_slice(),
+                &Resources::default().with_compute_target(1),
+            )
+            .unwrap();
     });
     check("store_chunk_zstd", stats);
 }
@@ -428,7 +466,11 @@ fn store_array_subset_sharded() {
     let data = data();
     let ((), stats) = measure("store_array_subset_sharded", || {
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(
+                &array.subset_all(),
+                data.as_slice(),
+                &Resources::default().with_compute_target(1),
+            )
             .unwrap();
     });
     check("store_array_subset_sharded", stats);
@@ -440,7 +482,11 @@ fn store_array_subset_many_chunks_zstd() {
     let data = data();
     measure_and_check("store_array_subset_many_chunks_zstd", &array, |array| {
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(
+                &array.subset_all(),
+                data.as_slice(),
+                &Resources::default().with_compute_target(1),
+            )
             .unwrap();
     });
 }
@@ -451,7 +497,13 @@ fn store_array_subset_partial_chunks_zstd() {
     let subset = ArraySubset::new_with_ranges(&[32..224, 32..224]);
     let data: Vec<u16> = vec![1; 192 * 192];
     measure_and_check("store_array_subset_partial_chunks_zstd", &array, |array| {
-        array.store_array_subset(&subset, data.as_slice()).unwrap();
+        array
+            .store_array_subset(
+                &subset,
+                data.as_slice(),
+                &Resources::default().with_compute_target(1),
+            )
+            .unwrap();
     });
 }
 
@@ -464,6 +516,7 @@ fn store_chunks_sharded() {
             .store_chunks(
                 &ArraySubset::new_with_ranges(&[0..1, 0..1]),
                 data.as_slice(),
+                &Resources::default().with_compute_target(1),
             )
             .unwrap();
     });
@@ -477,11 +530,20 @@ fn async_retrieve_chunk_zstd() {
     let array = ArrayBuilder::new(SHAPE.to_vec(), SHAPE.to_vec(), data_type::uint16(), 0u16)
         .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
         .build(store, "/")
+        .unwrap();
+    futures::executor::block_on(array.async_store_chunk(
+        &[0, 0],
+        data(),
+        &Resources::default().with_compute_target(1),
+    ))
+    .unwrap();
+    let retrieve = || {
+        futures::executor::block_on(array.async_retrieve_chunk::<ArrayBytes>(
+            &[0, 0],
+            &Resources::default().with_compute_target(1),
+        ))
         .unwrap()
-        .with_codec_options(CodecOptions::default().with_concurrent_target(1));
-    futures::executor::block_on(array.async_store_chunk(&[0, 0], data())).unwrap();
-    let retrieve =
-        || futures::executor::block_on(array.async_retrieve_chunk::<ArrayBytes>(&[0, 0])).unwrap();
+    };
     let (_, stats) = measure("async_retrieve_chunk_zstd", retrieve);
     check("async_retrieve_chunk_zstd", stats);
 }
@@ -493,13 +555,14 @@ fn async_store_array_subset_many_chunks_zstd() {
     let array = ArrayBuilder::new(SHAPE.to_vec(), vec![64, 64], data_type::uint16(), 0u16)
         .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
         .build(Arc::new(AsyncMemoryStore::new()), "/")
-        .unwrap()
-        .with_codec_options(CodecOptions::default().with_concurrent_target(1));
+        .unwrap();
     let data = data();
     let ((), stats) = measure("async_store_array_subset_many_chunks_zstd", || {
-        futures::executor::block_on(
-            array.async_store_array_subset(&array.subset_all(), data.as_slice()),
-        )
+        futures::executor::block_on(array.async_store_array_subset(
+            &array.subset_all(),
+            data.as_slice(),
+            &Resources::default().with_compute_target(1),
+        ))
         .unwrap();
     });
     check("async_store_array_subset_many_chunks_zstd", stats);
@@ -620,15 +683,15 @@ fn collection_async_partial_decode() {
     let decoder = (store, key);
     for count in [0, 1, 1024] {
         let ranges = vec![ByteRange::FromStart(0, Some(1)); count];
-        let (output, stats) =
-            measure("collection_async_partial_decode", || {
-                futures::executor::block_on(decoder.partial_decode_many(
-                    Box::new(ranges.iter().copied()),
-                    &CodecOptions::default(),
-                ))
-                .unwrap()
-                .unwrap()
-            });
+        let (output, stats) = measure("collection_async_partial_decode", || {
+            futures::executor::block_on(decoder.partial_decode_many(
+                Box::new(ranges.iter().copied()),
+                &CodecOptions::default(),
+                &Resources::default().with_compute_target(1),
+            ))
+            .unwrap()
+            .unwrap()
+        });
         assert_eq!(output.len(), count);
         assert!(output.iter().all(|bytes| bytes.as_ref() == [42]));
         assert!(stats.allocations <= 7, "{stats:?}");

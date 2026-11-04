@@ -7,7 +7,7 @@ use super::{BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -154,6 +154,7 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.validate_indexer(indexer)?;
 
@@ -164,9 +165,11 @@ where
             .map(ByteRange::new);
 
         // Decode
-        let decoded = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)?;
+        let decoded = self.input_output_handle.partial_decode_many(
+            Box::new(byte_ranges),
+            options,
+            resources,
+        )?;
 
         let decoded = if let Some(decoded) = decoded {
             ArrayBytes::from(self.decode_bytes(CowBytes::from(decoded.concat()))?)
@@ -205,6 +208,7 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let data_type_size = self.validate_indexer(indexer)?;
 
@@ -218,7 +222,7 @@ where
         // Decode
         let decoded = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
             .await?;
 
         let decoded = if let Some(decoded) = decoded {
@@ -248,6 +252,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
@@ -260,7 +265,9 @@ where
                 return self.input_output_handle.erase();
             }
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
-            return self.input_output_handle.encode(chunk_bytes, options);
+            return self
+                .input_output_handle
+                .encode(chunk_bytes, options, resources);
         }
 
         // Only the written elements are encoded, so an existing chunk is never read.
@@ -268,11 +275,15 @@ where
         if self.input_output_handle.exists()? {
             let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
             let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
-            self.input_output_handle
-                .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+            self.input_output_handle.partial_encode_many(
+                Box::new(offset_bytes.into_iter()),
+                options,
+                resources,
+            )
         } else {
             let chunk_bytes = self.encode_missing(indexer, bytes)?;
-            self.input_output_handle.encode(chunk_bytes, options)
+            self.input_output_handle
+                .encode(chunk_bytes, options, resources)
         }
     }
 
@@ -297,6 +308,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         let data_type_size = self.validate_indexer(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
@@ -309,7 +321,10 @@ where
                 return self.input_output_handle.erase().await;
             }
             let chunk_bytes = self.encode_bytes(bytes.clone().into_fixed()?)?;
-            return self.input_output_handle.encode(chunk_bytes, options).await;
+            return self
+                .input_output_handle
+                .encode(chunk_bytes, options, resources)
+                .await;
         }
 
         // Only the written elements are encoded, so an existing chunk is never read.
@@ -318,11 +333,13 @@ where
             let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
             let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
             self.input_output_handle
-                .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+                .partial_encode_many(Box::new(offset_bytes.into_iter()), options, resources)
                 .await
         } else {
             let chunk_bytes = self.encode_missing(indexer, bytes)?;
-            self.input_output_handle.encode(chunk_bytes, options).await
+            self.input_output_handle
+                .encode(chunk_bytes, options, resources)
+                .await
         }
     }
 

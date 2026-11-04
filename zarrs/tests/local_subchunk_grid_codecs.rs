@@ -2,6 +2,7 @@
 
 //! Chunk-local subchunk grid propagation through codec partial decoders/encoders.
 
+use zarrs::array::Resources;
 mod subchunk_grid_cases;
 
 use std::error::Error;
@@ -23,7 +24,11 @@ type TestResult = Result<(), Box<dyn Error>>;
 fn build(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
     let store = Arc::new(MemoryStore::default());
     let array = case.builder().build_arc(store, "/array")?;
-    array.store_chunk(&case.chunk_indices, case.zero_chunk_bytes())?;
+    array.store_chunk(
+        &case.chunk_indices,
+        case.zero_chunk_bytes(),
+        &Resources::default(),
+    )?;
     Ok(array)
 }
 
@@ -31,13 +36,13 @@ fn build(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
 fn local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
     for case in cases() {
         let array = build(&case)?;
-        let grid = array.local_subchunk_grid(&case.chunk_indices)?;
+        let grid = array.local_subchunk_grid(&case.chunk_indices, &Resources::default())?;
         case.assert_local_grid(grid.as_ref());
 
         // There is only one level of subchunking, so the next level down is absent.
         assert!(
             array
-                .local_subchunk_grid_at_level(1, &case.chunk_indices)?
+                .local_subchunk_grid_at_level(1, &case.chunk_indices, &Resources::default())?
                 .is_none(),
             "{}: expected no second subchunk level",
             case.name
@@ -45,11 +50,11 @@ fn local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
 
         // The partial decoder under test also has to report the decoded data type, and whether
         // the chunk it was created for exists.
-        let written = array.partial_decoder(&case.chunk_indices)?;
+        let written = array.partial_decoder(&case.chunk_indices, &Resources::default())?;
         assert_eq!(written.data_type(), &case.data_type, "{}", case.name);
         assert!(written.exists()?, "{}: written chunk exists", case.name);
 
-        let unwritten = array.partial_decoder(&case.absent_chunk_indices)?;
+        let unwritten = array.partial_decoder(&case.absent_chunk_indices, &Resources::default())?;
         assert_eq!(unwritten.data_type(), &case.data_type, "{}", case.name);
         assert!(
             !unwritten.exists()?,
@@ -67,16 +72,23 @@ fn local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
     let cached = ArrayCached::new(array.clone(), ChunkCachePartialDecoderLruChunkLimit::new(1));
 
     let encoders: [(&str, Arc<dyn ArrayPartialEncoderTraits>); 2] = [
-        ("sharding", array.partial_encoder(&case.chunk_indices)?),
-        ("cached", cached.partial_encoder(&case.chunk_indices)?),
+        (
+            "sharding",
+            array.partial_encoder(&case.chunk_indices, &Resources::default())?,
+        ),
+        (
+            "cached",
+            cached.partial_encoder(&case.chunk_indices, &Resources::default())?,
+        ),
     ];
     for (name, encoder) in encoders {
-        let grids = encoder.local_subchunk_grids(&CodecOptions::default())?;
+        let grids =
+            encoder.local_subchunk_grids(&CodecOptions::default(), &Resources::default())?;
         assert_eq!(grids.len(), 1, "{name}: one subchunk level");
         case.assert_local_grid(grids[0].as_ref());
         case.assert_local_grid(
             encoder
-                .local_subchunk_grid(&CodecOptions::default())?
+                .local_subchunk_grid(&CodecOptions::default(), &Resources::default())?
                 .as_ref(),
         );
     }
@@ -91,7 +103,7 @@ fn check_cache<C: ChunkCache + 'static>(
     expect_subchunks: bool,
 ) -> TestResult {
     let cached = ArrayCached::new(array.clone(), cache);
-    let grid = cached.local_subchunk_grid(&case.chunk_indices)?;
+    let grid = cached.local_subchunk_grid(&case.chunk_indices, &Resources::default())?;
     if expect_subchunks {
         case.assert_local_grid(grid.as_ref());
     } else {
@@ -125,15 +137,19 @@ fn local_subchunk_grid_absent_with_array_partial_decoder_cache() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let array =
         ArrayBuilder::new(vec![4], vec![4], data_type::string(), "").build(store, "/array")?;
-    array.store_chunk(&[0], vec!["a", "bb", "ccc", "dddd"])?;
+    array.store_chunk(&[0], vec!["a", "bb", "ccc", "dddd"], &Resources::default())?;
 
-    let partial_decoder = array.partial_decoder(&[0])?;
+    let partial_decoder = array.partial_decoder(&[0], &Resources::default())?;
     assert!(partial_decoder.supports_partial_decode());
     assert!(
         partial_decoder
-            .local_subchunk_grids(&CodecOptions::default())?
+            .local_subchunk_grids(&CodecOptions::default(), &Resources::default())?
             .is_empty()
     );
-    assert!(array.local_subchunk_grid(&[0])?.is_none());
+    assert!(
+        array
+            .local_subchunk_grid(&[0], &Resources::default())?
+            .is_none()
+    );
     Ok(())
 }

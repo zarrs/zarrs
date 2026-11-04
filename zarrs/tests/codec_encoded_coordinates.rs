@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+use zarrs::array::ComputeResources;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 
 use std::num::NonZeroU64;
@@ -38,6 +39,7 @@ fn check_encoded_coordinates(codec: &Arc<dyn ArrayToArrayCodecTraits>, decoded_s
             ArrayBytes::new_flen(bytemuck::cast_slice::<u32, u8>(&decoded).to_vec()),
             &decoded_shape,
             &CodecOptions::default(),
+            &ComputeResources::default(),
         )
         .unwrap();
     let encoded: Vec<u32> = bytemuck::pod_collect_to_vec(&encoded.into_fixed().unwrap());
@@ -159,6 +161,7 @@ fn identity_coordinates_are_independent_of_value_changes() {
                 ArrayBytes::new_flen(input.clone()),
                 &shape(&[2, 3]),
                 &CodecOptions::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_fixed()

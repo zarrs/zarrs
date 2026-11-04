@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use zarrs::array::{
     ArrayBytes, ArrayBytesOffsets, ArraySubset, CodecChain, CodecChainBound, DataType, FillValue,
-    data_type,
+    Resources, data_type,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
@@ -112,17 +112,17 @@ fn whole_chunk_partial_encode() {
         // The existing chunk is replaced without being decoded
         case.codec
             .clone()
-            .partial_encoder(handle.clone(), &shape(), &options)
+            .partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
             .unwrap()
-            .partial_encode(&whole, &case.data, &options)
+            .partial_encode(&whole, &case.data, &options, &Resources::default())
             .unwrap_or_else(|err| panic!("{name}: {err}"));
 
         let decoded = case
             .codec
             .clone()
-            .partial_decoder(handle, &shape(), &options)
+            .partial_decoder(handle, &shape(), &options, &Resources::default())
             .unwrap()
-            .partial_decode(&whole, &options)
+            .partial_decode(&whole, &options, &Resources::default())
             .unwrap()
             .into_owned();
         assert_eq!(decoded, case.data, "{name}");
@@ -166,20 +166,20 @@ mod r#async {
             // The existing chunk is replaced without being decoded
             case.codec
                 .clone()
-                .async_partial_encoder(handle.clone(), &shape(), &options)
+                .async_partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
                 .await
                 .unwrap()
-                .partial_encode(&whole, &case.data, &options)
+                .partial_encode(&whole, &case.data, &options, &Resources::default())
                 .await
                 .unwrap_or_else(|err| panic!("{name}: {err}"));
 
             let decoded = case
                 .codec
                 .clone()
-                .async_partial_decoder(handle, &shape(), &options)
+                .async_partial_decoder(handle, &shape(), &options, &Resources::default())
                 .await
                 .unwrap()
-                .partial_decode(&whole, &options)
+                .partial_decode(&whole, &options, &Resources::default())
                 .await
                 .unwrap()
                 .into_owned();

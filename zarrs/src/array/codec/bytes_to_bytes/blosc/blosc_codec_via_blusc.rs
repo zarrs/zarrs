@@ -16,8 +16,8 @@ use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
     BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_plugin::PluginCreateError;
 
@@ -212,6 +212,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -227,6 +228,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
@@ -242,6 +244,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(blosc_partial_decoder::BloscPartialDecoder::new(
             input_handle,
@@ -254,6 +257,7 @@ impl BytesToBytesCodecTraits for BloscCodec {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _parallel: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),

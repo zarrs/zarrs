@@ -5,7 +5,7 @@ use zarrs_storage::byte_range::{
     ByteLength, ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError,
 };
 
-use crate::{CodecError, CodecOptions, CowBytes};
+use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 #[cfg(feature = "async")]
 use crate::AsyncBytesPartialDecoderTraits;
@@ -71,10 +71,11 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         &self,
         byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let byte_ranges = interval_byte_ranges(byte_ranges, self.byte_offset, self.byte_length)?;
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -125,10 +126,11 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         &'a self,
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let byte_ranges = interval_byte_ranges(byte_ranges, self.byte_offset, self.byte_length)?;
         self.input_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)
             .await
     }
 
@@ -145,7 +147,7 @@ mod tests {
         let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new((0..10u8).collect::<Vec<u8>>());
         let decoder = ByteIntervalPartialDecoder::new(input, 2, 5);
         decoder
-            .partial_decode(byte_range, &CodecOptions::default())
+            .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())
             .unwrap()
             .unwrap()
             .to_vec()
@@ -172,7 +174,7 @@ mod tests {
             ByteRange::Suffix(6),
         ] {
             assert!(matches!(
-                decoder.partial_decode(byte_range, &options),
+                decoder.partial_decode(byte_range, &options, &Resources::default()),
                 Err(CodecError::InvalidByteRangeError(_))
             ));
         }
@@ -185,7 +187,7 @@ mod tests {
             ByteRange::Suffix(1),
         ] {
             assert!(matches!(
-                decoder.partial_decode(byte_range, &options),
+                decoder.partial_decode(byte_range, &options, &Resources::default()),
                 Err(CodecError::InvalidByteRangeError(_))
             ));
         }
@@ -196,10 +198,14 @@ mod tests {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> =
             Arc::new((0..10u8).collect::<Vec<u8>>());
         let decoder = AsyncByteIntervalPartialDecoder::new(input, 2, 5);
-        futures::executor::block_on(decoder.partial_decode(byte_range, &CodecOptions::default()))
-            .unwrap()
-            .unwrap()
-            .to_vec()
+        futures::executor::block_on(decoder.partial_decode(
+            byte_range,
+            &CodecOptions::default(),
+            &Resources::default(),
+        ))
+        .unwrap()
+        .unwrap()
+        .to_vec()
     }
 
     #[cfg(feature = "async")]

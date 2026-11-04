@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use std::sync::Mutex;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, Resources};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::store::MemoryStore;
 use zarrs_storage::{StoreKey, WritableStorageTraits};
@@ -21,7 +21,7 @@ fn partial_decode_collections() {
         for count in [0, 1, 1024] {
             let ranges = (0..count).map(|i| ByteRange::FromStart(i % 2, Some(1)));
             let values = decoder
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .unwrap()
                 .unwrap();
             assert_eq!(values.len(), usize::try_from(count).unwrap());
@@ -39,7 +39,7 @@ fn partial_decode_collections() {
         }));
         assert!(
             decoder
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .is_err()
         );
     }
@@ -49,7 +49,7 @@ fn partial_decode_collections() {
         let ranges = std::iter::once_with(|| panic!("missing values must not consume ranges"));
         assert!(
             decoder
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .unwrap()
                 .is_none()
         );
@@ -72,7 +72,7 @@ fn async_partial_decode_collections() {
         for count in [0, 1, 1024] {
             let ranges = (0..count).map(|i| ByteRange::FromStart(i % 2, Some(1)));
             let values = decoder
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .await
                 .unwrap()
                 .unwrap();
@@ -87,7 +87,11 @@ fn async_partial_decode_collections() {
         ];
         assert!(
             decoder
-                .partial_decode_many(Box::new(ranges.into_iter()), &options)
+                .partial_decode_many(
+                    Box::new(ranges.into_iter()),
+                    &options,
+                    &Resources::default()
+                )
                 .await
                 .is_err()
         );
@@ -95,7 +99,7 @@ fn async_partial_decode_collections() {
         let ranges = std::iter::once_with(|| panic!("missing values must not consume ranges"));
         assert!(
             missing
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .await
                 .unwrap()
                 .is_none()

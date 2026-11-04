@@ -8,8 +8,8 @@ use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCodecOptions};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -191,6 +191,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         Ok(CowBytes::from(compress(
             &decoded_value,
@@ -205,6 +206,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
@@ -256,13 +258,20 @@ mod tests {
     fn check_encode(codec: &dyn BytesToBytesCodecTraits, input: &[u8], reuse: bool) {
         COMPRESSOR.with(|slot| *slot.borrow_mut() = None);
         let options = CodecOptions::default();
-        let encoded = codec.encode(CowBytes::Borrowed(input), &options).unwrap();
+        let encoded = codec
+            .encode(
+                CowBytes::Borrowed(input),
+                &options,
+                &ComputeResources::default(),
+            )
+            .unwrap();
         COMPRESSOR.with(|slot| assert_eq!(slot.borrow().is_some(), reuse));
         let decoded = codec
             .decode(
                 encoded,
                 &BytesRepresentation::FixedSize(input.len() as u64),
                 &options,
+                &ComputeResources::default(),
             )
             .unwrap();
         assert_eq!(&*decoded, input);

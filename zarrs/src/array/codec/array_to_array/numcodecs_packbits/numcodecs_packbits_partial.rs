@@ -5,6 +5,7 @@ use std::sync::Arc;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
+    Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -94,6 +95,7 @@ impl<T: ArrayPartialDecoderTraits + ?Sized> BytesPartialDecoderTraits
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let subsets = self.subsets(decoded_regions)?;
         if includes_padding_byte(&subsets) && !self.input_handle.exists()? {
@@ -102,7 +104,9 @@ impl<T: ArrayPartialDecoderTraits + ?Sized> BytesPartialDecoderTraits
         if subsets.is_empty() {
             return Ok(Some(vec![]));
         }
-        let bytes = self.input_handle.partial_decode(&subsets, options)?;
+        let bytes = self
+            .input_handle
+            .partial_decode(&subsets, options, resources)?;
         split_subsets(bytes, &subsets).map(Some)
     }
 
@@ -118,22 +122,32 @@ impl<T: ArrayPartialEncoderTraits + ?Sized> BytesPartialEncoderTraits
         self.input_handle.erase()
     }
 
-    fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+    fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
         // The whole-chunk subset replaces every element, so the existing chunk is not read
         let subset = self.subset_all(&bytes)?;
         self.input_handle
-            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)
+            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options, resources)
     }
 
     fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<CowBytes<'_>>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         for (offset, bytes) in offset_values {
             let subset = self.subset(ByteRange::FromStart(offset, Some(bytes.len() as u64)))?;
-            self.input_handle
-                .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)?;
+            self.input_handle.partial_encode(
+                &subset,
+                &ArrayBytes::Fixed(bytes),
+                options,
+                resources,
+            )?;
         }
         Ok(())
     }
@@ -161,6 +175,7 @@ impl<T: AsyncArrayPartialDecoderTraits + ?Sized> AsyncBytesPartialDecoderTraits
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         let subsets = self.subsets(decoded_regions)?;
         if subsets.is_empty() {
@@ -170,14 +185,17 @@ impl<T: AsyncArrayPartialDecoderTraits + ?Sized> AsyncBytesPartialDecoderTraits
             // Check that the chunk exists while retrieving it
             let (exists, bytes) = futures::join!(
                 self.input_handle.exists(),
-                self.input_handle.partial_decode(&subsets, options)
+                self.input_handle
+                    .partial_decode(&subsets, options, resources)
             );
             if !exists? {
                 return Ok(None);
             }
             bytes?
         } else {
-            self.input_handle.partial_decode(&subsets, options).await?
+            self.input_handle
+                .partial_decode(&subsets, options, resources)
+                .await?
         };
         split_subsets(bytes, &subsets).map(Some)
     }
@@ -197,11 +215,16 @@ impl<T: AsyncArrayPartialEncoderTraits + ?Sized> AsyncBytesPartialEncoderTraits
         self.input_handle.erase().await
     }
 
-    async fn encode(&self, bytes: CowBytes<'_>, options: &CodecOptions) -> Result<(), CodecError> {
+    async fn encode(
+        &self,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
         // The whole-chunk subset replaces every element, so the existing chunk is not read
         let subset = self.subset_all(&bytes)?;
         self.input_handle
-            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)
+            .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options, resources)
             .await
     }
 
@@ -209,11 +232,12 @@ impl<T: AsyncArrayPartialEncoderTraits + ?Sized> AsyncBytesPartialEncoderTraits
         &'a self,
         offset_values: OffsetBytesIterator<'a, CowBytes<'_>>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         for (offset, bytes) in offset_values {
             let subset = self.subset(ByteRange::FromStart(offset, Some(bytes.len() as u64)))?;
             self.input_handle
-                .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options)
+                .partial_encode(&subset, &ArrayBytes::Fixed(bytes), options, resources)
                 .await?;
         }
         Ok(())

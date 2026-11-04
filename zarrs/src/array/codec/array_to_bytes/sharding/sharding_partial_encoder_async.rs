@@ -22,7 +22,7 @@ use crate::array::{
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderSubchunkingTraits,
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
+    AsyncBytesPartialEncoderTraits, CodecError, CodecOptions, Resources, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -51,6 +51,7 @@ impl AsyncShardingPartialEncoder {
         index_codecs: Arc<CodecChainBound>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
+        resources: &Resources,
         sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, &subchunk_shape)?;
@@ -64,6 +65,7 @@ impl AsyncShardingPartialEncoder {
             shard_shape,
             &subchunk_shape,
             options,
+            resources,
         )
         .await?
         .unwrap_or_else(|| {
@@ -96,6 +98,7 @@ impl AsyncShardingPartialEncoder {
         shard_index_guard: &mut Vec<u64>,
         updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         // Rewrite the retained subchunks too if the shard is rewritten entirely anyway (e.g. in memory)
         //  Otherwise superseded subchunks accumulate in the shard
@@ -106,7 +109,7 @@ impl AsyncShardingPartialEncoder {
             if !retained.is_empty() {
                 let retained_encoded = self
                     .input_output_handle
-                    .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+                    .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)
                     .await?
                     .ok_or_else(super::missing_retained_subchunks)?;
                 updated_subchunks.extend(
@@ -190,7 +193,12 @@ impl AsyncShardingPartialEncoder {
             let shard_index_bytes: CowBytes = transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
-                .encode(shard_index_bytes.into(), &self.index_shape, options)?
+                .encode(
+                    shard_index_bytes.into(),
+                    &self.index_shape,
+                    options,
+                    resources.compute(),
+                )?
                 .into_static();
 
             // Get the total size of the encoded subchunks
@@ -233,7 +241,7 @@ impl AsyncShardingPartialEncoder {
                     }
                 };
                 self.input_output_handle
-                    .encode(CowBytes::from(shard), options)
+                    .encode(CowBytes::from(shard), options, resources)
                     .await?;
             } else {
                 // Write the encoded index and updated subchunks
@@ -249,6 +257,7 @@ impl AsyncShardingPartialEncoder {
                                     .into_iter(),
                                 ),
                                 options,
+                                resources,
                             )
                             .await?;
                     }
@@ -261,6 +270,7 @@ impl AsyncShardingPartialEncoder {
                                         .into_iter(),
                                 ),
                                 options,
+                                resources,
                             )
                             .await?;
                     }
@@ -278,6 +288,7 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialEncoder {
     async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         nested_local_subchunk_grids(ChunkGrid::new(self.chunk_grid.clone()), &self.inner_codecs)
     }
@@ -303,6 +314,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let handle: Arc<dyn AsyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
         let shard_index = self.shard_index.lock().await;
@@ -314,6 +326,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialEncoder {
             Some(shard_index.as_slice()),
             indexer,
             options,
+            resources,
         )
         .await
     }
@@ -340,6 +353,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         chunk_subset_indexer: &dyn crate::array::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
+        resources: &Resources,
     ) -> Result<(), super::CodecError> {
         let data_type = self.inner_codecs.data_type();
         let fill_value = self
@@ -386,7 +400,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
         // Read the straddling subchunks
         let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options, resources)
             .await?
             .map(|bytes| {
                 std::iter::zip(
@@ -406,12 +420,12 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
             })
             .collect::<Vec<_>>();
 
-        let (subchunk_concurrent_limit, subchunk_options) =
-            super::get_concurrent_target_and_codec_options(
+        let (subchunk_concurrent_limit, subchunk_resources) =
+            super::get_concurrent_target_and_resources(
                 &self.inner_codecs,
                 &self.subchunk_shape,
                 updates.len(),
-                options,
+                resources.compute(),
             )?;
         let updated_subchunks = updates
             .concurrent_limit(subchunk_concurrent_limit)
@@ -421,7 +435,8 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                         .decode(
                             CowBytes::from(subchunk_encoded),
                             &update.subchunk_shape,
-                            &subchunk_options,
+                            options,
+                            &subchunk_resources,
                         )?
                         .into_owned()
                 } else {
@@ -443,15 +458,25 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(subchunk_updated, &update.subchunk_shape, &subchunk_options)?
+                        .encode(
+                            subchunk_updated,
+                            &update.subchunk_shape,
+                            options,
+                            &subchunk_resources,
+                        )?
                         .into_static();
                     Ok((update.subchunk_index, Some(subchunk_encoded)))
                 }
             })
             .collect::<Result<Vec<_>, CodecError>>()?;
 
-        self.commit_subchunk_updates(&mut shard_index_guard, updated_subchunks, options)
-            .await
+        self.commit_subchunk_updates(
+            &mut shard_index_guard,
+            updated_subchunks,
+            options,
+            resources,
+        )
+        .await
     }
 
     fn supports_partial_encode(&self) -> bool {

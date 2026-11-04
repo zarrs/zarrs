@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::Array;
 use zarrs_filesystem::FilesystemStore;
@@ -25,14 +26,16 @@ fn zarr_python_v3_fixed_length_utf32_le() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
 
-    let elements = array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all, &Resources::default())?;
 
     for (i, chars) in elements.iter().enumerate() {
         let s: String = chars.iter().collect();
         assert_eq!(&s, &TEST_DATA[i], "element {i} mismatch");
     }
 
-    let elements = array.retrieve_array_subset::<Vec<[char; 4]>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<[char; 4]>>(&subset_all, &Resources::default())?;
     for (i, chars) in elements.iter().enumerate() {
         let s: String = chars.iter().take_while(|&c| *c != '\0').collect();
         assert_eq!(&s, &TEST_DATA[i], "element {i} mismatch");
@@ -49,7 +52,8 @@ fn zarr_python_v2_fixed_length_utf32_lt_u4() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
 
-    let elements = array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all, &Resources::default())?;
 
     for (i, chars) in elements.iter().enumerate() {
         let s: String = chars.iter().collect();
@@ -67,7 +71,8 @@ fn zarr_python_v2_fixed_length_utf32_gt_u4() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
 
-    let elements = array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<Vec<char>>>(&subset_all, &Resources::default())?;
 
     for (i, chars) in elements.iter().enumerate() {
         let s: String = chars.iter().collect();

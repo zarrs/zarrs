@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
@@ -46,13 +47,22 @@ fn fixture() -> (Arc<Array<TestStore>>, Arc<TestStore>) {
 }
 
 fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
-    array.store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])?;
-    array.store_chunk(&[0, 1], &[4u8, 5, 0, 9, 10, 0, 14, 15, 0])?;
+    array.store_chunk(
+        &[0, 0],
+        &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+        &Resources::default(),
+    )?;
+    array.store_chunk(
+        &[0, 1],
+        &[4u8, 5, 0, 9, 10, 0, 14, 15, 0],
+        &Resources::default(),
+    )?;
     array.store_chunks(
         &ArraySubset::new_with_ranges(&[1..2, 0..2]),
         &[
             16u8, 17, 18, 19, 20, 0, 21, 22, 23, 24, 25, 0, 0, 0, 0, 0, 0, 0,
         ],
+        &Resources::default(),
     )?;
     Ok(())
 }
@@ -145,9 +155,14 @@ fn retrieve_into<A: ArrayReadOps>(
         };
         let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
         if let Some(chunk_indices) = chunk_indices {
-            array.retrieve_partial_chunk_into(chunk_indices, subset, target)?;
+            array.retrieve_partial_chunk_into(
+                chunk_indices,
+                subset,
+                target,
+                &Resources::default(),
+            )?;
         } else {
-            array.retrieve_array_subset_into(subset, target)?;
+            array.retrieve_array_subset_into(subset, target, &Resources::default())?;
         }
     }
     Ok(output)
@@ -167,7 +182,11 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        array.retrieve_chunk_into(chunk_indices, ArrayBytesDecodeIntoTarget::Fixed(&mut view))?;
+        array.retrieve_chunk_into(
+            chunk_indices,
+            ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+            &Resources::default(),
+        )?;
     }
     Ok(output)
 }
@@ -179,11 +198,11 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     let array_subset = ArraySubset::new_with_ranges(&[1..4, 1..4]);
 
     assert_eq!(
-        array.retrieve_chunk::<Vec<u8>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
         [1, 2, 3, 6, 7, 8, 11, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunk::<Vec<u8>>(&[0, 1])?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())?,
         [4, 5, 0, 9, 10, 0, 14, 15, 0]
     );
     assert_eq!(
@@ -191,17 +210,20 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         [1, 2, 3, 6, 7, 8, 11, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0])?,
+        array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0], &Resources::default())?,
         Some(vec![16, 17, 18, 21, 22, 23, 0, 0, 0])
     );
     array.erase_chunk(&[1, 1])?;
-    assert_eq!(array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1])?, None);
     assert_eq!(
-        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)?,
+        array.retrieve_chunk_if_exists::<Vec<u8>>(&[1, 1], &Resources::default())?,
+        None
+    );
+    assert_eq!(
+        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset, &Resources::default())?,
         [7, 8, 12, 13]
     );
     assert_eq!(
-        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)?,
+        array.retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset, &Resources::default())?,
         [7, 8, 12, 13]
     );
     assert_eq!(
@@ -209,19 +231,19 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         [7, 8, 12, 13]
     );
     assert_eq!(
-        array.retrieve_chunks::<Vec<u8>>(&chunks)?,
+        array.retrieve_chunks::<Vec<u8>>(&chunks, &Resources::default())?,
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
     assert_eq!(
-        array.retrieve_chunks::<Vec<u8>>(&chunks)?,
+        array.retrieve_chunks::<Vec<u8>>(&chunks, &Resources::default())?,
         [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 0, 11, 12, 13, 14, 15, 0]
     );
     assert_eq!(
-        array.retrieve_array_subset::<Vec<u8>>(&array_subset)?,
+        array.retrieve_array_subset::<Vec<u8>>(&array_subset, &Resources::default())?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
-        array.retrieve_array_subset::<Vec<u8>>(&array_subset)?,
+        array.retrieve_array_subset::<Vec<u8>>(&array_subset, &Resources::default())?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
     assert_eq!(
@@ -232,26 +254,42 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
         retrieve_into(array, &array_subset, None)?,
         [7, 8, 9, 12, 13, 14, 17, 18, 0]
     );
-    assert_eq!(array.retrieve_subchunk::<Vec<u8>>(&[1, 1])?, [7]);
     assert_eq!(
-        array.retrieve_subchunks::<Vec<u8>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]),)?,
+        array.retrieve_subchunk::<Vec<u8>>(&[1, 1], &Resources::default())?,
+        [7]
+    );
+    assert_eq!(
+        array.retrieve_subchunks::<Vec<u8>>(
+            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            &Resources::default()
+        )?,
         [7, 8, 12, 13]
     );
     assert!(array.retrieve_encoded_chunk(&[0, 0])?.is_some());
     assert_eq!(
-        array.retrieve_encoded_chunks(&chunks)?.len(),
+        array
+            .retrieve_encoded_chunks(&chunks, &Resources::default())?
+            .len(),
         chunks.num_elements_usize()
     );
-    let decoder = array.partial_decoder(&[0, 0])?;
+    let decoder = array.partial_decoder(&[0, 0], &Resources::default())?;
     assert!(decoder.exists()?);
     assert_eq!(
         decoder
-            .partial_decode(&chunk_subset, &CodecOptions::default())?
+            .partial_decode(
+                &chunk_subset,
+                &CodecOptions::default(),
+                &Resources::default()
+            )?
             .into_fixed()?
             .as_ref(),
         &[7, 8, 12, 13]
     );
-    assert!(array.partial_decoder(&[0, 0])?.exists()?);
+    assert!(
+        array
+            .partial_decoder(&[0, 0], &Resources::default())?
+            .exists()?
+    );
     Ok(())
 }
 
@@ -281,6 +319,7 @@ where
         sharding_codec.index_codecs(),
         sharding_codec.index_location(),
         array.codec_options(),
+        &Resources::default(),
         sharding_codec.options().clone(),
     )?)
 }
@@ -292,8 +331,16 @@ fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
 
     let decoder = sharding_partial_decoder(array.as_ref())?;
 
-    assert!(decoder.retrieve_subchunk_encoded(&[1, 1])?.is_some());
-    assert!(decoder.retrieve_subchunk_encoded(&[3, 3]).is_err());
+    assert!(
+        decoder
+            .retrieve_subchunk_encoded(&[1, 1], array.codec_options(), &Resources::default())?
+            .is_some()
+    );
+    assert!(
+        decoder
+            .retrieve_subchunk_encoded(&[3, 3], array.codec_options(), &Resources::default())
+            .is_err()
+    );
     Ok(())
 }
 
@@ -302,11 +349,21 @@ fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestResult {
     let (array, _) = fixture();
 
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 0])?, None);
+    assert_eq!(
+        decoder.retrieve_subchunk_encoded(&[0, 0], array.codec_options(), &Resources::default())?,
+        None
+    );
 
-    array.store_chunk(&[0, 0], &[1u8, 0, 0, 0, 0, 0, 0, 0, 0])?;
+    array.store_chunk(
+        &[0, 0],
+        &[1u8, 0, 0, 0, 0, 0, 0, 0, 0],
+        &Resources::default(),
+    )?;
     let decoder = sharding_partial_decoder(array.as_ref())?;
-    assert_eq!(decoder.retrieve_subchunk_encoded(&[0, 1])?, None);
+    assert_eq!(
+        decoder.retrieve_subchunk_encoded(&[0, 1], array.codec_options(), &Resources::default())?,
+        None
+    );
     Ok(())
 }
 
@@ -324,20 +381,23 @@ fn partial_encode_variable_fill_value() -> TestResult {
             let subset = ArraySubset::new_with_ranges(&[0..2]);
 
             // Concatenated bytes match the fill, but the individual strings do not.
-            array.store_partial_chunk(&[0], &subset, &["a", "b"])?;
+            array.store_partial_chunk(&[0], &subset, &["a", "b"], &Resources::default())?;
             assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
             assert_eq!(
-                array.retrieve_chunk::<Vec<String>>(&[0])?,
+                array.retrieve_chunk::<Vec<String>>(&[0], &Resources::default())?,
                 ["a", "b", "ab", "ab"]
             );
 
             // Actual fill strings still read back correctly and leave missing shards
             // missing when empty chunks are disabled.
-            array.store_partial_chunk(&[1], &subset, &["ab", "ab"])?;
+            array.store_partial_chunk(&[1], &subset, &["ab", "ab"], &Resources::default())?;
             if !store_empty_chunks {
                 assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
             }
-            assert_eq!(array.retrieve_chunk::<Vec<String>>(&[1])?, ["ab"; 4]);
+            assert_eq!(
+                array.retrieve_chunk::<Vec<String>>(&[1], &Resources::default())?,
+                ["ab"; 4]
+            );
         }
     }
     Ok(())
@@ -358,26 +418,42 @@ fn partial_encode_fill_value() -> TestResult {
         let subset = |range| ArraySubset::new_with_ranges(&[range]);
 
         // Writing only the fill value does not store a missing chunk
-        array.store_partial_chunk(&[0], &subset(0..1), &[0u16])?;
+        array.store_partial_chunk(&[0], &subset(0..1), &[0u16], &Resources::default())?;
         assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
 
         // An empty write does not store a missing chunk, even if empty chunks are stored
-        array_store_empty.store_partial_chunk(&[0], &subset(0..0), &[0u16; 0])?;
+        array_store_empty.store_partial_chunk(
+            &[0],
+            &subset(0..0),
+            &[0u16; 0],
+            &Resources::default(),
+        )?;
         assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
 
         // Writing only the fill value stores a missing chunk if empty chunks are stored
-        array_store_empty.store_partial_chunk(&[0], &subset(0..1), &[0u16])?;
-        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0])?, [0, 0, 0, 0]);
+        array_store_empty.store_partial_chunk(
+            &[0],
+            &subset(0..1),
+            &[0u16],
+            &Resources::default(),
+        )?;
+        assert_eq!(
+            array.retrieve_chunk::<Vec<u16>>(&[0], &Resources::default())?,
+            [0, 0, 0, 0]
+        );
 
         // A partial write of other values stores a missing chunk
-        array.store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5])?;
-        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[1])?, [1, 0, 5, 0]);
+        array.store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5], &Resources::default())?;
+        assert_eq!(
+            array.retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())?,
+            [1, 0, 5, 0]
+        );
 
         // An out-of-bounds write of only the fill value to a missing chunk is an error
         let out_of_bounds: Vec<Vec<u64>> = vec![vec![4]];
         assert!(
             array
-                .store_partial_chunk(&[2], &out_of_bounds, &[0u16])
+                .store_partial_chunk(&[2], &out_of_bounds, &[0u16], &Resources::default())
                 .is_err()
         );
 
@@ -385,12 +461,15 @@ fn partial_encode_fill_value() -> TestResult {
             // Writing the fill value into an existing chunk writes it in place without reading the chunk
             store.reset();
             for range in [0..1, 2..3] {
-                array.store_partial_chunk(&[1], &subset(range), &[0u16])?;
+                array.store_partial_chunk(&[1], &subset(range), &[0u16], &Resources::default())?;
             }
             assert_eq!(store.reads(), 0);
             assert_eq!(store.bytes_written(), 4);
             assert_eq!(store.keys_erased(), 0);
-            assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[1])?, [0, 0, 0, 0]);
+            assert_eq!(
+                array.retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())?,
+                [0, 0, 0, 0]
+            );
         }
     }
     Ok(())
@@ -410,9 +489,17 @@ fn partial_encode_lossy_fill_value() -> TestResult {
         .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
 
     // The written value is not the fill value, so the chunk is stored
-    array.store_partial_chunk(&[0], &ArraySubset::new_with_ranges(&[0..1]), &[1.2f32])?;
+    array.store_partial_chunk(
+        &[0],
+        &ArraySubset::new_with_ranges(&[0..1]),
+        &[1.2f32],
+        &Resources::default(),
+    )?;
     assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
-    assert_eq!(array.retrieve_chunk::<Vec<f32>>(&[0])?[0], 1.0);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<f32>>(&[0], &Resources::default())?[0],
+        1.0
+    );
     Ok(())
 }
 
@@ -437,13 +524,25 @@ fn optional_malformed_masks_are_rejected() -> TestResult {
         .with_codec_options(
             CodecOptions::default().with_experimental_partial_encoding(partial_encoding),
         );
-        array.store_chunk(&[0], &[Some(1u8), None, Some(3), Some(4)])?;
+        array.store_chunk(
+            &[0],
+            &[Some(1u8), None, Some(3), Some(4)],
+            &Resources::default(),
+        )?;
         let existing = array.retrieve_encoded_chunk(&[0])?;
         assert!(existing.is_some());
 
         for bytes in malformed_optional_bytes(4) {
-            assert!(array.store_chunk(&[0], bytes.clone()).is_err());
-            assert!(array.store_chunk(&[1], bytes).is_err());
+            assert!(
+                array
+                    .store_chunk(&[0], bytes.clone(), &Resources::default())
+                    .is_err()
+            );
+            assert!(
+                array
+                    .store_chunk(&[1], bytes, &Resources::default())
+                    .is_err()
+            );
             assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
             assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
         }
@@ -451,10 +550,14 @@ fn optional_malformed_masks_are_rejected() -> TestResult {
             let subset = |range| ArraySubset::new_with_ranges(&[range]);
             assert!(
                 array
-                    .store_array_subset(&subset(1..4), bytes.clone())
+                    .store_array_subset(&subset(1..4), bytes.clone(), &Resources::default())
                     .is_err()
             );
-            assert!(array.store_array_subset(&subset(5..8), bytes).is_err());
+            assert!(
+                array
+                    .store_array_subset(&subset(5..8), bytes, &Resources::default())
+                    .is_err()
+            );
             assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
             assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
         }
@@ -480,7 +583,7 @@ fn array_ops_subchunks_with_reshape_codec() -> TestResult {
     let data: Vec<u16> = (0..array.shape().iter().product())
         .map(|i| u16::try_from(i).unwrap())
         .collect();
-    array.store_array_subset(&array.subset_all(), &data)?;
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
 
     assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(3)]));
     assert_eq!(
@@ -488,14 +591,14 @@ fn array_ops_subchunks_with_reshape_codec() -> TestResult {
         &[4, 2]
     );
 
-    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[2, 1])?;
-    let compare = array.retrieve_array_subset::<Vec<u16>>(&[2..3, 3..6])?;
+    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[2, 1], &Resources::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[2..3, 3..6], &Resources::default())?;
     assert_eq!(subchunk, compare);
     assert_eq!(subchunk, [15, 16, 17]);
 
     let subchunks = ArraySubset::new_with_ranges(&[1..3, 0..2]);
-    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks)?;
-    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..3, 0..6])?;
+    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks, &Resources::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..3, 0..6], &Resources::default())?;
     assert_eq!(subchunk_range, compare);
 
     Ok(())
@@ -516,7 +619,7 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
     let data: Vec<u16> = (0..array.shape().iter().product())
         .map(|i| u16::try_from(i).unwrap())
         .collect();
-    array.store_array_subset(&array.subset_all(), &data)?;
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
 
     assert_eq!(array.subchunk_shape(), Some(vec![nz(1), nz(2)]));
     assert_eq!(
@@ -524,14 +627,14 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
         &[2, 2]
     );
 
-    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[1, 1])?;
-    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..2, 2..4])?;
+    let subchunk = array.retrieve_subchunk::<Vec<u16>>(&[1, 1], &Resources::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[1..2, 2..4], &Resources::default())?;
     assert_eq!(subchunk, compare);
     assert_eq!(subchunk, [6, 7]);
 
     let subchunks = ArraySubset::new_with_ranges(&[0..2, 1..2]);
-    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks)?;
-    let compare = array.retrieve_array_subset::<Vec<u16>>(&[0..2, 2..4])?;
+    let subchunk_range = array.retrieve_subchunks::<Vec<u16>>(&subchunks, &Resources::default())?;
+    let compare = array.retrieve_array_subset::<Vec<u16>>(&[0..2, 2..4], &Resources::default())?;
     assert_eq!(subchunk_range, compare);
 
     Ok(())
@@ -550,7 +653,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     builder.array_to_bytes_codec(outer_sharding.build_arc());
     let array = builder.build_arc(store, "/array")?;
     let data: Vec<u16> = (0..64).collect();
-    array.store_array_subset(&array.subset_all(), &data)?;
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
 
     assert_eq!(array.subchunk_grids().len(), 2);
     assert_eq!(array.subchunk_codecs().len(), 2);
@@ -602,17 +705,18 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     ));
 
     assert_eq!(
-        array.retrieve_subchunk::<Vec<u16>>(&[1, 0])?,
-        array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 0])?
+        array.retrieve_subchunk::<Vec<u16>>(&[1, 0], &Resources::default())?,
+        array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 0], &Resources::default())?
     );
     assert_eq!(
-        array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
+        array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3], &Resources::default())?,
         [38, 39, 46, 47]
     );
     assert_eq!(
         array.retrieve_subchunks_at_level::<Vec<u16>>(
             1,
             &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            &Resources::default()
         )?,
         [
             18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45
@@ -620,20 +724,20 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     );
     assert!(
         array
-            .retrieve_subchunk_at_level::<Vec<u16>>(2, &[0, 0])
+            .retrieve_subchunk_at_level::<Vec<u16>>(2, &[0, 0], &Resources::default())
             .is_err()
     );
 
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(0, &[0, 0])?
+            .local_subchunk_grid_at_level(0, &[0, 0], &Resources::default())?
             .unwrap()
             .grid_shape(),
         &[2, 2]
     );
     assert_eq!(
         array
-            .local_subchunk_grid_at_level(1, &[0, 0])?
+            .local_subchunk_grid_at_level(1, &[0, 0], &Resources::default())?
             .unwrap()
             .grid_shape(),
         &[4, 4]
@@ -643,7 +747,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     assert_eq!(cached.subchunk_grids().len(), 2);
     assert_eq!(cached.subchunk_codecs().len(), 2);
     assert_eq!(
-        cached.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
+        cached.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3], &Resources::default())?,
         [38, 39, 46, 47]
     );
 
@@ -680,10 +784,14 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let mut builder = ArrayBuilder::new(vec![10, 10], vec![8, 8], data_type, 0u16);
     builder.array_to_bytes_codec(outer_sharding.build_arc());
     let edge = builder.build(Arc::new(MemoryStore::default()), "/edge")?;
-    edge.store_array_subset(&edge.subset_all(), (0..100).collect::<Vec<u16>>())?;
+    edge.store_array_subset(
+        &edge.subset_all(),
+        (0..100).collect::<Vec<u16>>(),
+        &Resources::default(),
+    )?;
     assert_eq!(edge.subchunk_grids().len(), 2);
     assert_eq!(
-        edge.retrieve_subchunk_at_level::<Vec<u16>>(1, &[4, 4])?,
+        edge.retrieve_subchunk_at_level::<Vec<u16>>(1, &[4, 4], &Resources::default())?,
         [88, 89, 98, 99]
     );
 
@@ -715,11 +823,15 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .into()])?))])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/reshape")?;
-        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
+        array.store_array_subset(
+            &array.subset_all(),
+            (0..32).collect::<Vec<u16>>(),
+            &Resources::default(),
+        )?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(8)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(4)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 1])?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 1], &Resources::default())?,
             [20, 21, 22, 23]
         );
     }
@@ -734,11 +846,15 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             .array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/squeeze")?;
-        array.store_array_subset(&array.subset_all(), (0..8).collect::<Vec<u16>>())?;
+        array.store_array_subset(
+            &array.subset_all(),
+            (0..8).collect::<Vec<u16>>(),
+            &Resources::default(),
+        )?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(1), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(1), nz(2)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[0, 2])?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[0, 2], &Resources::default())?,
             [4, 5]
         );
     }
@@ -755,11 +871,15 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
             )?))])
             .array_to_bytes_codec(outer.build_arc());
         let array = builder.build(Arc::new(MemoryStore::default()), "/transpose")?;
-        array.store_array_subset(&array.subset_all(), (0..32).collect::<Vec<u16>>())?;
+        array.store_array_subset(
+            &array.subset_all(),
+            (0..32).collect::<Vec<u16>>(),
+            &Resources::default(),
+        )?;
         assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
         assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
         assert_eq!(
-            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[1, 3])?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[1, 3], &Resources::default())?,
             [22, 23, 30, 31]
         );
     }
@@ -779,40 +899,63 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
         .erase_metadata()?;
     array.store_metadata()?;
 
-    array.store_chunk(&[0, 0], &[1u8; 9])?;
-    array.store_chunk(&[0, 1], &[2u8; 9])?;
-    array.store_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]), &[3u8; 18])?;
-    assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[1, 1])?, [3u8; 9]);
+    array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
+    array.store_chunk(&[0, 1], &[2u8; 9], &Resources::default())?;
+    array.store_chunks(
+        &ArraySubset::new_with_ranges(&[1..2, 0..2]),
+        &[3u8; 18],
+        &Resources::default(),
+    )?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u8>>(&[1, 1], &Resources::default())?,
+        [3u8; 9]
+    );
 
     array.store_partial_chunk(
         &[0, 0],
         &ArraySubset::new_with_ranges(&[1..2, 1..3]),
         &[4u8, 5],
+        &Resources::default(),
     )?;
     array.store_partial_chunk(
         &[0, 0],
         &ArraySubset::new_with_ranges(&[2..3, 0..1]),
         &[6u8],
+        &Resources::default(),
     )?;
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &[7u8, 8])?;
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[4..5, 4..5]), &[9u8])?;
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+        &[7u8, 8],
+        &Resources::default(),
+    )?;
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[4..5, 4..5]),
+        &[9u8],
+        &Resources::default(),
+    )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<u8>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
         [7, 8, 1, 1, 4, 5, 6, 1, 1]
     );
     assert_eq!(
-        array.readable().retrieve_chunk::<Vec<u8>>(&[1, 1])?,
+        array
+            .readable()
+            .retrieve_chunk::<Vec<u8>>(&[1, 1], &Resources::default())?,
         [3, 3, 3, 3, 9, 3, 3, 3, 3]
     );
 
-    let partial_encoder = array.partial_encoder(&[0, 0])?;
+    let partial_encoder = array.partial_encoder(&[0, 0], &Resources::default())?;
     assert!(partial_encoder.supports_partial_encode());
     partial_encoder.partial_encode(
         &ArraySubset::new_with_ranges(&[0..1, 2..3]),
         &vec![10u8].into(),
         &CodecOptions::default(),
+        &Resources::default(),
     )?;
-    assert_eq!(array.retrieve_chunk::<Vec<u8>>(&[0, 0])?[2], 10);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?[2],
+        10
+    );
 
     let encoded = array.retrieve_encoded_chunk(&[0, 0])?.unwrap();
     unsafe {
@@ -820,21 +963,24 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
         array.store_encoded_chunk(&[0, 1], encoded.into())?;
     }
     assert_eq!(
-        array.retrieve_chunk::<Vec<u8>>(&[0, 1])?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())?,
         [7, 8, 10, 1, 4, 5, 6, 1, 1]
     );
 
-    let _ = array.compact_chunk(&[0, 0])?;
+    let _ = array.compact_chunk(&[0, 0], &Resources::default())?;
     array.erase_chunk(&[0, 1])?;
     assert!(
         array
-            .retrieve_chunk_if_exists::<Vec<u8>>(&[0, 1])?
+            .retrieve_chunk_if_exists::<Vec<u8>>(&[0, 1], &Resources::default())?
             .is_none()
     );
-    array.erase_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]))?;
+    array.erase_chunks(
+        &ArraySubset::new_with_ranges(&[1..2, 0..2]),
+        &Resources::default(),
+    )?;
     assert!(
         array
-            .retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0])?
+            .retrieve_chunk_if_exists::<Vec<u8>>(&[1, 0], &Resources::default())?
             .is_none()
     );
     Ok(())
@@ -849,21 +995,31 @@ fn exercise_all<A: ArrayUpdateOps>(array: &A) -> TestResult {
 fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = ["a", "bb", "ccc", "dddd"];
     let second_chunk = ["eeeee", "ffffff", "ggggggg", "hhhhhhhh"];
-    array.store_chunk(&[0, 0], &first_chunk)?;
-    array.store_chunk(&[0, 1], &second_chunk)?;
+    array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;
+    array.store_chunk(&[0, 1], &second_chunk, &Resources::default())?;
 
-    assert_eq!(array.retrieve_chunk::<Vec<String>>(&[0, 0])?, first_chunk);
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?,
+        array.retrieve_chunk::<Vec<String>>(&[0, 0], &Resources::default())?,
+        first_chunk
+    );
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<String>>(
+            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            &Resources::default()
+        )?,
         ["dddd", "ggggggg", "", ""]
     );
 
     array.store_array_subset(
         &ArraySubset::new_with_ranges(&[1..3, 1..3]),
         &["updated", "values", "across", "chunks"],
+        &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?,
+        array.retrieve_array_subset::<Vec<String>>(
+            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            &Resources::default()
+        )?,
         ["updated", "values", "across", "chunks"]
     );
     Ok(())
@@ -872,30 +1028,31 @@ fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
 fn exercise_optional_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = [Some(1u8), None, Some(3), Some(4)];
     let second_chunk = [None, Some(6u8), None, Some(8)];
-    array.store_chunk(&[0, 0], &first_chunk)?;
-    array.store_chunk(&[0, 1], &second_chunk)?;
+    array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;
+    array.store_chunk(&[0, 1], &second_chunk, &Resources::default())?;
 
     assert_eq!(
-        array.retrieve_chunk::<Vec<Option<u8>>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<Option<u8>>>(&[0, 0], &Resources::default())?,
         first_chunk
     );
     assert_eq!(
-        array.retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
-            0..2,
-            1..3
-        ]))?,
+        array.retrieve_array_subset::<Vec<Option<u8>>>(
+            &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+            &Resources::default()
+        )?,
         [None, None, Some(4), None]
     );
 
     array.store_array_subset(
         &ArraySubset::new_with_ranges(&[0..2, 1..3]),
         &[Some(9u8), None, None, Some(10)],
+        &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
-            0..2,
-            1..3
-        ]))?,
+        array.retrieve_array_subset::<Vec<Option<u8>>>(
+            &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+            &Resources::default()
+        )?,
         [Some(9), None, None, Some(10)]
     );
     Ok(())
@@ -958,30 +1115,49 @@ where
     C::Value: zarrs::array::chunk_cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
-    array.store_chunk(&[0, 0], &[1u8; 9])?;
-    array.store_chunk(&[0, 1], &[2u8; 9])?;
+    array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
+    array.store_chunk(&[0, 1], &[2u8; 9], &Resources::default())?;
     let cached = ArrayCached::new(array, cache);
 
     store.reset();
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, [1u8; 9]);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        [1u8; 9]
+    );
     let reads_after_miss = store.reads();
     assert!(reads_after_miss > 0);
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, [1u8; 9]);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        [1u8; 9]
+    );
     if caches_full_chunk_reads {
         assert_eq!(store.reads(), reads_after_miss);
     } else {
         assert!(store.reads() > reads_after_miss);
     }
 
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 1])?, [2u8; 9]);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())?,
+        [2u8; 9]
+    );
     assert_eq!(cached.cache().len(), 2);
-    cached.store_chunk(&[0, 0], &[3u8; 9])?;
+    cached.store_chunk(&[0, 0], &[3u8; 9], &Resources::default())?;
     assert_eq!(cached.cache().len(), 1);
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, [3u8; 9]);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        [3u8; 9]
+    );
 
-    cached.store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 3..4]), &[4u8])?;
+    cached.store_array_subset(
+        &ArraySubset::new_with_ranges(&[0..1, 3..4]),
+        &[4u8],
+        &Resources::default(),
+    )?;
     assert_eq!(cached.cache().len(), 1);
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 1])?[0], 4);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())?[0],
+        4
+    );
 
     cached.store_metadata()?;
     assert!(cached.cache().is_empty());
@@ -1034,16 +1210,25 @@ fn array_cached_with_codec_options_preserves_cache() -> TestResult {
 
     store.reset();
     let expected = [1u8, 2, 3, 6, 7, 8, 11, 12, 13];
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, expected);
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        expected
+    );
     let reads_after_miss = store.reads();
     assert!(reads_after_miss > 0);
 
-    let tuned = cached.with_codec_options(CodecOptions::default().with_concurrent_target(1));
-    assert_eq!(tuned.retrieve_chunk::<Vec<u8>>(&[0, 0])?, expected);
+    let tuned = cached.with_codec_options(CodecOptions::default().with_validate_checksums(false));
+    assert_eq!(
+        tuned.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        expected
+    );
     assert_eq!(store.reads(), reads_after_miss);
 
-    tuned.store_chunk(&[0, 0], &[7u8; 9])?;
-    assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0, 0])?, [7u8; 9]);
+    tuned.store_chunk(&[0, 0], &[7u8; 9], &Resources::default())?;
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        [7u8; 9]
+    );
 
     Ok(())
 }
@@ -1083,7 +1268,7 @@ fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
 #[test]
 fn array_cached_encoded_reads_bypass_cache() -> TestResult {
     let (array, store) = fixture();
-    array.store_chunk(&[0, 0], &[1u8; 9])?;
+    array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
     let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
 
     store.reset();
@@ -1103,13 +1288,20 @@ fn erase_and_retrieve_encoded_chunks_validate_chunks() -> TestResult {
     let (array, _store) = fixture();
 
     // The chunk grid is 2x2
-    array.erase_chunks(&ArraySubset::new_with_ranges(&[0..2, 0..2]))?;
+    array.erase_chunks(
+        &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+        &Resources::default(),
+    )?;
     for chunks in [
         ArraySubset::new_with_ranges(&[0..3, 0..2]),
         ArraySubset::new_with_ranges(&[0..2]),
     ] {
-        assert!(array.erase_chunks(&chunks).is_err());
-        assert!(array.retrieve_encoded_chunks(&chunks).is_err());
+        assert!(array.erase_chunks(&chunks, &Resources::default()).is_err());
+        assert!(
+            array
+                .retrieve_encoded_chunks(&chunks, &Resources::default())
+                .is_err()
+        );
     }
 
     Ok(())
@@ -1125,7 +1317,8 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     assert_eq!(
         cached.retrieve_partial_chunk::<Vec<u8>>(
             &[0, 0],
-            &ArraySubset::new_with_ranges(&[0..1, 0..2])
+            &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+            &Resources::default()
         )?,
         [0, 0]
     );
@@ -1137,7 +1330,7 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     ] {
         assert!(
             cached
-                .retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset)
+                .retrieve_partial_chunk::<Vec<u8>>(&[0, 0], &chunk_subset, &Resources::default())
                 .is_err()
         );
     }
@@ -1145,7 +1338,8 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
         cached
             .retrieve_partial_chunk::<Vec<u8>>(
                 &[9, 9],
-                &ArraySubset::new_with_ranges(&[0..1, 0..2])
+                &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+                &Resources::default()
             )
             .is_err()
     );
@@ -1159,19 +1353,24 @@ fn sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
     let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
     builder.subchunk_shape(vec![1, 1]);
     let array = builder.build_arc(store, "/array")?;
-    array.store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])?;
+    array.store_chunk(
+        &[0, 0],
+        &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+        &Resources::default(),
+    )?;
 
     // Erasing a shard through a partial encoder must also reset its cached shard index, otherwise a subsequent
     // partial encode references subchunks of the erased shard
-    let encoder = array.partial_encoder(&[0, 0])?;
+    let encoder = array.partial_encoder(&[0, 0], &Resources::default())?;
     encoder.erase()?;
     encoder.partial_encode(
         &ArraySubset::new_with_ranges(&[0..1, 0..1]),
         &ArrayBytes::new_flen(vec![42u8]),
         &CodecOptions::default(),
+        &Resources::default(),
     )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<u8>>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
         [42, 255, 255, 255, 255, 255, 255, 255, 255]
     );
     Ok(())
@@ -1185,20 +1384,29 @@ async fn async_sharding_partial_encoder_erase_resets_shard_index() -> TestResult
     builder.subchunk_shape(vec![1, 1]);
     let array = builder.build_arc(store, "/array")?;
     array
-        .async_store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])
+        .async_store_chunk(
+            &[0, 0],
+            &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+            &Resources::default(),
+        )
         .await?;
 
-    let encoder = array.async_partial_encoder(&[0, 0]).await?;
+    let encoder = array
+        .async_partial_encoder(&[0, 0], &Resources::default())
+        .await?;
     encoder.erase().await?;
     encoder
         .partial_encode(
             &ArraySubset::new_with_ranges(&[0..1, 0..1]),
             &ArrayBytes::new_flen(vec![42u8]),
             &CodecOptions::default(),
+            &Resources::default(),
         )
         .await?;
     assert_eq!(
-        array.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+        array
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?,
         [42, 255, 255, 255, 255, 255, 255, 255, 255]
     );
     Ok(())
@@ -1207,6 +1415,7 @@ async fn async_sharding_partial_encoder_erase_resets_shard_index() -> TestResult
 #[cfg(feature = "async")]
 mod async_cached {
     use std::sync::Arc;
+    use zarrs::array::Resources;
 
     use zarrs::array::chunk_cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
@@ -1236,10 +1445,18 @@ mod async_cached {
     /// The asynchronous counterpart of `populate`.
     async fn populate(array: &Array<AsyncTestStore>) -> TestResult {
         array
-            .async_store_chunk(&[0, 0], &[1u8, 2, 3, 6, 7, 8, 11, 12, 13])
+            .async_store_chunk(
+                &[0, 0],
+                &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+                &Resources::default(),
+            )
             .await?;
         array
-            .async_store_chunk(&[0, 1], &[4u8, 5, 0, 9, 10, 0, 14, 15, 0])
+            .async_store_chunk(
+                &[0, 1],
+                &[4u8, 5, 0, 9, 10, 0, 14, 15, 0],
+                &Resources::default(),
+            )
             .await?;
         array
             .async_store_chunks(
@@ -1247,6 +1464,7 @@ mod async_cached {
                 &[
                     16u8, 17, 18, 19, 20, 0, 21, 22, 23, 24, 25, 0, 0, 0, 0, 0, 0, 0,
                 ],
+                &Resources::default(),
             )
             .await?;
         Ok(())
@@ -1269,6 +1487,7 @@ mod async_cached {
                 .async_retrieve_array_subset_into(
                     subset,
                     ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                    &Resources::default(),
                 )
                 .await?;
         }
@@ -1287,19 +1506,27 @@ mod async_cached {
         C: AsyncChunkCache + 'static,
     {
         let (array, store) = fixture();
-        array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
-        array.async_store_chunk(&[0, 1], &[2u8; 9]).await?;
+        array
+            .async_store_chunk(&[0, 0], &[1u8; 9], &Resources::default())
+            .await?;
+        array
+            .async_store_chunk(&[0, 1], &[2u8; 9], &Resources::default())
+            .await?;
         let cached = ArrayCached::new(array, cache);
 
         store.reset();
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                .await?,
             [1u8; 9]
         );
         let reads_after_miss = store.reads();
         assert!(reads_after_miss > 0);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                .await?,
             [1u8; 9]
         );
         if caches_full_chunk_reads {
@@ -1309,22 +1536,37 @@ mod async_cached {
         }
 
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await?,
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())
+                .await?,
             [2u8; 9]
         );
         assert_eq!(cached.cache().len().await, 2);
-        cached.async_store_chunk(&[0, 0], &[3u8; 9]).await?;
+        cached
+            .async_store_chunk(&[0, 0], &[3u8; 9], &Resources::default())
+            .await?;
         assert_eq!(cached.cache().len().await, 1);
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                .await?,
             [3u8; 9]
         );
 
         cached
-            .async_store_array_subset(&ArraySubset::new_with_ranges(&[0..1, 3..4]), &[4u8])
+            .async_store_array_subset(
+                &ArraySubset::new_with_ranges(&[0..1, 3..4]),
+                &[4u8],
+                &Resources::default(),
+            )
             .await?;
         assert_eq!(cached.cache().len().await, 1);
-        assert_eq!(cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await?[0], 4);
+        assert_eq!(
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())
+                .await?[0],
+            4
+        );
 
         cached.async_store_metadata().await?;
         assert!(cached.cache().is_empty().await);
@@ -1363,10 +1605,14 @@ mod async_cached {
         let cached = ArrayCached::new(array, AsyncChunkCachePartialDecoderLruChunkLimit::new(16));
 
         store.reset();
-        cached.async_retrieve_subchunk::<Vec<u8>>(&[0, 0]).await?;
+        cached
+            .async_retrieve_subchunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?;
         let reads_after_miss = store.reads();
         assert!(reads_after_miss > 0);
-        cached.async_retrieve_subchunk::<Vec<u8>>(&[0, 1]).await?;
+        cached
+            .async_retrieve_subchunk::<Vec<u8>>(&[0, 1], &Resources::default())
+            .await?;
         // The second subchunk of the same chunk only reads the subchunk itself.
         assert_eq!(store.reads(), reads_after_miss + 1);
         Ok(())
@@ -1402,15 +1648,21 @@ mod async_cached {
         C: AsyncChunkCache + 'static,
     {
         let (array, store) = fixture();
-        array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
-        array.async_store_chunk(&[0, 1], &[2u8; 9]).await?;
+        array
+            .async_store_chunk(&[0, 0], &[1u8; 9], &Resources::default())
+            .await?;
+        array
+            .async_store_chunk(&[0, 1], &[2u8; 9], &Resources::default())
+            .await?;
         let cached = ArrayCached::new(array, cache);
 
         // Establish the read count of a single uncontended miss on an equivalent chunk. A second
         // chunk is used rather than invalidating this one, since `moka` invalidation is lazy.
         store.reset();
         assert_eq!(
-            cached.async_retrieve_chunk::<Vec<u8>>(&[0, 0]).await?,
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                .await?,
             [1u8; 9]
         );
         let reads_for_one_miss = store.reads();
@@ -1419,7 +1671,11 @@ mod async_cached {
         store.reset();
         let retrievals = (0..8).map(|_| {
             let cached = cached.clone();
-            async move { cached.async_retrieve_chunk::<Vec<u8>>(&[0, 1]).await }
+            async move {
+                cached
+                    .async_retrieve_chunk::<Vec<u8>>(&[0, 1], &Resources::default())
+                    .await
+            }
         });
         for retrieved in futures::future::join_all(retrievals).await {
             assert_eq!(retrieved?, [2u8; 9]);
@@ -1441,7 +1697,9 @@ mod async_cached {
     #[tokio::test]
     async fn array_cached_async_encoded_reads_bypass_cache() -> TestResult {
         let (array, store) = fixture();
-        array.async_store_chunk(&[0, 0], &[1u8; 9]).await?;
+        array
+            .async_store_chunk(&[0, 0], &[1u8; 9], &Resources::default())
+            .await?;
         let cached = ArrayCached::new(array, AsyncChunkCacheDecodedLruChunkLimit::new(4));
 
         store.reset();

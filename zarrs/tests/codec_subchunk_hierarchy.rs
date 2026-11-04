@@ -5,7 +5,9 @@ use std::sync::Arc;
 use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{CodecChainBound, TransposeCodec, TransposeOrder};
-use zarrs::array::{ArrayBuilder, ArrayCached, ArraySubset, CodecOptions, data_type};
+use zarrs::array::{
+    ArrayBuilder, ArrayCached, ArraySubset, CodecOptions, ComputeResources, data_type,
+};
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 
@@ -48,11 +50,20 @@ fn hierarchy_is_pure_ordered_and_shape_independent() -> Result<(), Box<dyn std::
         for shape in [vec![nz(2), nz(3)], vec![nz(1), nz(2)], vec![nz(3), nz(1)]] {
             let bytes: Vec<u8> =
                 (0..u8::try_from(shape.iter().map(|x| x.get()).product::<u64>())?).collect();
-            let encoded =
-                at_level.encode(bytes.clone().into(), &shape, &CodecOptions::default())?;
+            let encoded = at_level.encode(
+                bytes.clone().into(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert_eq!(
                 at_level
-                    .decode(encoded, &shape, &CodecOptions::default())?
+                    .decode(
+                        encoded,
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default()
+                    )?
                     .into_fixed()?
                     .as_ref(),
                 bytes
@@ -66,7 +77,8 @@ fn hierarchy_is_pure_ordered_and_shape_independent() -> Result<(), Box<dyn std::
             .decode(
                 vec![0, 1, 2, 3, 4, 5].into(),
                 &[nz(2), nz(3)],
-                &CodecOptions::default()
+                &CodecOptions::default(),
+                &ComputeResources::default(),
             )?
             .into_fixed()?
             .as_ref(),
@@ -117,7 +129,12 @@ fn nested_codecs_decode_into_inner_chain_domain() -> Result<(), Box<dyn std::err
     // Encode a level 0 subchunk and extract the bytes of its first level 1 subchunk via the
     // inner shard index (4 subchunks of (offset, nbytes) u64 pairs, then a crc32c checksum)
     let values: Vec<u8> = (0..24).collect();
-    let shard = codecs[0].encode(values.into(), &[nz(4), nz(6)], &CodecOptions::default())?;
+    let shard = codecs[0].encode(
+        values.into(),
+        &[nz(4), nz(6)],
+        &CodecOptions::default(),
+        &ComputeResources::default(),
+    )?;
     let index_start = shard.len() - 4 - 4 * 16;
     let entry = |i: usize| {
         u64::from_le_bytes(
@@ -136,6 +153,7 @@ fn nested_codecs_decode_into_inner_chain_domain() -> Result<(), Box<dyn std::err
             encoded_subchunk.into(),
             &[nz(3), nz(2)],
             &CodecOptions::default(),
+            &ComputeResources::default(),
         )?
         .into_fixed()?;
     assert_eq!(decoded.as_ref(), &[0, 6, 1, 7, 2, 8]);
