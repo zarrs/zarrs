@@ -28,6 +28,35 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError>;
 
+    /// Return the codecs that encode the subchunks created by this codec, outermost first.
+    ///
+    /// There is one codec for each level of the grids returned by
+    /// [`decoded_subchunk_grids`](Self::decoded_subchunk_grids). The level zero codec decodes an
+    /// encoded subchunk of this codec, the level one codec decodes an encoded subchunk of a
+    /// subchunk, and so on. An empty vector indicates that the codec does not expose subchunks.
+    ///
+    /// Each codec decodes into the domain of the array-to-bytes codec that created its
+    /// subchunks: this codec at level zero, and the array-to-bytes codec of the level `N - 1`
+    /// codec at level `N`. Decoding an encoded subchunk at level `N` therefore yields array bytes
+    /// that the array-to-array codecs of the codecs at levels `0..N` have yet to decode, as do
+    /// any array-to-array codecs preceding this codec (e.g. in a codec chain). Its data type,
+    /// shape, dimensionality, and element order can differ from those of the subchunk in the
+    /// level `N` grid, which is mapped through all of those array-to-array codecs.
+    ///
+    /// The codecs retain their bound data type and fill value, but are not bound to a particular
+    /// subchunk shape. A caller decoding an encoded subchunk must pass its concrete shape, which
+    /// can vary between subchunks.
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>>;
+
+    /// Return the codecs that encode the subchunks at `level`, if any.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    ///
+    /// This is a compatibility wrapper around [`subchunk_codecs`](Self::subchunk_codecs).
+    fn subchunk_codecs_at_level(&self, level: usize) -> Option<Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().into_iter().nth(level)
+    }
+
     /// Return the outermost decoded subchunk grid created by this codec.
     ///
     /// This is a compatibility wrapper around [`decoded_subchunk_grids`](Self::decoded_subchunk_grids).
@@ -59,6 +88,10 @@ where
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
         Ok(Vec::new())
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        Vec::new()
     }
 }
 #[cfg(feature = "async")]
