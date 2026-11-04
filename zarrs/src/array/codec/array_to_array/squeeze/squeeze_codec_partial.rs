@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -41,34 +40,13 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
         &self,
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<ChunkGrid, CodecError> {
-        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
-        if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
-            return Err(CodecError::Other(
-                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let mut encoded_dim = 0;
-        let mut chunk_shapes = Vec::with_capacity(self.shape.len());
-        for dim in &self.shape {
-            let shape = if dim.get() == 1 {
-                ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())
-            } else {
-                let edge_lengths = encoded_subchunk_grid
-                    .chunk_edge_lengths(encoded_dim)
-                    .map_err(zarrs_chunk_grid::ChunkGridCreateError::from)
-                    .map_err(|err| CodecError::Other(err.to_string()))?;
-                encoded_dim += 1;
-                ChunkEdgeLengths::encode(&edge_lengths)
-            };
-            chunk_shapes.push(shape);
-        }
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))
+        let squeeze: Vec<bool> = self.shape.iter().map(|dim| dim.get() == 1).collect();
+        super::squeeze_codec::decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(&self.shape).to_vec(),
+            &squeeze,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 

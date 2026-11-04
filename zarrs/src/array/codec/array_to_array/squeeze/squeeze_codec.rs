@@ -215,34 +215,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             squeeze.push(squeeze_dim);
         }
 
-        let num_unsqueezed_dims = squeeze.iter().filter(|&&squeeze| !squeeze).count();
-        let expected_encoded_dimensionality = num_unsqueezed_dims.max(1);
-        if encoded_subchunk_grid.dimensionality() != expected_encoded_dimensionality {
-            return Err(ChunkGridCreateError::new(format!(
-                "encoded subchunk grid dimensionality {} is incompatible with squeezed dimensionality {}",
-                encoded_subchunk_grid.dimensionality(),
-                expected_encoded_dimensionality
-            )));
-        }
-
-        let mut encoded_dim = 0usize;
-        let mut chunk_shapes = Vec::with_capacity(squeeze.len());
-        for dim in &squeeze {
-            let shape = if *dim {
-                ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())
-            } else {
-                let edge_lengths = encoded_subchunk_grid
-                    .chunk_edge_lengths(encoded_dim)
-                    .map_err(ChunkGridCreateError::from)?;
-                encoded_dim += 1;
-                ChunkEdgeLengths::encode(&edge_lengths)
-            };
-            chunk_shapes.push(shape);
-        }
-
-        Ok(ChunkGridDecoded::Array(ChunkGrid::new(
-            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
-        )))
+        Ok(ChunkGridDecoded::Array(decoded_local_subchunk_grid(
+            decoded_chunk_grid.array_shape().to_vec(),
+            &squeeze,
+            encoded_subchunk_grid,
+        )?))
     }
 
     fn encoded_element_indices(
@@ -362,4 +339,39 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
             ),
         ))
     }
+}
+
+/// Map the edge lengths of `encoded_subchunk_grid` to a grid over `array_shape`, with unit edges in `squeeze`d dimensions.
+pub(super) fn decoded_local_subchunk_grid(
+    array_shape: Vec<u64>,
+    squeeze: &[bool],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    let expected_encoded_dimensionality =
+        squeeze.iter().filter(|&&squeeze| !squeeze).count().max(1);
+    if encoded_subchunk_grid.dimensionality() != expected_encoded_dimensionality {
+        return Err(ChunkGridCreateError::new(format!(
+            "encoded subchunk grid dimensionality {} is incompatible with squeezed dimensionality {}",
+            encoded_subchunk_grid.dimensionality(),
+            expected_encoded_dimensionality
+        )));
+    }
+
+    let mut encoded_dim = 0;
+    let chunk_shapes = squeeze
+        .iter()
+        .map(|&squeeze| {
+            if squeeze {
+                Ok(ChunkEdgeLengths::Scalar(NonZeroU64::MIN))
+            } else {
+                let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+                encoded_dim += 1;
+                Ok(ChunkEdgeLengths::encode(&edge_lengths))
+            }
+        })
+        .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+    Ok(ChunkGrid::new(RectilinearChunkGrid::new(
+        array_shape,
+        &chunk_shapes,
+    )?))
 }

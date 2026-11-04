@@ -4,7 +4,6 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -77,26 +76,12 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         &self,
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<ChunkGrid, CodecError> {
-        if self.order_inverse.len() != encoded_subchunk_grid.dimensionality() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match local subchunk grid dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let mut chunk_shapes = Vec::with_capacity(self.order_inverse.len());
-        for &dimension in &self.order_inverse {
-            let edge_lengths = encoded_subchunk_grid
-                .chunk_edge_lengths(dimension)
-                .map_err(zarrs_chunk_grid::ChunkGridCreateError::from)
-                .map_err(|err| CodecError::Other(err.to_string()))?;
-            chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
-        }
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))
+        super::transpose_codec::decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(&self.shape).to_vec(),
+            &self.order_inverse,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 
