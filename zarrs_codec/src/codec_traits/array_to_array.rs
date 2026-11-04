@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ArrayIndices, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -40,6 +40,40 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+
+    /// Map the coordinates of an element of a decoded chunk of `decoded_shape` to its coordinates in the encoded chunk.
+    ///
+    /// This addresses encoded subchunks through the codec: a subchunk of the decoded chunk is located by an element it
+    /// contains.
+    ///
+    /// Returns [`None`] if the codec does not map elements to elements of the encoded chunk.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_coordinates` are out of bounds of the decoded chunk.
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError>;
+}
+
+/// Check that `coordinates` are in bounds of a chunk of `shape`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `coordinates` have a different dimensionality to `shape` or are out of bounds.
+pub fn validate_chunk_coordinates(
+    shape: &[NonZeroU64],
+    coordinates: &[u64],
+) -> Result<(), CodecError> {
+    if coordinates.len() == shape.len()
+        && std::iter::zip(coordinates, shape).all(|(&coordinate, length)| coordinate < length.get())
+    {
+        Ok(())
+    } else {
+        Err(CodecError::Other(format!(
+            "coordinates {coordinates:?} are out of bounds of a chunk with shape {shape:?}"
+        )))
+    }
 }
 
 /// Marker trait for array-to-array codecs with identity subchunking mappings.
@@ -64,6 +98,15 @@ where
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
+    }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
+        Ok(Some(decoded_coordinates.into()))
     }
 }
 

@@ -5,7 +5,7 @@ use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
-use crate::array::{ChunkGrid, ChunkShape, DataType, FillValue};
+use crate::array::{ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -244,6 +244,17 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
         )))
     }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        zarrs_codec::validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
+        let encoded_coordinates =
+            super::squeeze_dims(decoded_coordinates.iter().copied(), decoded_shape, 0);
+        Ok(Some(ArrayIndices::from(encoded_coordinates.as_slice())))
+    }
 }
 
 #[cfg_attr(
@@ -265,16 +276,11 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        let encoded_shape: Vec<_> = decoded_shape
-            .iter()
-            .filter(|dim| dim.get() > 1)
-            .copied()
-            .collect();
-        if encoded_shape.is_empty() {
-            Ok(vec![NonZeroU64::new(1).unwrap()])
-        } else {
-            Ok(encoded_shape)
-        }
+        Ok(super::squeeze_dims(
+            decoded_shape.iter().copied(),
+            decoded_shape,
+            NonZeroU64::MIN,
+        ))
     }
 
     fn encode<'a>(

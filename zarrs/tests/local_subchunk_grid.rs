@@ -479,6 +479,17 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
     }
+
+    fn encoded_coordinates(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_coordinates: &[u64],
+    ) -> Result<Option<zarrs::array::ArrayIndices>, CodecError> {
+        let shape: &[u64] = bytemuck::must_cast_slice(decoded_shape);
+        let index = zarrs::array::ravel_indices(decoded_coordinates, shape)
+            .ok_or_else(|| CodecError::Other("out of bounds".to_string()))?;
+        Ok(Some(std::iter::once(index).collect()))
+    }
 }
 
 impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
