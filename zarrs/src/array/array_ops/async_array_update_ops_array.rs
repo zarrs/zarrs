@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::Resources;
 
 use futures::{StreamExt, TryStreamExt};
 
@@ -25,12 +26,14 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_store_partial_chunk_with_options(
             chunk_indices,
             indexer,
             indexer_data,
             self.codec_options(),
+            resources,
         )
         .await
     }
@@ -40,6 +43,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         // Validation
@@ -65,7 +69,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             if chunk_subset == array_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_partial_chunk
-                self.async_store_chunk_with_options(chunk_indices, subset_data, options)
+                self.async_store_chunk_with_options(chunk_indices, subset_data, options, resources)
                     .await?;
             } else {
                 // Store the chunk subset
@@ -74,6 +78,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
                     options,
+                    resources,
                 )
                 .await?;
             }
@@ -84,15 +89,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
             let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
-                num_chunks,
-                options,
-                &codec_concurrency,
-            );
+            let (chunk_concurrent_limit, resources) =
+                concurrency_chunks_and_codec(num_chunks, options, resources, &codec_concurrency);
 
             let array_subset_start = array_subset.start();
             let array_subset_shape = array_subset.shape();
+            let resources = &resources;
             let store_chunk = |chunk_indices: ArrayIndices| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                 let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
@@ -112,7 +114,8 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                         &chunk_indices,
                         &array_subset_in_chunk_subset,
                         chunk_subset_bytes,
-                        &options,
+                        options,
+                        resources,
                     )
                     .await
                 }
@@ -127,15 +130,21 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+    pub async fn async_compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError> {
         let options = self.codec_options();
         let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
         if let Some(chunk_bytes) = chunk_bytes {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            if let Some(compacted_bytes) =
-                self.codecs_bound
-                    .compact(chunk_bytes.into(), &chunk_shape, options)?
-            {
+            if let Some(compacted_bytes) = self.codecs_bound.compact(
+                chunk_bytes.into(),
+                &chunk_shape,
+                options,
+                resources.compute(),
+            )? {
                 unsafe {
                     self.async_store_encoded_chunk(chunk_indices, compacted_bytes)
                         .await?;
@@ -157,8 +166,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        self.async_partial_encoder_with_options(chunk_indices, self.codec_options())
+        self.async_partial_encoder_with_options(chunk_indices, self.codec_options(), resources)
             .await
     }
 }
@@ -173,6 +183,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         indexer: &dyn Indexer,
         indexer_data: T,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
             .chunk_grid()
@@ -191,7 +202,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         }
         if indexer.covers_array(&chunk_shape) {
             return self
-                .async_store_chunk_with_options(chunk_indices, indexer_data, options)
+                .async_store_chunk_with_options(chunk_indices, indexer_data, options, resources)
                 .await;
         }
 
@@ -224,19 +235,19 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             }
 
             let partial_encoder = self
-                .async_partial_encoder_with_options(chunk_indices, options)
+                .async_partial_encoder_with_options(chunk_indices, options, resources)
                 .await?;
             debug_assert!(
                 partial_encoder.supports_partial_encode(),
                 "partial encoder is misrepresenting its capabilities"
             );
             partial_encoder
-                .partial_encode(indexer, &indexer_bytes, options)
+                .partial_encode(indexer, &indexer_bytes, options, resources)
                 .await?;
             Ok(())
         } else {
             let chunk_bytes_old = self
-                .async_retrieve_chunk_with_options(chunk_indices, options)
+                .async_retrieve_chunk_with_options(chunk_indices, options, resources)
                 .await?;
 
             let chunk_bytes_new = update_array_bytes(
@@ -247,7 +258,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 self.data_type().size(),
             )?;
 
-            self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options)
+            self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
                 .await
         }
     }
@@ -256,6 +267,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
 
@@ -265,7 +277,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         let input_output_handle = Arc::new((storage_transformer, chunk_key));
         Ok(self
             .codecs_bound()
-            .async_partial_encoder(input_output_handle, &chunk_shape, options)
+            .async_partial_encoder(input_output_handle, &chunk_shape, options, resources)
             .await?)
     }
 }

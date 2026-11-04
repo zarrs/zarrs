@@ -77,9 +77,10 @@ impl CodecTraitsV2 for ZlibCodec {
 #[cfg(test)]
 #[allow(clippy::cast_possible_truncation)]
 mod tests {
+    use crate::array::Resources;
     use std::num::NonZeroU64;
     use std::sync::Arc;
-    use zarrs_codec::CowBytes;
+    use zarrs_codec::{ComputeResources, CowBytes};
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
@@ -103,10 +104,19 @@ mod tests {
         let codec = ZlibCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -128,7 +138,11 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
@@ -140,11 +154,16 @@ mod tests {
                 input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zlib partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
+            .partial_decode_many(
+                Box::new(decoded_regions),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .unwrap()
             .unwrap()
             .concat();
@@ -178,7 +197,11 @@ mod tests {
         let codec = Arc::new(ZlibCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
@@ -190,11 +213,16 @@ mod tests {
                 input_handle,
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
+            .partial_decode_many(
+                Box::new(decoded_regions),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await
             .unwrap()
             .unwrap()

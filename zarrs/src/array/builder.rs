@@ -682,7 +682,7 @@ mod tests {
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::codec::ShardingCodecBound;
-    use crate::array::{CodecChainBound, data_type};
+    use crate::array::{CodecChainBound, Resources, data_type};
     use zarrs_chunk_grid::ChunkGridCreateError;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
@@ -1254,11 +1254,18 @@ mod tests {
         let total_elements = SHAPE.iter().product::<u64>() as usize;
         let data: Vec<f64> = (0..total_elements).map(|x| x as f64).collect();
         array
-            .store_array_subset(&ArraySubset::new_with_shape(SHAPE), data.as_slice())
+            .store_array_subset(
+                &ArraySubset::new_with_shape(SHAPE),
+                data.as_slice(),
+                &Resources::default(),
+            )
             .unwrap();
 
         let read_data = array
-            .retrieve_array_subset::<Vec<f64>>(&ArraySubset::new_with_shape(SHAPE))
+            .retrieve_array_subset::<Vec<f64>>(
+                &ArraySubset::new_with_shape(SHAPE),
+                &Resources::default(),
+            )
             .unwrap();
         assert_eq!(data, read_data);
     }

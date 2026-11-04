@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
@@ -49,12 +49,15 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         let mut results = Vec::with_capacity(decoded_regions.size_hint().0);
         for decoded_region in decoded_regions {
-            let Some(bytes) = self
-                .input_handle
-                .partial_decode(encoded_region(decoded_region, self.suffix_size), options)?
+            let Some(bytes) = self.input_handle.partial_decode(
+                encoded_region(decoded_region, self.suffix_size),
+                options,
+                resources,
+            )?
             else {
                 return Ok(None);
             };
@@ -111,6 +114,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
@@ -118,13 +122,17 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             match decoded_region {
                 ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
                     self.input_handle
-                        .partial_decode(decoded_region, options)
+                        .partial_decode(decoded_region, options, resources)
                         .await?,
                 ),
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode(encoded_region(decoded_region, self.suffix_size), options)
+                        .partial_decode(
+                            encoded_region(decoded_region, self.suffix_size),
+                            options,
+                            resources,
+                        )
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
@@ -138,7 +146,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         let mut values = Vec::with_capacity(futures.size_hint().0);
         let mut results = futures::stream::iter(futures)
             // A zero target is unconstrained, but buffered(0) never makes progress.
-            .buffered(match options.concurrent_target() {
+            .buffered(match resources.compute_target() {
                 0 => usize::MAX,
                 target => target,
             });
@@ -167,7 +175,7 @@ mod tests {
         let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
         let decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         decoder
-            .partial_decode(byte_range, &CodecOptions::default())
+            .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())
             .unwrap()
             .unwrap()
             .to_vec()
@@ -192,7 +200,11 @@ mod tests {
         let options = CodecOptions::default();
         assert_eq!(
             decoder
-                .partial_decode_many(Box::new(std::iter::empty()), &options)
+                .partial_decode_many(
+                    Box::new(std::iter::empty()),
+                    &options,
+                    &Resources::default()
+                )
                 .unwrap()
                 .unwrap()
                 .len(),
@@ -204,7 +216,7 @@ mod tests {
             }));
         assert!(
             decoder
-                .partial_decode_many(Box::new(ranges), &options)
+                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
                 .unwrap()
                 .is_none()
         );
@@ -254,6 +266,7 @@ mod tests {
                 &'a self,
                 mut ranges: ByteRangeIterator<'a>,
                 _options: &CodecOptions,
+                _resources: &Resources,
             ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
                 let index = ranges.next().unwrap().start(3);
                 self.active.fetch_add(1, Ordering::SeqCst);
@@ -299,11 +312,12 @@ mod tests {
                     completed: std::sync::Mutex::new(Vec::new()),
                 });
                 let decoder = AsyncStripSuffixPartialDecoder::new(input.clone(), SUFFIX_SIZE);
-                let options = CodecOptions::default().with_concurrent_target(3);
+                let options = CodecOptions::default();
+                let resources = Resources::default().with_compute_target(3);
                 let ranges = (0u64..3).map(|i| ByteRange::FromStart(i, Some(1)));
                 let result = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    decoder.partial_decode_many(Box::new(ranges), &options),
+                    decoder.partial_decode_many(Box::new(ranges), &options, &resources),
                 )
                 .await
                 .unwrap();
@@ -324,7 +338,7 @@ mod tests {
                     _ => assert_eq!(result.unwrap_err().to_string(), "collection error"),
                 }
                 let empty = decoder
-                    .partial_decode_many(Box::new(std::iter::empty()), &options)
+                    .partial_decode_many(Box::new(std::iter::empty()), &options, &resources)
                     .await
                     .unwrap()
                     .unwrap();
@@ -338,7 +352,7 @@ mod tests {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
         let decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         decoder
-            .partial_decode(byte_range, &CodecOptions::default())
+            .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())
             .await
             .unwrap()
             .unwrap()
@@ -371,7 +385,8 @@ mod tests {
     async fn zero_concurrency_strip_suffix_partial_decoder() {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
         let partial_decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
-        let options = CodecOptions::default().with_concurrent_target(0);
+        let options = CodecOptions::default();
+        let resources = Resources::default().with_compute_target(0);
         let ranges = [
             ByteRange::Suffix(2),
             ByteRange::FromStart(2, None),
@@ -379,7 +394,7 @@ mod tests {
         ];
         let decoded = tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            partial_decoder.partial_decode_many(Box::new(ranges.into_iter()), &options),
+            partial_decoder.partial_decode_many(Box::new(ranges.into_iter()), &options, &resources),
         )
         .await
         .unwrap()

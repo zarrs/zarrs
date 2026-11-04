@@ -13,6 +13,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
@@ -77,7 +78,11 @@ fn populate_array(store: ReadableWritableListableStorage) {
     let total_elements = SHAPE.iter().product::<u64>() as usize;
     let data = random_data(total_elements);
     array
-        .store_array_subset(&ArraySubset::new_with_shape(SHAPE), data.as_slice())
+        .store_array_subset(
+            &ArraySubset::new_with_shape(SHAPE),
+            data.as_slice(),
+            &Resources::default(),
+        )
         .unwrap();
 }
 
@@ -108,7 +113,9 @@ fn bench_read_full(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(full_bytes));
     group.bench_function("full_array", |b| {
         b.iter(|| {
-            let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+            let _: zarrs::array::ArrayBytes = array
+                .retrieve_array_subset(&subset, &Resources::default())
+                .unwrap();
         });
     });
 
@@ -126,7 +133,10 @@ fn bench_read_partial_aligned(c: &mut Criterion) {
     group.bench_function("partial_shard_aligned", |b| {
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]])
+                .retrieve_array_subset(
+                    &[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]],
+                    &Resources::default(),
+                )
                 .unwrap();
         });
     });
@@ -145,12 +155,15 @@ fn bench_read_partial_unaligned(c: &mut Criterion) {
     group.bench_function("partial_shard_unaligned", |b| {
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[
-                    0..(SHARD_SHAPE[0] - 1),
-                    0..SHAPE[1],
-                    0..SHAPE[2],
-                    0..SHAPE[3],
-                ])
+                .retrieve_array_subset(
+                    &[
+                        0..(SHARD_SHAPE[0] - 1),
+                        0..SHAPE[1],
+                        0..SHAPE[2],
+                        0..SHAPE[3],
+                    ],
+                    &Resources::default(),
+                )
                 .unwrap();
         });
     });

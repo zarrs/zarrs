@@ -36,8 +36,9 @@ use zarrs_codec::{
     ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -291,9 +292,10 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.packbits
-            .encode(bytes, shape, options)
+            .encode(bytes, shape, options, resources)
             .map(ArrayBytes::Fixed)
     }
 
@@ -302,8 +304,10 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.packbits.decode(bytes.into_fixed()?, shape, options)
+        self.packbits
+            .decode(bytes.into_fixed()?, shape, options, resources)
     }
 
     fn partial_decoder(
@@ -311,12 +315,13 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
-        let inner = self
-            .packbits
-            .clone()
-            .partial_decoder(packed_handle, shape, options)?;
+        let inner =
+            self.packbits
+                .clone()
+                .partial_decoder(packed_handle, shape, options, resources)?;
         Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
             input_handle,
             shape.to_vec(),
@@ -330,11 +335,12 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         input_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         let input_handle = self.packed_handle(input_handle, shape)?;
         self.packbits
             .clone()
-            .partial_encoder(input_handle, shape, options)
+            .partial_encoder(input_handle, shape, options, resources)
     }
 
     #[cfg(feature = "async")]
@@ -343,12 +349,13 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
         let inner = self
             .packbits
             .clone()
-            .async_partial_decoder(packed_handle, shape, options)
+            .async_partial_decoder(packed_handle, shape, options, resources)
             .await?;
         Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
             input_handle,
@@ -364,11 +371,12 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         input_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         let input_handle = self.packed_handle(input_handle, shape)?;
         self.packbits
             .clone()
-            .async_partial_encoder(input_handle, shape, options)
+            .async_partial_encoder(input_handle, shape, options, resources)
             .await
     }
 }
@@ -380,8 +388,8 @@ mod tests {
 
     use zarrs_codec::{
         BytesPartialDecoderTraits, Codec, CodecCreateError, CodecMetadataOptions, CodecOptions,
-        CodecSpecificOptions, CowBytes, UnboundArrayToArrayCodecTraits,
-        UnboundArrayToBytesCodecTraits,
+        CodecSpecificOptions, ComputeResources, CowBytes, Resources,
+        UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata::v2::MetadataV2;
     use zarrs_metadata::v3::MetadataV3;
@@ -404,10 +412,18 @@ mod tests {
         let shape = [NonZeroU64::new(4).unwrap()];
         let elements = vec![true, false, false, true];
         let bytes = bool::to_array_bytes(&data_type::bool(), &elements)?;
-        let encoded = codec.encode(bytes.clone(), &shape, &options)?;
+        let encoded = codec.encode(
+            bytes.clone(),
+            &shape,
+            &options,
+            &ComputeResources::default(),
+        )?;
         // The `numcodecs.PackBits` docstring example
         assert_eq!(encoded.clone().into_fixed()?.as_slice(), [4, 0b1001_0000]);
-        assert_eq!(codec.decode(encoded, &shape, &options)?, bytes);
+        assert_eq!(
+            codec.decode(encoded, &shape, &options, &ComputeResources::default())?,
+            bytes
+        );
         Ok(())
     }
 
@@ -490,14 +506,24 @@ mod tests {
         for metadata in [ArrayMetadata::V2(metadata), ArrayMetadata::V3(metadata_v3)] {
             let store = Arc::new(MemoryStore::new());
             let array = Array::new_with_metadata(store.clone(), "/", metadata)?;
-            array.store_array_subset(&array.subset_all(), elements.clone())?;
+            array.store_array_subset(
+                &array.subset_all(),
+                elements.clone(),
+                &Resources::default(),
+            )?;
             assert_eq!(store.get(&StoreKey::new("0")?)?.unwrap(), expected);
             assert_eq!(
-                array.retrieve_array_subset::<Vec<bool>>(&array.subset_all())?,
+                array.retrieve_array_subset::<Vec<bool>>(
+                    &array.subset_all(),
+                    &Resources::default()
+                )?,
                 elements
             );
             assert_eq!(
-                array.retrieve_array_subset::<Vec<bool>>(&ArraySubset::new_with_ranges(&[2..9]))?,
+                array.retrieve_array_subset::<Vec<bool>>(
+                    &ArraySubset::new_with_ranges(&[2..9]),
+                    &Resources::default()
+                )?,
                 elements[2..9]
             );
         }
@@ -581,9 +607,11 @@ mod tests {
             &self,
             decoded_regions: zarrs_storage::byte_range::ByteRangeIterator,
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Option<Vec<CowBytes<'_>>>, zarrs_codec::CodecError> {
             self.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            self.0.partial_decode_many(decoded_regions, options)
+            self.0
+                .partial_decode_many(decoded_regions, options, resources)
         }
 
         fn supports_partial_decode(&self) -> bool {
@@ -613,6 +641,7 @@ mod tests {
                 bool::to_array_bytes(&data_type::bool(), &elements)?,
                 &shape,
                 &options,
+                &ComputeResources::default(),
             )?
             .into_fixed()?
             .into_static();
@@ -624,10 +653,19 @@ mod tests {
                 Some(FillValue::from(0u8)),
                 &CodecSpecificOptions::default(),
             )?
-            .partial_decoder(input.clone(), &encoded_shape, &options)?;
-        let partial_decoder = codec.partial_decoder(input_handle, &shape, &options)?;
-        let decoded = partial_decoder
-            .partial_decode(&ArraySubset::new_with_ranges(&[2..6, 1..5]), &options)?;
+            .partial_decoder(
+                input.clone(),
+                &encoded_shape,
+                &options,
+                &Resources::default(),
+            )?;
+        let partial_decoder =
+            codec.partial_decoder(input_handle, &shape, &options, &Resources::default())?;
+        let decoded = partial_decoder.partial_decode(
+            &ArraySubset::new_with_ranges(&[2..6, 1..5]),
+            &options,
+            &Resources::default(),
+        )?;
         let expected: Vec<bool> = (2..6)
             .flat_map(|i| elements[i * 9 + 1..i * 9 + 5].iter().copied())
             .collect();

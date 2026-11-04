@@ -8,7 +8,7 @@ use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
+    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -85,10 +85,12 @@ where
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.codec.decoded_local_subchunk_grids(
             &self.shape,
-            self.input_output_handle.local_subchunk_grids(options)?,
+            self.input_output_handle
+                .local_subchunk_grids(options, resources)?,
         )
     }
 }
@@ -113,18 +115,21 @@ where
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_transposed =
                 get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
-            let encoded_value = self
-                .input_output_handle
-                .partial_decode(&array_subset_transposed, options)?;
+            let encoded_value = self.input_output_handle.partial_decode(
+                &array_subset_transposed,
+                options,
+                resources,
+            )?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
-                .partial_decode(&indexer_transposed, options)
+                .partial_decode(&indexer_transposed, options, resources)
         }
     }
 
@@ -146,6 +151,7 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
@@ -155,11 +161,12 @@ where
                 &array_subset_transposed,
                 &encoded_value,
                 options,
+                resources,
             )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
-                .partial_encode(&indexer_transposed, bytes, options)
+                .partial_encode(&indexer_transposed, bytes, options, resources)
         }
     }
 
@@ -178,11 +185,12 @@ where
     async fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         self.codec.decoded_local_subchunk_grids(
             &self.shape,
             self.input_output_handle
-                .local_subchunk_grids(options)
+                .local_subchunk_grids(options, resources)
                 .await?,
         )
     }
@@ -211,19 +219,20 @@ where
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_transposed =
                 get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             let encoded_value = self
                 .input_output_handle
-                .partial_decode(&array_subset_transposed, options)
+                .partial_decode(&array_subset_transposed, options, resources)
                 .await?;
             self.decode(&encoded_value, &array_subset.shape())
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
-                .partial_decode(&indexer_transposed, options)
+                .partial_decode(&indexer_transposed, options, resources)
                 .await
         }
     }
@@ -249,18 +258,19 @@ where
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let encoded_value = self.encode(bytes, &array_subset.shape())?;
             let array_subset_transposed =
                 get_transposed_array_subset(&self.order, &self.shape, array_subset)?;
             self.input_output_handle
-                .partial_encode(&array_subset_transposed, &encoded_value, options)
+                .partial_encode(&array_subset_transposed, &encoded_value, options, resources)
                 .await
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, &self.shape, indexer)?;
             self.input_output_handle
-                .partial_encode(&indexer_transposed, bytes, options)
+                .partial_encode(&indexer_transposed, bytes, options, resources)
                 .await
         }
     }

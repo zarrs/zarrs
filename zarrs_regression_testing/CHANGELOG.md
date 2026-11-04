@@ -9,6 +9,9 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 
 ## [Unreleased]
 
+### Changed
+- Pass explicit operation resources when reading and writing compatibility samples
+
 ### Added
 - Report non-conformant `numcodecs.fletcher32` checksums written by releases, and add `schema::REJECTS_CONFORMANT` for releases that reject the conformant equivalent of the non-conformant data they write (known issues rather than regressions)
 - Compare lossy data read by other subjects approximately (`schema::Data::approx_eq`), as decodings may differ slightly between implementations, and add `schema::DataType::numeric`

@@ -71,9 +71,9 @@ pub use zarrs_codec::{
     ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, CowBytes,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    copy_fill_value_into, update_array_bytes,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes,
+    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -204,13 +204,15 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Similarly, array `store_*` methods are generic over the input type.
 ///
 /// ### Codec Options
-/// Many `retrieve` and `store` methods have a standard and an `_opt` variant.
-/// The latter has an additional [`CodecOptions`] parameter for fine-grained concurrency control and more.
+/// The [`CodecOptions`] of an array control checksum validation, partial encoding, and chunk scheduling preferences.
+/// Set them with [`with_codec_options`](Array::with_codec_options) or [`set_codec_options`](Array::set_codec_options).
+/// All encode/decode operations also take [`Resources`] to set their compute target.
+/// In-memory codec methods receive only [`ComputeResources`].
 /// Codec-specific options (e.g. [`ShardingCodecOptions`](codec::array_to_bytes::sharding::ShardingCodecOptions)) are set via [`CodecSpecificOptions`] and set at the array level with [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
 ///
-/// - **[`CodecOptions`]** — per-operation settings passed at each encode/decode call.
-///   Controls things like concurrency limits, checksum validation, and partial encoding.
-///   Use the `_opt` method variants to supply a non-default [`CodecOptions`].
+/// - **[`CodecOptions`]** — settings applied to every encode/decode operation of the array.
+///   Controls checksum validation, partial encoding, and the preferred minimum chunk concurrency.
+///   Use [`with_codec_options`](Array::with_codec_options) for a copy of the array with non-default [`CodecOptions`].
 ///
 /// - **[`CodecSpecificOptions`]** — codec-specific configuration applied when the codec chain is bound to the array.
 ///   Used to pass options that are specific to a particular codec, such as [`ShardingCodecOptions`](codec::ShardingCodecOptions).
@@ -264,7 +266,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use zarrs::array::{Array, ArrayBytes, ArrayIndices, Indexer};
+/// # use zarrs::array::{Array, ArrayBytes, ArrayIndices, Indexer, Resources};
 /// # use zarrs::array::ArraySubset;
 /// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -276,19 +278,21 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// let chunk_grid_shape = array.chunk_grid_shape();
 /// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape).indices();
 ///
+/// let resources = Resources::default();
+///
 /// // Iterate over chunk indices (in parallel)
 /// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndices| {
 ///     // Retrieve the array subset of the chunk within the array bounds
 ///     //   This partially decodes chunks that extend beyond the array end
 ///     let subset: ArraySubset = array.chunk_subset_bounded(&chunk_indices)?;
-///     let chunk_bytes: ArrayBytes = array.retrieve_array_subset(&subset)?;
+///     let chunk_bytes: ArrayBytes = array.retrieve_array_subset(&subset, &resources)?;
 ///
 ///     // ... Update the chunk bytes
 ///
 ///     // Write the updated chunk
 ///     //   Elements beyond the array bounds in straddling chunks are left
 ///     //   unmodified or set to the fill value if the chunk did not exist.
-///     array.store_array_subset(&subset, chunk_bytes)
+///     array.store_array_subset(&subset, chunk_bytes, &resources)
 /// })?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -363,7 +367,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// `zarrs` will automatically choose where to prioritise parallelism between codecs/chunks based on the codecs and number of chunks.
 ///
 /// By default, all available CPU cores will be used (where possible/efficient).
-/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`] manipulated with [`CodecOptions::set_concurrent_target`](CodecOptions::set_concurrent_target).
+/// Concurrency can be limited per operation with the [`Resources`] argument (see [`Resources::set_compute_target`]).
 ///
 /// ### Async API
 /// This crate is async runtime-agnostic.
@@ -373,7 +377,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Due the lack of parallelism, methods like [`async_retrieve_array_subset`](Array::async_retrieve_array_subset) or [`async_retrieve_chunks`](Array::async_retrieve_chunks) do not parallelise over chunks and can be slow compared to the sync API.
 /// Parallelism over chunks can be achieved by spawning tasks outside of `zarrs`.
 /// A crate like [`async-scoped`](https://crates.io/crates/async-scoped) can enable spawning non-`'static` futures.
-/// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](CodecOptions::set_concurrent_target).
+/// If executing many tasks concurrently, consider reducing the [`compute_target`](Resources::set_compute_target) of each task.
 ///
 /// ## Custom Extensions
 /// `zarrs` can be extended with custom data types, codecs, chunk grids, chunk key encodings, and storage transformers.
@@ -1535,12 +1539,13 @@ mod tests {
             .store_array_subset(
                 &[3..6, 3..6],
                 &[1.0f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                &Resources::default(),
             )
             .unwrap();
 
         let subset_all = array.subset_all();
         let data_all = array
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
         assert_eq!(
             data_all,
@@ -1559,14 +1564,14 @@ mod tests {
         );
         assert!(
             array
-                .retrieve_chunk_if_exists::<Vec<f32>>(&[0; 2])
+                .retrieve_chunk_if_exists::<Vec<f32>>(&[0; 2], &Resources::default())
                 .unwrap()
                 .is_none()
         );
         #[cfg(feature = "ndarray")]
         assert!(
             array
-                .retrieve_chunk_if_exists::<ndarray::ArrayD<f32>>(&[0; 2])
+                .retrieve_chunk_if_exists::<ndarray::ArrayD<f32>>(&[0; 2], &Resources::default())
                 .unwrap()
                 .is_none()
         );
@@ -1581,7 +1586,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape());
         let elements = array_in
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
 
         assert_eq!(
@@ -1603,7 +1608,7 @@ mod tests {
         let store = Arc::new(FilesystemStore::new(path_out).unwrap());
         let array_out = Array::new_with_metadata(store, "/", array_in.metadata().clone()).unwrap();
         array_out
-            .store_array_subset(&subset_all, &elements)
+            .store_array_subset(&subset_all, &elements, &Resources::default())
             .unwrap();
 
         // Store V2 and V3 metadata
@@ -1752,7 +1757,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape());
         let elements = array_in
-            .retrieve_array_subset::<Vec<f32>>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())
             .unwrap();
 
         assert_eq!(

@@ -2,7 +2,7 @@
 use super::ArrayReadOps;
 use super::{ArrayError, ArrayOps, ArraySubsetTraits, ChunkGrid, FromArrayBytes, Indexer};
 use std::sync::Arc;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, Resources};
 use zarrs_storage::Bytes;
 
 /// Asynchronous array read operations.
@@ -16,6 +16,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_chunk_into`].
@@ -24,6 +25,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_chunks`].
@@ -31,9 +33,11 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let array_subset = self.chunks_subset(chunks)?;
-        self.async_retrieve_array_subset(&array_subset).await
+        self.async_retrieve_array_subset(&array_subset, resources)
+            .await
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_partial_chunk`].
@@ -42,6 +46,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_partial_chunk_into`].
@@ -51,6 +56,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_array_subset`].
@@ -58,6 +64,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_chunk_if_exists`].
@@ -65,6 +72,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<T>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_encoded_chunk`].
@@ -91,6 +99,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_encoded_chunks(
         &self,
         chunks: &dyn Indexer,
+        resources: &Resources,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
@@ -98,8 +107,9 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_subchunk_at_level(0, subchunk_indices)
+        self.async_retrieve_subchunk_at_level(0, subchunk_indices, resources)
             .await
     }
 
@@ -109,6 +119,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         level: usize,
         subchunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let subchunk_grid = self
             .subchunk_grid_at_level(level)
@@ -117,7 +128,8 @@ pub trait AsyncArrayReadOps: ArrayOps {
         let array_subset = subchunk_grid
             .subset(subchunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-        self.async_retrieve_array_subset(&array_subset).await
+        self.async_retrieve_array_subset(&array_subset, resources)
+            .await
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunks`].
@@ -125,8 +137,10 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_subchunks_at_level(0, subchunks).await
+        self.async_retrieve_subchunks_at_level(0, subchunks, resources)
+            .await
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_subchunks_at_level`].
@@ -135,6 +149,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         level: usize,
         subchunks: &dyn ArraySubsetTraits,
+        resources: &Resources,
     ) -> Result<T, ArrayError> {
         let subchunk_grid = self
             .subchunk_grid_at_level(level)
@@ -146,7 +161,8 @@ pub trait AsyncArrayReadOps: ArrayOps {
                 subchunk_grid.grid_shape().to_vec(),
             )
         })?;
-        self.async_retrieve_array_subset(&array_subset).await
+        self.async_retrieve_array_subset(&array_subset, resources)
+            .await
     }
 
     /// Async variant of [`ArrayReadOps::retrieve_array_subset_into`].
@@ -155,6 +171,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
+        resources: &Resources,
     ) -> Result<(), ArrayError>;
 
     /// Async variant of [`ArrayReadOps::partial_decoder`].
@@ -162,6 +179,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_partial_decoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>;
 
     /// Async variant of [`ArrayReadOps::local_subchunk_grid`].
@@ -169,8 +187,9 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_local_subchunk_grid(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
-        self.async_local_subchunk_grid_at_level(0, chunk_indices)
+        self.async_local_subchunk_grid_at_level(0, chunk_indices, resources)
             .await
     }
 
@@ -180,11 +199,12 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         level: usize,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Option<ChunkGrid>, ArrayError> {
         Ok(self
-            .async_partial_decoder(chunk_indices)
+            .async_partial_decoder(chunk_indices, resources)
             .await?
-            .local_subchunk_grids(self.codec_options())
+            .local_subchunk_grids(self.codec_options(), resources)
             .await
             .map_err(ArrayError::CodecError)?
             .into_iter()

@@ -2,6 +2,7 @@
 #![cfg(feature = "async")]
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use serde_json::json;
 use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
@@ -58,12 +59,13 @@ fn array_read_and_write_async_storage_adapter() {
             &[
                 0.0f32, 0.1, 0.2, 0.3, 1.0, 1.1, 1.2, 1.3, 2.0, 2.1, 2.2, 2.3, 3.0, 3.1, 3.2, 3.3,
             ],
+            &Resources::default(),
         )
         .unwrap();
 
     let subset = ArraySubset::new_with_ranges(&[2..4, 2..4]);
     let data = array
-        .retrieve_array_subset::<ndarray::ArrayD<f32>>(&subset)
+        .retrieve_array_subset::<ndarray::ArrayD<f32>>(&subset, &Resources::default())
         .unwrap();
     assert_eq!(data, ndarray::array![[2.2, 2.3], [3.2, 3.3]].into_dyn());
 }

@@ -4,7 +4,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use std::sync::Arc;
-use zarrs::array::CowBytes;
+use zarrs::array::{CowBytes, Resources};
 
 use serde::Deserialize;
 use zarrs::array::{
@@ -201,6 +201,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
 }
 
 fn main() {
+    let resources = Resources::default();
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";
     let fill_value = CustomDataTypeFloat8e3m4Element::from(1.23);
@@ -234,10 +235,11 @@ fn main() {
         CustomDataTypeFloat8e3m4Element::from(f32::NEG_INFINITY),
         CustomDataTypeFloat8e3m4Element::from(f32::NAN),
     ];
-    array.store_chunk(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data, &resources).unwrap();
 
-    let data: Vec<CustomDataTypeFloat8e3m4Element> =
-        array.retrieve_array_subset(&array.subset_all()).unwrap();
+    let data: Vec<CustomDataTypeFloat8e3m4Element> = array
+        .retrieve_array_subset(&array.subset_all(), &resources)
+        .unwrap();
 
     for f in &data {
         println!(

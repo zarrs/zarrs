@@ -44,9 +44,12 @@ pub use zarrs_data_type::codec_traits::cast_value::{
 
 #[cfg(test)]
 mod tests {
+
     use std::num::NonZeroU64;
 
-    use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits};
+    use zarrs_codec::{
+        CodecOptions, CodecSpecificOptions, ComputeResources, UnboundArrayToArrayCodecTraits,
+    };
     use zarrs_data_type::FillValue;
 
     use super::*;
@@ -75,7 +78,12 @@ mod tests {
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements = crate::array::transmute_from_bytes_vec::<u16>(
             encoded.clone().into_fixed().unwrap().into_vec(),
@@ -83,7 +91,12 @@ mod tests {
         assert_eq!(encoded_elements, vec![0u16, 1, 127, 255]);
 
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(decoded.into_fixed().unwrap().into_vec());
@@ -115,7 +128,12 @@ mod tests {
         ]));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
@@ -145,7 +163,12 @@ mod tests {
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![u64::MAX]));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
@@ -175,10 +198,20 @@ mod tests {
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![255.0f32, 256.0]));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<f32>(decoded.into_fixed().unwrap().into_vec());
@@ -215,7 +248,12 @@ mod tests {
         ]));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
@@ -247,7 +285,12 @@ mod tests {
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![1.0f32]));
 
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
@@ -288,7 +331,12 @@ mod tests {
             ]));
 
             let encoded = codec
-                .encode(bytes, &shape, &CodecOptions::default())
+                .encode(
+                    bytes,
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<i8>(
                 encoded.into_fixed().unwrap().into_vec(),
@@ -348,7 +396,12 @@ mod tests {
             let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
             let encoded = codec
-                .encode(bytes, &shape, &CodecOptions::default())
+                .encode(
+                    bytes,
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             let encoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
                 encoded.into_fixed().unwrap().into_vec(),
@@ -383,7 +436,12 @@ mod tests {
             f32::MIN,
         ]));
         let encoded = codec_f32
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
@@ -400,7 +458,12 @@ mod tests {
         let shape = [NonZeroU64::new(1).unwrap()];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![2.0f64.powi(127)]));
         let encoded = codec_f64
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
@@ -432,7 +495,12 @@ mod tests {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<u8>(encoded.into_fixed().unwrap().into_vec());
@@ -454,7 +522,12 @@ mod tests {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes, &shape, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let encoded_elements =
             crate::array::transmute_from_bytes_vec::<i8>(encoded.into_fixed().unwrap().into_vec());
@@ -567,8 +640,12 @@ mod tests {
                                 .is_err()
                         });
 
-                        let encoded =
-                            codec.encode(ArrayBytes::from(source_bytes.clone()), &shape, &options);
+                        let encoded = codec.encode(
+                            ArrayBytes::from(source_bytes.clone()),
+                            &shape,
+                            &options,
+                            &ComputeResources::default(),
+                        );
                         if expected_err {
                             assert!(encoded.is_err(), "{case}: expected encode error");
                             continue;
@@ -594,8 +671,12 @@ mod tests {
                                     )
                                     .is_err()
                             });
-                        let decoded =
-                            codec.decode(ArrayBytes::from(encoded.clone()), &shape, &options);
+                        let decoded = codec.decode(
+                            ArrayBytes::from(encoded.clone()),
+                            &shape,
+                            &options,
+                            &ComputeResources::default(),
+                        );
                         if expected_decode_err {
                             assert!(decoded.is_err(), "{case}: expected decode error");
                         } else {

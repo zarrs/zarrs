@@ -16,7 +16,7 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, InvalidBytesLengthError,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToBytesCodecTraits,
 };
@@ -391,6 +391,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         bytes.validate(shape.num_elements_u64(), &self.data_type)?;
         let (dense_data, mask) = bytes.into_optional()?.into_parts();
@@ -400,10 +401,12 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Encode mask
-        let encoded_mask =
-            self.mask_codecs
-                .clone()
-                .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
+        let encoded_mask = self.mask_codecs.clone().encode(
+            ArrayBytes::from(mask.as_ref()),
+            shape,
+            options,
+            resources,
+        )?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
@@ -415,7 +418,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
             self.data_codecs
                 .clone()
-                .encode(sparse_data, &data_shape, options)?
+                .encode(sparse_data, &data_shape, options, resources)?
         } else {
             CowBytes::from(vec![])
         };
@@ -435,6 +438,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
+        resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
         if bytes.len() < 2 * size_of::<u64>() {
@@ -452,10 +456,10 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         let encoded_data = &bytes[16 + mask_len..];
 
         // Decode mask
-        let decoded_mask = self
-            .mask_codecs
-            .clone()
-            .decode(encoded_mask.into(), shape, options)?;
+        let decoded_mask =
+            self.mask_codecs
+                .clone()
+                .decode(encoded_mask.into(), shape, options, resources)?;
         let mask = decoded_mask.into_fixed()?.into_vec();
         let (mask_or, valid_count) = mask
             .iter()
@@ -477,7 +481,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
                 self.data_codecs
                     .clone()
-                    .decode(encoded_data.into(), &data_shape, options)?
+                    .decode(encoded_data.into(), &data_shape, options, resources)?
                     .into_owned()
             };
 
@@ -699,8 +703,18 @@ mod tests {
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(data_type, num_elements);
 
-        let encoded = codec.encode(input, &chunk_shape, &CodecOptions::default())?;
-        let decoded = codec.decode(encoded, &chunk_shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            input,
+            &chunk_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )?;
+        let decoded = codec.decode(
+            encoded,
+            &chunk_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )?;
 
         // The codec now returns optional ArrayBytes
         assert!(matches!(decoded, ArrayBytes::Optional(..)));
@@ -896,10 +910,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -965,10 +989,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -1062,10 +1096,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
 
         // Verify the 3-level nested structure
@@ -1135,10 +1179,20 @@ mod tests {
             .unwrap();
 
         let encoded = codec
-            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
+            .encode(
+                input.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -1203,7 +1257,12 @@ mod tests {
             let input = ArrayBytes::new_flen(vec![1u8, 2, 3]).with_optional_mask(mask);
             assert!(
                 codec
-                    .encode(input, &shape, &CodecOptions::default())
+                    .encode(
+                        input,
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default()
+                    )
                     .is_err()
             );
         }
@@ -1232,12 +1291,22 @@ mod tests {
         };
         assert!(
             codec
-                .decode(encoded([1, 1, 0]).into(), &shape, &CodecOptions::default())
+                .decode(
+                    encoded([1, 1, 0]).into(),
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )
                 .is_ok()
         );
         assert!(
             codec
-                .decode(encoded([1, 2, 0]).into(), &shape, &CodecOptions::default())
+                .decode(
+                    encoded([1, 2, 0]).into(),
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )
                 .is_err()
         );
     }

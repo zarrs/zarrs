@@ -3,7 +3,7 @@
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 
@@ -20,9 +20,10 @@ impl BytesPartialDecoderCache {
     pub(crate) fn new(
         input_handle: &dyn BytesPartialDecoderTraits,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Self, CodecError> {
         let cache = input_handle
-            .partial_decode(ByteRange::FromStart(0, None), options)?
+            .partial_decode(ByteRange::FromStart(0, None), options, resources)?
             .map(CowBytes::into_vec);
         Ok(Self { cache })
     }
@@ -35,9 +36,10 @@ impl BytesPartialDecoderCache {
     pub(crate) async fn async_new(
         input_handle: &dyn AsyncBytesPartialDecoderTraits,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<BytesPartialDecoderCache, CodecError> {
         let cache = input_handle
-            .partial_decode(ByteRange::FromStart(0, None), options)
+            .partial_decode(ByteRange::FromStart(0, None), options, resources)
             .await?
             .map(CowBytes::into_vec);
         Ok(Self { cache })
@@ -57,6 +59,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
             Some(bytes) => Some(
@@ -91,8 +94,9 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
-        BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
+        BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {
