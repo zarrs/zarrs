@@ -28,7 +28,7 @@ pub(crate) fn partial_decode_bytes(
     let chain = CodecChain::new(vec![], Arc::new(BytesCodec::new(None)), vec![codec])
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -73,7 +73,11 @@ pub(crate) fn chain(
     fill_value: FillValue,
 ) -> Arc<CodecChainBound> {
     CodecChain::new(array_to_array, array_to_bytes, bytes_to_bytes)
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap()
 }
 

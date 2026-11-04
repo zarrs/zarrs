@@ -253,7 +253,7 @@ fn encode_chunk<T: ElementOwned>(
     let bound_codec = codec
         .with_context(
             data_type.clone(),
-            FillValue::from(0u32),
+            Some(FillValue::from(0u32)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::num::NonZeroU64;
 use std::sync::{Arc, Weak};
 
@@ -15,7 +16,7 @@ use crate::array::chunk_grid::{
 };
 use crate::array::{
     ArrayBytes, ArraySubset, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits,
-    CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
+    CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec,
 };
 use smallvec::SmallVec;
 use zarrs_codec::plan::{
@@ -130,8 +131,9 @@ pub(super) fn subchunk_subset(
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_index: usize,
 ) -> ArraySubset {
-    let subchunk_indices = unravel_index(subchunk_index as u64, subchunk_grid.grid_shape())
-        .expect("inbounds subchunk");
+    let subchunk_indices =
+        zarrs_chunk_grid::unravel_index(subchunk_index as u64, subchunk_grid.grid_shape())
+            .expect("inbounds subchunk");
     subchunk_grid
         .subset(&subchunk_indices)
         .expect("matching dimensionality")
@@ -165,6 +167,52 @@ pub struct ShardingCodecBound {
     pub(crate) require_divisible_subchunks: bool,
     /// The codec, for planning from methods that borrow it (planners take an [`Arc`] of the codec).
     pub(crate) this: Weak<ShardingCodecBound>,
+}
+
+pub(super) fn subchunk_order_iterator(
+    subchunks_write_order: SubchunkWriteOrder,
+    n_chunks: usize,
+    subchunk_grid: &RegularBoundedChunkGrid,
+) -> Vec<usize> {
+    match subchunks_write_order {
+        SubchunkWriteOrder::C
+        | SubchunkWriteOrder::Lexicographic
+        | SubchunkWriteOrder::Unordered => (0..n_chunks).collect_vec(),
+        SubchunkWriteOrder::Colexicographic => (0..n_chunks)
+            .sorted_by_cached_key(|&i| {
+                let mut indices =
+                    zarrs_chunk_grid::unravel_index(i as u64, subchunk_grid.grid_shape())
+                        .expect("inbounds subchunk");
+                indices.reverse();
+                indices
+            })
+            .collect_vec(),
+        SubchunkWriteOrder::Morton => (0..n_chunks)
+            .map(|i| {
+                let indices = zarrs_chunk_grid::unravel_index(i as u64, subchunk_grid.grid_shape())
+                    .expect("inbounds subchunk");
+                (indices, i)
+            })
+            .sorted_unstable_by(|(a, _), (b, _)| morton_cmp(a, b))
+            .map(|(_, i)| i)
+            .collect_vec(),
+    }
+}
+
+/// Compare two indices in Morton (Z) order, first axis most significant: <https://en.wikipedia.org/wiki/Z-order_curve#Efficiently_building_quadtrees_and_octrees>
+fn morton_cmp(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
+    // `x < y && x < x ^ y` iff the highest set bit of `x` is below that of `y`.
+    let less_msb = |x: u64, y: u64| x < y && x < (x ^ y);
+    let mut dim = 0;
+    let mut msb = 0;
+    for (d, (&ai, &bi)) in a.iter().zip(b).enumerate() {
+        let diff = ai ^ bi;
+        if less_msb(msb, diff) {
+            msb = diff;
+            dim = d;
+        }
+    }
+    a[dim].cmp(&b[dim])
 }
 
 impl ShardingCodec {
@@ -255,15 +303,20 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
+        if fill_value.is_none() {
+            return Err(CodecCreateError::Other(
+                "sharding requires a defined fill value".into(),
+            ));
+        }
         let inner_codecs =
             self.inner_codecs
                 .with_context(data_type, fill_value, codec_specific_options)?;
         let index_codecs = self.index_codecs.with_context(
             crate::array::data_type::uint64(),
-            FillValue::from(u64::MAX),
+            Some(FillValue::from(u64::MAX)),
             codec_specific_options,
         )?;
         let options = codec_specific_options
@@ -294,7 +347,7 @@ impl ArrayCodecTraits for ShardingCodecBound {
         self.inner_codecs.data_type()
     }
 
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.inner_codecs.fill_value()
     }
 }
@@ -509,7 +562,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             shape,
             DecodeRequest {
                 indexer: PlanIndexer::Subset(ArraySubset::new_with_shape(
-                    bytemuck::must_cast_slice(shape).to_vec(),
+                    bytemuck::must_cast_slice(shape),
                 )),
                 target: TaskTarget::Views(views),
             },
@@ -582,7 +635,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         {
             return zarrs_codec::plan::encode_and_set(self, bytes, shape, key, options, ctx);
         }
-        if !options.store_empty_chunks() && bytes.is_fill_value(self.inner_codecs.fill_value()) {
+        if !options.store_empty_chunks()
+            && self
+                .inner_codecs
+                .fill_value()
+                .is_some_and(|fill| bytes.is_fill_value(fill))
+        {
             return Ok(zarrs_codec::plan::Outcome::Write {
                 ops: smallvec::smallvec![zarrs_codec::plan::WriteOp::Erase(key)],
                 then: zarrs_codec::plan::TaskValue::None,
@@ -601,6 +659,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         set_partial: bool,
         options: &CodecOptions,
     ) -> Result<zarrs_codec::plan::Task<'a>, CodecError> {
+        if indexer.is_whole(shape) {
+            return Ok(zarrs_codec::plan::plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ));
+        }
+
         if set_partial {
             self.plan_partial_encode_shard(key, shape, indexer, bytes, state, options)
         } else {

@@ -102,12 +102,20 @@ pub enum ChunkGridCreateError {
 impl ChunkGridCreateError {
     /// Create a new [`ChunkGridCreateError`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn new(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
 
     /// Create a new [`ChunkGridCreateError::Other`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
@@ -381,10 +389,9 @@ pub unsafe trait ChunkGridTraits:
             let chunk0 = self.subset(&chunks.start())?;
             let chunk1 = self.subset(&end)?;
             if let (Some(chunk0), Some(chunk1)) = (chunk0, chunk1) {
-                let ranges = std::iter::zip(chunk0.start(), chunk1.end_exc())
-                    .map(|(&s, e)| s..e)
-                    .collect::<Vec<_>>();
-                Ok(Some(ArraySubset::new_with_ranges(&ranges)))
+                Ok(Some(ArraySubset::from(
+                    std::iter::zip(chunk0.start(), chunk1.end_exc()).map(|(&s, e)| s..e),
+                )))
             } else {
                 Ok(None)
             }
@@ -453,10 +460,9 @@ pub unsafe trait ChunkGridTraits:
 
                 Ok(
                     if let (Some(chunks_start), Some(chunks_end)) = (chunks_start, chunks_end) {
-                        let ranges = std::iter::zip(&chunks_start, chunks_end)
-                            .map(|(&s, e)| s..e + 1)
-                            .collect::<Vec<_>>();
-                        Some(ArraySubset::new_with_ranges(&ranges))
+                        Some(ArraySubset::from(
+                            std::iter::zip(&chunks_start, chunks_end).map(|(&s, e)| s..e + 1),
+                        ))
                     } else {
                         None
                     },
@@ -468,7 +474,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return a serial iterator over the chunk indices of the chunk grid.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
-        let shape = self.grid_shape().to_vec();
+        let shape = self.grid_shape();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         IndicesIntoIterator::new(ArraySubset::new_with_shape(shape), 0..n_chunks)
@@ -476,7 +482,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
-        let shape = self.grid_shape().to_vec();
+        let shape = self.grid_shape();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         ParIndicesIntoIterator {
@@ -539,77 +545,12 @@ pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
 /// Returns [`None`] if `index` is out-of-bounds of `shape`.
 #[must_use]
 pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
-    let total_size: u64 = shape
-        .iter()
-        .try_fold(1u64, |acc, &dim| acc.checked_mul(dim))?;
-    if index >= total_size {
-        return None;
+    let mut indices: ArrayIndices = std::iter::repeat_n(0, shape.len()).collect();
+    for (indices_i, &dim) in std::iter::zip(indices.iter_mut().rev(), shape.iter().rev()) {
+        *indices_i = index.checked_rem(dim)?;
+        index /= dim;
     }
-
-    // Specialised routines for dimensions <=4, unrolled and no dynamic allocation
-    match shape.len() {
-        0 => Some(ArrayIndices::new()),
-        1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
-        2 => {
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1))
-        }
-        3 => {
-            let i2 = index % shape[2];
-            index /= shape[2];
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2))
-        }
-        4 => {
-            let i3 = index % shape[3];
-            index /= shape[3];
-            let i2 = index % shape[2];
-            index /= shape[2];
-            let i1 = index % shape[1];
-            index /= shape[1];
-            let i0 = index % shape[0];
-            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3))
-        }
-        len => {
-            // For 5+ dimensions, use Vec path with spare_capacity_mut
-            let mut vec = Vec::with_capacity(len);
-
-            {
-                // SAFETY: `indices` are initialised and never read below
-                let indices = unsafe { vec_spare_capacity_to_mut_slice(&mut vec) };
-
-                // Fill in reverse order
-                for i in (0..len).rev() {
-                    indices[i] = index % shape[i];
-                    index /= shape[i];
-                }
-            }
-
-            // SAFETY: all `len` elements are initialised
-            unsafe { vec.set_len(len) };
-
-            Some(ArrayIndices::Heap(vec))
-        }
-    }
-}
-
-/// Get a mutable slice of the spare capacity in a vector.
-///
-/// # Safety
-/// The caller must not read from the returned slice before it has been initialised.
-unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
-    let spare_capacity = vec.spare_capacity_mut();
-    // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
-    unsafe {
-        std::slice::from_raw_parts_mut(
-            spare_capacity.as_mut_ptr().cast::<T>(),
-            spare_capacity.len(),
-        )
-    }
+    (index == 0).then_some(indices)
 }
 
 #[cfg(test)]

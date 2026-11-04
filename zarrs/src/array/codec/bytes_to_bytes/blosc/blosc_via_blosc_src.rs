@@ -60,7 +60,20 @@ pub(super) const fn compressor_as_cstr(compressor: BloscCompressor) -> *const u8
     }
 }
 
+/// The number of blosc internal threads to use for `len` bytes, clamped to [`BLOSC_MAX_THREADS`].
+fn internal_threads(len: usize, numinternalthreads: usize) -> c_int {
+    if len >= MIN_PARALLEL_LENGTH {
+        // `BLOSC_MAX_THREADS` fits in a `c_int`
+        c_int::try_from(numinternalthreads.min(BLOSC_MAX_THREADS as usize)).unwrap_or(1)
+    } else {
+        1
+    }
+}
+
 /// Compress bytes using blosc.
+///
+/// # Errors
+/// Returns a [`BloscError`] if compression fails.
 pub fn blosc_compress_bytes(
     src: &[u8],
     clevel: BloscCompressionLevel,
@@ -70,11 +83,7 @@ pub fn blosc_compress_bytes(
     blocksize: usize,
     numinternalthreads: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let numinternalthreads = if src.len() >= MIN_PARALLEL_LENGTH {
-        std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
-    } else {
-        1
-    };
+    let numinternalthreads = internal_threads(src.len(), numinternalthreads);
 
     // let mut dest = vec![0; src.len() + BLOSC_MAX_OVERHEAD as usize];
     let destsize = src.len() + BLOSC_MAX_OVERHEAD as usize;
@@ -91,7 +100,7 @@ pub fn blosc_compress_bytes(
             destsize,
             compressor_as_cstr(compressor).cast::<c_char>(),
             blocksize,
-            i32::try_from(numinternalthreads).unwrap(),
+            numinternalthreads,
         )
     };
     if destsize > 0 {
@@ -159,34 +168,37 @@ pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
 }
 
 /// Decompress a blosc buffer.
+///
+/// # Errors
+/// Returns a [`BloscError`] if decompression fails or does not yield `destsize` bytes.
 pub fn blosc_decompress_bytes(
     src: &[u8],
     destsize: usize,
     numinternalthreads: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let numinternalthreads = if destsize >= MIN_PARALLEL_LENGTH {
-        std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
-    } else {
-        1
-    };
+    let numinternalthreads = internal_threads(destsize, numinternalthreads);
 
     let mut dest: Vec<u8> = Vec::with_capacity(destsize);
-    let destsize = unsafe {
+    let decompressed = unsafe {
         blosc_decompress_ctx(
             src.as_ptr().cast::<c_void>(),
             dest.as_mut_ptr().cast::<c_void>(),
             destsize,
-            i32::try_from(numinternalthreads).unwrap(),
+            numinternalthreads,
         )
     };
-    if destsize > 0 {
+    if decompressed <= 0 {
+        Err(BloscError::from("blosc_decompress_ctx failed"))
+    } else if usize::try_from(decompressed) != Ok(destsize) {
+        Err(BloscError::from(format!(
+            "blosc_decompress_ctx returned {decompressed} bytes, expected {destsize}"
+        )))
+    } else {
+        // SAFETY: blosc initialised `destsize` bytes, which is the capacity of `dest`
         unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
+            dest.set_len(destsize);
         }
         Ok(dest)
-    } else {
-        Err(BloscError::from("blosc_decompress_ctx failed"))
     }
 }
 
@@ -218,14 +230,21 @@ pub(super) fn blosc_decompress_bytes_into(
 }
 
 /// Partially decompress a blosc buffer at a given byte offset and length.
+///
+/// # Errors
+/// Returns a [`BloscError`] if decompression fails or does not yield `length` bytes.
 pub fn blosc_decompress_bytes_partial(
     src: &[u8],
     offset: usize,
     length: usize,
     typesize: usize,
 ) -> Result<Vec<u8>, BloscError> {
-    let start = i32::try_from(offset / typesize).unwrap();
-    let nitems = i32::try_from(length / typesize).unwrap();
+    let to_items = |bytes: usize| {
+        c_int::try_from(bytes / typesize)
+            .map_err(|_| BloscError::from("blosc_getitem item index exceeds c_int::MAX"))
+    };
+    let start = to_items(offset)?;
+    let nitems = to_items(length)?;
     let mut dest: Vec<u8> = Vec::with_capacity(length);
     let destsize = unsafe {
         blosc_getitem(
@@ -240,10 +259,14 @@ pub fn blosc_decompress_bytes_partial(
             "blosc_getitem(src: len {}, start: {start}, nitems: {nitems}) -> {destsize} (failure)",
             src.len()
         )))
+    } else if usize::try_from(destsize) != Ok(length) {
+        Err(BloscError::from(format!(
+            "blosc_getitem returned {destsize} bytes, expected {length}"
+        )))
     } else {
+        // SAFETY: blosc initialised `length` bytes, which is the capacity of `dest`
         unsafe {
-            #[allow(clippy::cast_sign_loss)]
-            dest.set_len(destsize as usize);
+            dest.set_len(length);
         }
         Ok(dest)
     }

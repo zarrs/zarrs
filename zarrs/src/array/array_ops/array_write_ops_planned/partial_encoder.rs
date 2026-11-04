@@ -122,7 +122,12 @@ impl ArrayPartialDecoderTraits for PlannedArrayPartialEncoder {
     }
 
     fn size_held(&self) -> usize {
-        0
+        self.state
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|state| state.downcast_ref::<Vec<u64>>())
+            .map_or(0, |index| std::mem::size_of_val(index.as_slice()))
     }
 
     fn partial_decode(
@@ -198,7 +203,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             chunk: PartialChunk {
                 codecs: self.codecs_bound().clone(),
                 shape: self.chunk_shape(chunk_indices)?,
-                set_partial: self.storage.supports_set_partial(),
+                set_partial: self.readable_writable_storage()?.supports_set_partial(),
             },
             io: self.owned_chunk_read_write_io(self.one_key(chunk_indices)?)?,
             state: Mutex::new(None),
@@ -240,6 +245,7 @@ mod async_planned {
         ///
         /// The lock is held during a partial encode, so partial encodes of the chunk are serialised.
         state: async_lock::Mutex<Option<PartialEncodeState>>,
+        state_size: std::sync::atomic::AtomicUsize,
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -271,7 +277,7 @@ mod async_planned {
         }
 
         fn size_held(&self) -> usize {
-            0
+            self.state_size.load(std::sync::atomic::Ordering::Relaxed)
         }
 
         async fn partial_decode<'a>(
@@ -316,6 +322,8 @@ mod async_planned {
         async fn erase(&self) -> Result<(), CodecError> {
             let mut state = self.state.lock().await;
             *state = None;
+            self.state_size
+                .store(0, std::sync::atomic::Ordering::Relaxed);
             Ok(self.io.write(WriteOp::Erase(SourceKey(0))).await?)
         }
 
@@ -328,10 +336,18 @@ mod async_planned {
         ) -> Result<(), CodecError> {
             let mut state = self.state.lock().await;
             // The state is unknown if the partial encode fails
+            self.state_size
+                .store(0, std::sync::atomic::Ordering::Relaxed);
             let task = self
                 .chunk
                 .plan_partial_encode(indexer, bytes, state.take(), options)?;
             *state = partial_encode_state(drive_async_one(task, &self.io, resources).await?);
+            let size = state
+                .as_ref()
+                .and_then(|state| state.downcast_ref::<Vec<u64>>())
+                .map_or(0, |index| std::mem::size_of_val(index.as_slice()));
+            self.state_size
+                .store(size, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         }
 
@@ -350,12 +366,16 @@ mod async_planned {
                 chunk: PartialChunk {
                     codecs: self.codecs_bound().clone(),
                     shape: self.chunk_shape(chunk_indices)?,
-                    set_partial: self.storage.supports_set_partial(),
+                    set_partial: self
+                        .async_readable_writable_storage()
+                        .await?
+                        .supports_set_partial(),
                 },
                 io: self
                     .async_owned_chunk_read_write_io(self.one_key(chunk_indices)?)
                     .await?,
                 state: async_lock::Mutex::new(None),
+                state_size: std::sync::atomic::AtomicUsize::new(0),
             }))
         }
     }

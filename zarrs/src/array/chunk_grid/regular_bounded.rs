@@ -135,7 +135,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             return Ok(Vec::new());
         }
         let chunk_size = self.chunk_shape.as_slice()[dimension];
-        let n_chunks = self.grid_shape[dimension] as usize;
+        let n_chunks = usize::try_from(self.grid_shape[dimension])
+            .expect("the chunk edge lengths fit in memory");
         let mut result = Vec::with_capacity(n_chunks);
         result.resize(n_chunks - 1, chunk_size);
         let last_edge = self.array_shape[dimension] - (n_chunks - 1) as u64 * chunk_size.get();
@@ -151,7 +152,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(izip!(
+            let values = izip!(
                 self.chunk_shape.as_slice(),
                 &self.array_shape,
                 chunk_indices
@@ -160,8 +161,15 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
                 NonZeroU64::new(end.saturating_sub(start))
-            })
-            .collect::<Option<Vec<_>>>())
+            });
+            let mut output = Vec::with_capacity(values.size_hint().0);
+            for value in values {
+                let Some(value) = value else {
+                    return Ok(None);
+                };
+                output.push(value);
+            }
+            Ok(Some(output))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -175,7 +183,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(izip!(
+            let values = izip!(
                 self.chunk_shape.as_slice(),
                 &self.array_shape,
                 chunk_indices
@@ -184,8 +192,15 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
                 if end > start { Some(end - start) } else { None }
-            })
-            .collect::<Option<Vec<_>>>())
+            });
+            let mut output = Vec::with_capacity(values.size_hint().0);
+            for value in values {
+                let Some(value) = value else {
+                    return Ok(None);
+                };
+                output.push(value);
+            }
+            Ok(Some(output))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -199,7 +214,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(izip!(
+            let values = izip!(
                 chunk_indices,
                 self.chunk_shape.as_slice(),
                 &self.array_shape
@@ -211,8 +226,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 } else {
                     None
                 }
-            })
-            .collect::<Option<ArrayIndices>>())
+            });
+            Ok(values.collect())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -226,7 +241,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         array_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if array_indices.len() == self.dimensionality() {
-            Ok(izip!(
+            let values = izip!(
                 array_indices,
                 self.chunk_shape.as_slice(),
                 &self.array_shape
@@ -237,8 +252,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 } else {
                     None
                 }
-            })
-            .collect::<Option<ArrayIndices>>())
+            });
+            Ok(values.collect())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),
@@ -252,7 +267,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         array_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if array_indices.len() == self.dimensionality() {
-            Ok(izip!(
+            let values = izip!(
                 array_indices,
                 self.chunk_shape.as_slice(),
                 &self.array_shape
@@ -263,8 +278,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 } else {
                     None
                 }
-            })
-            .collect::<Option<ArrayIndices>>())
+            });
+            Ok(values.collect())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),

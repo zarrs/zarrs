@@ -42,7 +42,10 @@ impl ShardingCodecBound {
         options: &CodecOptions,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
-        let unordered = !matches!(self.options.subchunk_write_order(), SubchunkWriteOrder::C);
+        let unordered = matches!(
+            self.options.subchunk_write_order(),
+            SubchunkWriteOrder::Unordered
+        );
         let encode = ShardEncode::new(self, bytes, shape, options)?;
         // The bound of the encoded size of a subchunk, if the encoded subchunks are written straight into the shard
         let direct_bound = if unordered {
@@ -67,6 +70,19 @@ impl ShardingCodecBound {
         options: &CodecOptions,
         ctx: &ComputeCtx,
     ) -> Result<Outcome<'a>, CodecError> {
+        if matches!(
+            self.options.subchunk_write_order(),
+            SubchunkWriteOrder::Colexicographic | SubchunkWriteOrder::Morton
+        ) {
+            return zarrs_codec::plan::encode_and_set(
+                self.into_dyn(),
+                bytes,
+                shape,
+                key,
+                options,
+                ctx,
+            );
+        }
         ShardEncode::new(self, bytes, shape, options)?.plan_write(key, ctx)
     }
 }
@@ -215,9 +231,12 @@ impl<'a> ShardEncode<'a> {
             move |write, ctx| self.finish_write(write, ctx),
         );
         let fold = match order {
-            SubchunkWriteOrder::C => fold,
+            SubchunkWriteOrder::C
+            | SubchunkWriteOrder::Lexicographic
+            | SubchunkWriteOrder::Colexicographic
+            | SubchunkWriteOrder::Morton => fold,
             // The index locates the subchunks, so they are written as they are encoded
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => fold.unordered(),
+            SubchunkWriteOrder::Unordered => fold.unordered(),
         };
         Ok(Outcome::Stream { children, fold })
     }
@@ -346,7 +365,10 @@ impl<'a> ShardEncode<'a> {
             self.subchunk_grid.array_shape(),
             inner_codecs.data_type(),
         )?;
-        if bytes.is_fill_value(inner_codecs.fill_value()) {
+        if inner_codecs
+            .fill_value()
+            .is_some_and(|fill| bytes.is_fill_value(fill))
+        {
             return Ok(None);
         }
         let shape: smallvec::SmallVec<[NonZeroU64; 4]> = subset
@@ -392,13 +414,21 @@ impl<'a> ShardEncode<'a> {
             shard.resize(self.index_encoded_size, 0);
         }
         let mut shard_index = vec![EMPTY; self.num_subchunks * 2];
+        let mut encoded: Vec<Option<&Bytes>> = vec![None; self.num_subchunks];
         for block in blocks {
-            for (subchunk, encoded) in (block.first..).zip(&block.encoded) {
-                if let Some(encoded) = encoded {
-                    shard_index[subchunk * 2] = shard.len() as u64;
-                    shard_index[subchunk * 2 + 1] = encoded.len() as u64;
-                    shard.extend_from_slice(encoded);
-                }
+            for (i, bytes) in (block.first..).zip(&block.encoded) {
+                encoded[i] = bytes.as_ref();
+            }
+        }
+        for i in super::sharding_codec::subchunk_order_iterator(
+            self.codec.options.subchunk_write_order(),
+            self.num_subchunks,
+            &self.subchunk_grid,
+        ) {
+            if let Some(bytes) = encoded[i] {
+                shard_index[i * 2] = shard.len() as u64;
+                shard_index[i * 2 + 1] = bytes.len() as u64;
+                shard.extend_from_slice(bytes);
             }
         }
         let data_end = shard.len();
@@ -675,7 +705,7 @@ mod tests {
                             .build_arc()
                             .with_context(
                                 data_type::uint16(),
-                                FillValue::from(7u16),
+                                Some(FillValue::from(7u16)),
                                 &CodecSpecificOptions::default().with_option(
                                     crate::array::codec::ShardingCodecOptions::default()
                                         .with_subchunk_write_order(order),
@@ -713,7 +743,7 @@ mod tests {
             .build_arc()
             .with_context(
                 data_type::uint16(),
-                FillValue::from(7u16),
+                Some(FillValue::from(7u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

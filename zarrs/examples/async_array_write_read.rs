@@ -1,4 +1,8 @@
-#![allow(missing_docs)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 use futures::TryStreamExt;
 use ndarray::ArrayD;
@@ -6,6 +10,7 @@ use zarrs::array::Resources;
 use zarrs::storage::AsyncReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 

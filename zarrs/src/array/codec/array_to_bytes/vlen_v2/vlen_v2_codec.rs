@@ -18,7 +18,7 @@ pub struct VlenV2Codec {}
 #[derive(Debug, Clone)]
 struct VlenV2CodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl VlenV2Codec {
@@ -47,7 +47,7 @@ impl UnboundArrayToBytesCodecTraits for VlenV2Codec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() || !matches!(data_type.size(), DataTypeSize::Variable) {
@@ -72,8 +72,8 @@ impl ArrayCodecTraits for VlenV2CodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 

@@ -5,7 +5,7 @@ use zarrs_codec::{CodecCreateError, CodecError};
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
-use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
+use super::{ArrayBytesFixedDisjointViewCreateError, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
 use zarrs_chunk_key_encoding::ChunkKeyEncodingError;
@@ -122,7 +122,7 @@ pub enum ArrayError {
     InvalidArraySubset(Box<ArraySubset>, ArrayShape),
     /// Incompatible chunk subset.
     #[error("chunk subset {_0} is not compatible with chunk {_1:?} with shape {_2:?}")]
-    InvalidChunkSubset(Box<ArraySubset>, ArrayIndices, ArrayShape),
+    InvalidChunkSubset(Box<ArraySubset>, Vec<u64>, ArrayShape),
     /// An unexpected chunk decoded size.
     #[error("got chunk decoded size {_0:?}, expected {_1:?}")]
     UnexpectedChunkDecodedSize(usize, usize),
@@ -195,5 +195,18 @@ impl AdditionalFieldUnsupportedError {
     #[must_use]
     pub const fn value(&self) -> &Value {
         &self.value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Errors are returned on every array operation, so keep them small.
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn error_sizes() {
+        assert!(size_of::<CodecError>() <= 56);
+        assert!(size_of::<ArrayError>() <= 64);
     }
 }

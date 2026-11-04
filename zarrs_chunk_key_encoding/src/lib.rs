@@ -32,6 +32,10 @@ pub enum ChunkKeyEncodingError {
 impl ChunkKeyEncodingError {
     /// Create a new [`ChunkKeyEncodingError::Other`].
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
@@ -202,9 +206,10 @@ pub trait ChunkKeyEncodingTraits: ExtensionName + core::fmt::Debug + MaybeSend +
     /// such as if they are incompatible with the dimensionality of the chunk key encoding.
     fn encode(&self, chunk_grid_indices: &[u64]) -> Result<String, ChunkKeyEncodingError>;
 
-    /// Encode chunk grid indices (grid cell coordinates) into a chunk key, appended to `key`.
+    /// Encode chunk grid indices (grid cell coordinates) into a chunk key and append it to `key`.
     ///
-    /// This lets a store key be built in one allocation. The default implementation appends the key of
+    /// `key` can already contain the array path, allowing the store key to be built directly
+    /// in one allocation. The default implementation appends the key returned by
     /// [`encode`](ChunkKeyEncodingTraits::encode).
     ///
     /// # Errors

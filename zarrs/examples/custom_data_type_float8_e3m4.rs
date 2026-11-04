@@ -1,6 +1,7 @@
 //! A custom data type for `float8_e3m4`.
 //!
 //! It accepts float compatible fill values.
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use std::sync::Arc;
 use zarrs::array::{CowBytes, Resources};
@@ -101,7 +102,7 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
         sign
     } else if biased_to_exponent > 7 {
         // Overflow: return ±Infinity
-        sign | 0b01110000
+        sign | 0b0111_0000
     } else {
         sign | ((biased_to_exponent as u8) << 4) | mantissa
     }
@@ -109,7 +110,7 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float8_e3m4_to_float32(val: u8) -> f32 {
-    let sign = u32::from(val & 0b10000000);
+    let sign = u32::from(val & 0b1000_0000);
     let biased_exponent = i16::from((val >> 4) & 0b111);
     let mantissa = u32::from(val & 0b1111);
 
@@ -119,9 +120,9 @@ fn float8_e3m4_to_float32(val: u8) -> f32 {
     } else if biased_exponent == 7 {
         // Infinity or NaN
         if mantissa == 0 {
-            (sign << 24) | 0x7F800000 // ±Infinity
+            (sign << 24) | 0x7F80_0000 // ±Infinity
         } else {
-            (sign << 24) | 0x7F800000 | (mantissa << 19) // NaN
+            (sign << 24) | 0x7F80_0000 | (mantissa << 19) // NaN
         }
     } else {
         let unbiased_exponent = biased_exponent - 3;
@@ -192,7 +193,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len);
         // NOTE: Could memcpy here
-        for byte in bytes.iter() {
+        for byte in &bytes {
             elements.push(CustomDataTypeFloat8e3m4Element(*byte));
         }
         Ok(elements)

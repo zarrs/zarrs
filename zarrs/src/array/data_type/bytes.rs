@@ -41,15 +41,16 @@ impl zarrs_data_type::DataTypeTraits for BytesDataType {
                 .map_err(|_| zarrs_data_type::DataTypeFillValueMetadataError)?;
             Ok(zarrs_data_type::FillValue::from(bytes))
         } else if let Some(arr) = fill_value_metadata.as_array() {
-            let bytes: Result<Vec<u8>, _> = arr
-                .iter()
-                .map(|v| {
-                    v.as_u64()
+            let mut bytes = Vec::with_capacity(arr.len());
+            for value in arr {
+                bytes.push(
+                    value
+                        .as_u64()
                         .and_then(|u| u8::try_from(u).ok())
-                        .ok_or(zarrs_data_type::DataTypeFillValueMetadataError)
-                })
-                .collect();
-            Ok(zarrs_data_type::FillValue::from(bytes?))
+                        .ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?,
+                );
+            }
+            Ok(zarrs_data_type::FillValue::from(bytes))
         } else if matches!(version, zarrs_plugin::ZarrVersion::V2) && fill_value_metadata.is_null()
         {
             // V2: null -> empty bytes

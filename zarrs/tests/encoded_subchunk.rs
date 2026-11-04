@@ -353,11 +353,10 @@ fn sharded_array_with_bytes_to_bytes_codecs_retrieve_encoded_subchunk() -> TestR
             decode_subchunk(array.as_ref(), 0, &encoded)?,
             array.retrieve_subchunk::<Vec<u16>>(&[1, 2], &resources)?
         );
-        assert_eq!(
+        assert!(
             array
                 .retrieve_encoded_subchunk(&[0, 0], &resources)?
-                .is_some(),
-            true
+                .is_some()
         );
     }
     Ok(())
@@ -561,7 +560,7 @@ struct BlockCodecBound {
     block_shape: ChunkShape,
     inner_codecs: Arc<CodecChainBound>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 zarrs_plugin::impl_extension_aliases!(BlockCodec, v3: "zarrs.test.block");
@@ -629,7 +628,7 @@ impl UnboundArrayToBytesCodecTraits for BlockCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(BlockCodecBound {
@@ -654,8 +653,8 @@ impl ArrayCodecTraits for BlockCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 

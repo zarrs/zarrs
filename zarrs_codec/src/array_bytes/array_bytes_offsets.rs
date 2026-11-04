@@ -319,6 +319,9 @@ impl ArrayBytesOffsets {
     }
 
     /// Returns the last offset.
+    ///
+    /// # Panics
+    /// Panics if the offset exceeds [`usize::MAX`].
     #[must_use]
     pub fn last(&self) -> usize {
         self.as_slice()
@@ -362,6 +365,15 @@ impl PartialEq for ArrayBytesOffsets {
 }
 
 impl Eq for ArrayBytesOffsets {}
+
+impl<'a> IntoIterator for &'a ArrayBytesOffsets {
+    type Item = usize;
+    type IntoIter = ArrayBytesOffsetsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
 
 impl<'a> ArrayBytesOffsetsSlice<'a> {
     /// Returns the number of offsets.
@@ -431,6 +443,15 @@ impl<'a> ArrayBytesOffsetsSlice<'a> {
             front: 0,
             back: self.len().saturating_sub(1),
         }
+    }
+}
+
+impl<'a> IntoIterator for &ArrayBytesOffsetsSlice<'a> {
+    type Item = usize;
+    type IntoIter = ArrayBytesOffsetsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -646,7 +667,7 @@ mod tests {
         let pointer = misaligned.as_ptr();
         let offsets = ArrayBytesOffsets::from_ne_bytes::<u32>(misaligned).unwrap();
         assert_eq!(offsets.as_u32().unwrap(), &[0, 1, 2]);
-        if !pointer.cast::<u32>().is_aligned() {
+        if !pointer.addr().is_multiple_of(align_of::<u32>()) {
             assert_ne!(offsets.as_ne_bytes().as_ptr(), pointer);
         }
 

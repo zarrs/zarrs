@@ -75,6 +75,7 @@ impl CodecTraitsV2 for ZlibCodec {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::ComputeResources;
     use crate::array::codec::test_util::partial_decode_bytes;

@@ -72,7 +72,8 @@ use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::{
-    ArrayBytes, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer, IndexerError,
+    ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer,
+    IndexerError,
 };
 use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::DataTypeSize;
@@ -192,7 +193,9 @@ fn get_transposed_indexer(
 
     Ok(indexer
         .iter_indices()
-        .map(|indices| permute(&indices, order).expect("matching dimensionality"))
+        .map(|indices| {
+            permute::<_, ArrayIndices>(&indices, order).expect("matching dimensionality")
+        })
         .collect::<Vec<_>>())
 }
 
@@ -265,6 +268,7 @@ pub(crate) fn apply_permutation<'a>(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 mod tests {
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use crate::array::{ComputeResources, Resources};
@@ -293,7 +297,11 @@ mod tests {
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -346,7 +354,11 @@ mod tests {
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -410,7 +422,7 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
             .with_context(
                 data_type,
-                FillValue::new_optional_null(),
+                Some(FillValue::new_optional_null()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

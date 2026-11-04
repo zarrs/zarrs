@@ -134,7 +134,7 @@ impl Hierarchy {
         let node_path = NodePath::try_from(path)?;
         let policy = options.use_consolidated_metadata();
         let version = options.version();
-        let node_metadata = Node::get_metadata(storage, &node_path, &version)?;
+        let node_metadata = Node::get_metadata(storage, &node_path, version)?;
         let mut hierarchy = Hierarchy::new();
 
         let nodes = match &node_metadata {
@@ -142,7 +142,7 @@ impl Hierarchy {
             NodeMetadata::Group(_) => {
                 match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
                     Some(consolidated) => expand_consolidated_metadata(&node_path, consolidated)?,
-                    None => get_all_nodes_of(storage, &node_path, &version)?,
+                    None => get_all_nodes_of(storage, &node_path, version)?,
                 }
             }
         };
@@ -222,7 +222,7 @@ impl Hierarchy {
         hierarchy.0.extend(get_all_nodes_of(
             &group.storage(),
             group.path(),
-            &MetadataRetrieveVersion::Default,
+            MetadataRetrieveVersion::Default,
         )?);
         Ok(hierarchy)
     }
@@ -475,6 +475,8 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_invalid_async_group() {
+        use zarrs_storage::AsyncWritableStorageTraits;
+
         let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
 
         let root = Group::new_with_metadata(
@@ -486,7 +488,6 @@ mod tests {
 
         assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
 
-        use zarrs_storage::AsyncWritableStorageTraits;
         // Inject fauly subgroup
         store
             .set(

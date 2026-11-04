@@ -1,4 +1,8 @@
-#![allow(missing_docs)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 use ndarray::{Array2, ArrayD, array};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -6,6 +10,7 @@ use zarrs::array::Resources;
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 

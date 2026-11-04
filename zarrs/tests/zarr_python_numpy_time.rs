@@ -30,6 +30,7 @@ fn try_numpy_to_jiff_unit(unit: NumpyTimeUnit) -> Result<jiff::Unit, NumpyTimeUn
 
 #[cfg(any(feature = "chrono", feature = "jiff"))]
 #[test]
+#[allow(clippy::too_many_lines)]
 fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
     for (path, unit) in [
         (
@@ -180,10 +181,11 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
         NumpyTimeUnit::Microsecond,
         NumpyTimeUnit::Nanosecond,
     ] {
-        println!("{unit:?}");
         use zarrs::array::ArrayBuilder;
         use zarrs::storage::store::MemoryStore;
         use zarrs_data_type::FillValue;
+
+        println!("{unit:?}");
 
         let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(
@@ -315,12 +317,7 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
             let elements = array
                 .retrieve_array_subset::<Vec<TimeDelta>>(&subset_all, &Resources::default())?;
 
-            let start_elem = if matches!(unit, NumpyTimeUnit::Picosecond) {
-                // first element overflows in numpy
-                1
-            } else {
-                0
-            };
+            let start_elem = usize::from(matches!(unit, NumpyTimeUnit::Picosecond));
 
             println!("{path:?}");
             println!("{elements:?}");
@@ -474,9 +471,9 @@ fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
 
     // Test storing and retrieving raw i64 values (seconds since Unix epoch)
     let i64_values = vec![
-        0_i64,     // Unix epoch (1970-01-01T00:00:00Z)
-        i64::MIN,  // NaT (Not a Time)
-        946782245, // 2000-01-02T03:04:05Z
+        0_i64,       // Unix epoch (1970-01-01T00:00:00Z)
+        i64::MIN,    // NaT (Not a Time)
+        946_782_245, // 2000-01-02T03:04:05Z
     ];
 
     array.store_array_subset(&array.subset_all(), &i64_values, &Resources::default())?;
@@ -530,9 +527,9 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
 
     // Test storing and retrieving raw i64 values (milliseconds)
     let i64_values = vec![
-        0_i64,    // Zero duration
-        i64::MIN, // NaT (Not a Time)
-        86400000, // 1 day in milliseconds
+        0_i64,      // Zero duration
+        i64::MIN,   // NaT (Not a Time)
+        86_400_000, // 1 day in milliseconds
     ];
 
     array.store_array_subset(&array.subset_all(), &i64_values, &Resources::default())?;
@@ -548,7 +545,7 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
             .retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all(), &Resources::default())?;
         assert_eq!(chrono_values[0], TimeDelta::default());
         assert_eq!(chrono_values[1], TimeDelta::MIN);
-        assert_eq!(chrono_values[2], TimeDelta::milliseconds(86400000));
+        assert_eq!(chrono_values[2], TimeDelta::milliseconds(86_400_000));
     }
 
     #[cfg(feature = "jiff")]
@@ -560,7 +557,7 @@ fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
         )?;
         assert_eq!(jiff_values[0], SignedDuration::ZERO);
         assert_eq!(jiff_values[1], SignedDuration::MIN);
-        assert_eq!(jiff_values[2], SignedDuration::from_millis(86400000));
+        assert_eq!(jiff_values[2], SignedDuration::from_millis(86_400_000));
     }
 
     Ok(())

@@ -63,7 +63,9 @@ impl ShardingCodecBound {
                     let Some(shard) = reads.pop().flatten() else {
                         return place_fill_value(
                             self.inner_codecs.data_type(),
-                            self.inner_codecs.fill_value(),
+                            self.inner_codecs
+                                .fill_value()
+                                .ok_or(CodecError::UndefinedFillValue)?,
                             request,
                         );
                     };
@@ -86,7 +88,9 @@ impl ShardingCodecBound {
                 let Some(encoded_index) = reads.pop().flatten() else {
                     return place_fill_value(
                         self.inner_codecs.data_type(),
-                        self.inner_codecs.fill_value(),
+                        self.inner_codecs
+                            .fill_value()
+                            .ok_or(CodecError::UndefinedFillValue)?,
                         request,
                     );
                 };
@@ -229,7 +233,9 @@ impl ShardingCodecBound {
         if indexer.is_empty() {
             return place_fill_value(
                 self.inner_codecs.data_type(),
-                self.inner_codecs.fill_value(),
+                self.inner_codecs
+                    .fill_value()
+                    .ok_or(CodecError::UndefinedFillValue)?,
                 request,
             );
         }
@@ -447,7 +453,9 @@ impl ShardingCodecBound {
         } else {
             match place_fill_value(
                 self.inner_codecs.data_type(),
-                self.inner_codecs.fill_value(),
+                self.inner_codecs
+                    .fill_value()
+                    .ok_or(CodecError::UndefinedFillValue)?,
                 request,
             )? {
                 Outcome::Done => Ok(None),
@@ -641,7 +649,9 @@ impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
             views.with_target(|target| {
                 copy_fill_value_into(
                     self.inner_codecs.data_type(),
-                    self.inner_codecs.fill_value(),
+                    self.inner_codecs
+                        .fill_value()
+                        .ok_or(CodecError::UndefinedFillValue)?,
                     target,
                 )
             })?;
@@ -676,7 +686,9 @@ impl<'a, I: ShardIndex + 'a> SubchunksIntoViews<'a, I> {
                     return views.with_target(|target| {
                         copy_fill_value_into(
                             inner_codecs.data_type(),
-                            inner_codecs.fill_value(),
+                            inner_codecs
+                                .fill_value()
+                                .ok_or(CodecError::UndefinedFillValue)?,
                             target,
                         )
                     });
@@ -880,7 +892,10 @@ impl PreparedDecoder for ShardDecoder {
                     let Some(shard) = reads.pop().flatten() else {
                         return place_fill_value(
                             self.codec.inner_codecs.data_type(),
-                            self.codec.inner_codecs.fill_value(),
+                            self.codec
+                                .inner_codecs
+                                .fill_value()
+                                .ok_or(CodecError::UndefinedFillValue)?,
                             request,
                         );
                     };

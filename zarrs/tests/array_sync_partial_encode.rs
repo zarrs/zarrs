@@ -132,11 +132,11 @@ fn test_array_to_array_codec_sync_partial_encoding<
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().unwrap();
     assert!(!partial_encoder.exists().unwrap());
-
     Ok(())
 }
 
 /// Test sync partial encoding for bytes-to-bytes codecs in isolation  
+#[allow(clippy::too_many_lines)]
 fn test_bytes_to_bytes_codec_sync_partial_encoding<
     T: BytesToBytesCodecTraits + Send + Sync + 'static,
 >(
@@ -280,7 +280,6 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     println!("Codec {codec_name} partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().unwrap();
     assert!(!partial_encoder.exists().unwrap());
-
     Ok(())
 }
 

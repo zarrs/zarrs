@@ -343,7 +343,7 @@ pub(crate) fn write_current(
     let bytes = to_array_bytes(data)?;
     array
         .store_array_subset(
-            &ArraySubset::new_with_shape(shape.to_vec()),
+            &ArraySubset::new_with_shape(shape),
             bytes,
             &Resources::default(),
         )
@@ -356,7 +356,7 @@ pub(crate) fn read_current(path: &Path, shape: &[u64]) -> Result<Data, String> {
     let array = Array::open(store, ARRAY_PATH).map_err(|err| format!("open array: {err}"))?;
     let bytes = array
         .retrieve_array_subset::<ArrayBytes>(
-            &ArraySubset::new_with_shape(shape.to_vec()),
+            &ArraySubset::new_with_shape(shape),
             &Resources::default(),
         )
         .map_err(|err| format!("retrieve array subset: {err}"))?;

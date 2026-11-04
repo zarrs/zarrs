@@ -17,7 +17,7 @@ fn codec_chain_bound_context_and_runtime() -> Result<(), Box<dyn std::error::Err
     let codecs = array.codecs_bound();
 
     assert_eq!(codecs.data_type(), array.data_type());
-    assert_eq!(codecs.fill_value(), array.fill_value());
+    assert_eq!(codecs.fill_value(), Some(array.fill_value()));
 
     let shape = array.chunk_shape(&[0])?;
     let decoded = ArrayBytes::from(vec![1, 2, 3, 4]);

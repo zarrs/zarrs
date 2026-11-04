@@ -29,15 +29,12 @@ pub enum ArraySubsetError {
     IncompatibleDimensionality { got: usize, expected: usize },
     /// Incompatible start and shape.
     #[error("incompatible start {start:?} with shape {shape:?}")]
-    IncompatibleStartShape {
-        start: ArrayIndices,
-        shape: ArrayShape,
-    },
+    IncompatibleStartShape { start: Vec<u64>, shape: ArrayShape },
     /// Incompatible start and end indices.
     #[error("incompatible start {start:?} with end {end:?} (inclusive: {inclusive})")]
     IncompatibleStartEnd {
-        start: ArrayIndices,
-        end: ArrayIndices,
+        start: Vec<u64>,
+        end: Vec<u64>,
         inclusive: bool,
     },
     /// Incompatible offset.
@@ -119,7 +116,7 @@ impl ArraySubset {
             })
         } else {
             Err(ArraySubsetError::IncompatibleStartShape {
-                start: start.into(),
+                start: start.to_vec(),
                 shape: shape.to_vec(),
             })
         }
@@ -136,8 +133,8 @@ impl ArraySubset {
         let (start, end) = (start.as_ref(), end.as_ref());
         if start.len() != end.len() || std::iter::zip(start, end).any(|(start, end)| end < start) {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start: start.into(),
-                end: end.into(),
+                start: start.to_vec(),
+                end: end.to_vec(),
                 inclusive: true,
             })
         } else {
@@ -162,8 +159,8 @@ impl ArraySubset {
         let (start, end) = (start.as_ref(), end.as_ref());
         if start.len() != end.len() || std::iter::zip(start, end).any(|(start, end)| end < start) {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start: start.into(),
-                end: end.into(),
+                start: start.to_vec(),
+                end: end.to_vec(),
                 inclusive: false,
             })
         } else {
@@ -189,18 +186,18 @@ impl ArraySubset {
     /// Returns an error if `end` does not match the array subset dimensionality.
     pub fn bound(&self, end: &[u64]) -> Result<Self, ArraySubsetError> {
         if end.len() == self.start.len() {
-            let start = std::iter::zip(&self.start, end)
-                .map(|(&a, &b)| std::cmp::min(a, b))
-                .collect::<ArrayIndices>();
-            let end_exc = std::iter::zip(&self.start, &self.shape).map(|(&s, &l)| s + l);
-            let end = std::iter::zip(end_exc, end)
-                .map(|(a, &b)| std::cmp::min(a, b))
-                .collect::<ArrayIndices>();
-            Ok(Self::new_with_start_end_exc(start, end)?)
+            // Bounding the start and end alike keeps the end at or after the start
+            let (start, shape) = std::iter::zip(std::iter::zip(&self.start, &self.shape), end)
+                .map(|((&start, &size), &end)| {
+                    let bounded_start = start.min(end);
+                    (bounded_start, (start + size).min(end) - bounded_start)
+                })
+                .unzip();
+            Ok(Self { start, shape })
         } else {
             Err(ArraySubsetError::IncompatibleStartEnd {
-                start: self.start.clone(),
-                end: end.into(),
+                start: self.start.to_vec(),
+                end: end.to_vec(),
                 inclusive: false,
             })
         }
@@ -223,7 +220,11 @@ impl ArraySubset {
     /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
     #[must_use]
     pub fn chunk_shape(&self) -> Option<ChunkShape> {
-        self.shape.iter().map(|s| NonZeroU64::new(*s)).collect()
+        let mut shape = Vec::with_capacity(self.shape.len());
+        for &size in &self.shape {
+            shape.push(NonZeroU64::new(size)?);
+        }
+        Some(shape)
     }
 
     /// Return the shape of the array subset.
@@ -294,7 +295,7 @@ impl ArraySubset {
         ArraySubsetTraits::indices(self)
     }
 
-    /// Returns an iterator over the linearised indices of elements within the subset.
+    /// Returns an iterator over the (lexicographic-order) linearised indices of elements within the subset.
     ///
     /// # Errors
     /// Returns [`IndexerError`] if the `array_shape` has an incompatible dimensionality or does not encapsulate this array subset.

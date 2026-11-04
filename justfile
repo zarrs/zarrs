@@ -7,34 +7,34 @@ help:
 
 # Build (cargo check) with all / default / no default features
 build:
-    cargo +{{TOOLCHAIN}} check
-    cargo +{{TOOLCHAIN}} check --all-features
-    cargo +{{TOOLCHAIN}} check --no-default-features
+    cargo +{{TOOLCHAIN}} check --quiet
+    cargo +{{TOOLCHAIN}} check --quiet --all-features
+    cargo +{{TOOLCHAIN}} check --quiet --no-default-features
 
 # Test with all features
 test *args:
-    cargo +{{TOOLCHAIN}} test --all-features {{args}}
-    cargo +{{TOOLCHAIN}} test --all-features --examples {{args}}
+    cargo +{{TOOLCHAIN}} test --quiet --all-features {{args}}
+    cargo +{{TOOLCHAIN}} test --quiet --all-features --examples {{args}}
 
 # Run ignored tests
 test_ignored:
-    cargo +{{TOOLCHAIN}} test --all-features -- --ignored
+    cargo +{{TOOLCHAIN}} test --quiet --all-features -- --ignored
 
 # Format with rustfmt
 fmt:
-    cargo +nightly fmt
+    cargo +nightly fmt --quiet --all
 
 # Lint with clippy
 clippy:
-    cargo +{{TOOLCHAIN}} clippy --all-features --all-targets -- -D warnings -A clippy::pedantic
+    cargo +{{TOOLCHAIN}} clippy --quiet --all-features --all-targets -- -D warnings -A clippy::pedantic
 
 # Generate documentation
 doc:
-    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc -Z unstable-options -Z rustdoc-scrape-examples --all-features --no-deps
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc -Z unstable-options -Z rustdoc-scrape-examples --quiet --all-features --no-deps
 
 # Build/test/clippy/doc/check formatting - recommended before a PR
 check: build test clippy doc
-    cargo +nightly fmt --all -- --check
+    cargo +nightly fmt --quiet --all -- --check
 
 # Build (WASM)
 build_wasm:
@@ -46,7 +46,7 @@ check_wasm: build_wasm
 
 # Run clippy with extra lints
 _clippy_extra:
-    cargo +{{TOOLCHAIN}} clippy --all-features -- -D warnings -W clippy::nursery -A clippy::significant-drop-tightening -A clippy::significant-drop-in-scrutinee
+    cargo +{{TOOLCHAIN}} clippy --quiet --all-features -- -D warnings -W clippy::nursery -A clippy::significant-drop-tightening -A clippy::significant-drop-in-scrutinee
 
 _miri:
     MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-ignore-leaks -Zmiri-tree-borrows" cargo +{{TOOLCHAIN}} miri test -p zarrs --all-features
@@ -99,7 +99,7 @@ _bench mode target filter *args:
         list) settings=(--list) ;;
     esac
     if [[ {{quote(target)}} == all ]]; then
-        targets=(array_subset array_uncompressed array_blosc codecs fill_value zero_copy_paths deferred_decode_into array_ops driver_overhead io_latency shard_write sharded_partial_read_memory)
+        targets=(array_subset array_uncompressed array_blosc codecs fill_value array_bytes_eq zero_copy_paths deferred_decode_into array_ops driver_overhead io_latency shard_write sharded_partial_read_memory)
     else
         targets=({{quote(target)}})
     fi

@@ -188,6 +188,7 @@ impl CodecTraitsV3 for ReshapeCodec {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use crate::array::{CodecChainBound, ComputeResources, Resources};
@@ -244,7 +245,7 @@ mod tests {
         json: &str,
         data_type: DataType,
         fill_value: FillValue,
-        output_shape: Vec<NonZeroU64>,
+        output_shape: &[NonZeroU64],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let shape = vec![
             NonZeroU64::new(5).unwrap(),
@@ -259,7 +260,7 @@ mod tests {
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
         let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?).with_context(
             data_type,
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )?;
         assert_eq!(codec.encoded_shape(&shape)?, output_shape);
@@ -295,7 +296,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -316,7 +317,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -333,7 +334,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -354,7 +355,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -375,7 +376,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -397,7 +398,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_ok()
         );
@@ -419,7 +420,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_err()
         );
@@ -441,7 +442,7 @@ mod tests {
                 JSON,
                 data_type::uint32(),
                 FillValue::from(0u32),
-                output_shape
+                &output_shape
             )
             .is_err()
         );
@@ -475,7 +476,7 @@ mod tests {
         let codec = Arc::new(ReshapeCodec::new(reshape_shape))
             .with_context(
                 data_type::uint8(),
-                FillValue::from(0u8),
+                Some(FillValue::from(0u8)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -582,7 +583,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -606,7 +607,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -654,7 +655,7 @@ mod tests {
         ])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -680,6 +681,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn codec_reshape_encoded_chunk_grid() {
         struct TestCase {
             name: &'static str,
@@ -848,7 +850,7 @@ mod tests {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
                 .with_context(
                     data_type::uint8(),
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -911,7 +913,7 @@ mod tests {
             let codec = Arc::new(ReshapeCodec::new(case.reshape_shape))
                 .with_context(
                     data_type::uint8(),
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -938,7 +940,7 @@ mod tests {
         ))])))
         .with_context(
             data_type::uint8(),
-            FillValue::from(0u8),
+            Some(FillValue::from(0u8)),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -970,12 +972,12 @@ mod tests {
     }
 
     fn partial_decoder_u16(
-        codec: Arc<ReshapeCodec>,
+        codec: &Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
     ) -> MemoryPartialDecoder {
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
-        MemoryPartialDecoder::encode(chain_u16(codec), bytes, shape)
+        MemoryPartialDecoder::encode(chain_u16(codec.clone()), bytes, shape)
     }
 
     fn partial_decode_u16(
@@ -989,13 +991,13 @@ mod tests {
     }
 
     fn partial_encode_u16(
-        codec: Arc<ReshapeCodec>,
+        codec: &Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
         indexer: &dyn Indexer,
         elements_partial_encode: Vec<u16>,
     ) -> Vec<u16> {
-        let codecs = chain_u16(codec);
+        let codecs = chain_u16(codec.clone());
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
         let mut encoded = Some(
             codecs
@@ -1054,7 +1056,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
         assert_eq!(
@@ -1092,7 +1094,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
         assert_eq!(partial_decode_u16(&partial_decoder, &indexer), [23, 1, 14]);
@@ -1117,7 +1119,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..3, 2..4]);
         assert_eq!(
@@ -1155,7 +1157,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let indexer = vec![vec![0, 2, 3], vec![1, 0, 0], vec![1, 2, 2]];
         assert_eq!(partial_decode_u16(&partial_decoder, &indexer), [11, 12, 22]);
@@ -1179,7 +1181,7 @@ mod tests {
             ReshapeDim::Size(NonZeroU64::new(2).unwrap()),
         ])));
         let shape = vec![NonZeroU64::new(12).unwrap()];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..12).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..12).collect());
 
         let decoded_region = ArraySubset::new_with_ranges(&[3..10]);
         assert_eq!(
@@ -1209,7 +1211,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..1, 0..1, 2..4]),
@@ -1232,7 +1234,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let partial_decoder = partial_decoder_u16(codec, &shape, (0..24).collect());
+        let partial_decoder = partial_decoder_u16(&codec, &shape, (0..24).collect());
 
         let wrong_dimensionality = ArraySubset::new_with_ranges(&[0..1, 0..1]);
         assert!(
@@ -1285,7 +1287,7 @@ mod tests {
 
         assert_eq!(
             partial_encode_u16(
-                codec,
+                &codec,
                 &shape,
                 (0..24).collect(),
                 &decoded_region,
@@ -1331,7 +1333,7 @@ mod tests {
 
         assert_eq!(
             partial_encode_u16(
-                codec,
+                &codec,
                 &shape,
                 (0..24).collect(),
                 &indexer,

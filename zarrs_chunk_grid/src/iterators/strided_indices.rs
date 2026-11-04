@@ -1,4 +1,6 @@
-use crate::ArrayIndices;
+use tinyvec::TinyVec;
+
+use super::odometer::{GridDimension, Odometer, unravel};
 
 /// The linearised indices of a regular grid of positions in an array, in C order.
 ///
@@ -7,13 +9,26 @@ use crate::ArrayIndices;
 #[derive(Clone)]
 pub(crate) struct StridedIndices {
     /// The number of positions.
-    len: usize,
+    num_elements: u64,
     /// The linearised index of the first position.
     first: u64,
-    /// The number of positions along each dimension in which there is more than one, outermost first.
-    counts: ArrayIndices,
-    /// The distance between the linearised indices of adjacent positions along each dimension of `counts`.
-    strides: ArrayIndices,
+    /// The dimensions in which there is more than one position, outermost first.
+    dimensions: TinyVec<[StridedDimension; 4]>,
+}
+
+/// A dimension of [`StridedIndices`].
+#[derive(Clone, Copy, Default)]
+struct StridedDimension {
+    /// The number of positions.
+    count: u64,
+    /// The distance between the linearised indices of adjacent positions.
+    stride: u64,
+}
+
+impl GridDimension for StridedDimension {
+    fn count(&self) -> u64 {
+        self.count
+    }
 }
 
 impl StridedIndices {
@@ -23,107 +38,116 @@ impl StridedIndices {
     /// The positions must be within the array if there are any.
     ///
     /// # Panics
-    /// Panics if the number of positions exceeds [`usize::MAX`].
+    /// Panics if the linearised index of a position or the number of positions exceeds [`u64::MAX`].
     pub(crate) fn new(starts: &[u64], counts: &[u64], array_shape: &[u64]) -> Self {
         debug_assert_eq!(starts.len(), array_shape.len());
         debug_assert_eq!(counts.len(), array_shape.len());
-        let len = usize::try_from(counts.iter().product::<u64>()).unwrap();
+        let mut num_elements = 0;
         let mut first = 0;
-        let mut stride_counts = ArrayIndices::new();
-        let mut strides = ArrayIndices::new();
-        if len > 0 {
-            let mut stride = 1;
+        let mut dimensions = TinyVec::<[StridedDimension; 4]>::new();
+        if !counts.contains(&0) {
+            // The linearised indices fit in a `u64` if the last does, since it is the greatest
+            let mut last: u64 = 0;
+            // The stride is only needed along dimensions with a nonzero index, so it may overflow beyond them
+            let mut stride = Some(1u64);
             for ((&start, &count), &array_size) in
                 std::iter::zip(starts, counts).zip(array_shape).rev()
             {
-                first += start * stride;
-                if count > 1 {
-                    stride_counts.push(count);
-                    strides.push(stride);
+                let end = start + (count - 1);
+                if end > 0 {
+                    let stride = stride.expect("linearised indices exceed u64::MAX");
+                    last = end
+                        .checked_mul(stride)
+                        .and_then(|offset| last.checked_add(offset))
+                        .expect("linearised indices exceed u64::MAX");
+                    first += start * stride;
+                    if count > 1 {
+                        dimensions.push(StridedDimension { count, stride });
+                    }
                 }
-                stride *= array_size;
+                stride = stride.and_then(|stride| stride.checked_mul(array_size));
             }
-            stride_counts.reverse();
-            strides.reverse();
+            dimensions.reverse();
+            num_elements = dimensions
+                .iter()
+                .try_fold(1u64, |num_elements, dimension| {
+                    num_elements.checked_mul(dimension.count)
+                })
+                .expect("the number of positions exceeds u64::MAX");
         }
         Self {
-            len,
+            num_elements,
             first,
-            counts: stride_counts,
-            strides,
+            dimensions,
         }
     }
 
     /// Return the number of positions.
+    pub(crate) fn num_elements(&self) -> u64 {
+        self.num_elements
+    }
+
+    /// Return the number of positions.
+    ///
+    /// # Panics
+    /// Panics if the number of positions exceeds [`usize::MAX`].
     pub(crate) fn len(&self) -> usize {
-        self.len
+        usize::try_from(self.num_elements).unwrap()
     }
 
     /// The linearised index of the position at `index`.
-    fn at(&self, mut index: u64) -> u64 {
+    fn at(&self, index: u64) -> u64 {
         let mut linearised = self.first;
-        for (&count, &stride) in std::iter::zip(&self.counts, &self.strides).rev() {
-            linearised += (index % count) * stride;
-            index /= count;
-        }
+        unravel(index, &self.dimensions, |dimension, position| {
+            linearised += position * dimension.stride;
+        });
         linearised
     }
 }
 
 /// An iterator position over [`StridedIndices`].
 ///
-/// Positions are iterated forwards like an odometer, by adding the stride of the innermost dimension and carrying into
-/// outer dimensions, so that no indices are unravelled or ravelled.
+/// Positions are iterated forwards with an [`Odometer`], adding the stride of each dimension that steps rather than
+/// ravelling indices.
 #[derive(Clone)]
 pub(crate) struct StridedOdometer {
-    /// The position of the next index from the front along each dimension of the counts.
-    positions: ArrayIndices,
+    odometer: Odometer,
     /// The next linearised index from the front.
     front: u64,
-    /// The positions of the remaining indices.
-    range: std::ops::Range<usize>,
 }
 
 impl StridedOdometer {
+    /// # Panics
+    /// Panics if the number of positions exceeds [`usize::MAX`].
     pub(crate) fn new(indices: &StridedIndices) -> Self {
         Self {
-            positions: crate::zero_indices(indices.counts.len()),
+            odometer: Odometer::new(&indices.dimensions, 0..indices.len()),
             front: indices.first,
-            range: 0..indices.len,
         }
     }
 
     #[inline]
     pub(crate) fn next(&mut self, indices: &StridedIndices) -> Option<u64> {
-        if self.range.is_empty() {
-            return None;
-        }
         let linearised = self.front;
-        self.range.start += 1;
-        if !self.range.is_empty() {
-            for ((position, &count), &stride) in
-                std::iter::zip(&mut self.positions, &indices.counts)
-                    .zip(&indices.strides)
-                    .rev()
-            {
-                *position += 1;
-                self.front += stride;
-                if *position < count {
-                    break;
+        let front = &mut self.front;
+        self.odometer
+            .pop_front(&indices.dimensions, |dimension, position| {
+                if position == 0 {
+                    *front -= (dimension.count - 1) * dimension.stride;
+                } else {
+                    *front += dimension.stride;
                 }
-                *position = 0;
-                self.front -= count * stride;
-            }
-        }
-        Some(linearised)
+            })
+            .then_some(linearised)
     }
 
     pub(crate) fn next_back(&mut self, indices: &StridedIndices) -> Option<u64> {
-        let index = self.range.next_back()?;
-        Some(indices.at(index as u64))
+        let index = self.odometer.pop_back()?;
+        Some(indices.at(index))
     }
 
     pub(crate) fn size_hint(&self) -> (usize, Option<usize>) {
-        self.range.size_hint()
+        let length = self.odometer.len();
+        (length, Some(length))
     }
 }

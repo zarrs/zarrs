@@ -1208,7 +1208,7 @@ mod tests {
             let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
             let fill_value = data_type.fill_value_v3(&metadata).unwrap();
             assert_eq!(fill_value.as_ne_bytes(), [170]);
-            assert_eq!(microfloat::f8e5m2::from_bits(170).to_f32(), -0.046875);
+            assert_eq!(microfloat::f8e5m2::from_bits(170).to_f32(), -0.046_875);
             assert_eq!(
                 serde_json::from_str::<FillValueMetadata>(r"-0.046875").unwrap(),
                 data_type.metadata_fill_value(&fill_value).unwrap()
@@ -1727,6 +1727,27 @@ mod tests {
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
         let data_type = DataType::from_metadata(&metadata).unwrap();
         assert_eq!(data_type.size(), DataTypeSize::Fixed(2));
+    }
+
+    #[test]
+    fn data_type_raw_bits_metadata_fill_value_size() {
+        let data_type = raw_bits(2);
+        assert!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1]))
+                .is_err()
+        );
+        assert!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1, 2, 3]))
+                .is_err()
+        );
+        assert_eq!(
+            data_type
+                .metadata_fill_value(&FillValue::new(vec![1, 2]))
+                .unwrap(),
+            serde_json::from_str::<FillValueMetadata>("[1, 2]").unwrap()
+        );
     }
 
     #[test]

@@ -396,7 +396,7 @@ fn sharding_codec_chain(data_type: &DataType) -> Arc<CodecChain> {
 /// Store and retrieve `data` in the whole array.
 fn assert_store_round_trip<T>(
     array: &Array<MemoryStore>,
-    data: T,
+    data: &T,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: IntoArrayBytes<'static> + FromArrayBytes + Clone + PartialEq + std::fmt::Debug,
@@ -405,7 +405,7 @@ where
     array.store_array_subset(&subset, data.clone(), &Resources::default())?;
     assert_eq!(
         array.retrieve_array_subset::<T>(&subset, &Resources::default())?,
-        data
+        data.clone()
     );
     Ok(())
 }
@@ -423,22 +423,23 @@ fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std
     builder.array_to_bytes_codec(Arc::new(vlen));
     let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
     let data = ["a", "bb", "", "cc"].map(String::from).to_vec();
-    assert_store_round_trip(&array, data)?;
+    assert_store_round_trip(&array, &data)?;
 
     let optional = OptionalCodec::new(
         bytes_codec_chain(),
         sharding_codec_chain(&data_type::uint16()),
     );
+    // A non-null fill value, since sharding is not permitted in the data codecs with a null fill value
     let mut builder = ArrayBuilder::new(
         vec![4],
         vec![4],
         data_type::uint16().to_optional(),
-        FillValue::from(None::<u16>),
+        FillValue::from(Some(0u16)),
     );
     builder.array_to_bytes_codec(Arc::new(optional));
     let array = builder.build(Arc::new(MemoryStore::default()), "/array")?;
     let data = vec![Some(1u16), None, Some(3), Some(4)];
-    assert_store_round_trip(&array, data)?;
+    assert_store_round_trip(&array, &data)?;
     Ok(())
 }
 

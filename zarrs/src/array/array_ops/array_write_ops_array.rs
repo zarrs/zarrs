@@ -5,7 +5,6 @@ use super::{ArrayWriteOps, *};
 use crate::array::ChunkShapeTraits;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::CodecError;
-use zarrs_storage::StorageHandle;
 
 #[inherent]
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
@@ -49,7 +48,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         let options = self.metadata_erase_version();
-        let storage_handle = StorageHandle::new(self.storage.clone());
+        let storage_handle = self.writable_storage()?;
         match options {
             MetadataEraseVersion::Default => match &*self.metadata {
                 ArrayMetadata::V3(_) => storage_handle.erase(&meta_key_v3(self.path())),

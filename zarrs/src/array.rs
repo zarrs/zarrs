@@ -545,7 +545,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Create bound codecs
         let codecs_bound = codecs.with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &codec_specific_options,
         )?;
 
@@ -663,7 +663,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codec_specific_options = CodecSpecificOptions::default();
         let codecs_bound = codecs.with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &codec_specific_options,
         )?;
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;

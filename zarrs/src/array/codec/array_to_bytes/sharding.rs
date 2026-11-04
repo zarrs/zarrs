@@ -574,6 +574,7 @@ fn subchunk_updates<'a>(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::codec::test_util::MemoryPartialDecoder;
     use std::sync::Arc;
@@ -646,6 +647,54 @@ mod tests {
         Partial,
         All,
         None,
+    }
+
+    /// Every write order.
+    fn subchunk_write_orders() -> Vec<SubchunkWriteOrder> {
+        vec![
+            SubchunkWriteOrder::Lexicographic,
+            SubchunkWriteOrder::Colexicographic,
+            SubchunkWriteOrder::Morton,
+            SubchunkWriteOrder::Unordered,
+        ]
+    }
+
+    /// Bit-interleaved Morton code, first axis most significant.
+    fn morton_key(indices: &[u64]) -> u64 {
+        let mut key = 0;
+        for bit in (0..u64::BITS as usize / indices.len()).rev() {
+            for &c in indices {
+                key = (key << 1) | ((c >> bit) & 1);
+            }
+        }
+        key
+    }
+
+    /// Assert the written subchunks (sorted by offset) appear in the order implied by `order`.
+    ///
+    /// Unordered orders are not checked.
+    fn assert_subchunk_write_order(index: &[u64], order: SubchunkWriteOrder, grid_shape: &[u64]) {
+        let mut written: Vec<(u64, u64)> = index
+            .chunks(2)
+            .enumerate()
+            .filter(|(_, e)| e[0] != u64::MAX)
+            .map(|(i, e)| (e[0], i as u64))
+            .collect();
+        written.sort_unstable();
+        let actual: Vec<u64> = written.iter().map(|(_, i)| *i).collect();
+        let mut expected = actual.clone();
+        let unravel = |i: u64| crate::array::unravel_index(i, grid_shape).unwrap();
+        match order {
+            SubchunkWriteOrder::Unordered => return,
+            SubchunkWriteOrder::C | SubchunkWriteOrder::Lexicographic => expected.sort_unstable(),
+            SubchunkWriteOrder::Colexicographic => expected.sort_by_key(|&i| {
+                let mut idx = unravel(i);
+                idx.reverse();
+                idx
+            }),
+            SubchunkWriteOrder::Morton => expected.sort_by_key(|&i| morton_key(&unravel(i))),
+        }
+        assert_eq!(actual, expected);
     }
 
     fn codec_sharding_round_trip_impl(
@@ -722,51 +771,24 @@ mod tests {
                 resources,
             )
             .unwrap();
+        let grid_shape = [chunk_size / subchunk_size; NUM_AXES];
+        let subchunk_write_order = codec.options.subchunk_write_order();
         match fill_value_amount {
-            FillValueAmount::None => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => (),
-                SubchunkWriteOrder::C => {
-                    let mut offset_with_len = index.chunks(2).collect::<Vec<&[u64]>>();
-                    offset_with_len.sort_by_key(|x| x[0]);
-                    // The shard index has the chunks in row-major/C order already so sorting by the offset should not alter the layout because the offset is C-ordered.
-                    assert_eq!(
-                        offset_with_len
-                            .into_iter()
-                            .flat_map(|e| e.iter().copied())
-                            .collect::<Vec<u64>>(),
-                        index
-                    );
-                }
-            },
-            FillValueAmount::Partial => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => (),
-                SubchunkWriteOrder::C => {
-                    // The sorted index with unwritten elements filtered matches that of the real index
-                    let filtered_index = index
-                        .into_iter()
-                        .filter(|e| *e != u64::MAX)
-                        .collect::<Vec<u64>>();
-                    let mut offset_with_len = filtered_index.chunks(2).collect::<Vec<&[u64]>>();
-                    offset_with_len.sort_by_key(|x| x[0]);
-                    assert_eq!(
-                        offset_with_len
-                            .into_iter()
-                            .flat_map(|e| e.iter().copied())
-                            .collect::<Vec<u64>>(),
-                        filtered_index
-                    );
-                    // Assert the number of chunks written in the shard is correct.
-                    // 2 times that for offset + len per chunk.
-                    assert_eq!(filtered_index.len(), 6);
-                }
-            },
+            FillValueAmount::None => {
+                assert_subchunk_write_order(&index, subchunk_write_order, &grid_shape);
+            }
+            FillValueAmount::Partial => {
+                // 3 subchunks written, 2 entries (offset + len) each.
+                assert_eq!(index.iter().filter(|e| **e != u64::MAX).count(), 6);
+                assert_subchunk_write_order(&index, subchunk_write_order, &grid_shape);
+            }
             FillValueAmount::All => assert_eq!(index, vec![u64::MAX; 8 * 8 * 8 * 2]),
         }
     }
 
     #[test]
     fn codec_sharding_round_trip1() {
-        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Unordered] {
+        for subchunk_write_order in subchunk_write_orders() {
             for index_at_end in [true, false] {
                 for fill_value_amount in [
                     FillValueAmount::All,
@@ -869,7 +891,7 @@ mod tests {
             .build()
             .with_context(
                 data_type,
-                fill_value,
+                Some(fill_value),
                 &CodecSpecificOptions::default().with_option(
                     ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
                 ),
@@ -931,7 +953,7 @@ mod tests {
                 calculate_chunks_per_shard(&shard_shape_nz, &to_nonzero(&subchunk_shape)).unwrap();
             let bytes = nondivisible_data(&shard_shape, &subchunk_shape, &data_type);
             for (subchunk_write_order, index_at_end, unbounded, parallel) in itertools::iproduct!(
-                [SubchunkWriteOrder::C, SubchunkWriteOrder::Unordered],
+                subchunk_write_orders(),
                 [true, false],
                 [true, false],
                 [true, false]
@@ -966,6 +988,8 @@ mod tests {
                 assert_eq!(index.len() as u64, chunks_per_shard.num_elements_u64() * 2);
                 assert_eq!(&index[..2], &[u64::MAX, u64::MAX]);
                 assert_eq!(index.iter().filter(|&&v| v == u64::MAX).count(), 2);
+                let grid_shape: Vec<u64> = chunks_per_shard.iter().map(|n| n.get()).collect();
+                assert_subchunk_write_order(&index, subchunk_write_order, &grid_shape);
 
                 // Decode into a larger output
                 let output_shape: Vec<u64> = shard_shape.iter().map(|s| s + 2).collect();
@@ -1170,7 +1194,7 @@ mod tests {
                 )
                 .with_context(
                     data_type::uint8(),
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -1208,7 +1232,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec =
+        let codec = Arc::new(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
@@ -1216,9 +1240,14 @@ mod tests {
                     ShardingIndexLocation::Start
                 })
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
-                .build()
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
-                .unwrap();
+                .build(),
+        )
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
 
         let encoded = codec
             .encode(bytes.clone(), &shape, options, resources)
@@ -1245,8 +1274,8 @@ mod tests {
                             &options,
                             &resources,
                             unbounded,
-                            all_fill_value,
                             index_at_end,
+                            all_fill_value,
                             vec![],
                         )
                         .await;
@@ -1296,7 +1325,7 @@ mod tests {
         )
         .with_context(
             data_type.clone(),
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -1335,8 +1364,8 @@ mod tests {
                             &options,
                             &resources,
                             unbounded,
-                            all_fill_value,
                             index_at_end,
+                            all_fill_value,
                         );
                     }
                 }
@@ -1362,7 +1391,11 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1408,7 +1441,11 @@ mod tests {
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1451,7 +1488,7 @@ mod tests {
 
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
         let data_type = data_type::uint16();
-        let fill_value = FillValue::from(0u16);
+        let fill_value = Some(FillValue::from(0u16));
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let original_bytes: ArrayBytes = bytes.into();

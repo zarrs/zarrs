@@ -21,9 +21,16 @@
   - `zarrs: 0.11-0.12` `numcodecs.pcodec` codec with the unregistered `pcodec` name (legacy configurations written by `zarrs` 0.11-0.15 are also read)
   - `zarrs: 0.11-0.12` `numcodecs.bz2` codec with the unregistered `bz2` name
   - `zarrs: 0.10-0.12` `zfp` codec with the non-conformant `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (registered as `fixed_rate`, `fixed_precision`, and `fixed_accuracy`)
+- `zarrs: 0.23.x` the `zarrs.optional` codec bound its `data_codecs` with a zero fill value rather than the unwrapped fill value of the `optional` data type (e.g. `[42]` -> `42`)
+  - Chunks are only affected if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). `zarrs` 0.24+ decodes subchunks of zeros omitted by `zarrs` 0.23 as the unwrapped fill value
+- `zarrs: 0.23.x` it was possible to create non-conformant arrays with a codec dependent on the fill value (e.g. `sharding_indexed`) in the `data_codecs` of the `zarrs.optional` codec with a `null` fill value, which the `optional` codec specification forbids
+  - `zarrs` 0.24+ `ArrayBuilder` returns an error for these arrays, and they fail to be opened
+- `zarrs: 0.18-0.23` partially encoding a chunk with `Array::[async_]partial_encoder` through a bytes-to-bytes codec (e.g. `zstd`) left trailing bytes of the previous chunk if the re-encoded chunk was shorter
+  - These chunks may fail to be decoded, depending on the codec and implementation (e.g. `zarrs` fails to decode them with `zstd`)
+  - `Array::store_chunk_subset` and similar methods were unaffected, since they only partially encode chunks if every codec supports partial encoding
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
 - `zarrs: 0.20-0.23` Data encoded with `packbits` with a `first_byte` or `last_byte` `padding_encoding` omitted the padding encoding byte if the components are whole bytes that are all packed (e.g. `float32`, or `int8` without `first_bit`/`last_bit`)
-  - These chunks fail to be decoded by other Zarr implementations, and by `zarrs` 0.24+
+  - These chunks fail to be decoded by other Zarr implementations and `zarrs` 0.24+
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`
   - `zarrs` will indefinitely support reading Zarr V2 data with `filters: []`

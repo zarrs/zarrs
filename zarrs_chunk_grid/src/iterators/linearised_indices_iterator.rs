@@ -1,9 +1,10 @@
 use std::iter::FusedIterator;
 
 use super::strided_indices::{StridedIndices, StridedOdometer};
-use crate::{ArraySubset, IndexerError};
+use crate::indexer::validate_start_shape;
+use crate::{ArraySubsetTraits, IndexerError};
 
-/// An iterator over the linearised indices in an array subset.
+/// An iterator over the linearised (lexicographic) indices in an array subset.
 ///
 /// Iterates over the last dimension fastest (i.e. C-contiguous order).
 /// For example, consider a 4x3 array with linearised element indices
@@ -26,43 +27,47 @@ impl LinearisedIndices {
     ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
-    pub fn new(subset: &ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
-        if subset.dimensionality() != array_shape.len() {
-            Err(IndexerError::new_incompatible_dimensionality(
-                subset.dimensionality(),
-                array_shape.len(),
-            ))
-        } else if !subset.is_empty()
-            && std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape)
-        {
-            // An empty subset references no elements, so it is always in-bounds.
-            Err(IndexerError::new_oob(
-                subset.end_exc(),
-                array_shape.to_vec(),
-            ))
-        } else {
-            // SAFETY: `array_shape` encapsulates `subset`
-            Ok(unsafe { Self::new_unchecked(subset, array_shape) })
-        }
+    ///
+    /// # Panics
+    /// Panics if the linearised indices of `subset` exceed [`u64::MAX`].
+    pub fn new(
+        subset: &(impl ArraySubsetTraits + ?Sized),
+        array_shape: &[u64],
+    ) -> Result<Self, IndexerError> {
+        let (start, shape) = (subset.start(), subset.shape());
+        validate_start_shape(&start, &shape, array_shape)?;
+        Ok(Self {
+            indices: StridedIndices::new(&start, &shape, array_shape),
+        })
     }
 
     /// Create a new linearised indices iterator.
     ///
     /// # Safety
     /// `array_shape` must encapsulate `subset`.
+    ///
+    /// # Panics
+    /// Panics if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`, or if the
+    /// linearised indices of `subset` exceed [`u64::MAX`].
     #[must_use]
-    pub unsafe fn new_unchecked(subset: &ArraySubset, array_shape: &[u64]) -> Self {
-        debug_assert_eq!(subset.dimensionality(), array_shape.len());
-        debug_assert!(
-            subset.is_empty()
-                || std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape)
-        );
+    pub unsafe fn new_unchecked(
+        subset: &(impl ArraySubsetTraits + ?Sized),
+        array_shape: &[u64],
+    ) -> Self {
+        let (start, shape) = (subset.start(), subset.shape());
+        // Out-of-bounds linearised indices are used to index buffers, so this is checked even in release builds
+        if let Err(err) = validate_start_shape(&start, &shape, array_shape) {
+            panic!("{err}");
+        }
         Self {
-            indices: StridedIndices::new(subset.start(), subset.shape(), array_shape),
+            indices: StridedIndices::new(&start, &shape, array_shape),
         }
     }
 
     /// Return the number of indices.
+    ///
+    /// # Panics
+    /// Panics if the number of indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn len(&self) -> usize {
         self.indices.len()
@@ -71,10 +76,13 @@ impl LinearisedIndices {
     /// Returns true if the number of indices is zero.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.indices.num_elements() == 0
     }
 
     /// Create a new serial iterator.
+    ///
+    /// # Panics
+    /// Panics if the number of indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn iter(&self) -> LinearisedIndicesIterator<'_> {
         <&Self as IntoIterator>::into_iter(self)
@@ -156,6 +164,8 @@ impl_linearised_indices_iterator!(LinearisedIndicesIntoIterator);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ArraySubset;
+    use crate::iterators::ContiguousLinearisedIndices;
 
     #[test]
     fn linearised_indices_iterator_partial() {
@@ -175,6 +185,40 @@ mod tests {
         assert!(
             LinearisedIndices::new(&ArraySubset::new_with_ranges(&[1..3, 5..7]), &[1, 1]).is_err()
         );
+    }
+
+    #[test]
+    fn linearised_indices_iterator_oob_overflow() {
+        let subset = ArraySubset::new_with_start_shape(vec![u64::MAX], vec![2]).unwrap();
+        assert!(LinearisedIndices::new(&subset, &[10]).is_err());
+        let subset = ArraySubset::new_with_start_shape(vec![u64::MAX, 0], vec![2, 1]).unwrap();
+        assert!(ContiguousLinearisedIndices::new(&subset, &[10, 1]).is_err());
+    }
+
+    #[test]
+    fn linearised_indices_iterator_large_array() {
+        // The array has more than `u64::MAX` elements, but the linearised indices of the subset fit in a `u64`
+        let array_shape = [1 << 40, 1 << 40];
+        let subset = ArraySubset::new_with_ranges(&[0..1, 5..7]);
+        let indices = LinearisedIndices::new(&subset, &array_shape).unwrap();
+        assert_eq!(indices.iter().collect::<Vec<_>>(), vec![5, 6]);
+        let subset = ArraySubset::new_with_ranges(&[1..2, 0..1]);
+        let indices = ContiguousLinearisedIndices::new(&subset, &array_shape).unwrap();
+        assert_eq!(indices.iter().collect::<Vec<_>>(), vec![(1 << 40, 1)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "linearised indices exceed u64::MAX")]
+    fn linearised_indices_iterator_overflow() {
+        let subset = ArraySubset::new_with_ranges(&[(1 << 40) - 1..1 << 40, 0..1]);
+        let _ = LinearisedIndices::new(&subset, &[1 << 40, 1 << 40]);
+    }
+
+    #[test]
+    #[should_panic(expected = "out-of-bounds")]
+    fn linearised_indices_iterator_unchecked_oob() {
+        let subset = ArraySubset::new_with_ranges(&[1..3, 5..7]);
+        let _ = unsafe { LinearisedIndices::new_unchecked(&subset, &[1, 1]) };
     }
 
     #[test]

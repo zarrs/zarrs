@@ -291,6 +291,7 @@ fn zfp_decompress(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_precision_loss)]
 mod tests {
     use crate::array::codec::test_util::MemoryPartialDecoder;
     use crate::array::{ComputeResources, Resources};
@@ -358,7 +359,7 @@ mod tests {
         ))
         .with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &CodecSpecificOptions::default(),
         )
         .unwrap();
@@ -400,7 +401,11 @@ mod tests {
         let element_size = data_type.fixed_size().unwrap();
         let codec = ZfpCodec::new_reversible()
             .with_write_header(write_header)
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let options = CodecOptions::default();
         let encoded = codec
@@ -503,13 +508,15 @@ mod tests {
     fn codec_zfp_header_round_trip() {
         let shape = chunk_shape();
         let data_type = data_type::float32();
-        let elements: Vec<f32> = (0..shape.num_elements_u64()).map(|i| i.as_()).collect();
+        let elements: Vec<f32> = (0..shape.num_elements_u64())
+            .map(num::traits::AsPrimitive::as_)
+            .collect();
         let bytes = f32::to_array_bytes(&data_type, &elements).unwrap();
         let codec = ZfpCodec::new_reversible()
             .with_write_header(true)
             .with_context(
                 data_type.clone(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -695,7 +702,11 @@ mod tests {
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec

@@ -248,7 +248,7 @@ impl Node {
     pub(crate) fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &NodePath,
-        version: &MetadataRetrieveVersion,
+        version: MetadataRetrieveVersion,
     ) -> Result<NodeMetadata, NodeCreateError> {
         if let MetadataRetrieveVersion::Default | MetadataRetrieveVersion::V3 = version {
             // Try a Zarr V3 group/array
@@ -386,7 +386,7 @@ impl Node {
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
         let policy = crate::config::global_config().use_consolidated_metadata();
-        let metadata = Self::get_metadata(storage, &path, version)?;
+        let metadata = Self::get_metadata(storage, &path, *version)?;
         let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {

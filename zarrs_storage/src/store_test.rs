@@ -452,7 +452,7 @@ pub fn store_multipart<T: ReadableStorageTraits + WritableStorageTraits + Listab
 #[cfg(feature = "async")]
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Check multipart writes with
-/// [`AsyncWritableStorageTraits::set_multipart`](crate::AsyncWritableStorageTraits::set_multipart) under the prefix
+/// [`crate::AsyncWritableStorageTraits::set_multipart`] under the prefix
 /// `multipart/`.
 ///
 /// The asynchronous equivalent of [`store_multipart`].

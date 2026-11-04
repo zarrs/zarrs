@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use itertools::Itertools;
 use ndarray::ArrayD;
@@ -7,6 +7,7 @@ use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_codec::CodecOptions;
 
+#[allow(clippy::too_many_lines)]
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 

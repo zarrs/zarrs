@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 #![cfg(feature = "ndarray")]
 
 use std::num::NonZeroU64;
@@ -183,7 +183,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
+fn array_str_impl(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
     // Store a single chunk
     array.store_chunk(&[0, 0], &["a", "bb", "ccc", "dddd"], &Resources::default())?;
     assert_eq!(
@@ -297,7 +297,7 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = builder.build(store, array_path).unwrap();
 
-    array_str_impl(array)
+    array_str_impl(&array)
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
 
     let array = builder.build(store, array_path).unwrap();
 
-    array_str_impl(array)
+    array_str_impl(&array)
 }
 
 #[rustfmt::skip]

@@ -822,6 +822,9 @@ mod tests {
         const HALFWAY: u64 = LOWER + (1_u64 << 39);
         const LOWER_BITS: u32 = 0x5f00_0000;
         const UPPER_BITS: u32 = 0x5f00_0001;
+        const NEGATIVE_HALFWAY: i64 = -((1_i64 << 62) + (1_i64 << 38));
+        const NEGATIVE_LOWER_BITS: u32 = 0xde80_0000;
+        const NEGATIVE_UPPER_BITS: u32 = 0xde80_0001;
 
         assert_eq!(
             cast_u64_to_f32(HALFWAY + 1, CastValueRoundingMode::NearestEven),
@@ -861,9 +864,6 @@ mod tests {
             LOWER_BITS
         );
 
-        const NEGATIVE_HALFWAY: i64 = -((1_i64 << 62) + (1_i64 << 38));
-        const NEGATIVE_LOWER_BITS: u32 = 0xde80_0000;
-        const NEGATIVE_UPPER_BITS: u32 = 0xde80_0001;
         assert_eq!(
             cast_i64_to_f32(NEGATIVE_HALFWAY - 1, CastValueRoundingMode::NearestEven),
             NEGATIVE_UPPER_BITS

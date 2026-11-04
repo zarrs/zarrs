@@ -41,7 +41,7 @@ pub(crate) struct IdentityCodec;
 #[derive(Debug)]
 struct IdentityCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 zarrs_plugin::impl_extension_aliases!(IdentityCodec, v3: "zarrs.test.identity");
@@ -64,7 +64,7 @@ impl UnboundArrayToArrayCodecTraits for IdentityCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(IdentityCodecBound {
@@ -83,8 +83,8 @@ impl ArrayCodecTraits for IdentityCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -99,8 +99,8 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
         &self.data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn encode<'a>(

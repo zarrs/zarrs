@@ -1,5 +1,5 @@
 //! Shared benchmark utilities.
-#![allow(dead_code, unreachable_pub)]
+#![allow(dead_code, unreachable_pub, clippy::cast_possible_truncation)]
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -65,7 +65,11 @@ mod tests {
         let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let elements = vec![0u8, 1, 127, 255];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
@@ -110,7 +114,11 @@ mod tests {
         let data_type = data_type::int16();
         let fill_value = FillValue::from(0i16);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             127i16, 128, 129, -129,
@@ -143,7 +151,11 @@ mod tests {
         let data_type = data_type::uint64();
         let fill_value = FillValue::from(0u64);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![u64::MAX]));
 
@@ -174,7 +186,11 @@ mod tests {
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![255.0f32, 256.0]));
 
@@ -216,7 +232,11 @@ mod tests {
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
             1.5f32,
@@ -253,7 +273,11 @@ mod tests {
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let codec = codec
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![1.0f32]));
 
@@ -295,7 +319,7 @@ mod tests {
             let codec = codec
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -362,7 +386,7 @@ mod tests {
             let codec = codec
                 .with_context(
                     data_type.clone(),
-                    fill_value.clone(),
+                    Some(fill_value.clone()),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -399,7 +423,7 @@ mod tests {
         let codec_f32 = codec
             .with_context(
                 data_type::float32(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -424,7 +448,7 @@ mod tests {
         let codec_f64 = codec
             .with_context(
                 data_type::float64(),
-                FillValue::from(0.0f64),
+                Some(FillValue::from(0.0f64)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -463,7 +487,7 @@ mod tests {
         let codec = codec
             .with_context(
                 data_type::float32(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -490,7 +514,7 @@ mod tests {
         let codec = codec
             .with_context(
                 data_type::float32(),
-                FillValue::from(0.0f32),
+                Some(FillValue::from(0.0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -508,6 +532,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn codec_cast_value_kernel_matches_scalar_path() {
         use zarrs_data_type::codec_traits::cast_value::{
             CastValueDataTypeExt, CastValueOutOfRangeMode as DtOutOfRange,
@@ -589,7 +614,7 @@ mod tests {
                         let codec = codec
                             .with_context(
                                 source_dt.clone(),
-                                FillValue::new(vec![0; source_size]),
+                                Some(FillValue::new(vec![0; source_size])),
                                 &CodecSpecificOptions::default(),
                             )
                             .unwrap();

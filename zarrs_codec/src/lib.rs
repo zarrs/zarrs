@@ -554,6 +554,10 @@ impl From<zarrs_data_type::DataTypeCodecError> for CodecCreateError {
 impl CodecCreateError {
     /// Create a new [`CodecCreateError::Other`] from a displayable error or message.
     #[must_use]
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "taking `impl ToString` by value keeps `.map_err(Self::other)` and string literals ergonomic"
+    )]
     pub fn other(error: impl ToString) -> Self {
         Self::Other(error.to_string())
     }
@@ -652,6 +656,13 @@ pub enum CodecError {
     /// Codec create error.
     #[error(transparent)]
     CodecCreateError(#[from] CodecCreateError),
+    /// Missing input cannot be decoded, or partially updated, because the fill value is undefined.
+    ///
+    /// See [`UnboundArrayToBytesCodecTraits::with_context`].
+    #[error(
+        "missing input cannot be decoded or partially updated because the fill value is undefined"
+    )]
+    UndefinedFillValue,
 }
 
 impl From<zarrs_data_type::DataTypeCodecError> for CodecError {

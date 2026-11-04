@@ -97,6 +97,13 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // Nested codec plans have larger stack frames without optimization. The compatibility
+    // runner exercises these plans on Rayon workers even in its default debug build.
+    #[cfg(debug_assertions)]
+    rayon::ThreadPoolBuilder::new()
+        .stack_size(16 * 1024 * 1024)
+        .build_global()
+        .expect("initialize the regression runner's Rayon pool");
     let args = Args::parse();
     let result = match &args.command {
         None => run(&args),
@@ -232,7 +239,7 @@ fn run(args: &Args) -> Result<bool, String> {
     if !known_issues.is_empty() {
         let known_issues: Vec<_> = known_issues.iter().collect();
         println!(
-            "Known issues (current and {latest} cannot read back data they wrote, or a release rejects conformant data as it writes non-conformant data):"
+            "Known issues (current and {latest} cannot read back data they wrote, a release rejects conformant data as it writes non-conformant data, or current deliberately does not read non-conformant data):"
         );
         print!("{}", format_failures(&run, &known_issues, args.verbose));
         println!();

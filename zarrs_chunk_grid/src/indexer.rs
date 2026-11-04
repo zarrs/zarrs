@@ -3,6 +3,7 @@
 use std::ops::Range;
 use thiserror::Error;
 
+use crate::array_subset_traits::inbounds_start_shape;
 use crate::{
     ArrayIndices, ArrayShape, ArraySubsetTraits, IncompatibleDimensionalityError, MaybeSend,
     MaybeSync, ravel_indices,
@@ -20,7 +21,7 @@ pub enum IndexerError {
     #[error(
         "indexer references array indices {_0:?} which are out-of-bounds of array shape {_1:?}"
     )]
-    OutOfBounds(ArrayIndices, ArrayShape),
+    OutOfBounds(Vec<u64>, ArrayShape),
     /// The indexer has an incompatible length.
     #[error("indexer has an incompatible length {_0}, expected {_1}")]
     IncompatibleLength(u64, u64),
@@ -35,7 +36,7 @@ impl IndexerError {
 
     /// Create a new [`IndexerError`] representing out-of-bounds indices.
     #[must_use]
-    pub fn new_oob(indices: ArrayIndices, shape: ArrayShape) -> Self {
+    pub fn new_oob(indices: Vec<u64>, shape: ArrayShape) -> Self {
         Self::OutOfBounds(indices, shape)
     }
 
@@ -54,18 +55,33 @@ pub(crate) fn validate_array_subset(
     subset: &(impl ArraySubsetTraits + ?Sized),
     array_shape: &[u64],
 ) -> Result<(), IndexerError> {
-    if subset.start().len() != array_shape.len() {
+    validate_start_shape(&subset.start(), &subset.shape(), array_shape)
+}
+
+/// Validate the region with `start` and `shape` against `array_shape`.
+pub(crate) fn validate_start_shape(
+    start: &[u64],
+    shape: &[u64],
+    array_shape: &[u64],
+) -> Result<(), IndexerError> {
+    if start.len() != array_shape.len() {
         Err(IndexerError::new_incompatible_dimensionality(
-            subset.start().len(),
+            start.len(),
             array_shape.len(),
         ))
-    } else if subset.inbounds_shape(array_shape) {
+    } else if shape.len() != array_shape.len() {
+        Err(IndexerError::new_incompatible_dimensionality(
+            shape.len(),
+            array_shape.len(),
+        ))
+    } else if inbounds_start_shape(start, shape, array_shape) {
         Ok(())
     } else {
-        Err(IndexerError::new_oob(
-            subset.end_exc(),
-            array_shape.to_vec(),
-        ))
+        // The end saturates so that an end beyond `u64::MAX` is reported rather than wrapping
+        let end_exc = std::iter::zip(start, shape)
+            .map(|(&start, &size)| start.saturating_add(size))
+            .collect();
+        Err(IndexerError::new_oob(end_exc, array_shape.to_vec()))
     }
 }
 
@@ -150,6 +166,19 @@ pub trait Indexer: MaybeSend + MaybeSync {
     fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         None
     }
+
+    /// Returns true if the indexer references every element of an array with `array_shape` exactly once, in C order.
+    ///
+    /// The indexer is then equivalent to the whole array, so callers may use bytes for the indexer as the bytes of the whole array.
+    /// An indexer that references every element in another order (e.g. a permutation) must return false.
+    ///
+    /// The default implementation only recognises indexers that represent an array subset (see [`Indexer::as_array_subset`]), and is otherwise false.
+    /// A false result is conservative: callers may still assume that some elements are not referenced.
+    #[must_use]
+    fn covers_array(&self, array_shape: &[u64]) -> bool {
+        self.as_array_subset()
+            .is_some_and(|subset| subset.is_whole(array_shape))
+    }
 }
 
 impl<T: Indexer> Indexer for &T {
@@ -190,6 +219,10 @@ impl<T: Indexer> Indexer for &T {
     fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         (**self).as_array_subset()
     }
+
+    fn covers_array(&self, array_shape: &[u64]) -> bool {
+        (**self).covers_array(array_shape)
+    }
 }
 
 impl<T: Indexer> Indexer for &[T] {
@@ -221,10 +254,10 @@ impl<T: Indexer> Indexer for &[T] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-        let linearised_indices = self
-            .iter()
-            .map(|indexer| indexer.iter_linearised_indices(array_shape))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indexer in *self {
+            linearised_indices.push(indexer.iter_linearised_indices(array_shape)?);
+        }
 
         Ok(Box::new(
             linearised_indices
@@ -237,10 +270,11 @@ impl<T: Indexer> Indexer for &[T] {
         &self,
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-        let contiguous_linearised_indices = self
-            .iter()
-            .map(|indexer| indexer.iter_contiguous_linearised_indices(array_shape))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut contiguous_linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+        for indexer in *self {
+            contiguous_linearised_indices
+                .push(indexer.iter_contiguous_linearised_indices(array_shape)?);
+        }
 
         Ok(Box::new(
             contiguous_linearised_indices
@@ -352,7 +386,7 @@ macro_rules! impl_indexer_for_indices {
                         .any(|(index, size)| index >= size)
                     {
                         Err(IndexerError::new_oob(
-                            ArrayIndices::from(&indices[..]),
+                            indices.to_vec(),
                             array_shape.to_vec(),
                         ))
                     } else {
@@ -385,25 +419,21 @@ macro_rules! impl_indexer_for_indices {
                 &self,
                 array_shape: &[u64],
             ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IndexerError> {
-                let linearised_indices = self
-                    .iter()
-                    .map(|indices| {
-                        if indices.len() == array_shape.len() {
-                            ravel_indices(indices, array_shape).ok_or_else(|| {
-                                IndexerError::new_oob(
-                                    ArrayIndices::from(&indices[..]),
-                                    array_shape.to_vec(),
-                                )
-                            })
-                        } else {
-                            Err(IncompatibleDimensionalityError::new(
-                                self.dimensionality(),
-                                array_shape.len(),
-                            )
-                            .into())
-                        }
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                let mut linearised_indices = Vec::with_capacity(self.iter().size_hint().0);
+                for indices in *self {
+                    if indices.len() == array_shape.len() {
+                        let index = ravel_indices(indices, array_shape).ok_or_else(|| {
+                            IndexerError::new_oob(indices.to_vec(), array_shape.to_vec())
+                        })?;
+                        linearised_indices.push(index);
+                    } else {
+                        return Err(IncompatibleDimensionalityError::new(
+                            self.dimensionality(),
+                            array_shape.len(),
+                        )
+                        .into());
+                    }
+                }
                 Ok(Box::new(linearised_indices.into_iter()))
             }
 
@@ -411,27 +441,10 @@ macro_rules! impl_indexer_for_indices {
                 &self,
                 array_shape: &[u64],
             ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
-                let contiguous_linearised_indices = self
-                    .iter()
-                    .map(|indices| {
-                        if indices.len() == array_shape.len() {
-                            let index = ravel_indices(indices, array_shape).ok_or_else(|| {
-                                IndexerError::new_oob(
-                                    ArrayIndices::from(&indices[..]),
-                                    array_shape.to_vec(),
-                                )
-                            })?;
-                            Ok((index, 1))
-                        } else {
-                            Err(IncompatibleDimensionalityError::new(
-                                self.dimensionality(),
-                                array_shape.len(),
-                            )
-                            .into())
-                        }
-                    })
-                    .collect::<Result<Vec<_>, IndexerError>>()?;
-                Ok(Box::new(contiguous_linearised_indices.into_iter()))
+                Ok(Box::new(
+                    self.iter_linearised_indices(array_shape)?
+                        .map(|index| (index, 1)),
+                ))
             }
         }
 
@@ -633,7 +646,104 @@ mod tests {
     use super::*;
     use crate::ArraySubset;
 
-    /// Test `as_array_subset` is Some for types implementing ArraySubsetTraits.
+    #[test]
+    fn collection_order_empty_and_large() {
+        for count in [0, 1, 1024] {
+            let indices: Vec<Vec<u64>> = (0..count).rev().map(|i| vec![i]).collect();
+            let subsets: Vec<_> = (0..count)
+                .rev()
+                .map(|i| ArraySubset::new_with_ranges(&[i..i + 1]))
+                .collect();
+            for indexer in [&indices as &dyn Indexer, &subsets as &dyn Indexer] {
+                assert_eq!(
+                    indexer
+                        .iter_linearised_indices(&[1024])
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    (0..count).rev().collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    indexer
+                        .iter_contiguous_linearised_indices(&[1024])
+                        .unwrap()
+                        .collect::<Vec<_>>(),
+                    (0..count).rev().map(|i| (i, 1)).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn covers_array() {
+        let whole = ArraySubset::new_with_ranges(&[0..2, 0..3]);
+        assert!(Indexer::covers_array(&whole, &[2, 3]));
+        assert!(Indexer::covers_array(&&whole, &[2, 3]));
+        assert!([0..2, 0..3].covers_array(&[2, 3]));
+        assert!(!Indexer::covers_array(&whole, &[2, 4]));
+        assert!(!ArraySubset::new_with_ranges(&[1..2, 0..3]).covers_array(&[2, 3]));
+
+        // Indexers that are not array subsets are conservatively not whole
+        let indices: Vec<Vec<u64>> = vec![vec![0], vec![1]];
+        assert!(!indices.covers_array(&[2]));
+    }
+
+    #[test]
+    fn validate_start_shape_dimensionality() {
+        assert!(validate_start_shape(&[0, 0], &[1, 1], &[2, 2]).is_ok());
+        for (start, shape) in [(&[0][..], &[1, 1][..]), (&[0, 0], &[1])] {
+            assert!(matches!(
+                validate_start_shape(start, shape, &[2, 2]),
+                Err(IndexerError::IncompatibleDimensionality(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn collection_first_error() {
+        let indices: Vec<Vec<u64>> = vec![vec![0], vec![4], vec![0, 0]];
+        let subsets = vec![
+            ArraySubset::new_with_ranges(&[0..1]),
+            ArraySubset::new_with_ranges(&[4..5]),
+            ArraySubset::new_with_ranges(&[0..1, 0..1]),
+        ];
+        for indexer in [&indices as &dyn Indexer, &subsets as &dyn Indexer] {
+            assert!(matches!(
+                indexer.iter_linearised_indices(&[4]),
+                Err(IndexerError::OutOfBounds(..))
+            ));
+            assert!(matches!(
+                indexer.iter_contiguous_linearised_indices(&[4]),
+                Err(IndexerError::OutOfBounds(..))
+            ));
+        }
+        let indices = vec![vec![0], vec![0, 0], vec![4]];
+        assert!(matches!(
+            indices.iter_linearised_indices(&[4]),
+            Err(IndexerError::IncompatibleDimensionality(..))
+        ));
+        assert!(matches!(
+            indices.iter_contiguous_linearised_indices(&[4]),
+            Err(IndexerError::IncompatibleDimensionality(..))
+        ));
+    }
+
+    #[test]
+    fn optional_chunk_shape() {
+        for count in [0, 1, 1024] {
+            let subset = ArraySubset::new_with_shape(vec![2; count]);
+            assert_eq!(
+                subset.chunk_shape().unwrap(),
+                vec![std::num::NonZeroU64::new(2).unwrap(); count]
+            );
+        }
+        assert!(
+            ArraySubset::new_with_shape(vec![2, 0, 3])
+                .chunk_shape()
+                .is_none()
+        );
+    }
+
+    /// Test `as_array_subset` is Some for types implementing `ArraySubsetTraits`.
     #[test]
     fn test_as_array_subset() {
         let subset = ArraySubset::new_with_shape(vec![10, 10]);

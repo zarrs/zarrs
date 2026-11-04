@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add sync/async array I/O latency benchmarks with a latency-injecting store, peak request concurrency, both Tokio runtime modes, and borrowed/owned writes
 - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
 - Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
+- Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
 - Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
   - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
 - Add the `cast_value` array-to-array codec
@@ -65,8 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Resources` (re-exported from `zarrs_codec`), which sets the resources (e.g. concurrency) available to an operation
   - Add `ComputeResources` (re-exported from `zarrs_codec`), the compute target of `Resources`, which is passed to codecs
 
+- Add `SubchunkWriteOrder::{Lexicographic,Colexicographic,Morton}` for writing subchunks in row-major, column-major, or Morton (Z-order) order
+  - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
+
 ### Changed
-- The `zstd` codec reuses a compression context per thread for values of up to 1 MiB, rather than creating one per value
 - Encode chunks and subchunks, and plan the decoding of subsets of chunks, without allocating their shapes (up to 4 dimensions)
 - The bound `bytes` codec looks up the `bytes` codec support of its data type once, rather than on each encode and decode
 - Re-export `<Codec>DataTypeSupport` alongside `<Codec>DataTypePlugin` for the `bitround`, `bytes`, `cast_value`, `fixedscaleoffset`, `packbits`, `pcodec` and `zfp` codecs
@@ -98,7 +101,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chunk-local subchunk grids are resolved by planned tasks, so a codec may read (or partially decode) a chunk to resolve its subchunk grid
 - Reads of nearby byte ranges of the same chunk (e.g. the subchunks of a shard) are coalesced into one request as hinted by the store (`ReadableStorageTraits::read_coalescing`) or set by `Resources::read_coalescing`
   - For example, a read of a 112 x 112 region straddling four shards of 8 x 8 subchunks made 8 rather than 20 requests to a store hinting object store coalescing
-- Reuse a `zstd` decompression context per thread when decoding
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
 - Bind whole-byte `packbits` components without a padding encoding as the equivalent little endian `bytes` codec instead of rebuilding it for each encode and decode; unsupported bytes data types now fail when binding
 - **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
@@ -128,7 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
 - Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: Apply codec-specific options when binding a codec chain rather than by reconfiguring its codecs
-  - `CodecChain::with_context` takes `CodecSpecificOptions`
+  - `CodecChain::with_context` takes `CodecSpecificOptions`, and an `Option<FillValue>` that is `None` if the fill value is undefined
   - `Array::{with,set}_codec_specific_options` replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
   - `ArrayBuilder::from_array` retains the codec-specific options of the array
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
@@ -184,7 +186,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Concurrency is now set per call rather than per array via `CodecOptions`
 - `erase_chunks` and `async_erase_chunks` are bounded by the concurrent target of their `Resources`
 
+- The `optional` codec binds its `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
+  - *Behavioural Change*: this changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
+  - **Breaking**: codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) are rejected within the `data_codecs` of an `optional` codec with a `null` fill value (unless the inner data type is `optional`), since the fill value of the data codecs is undefined
+    - Such arrays created by `zarrs` 0.23 fail to be opened
+- Reserve capacity for fallible array, chunk-grid, codec, fill-value, and async result collections
+- Build chunk store keys directly with `ChunkKeyEncodingTraits::encode_into`
+- Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
+- **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
+- `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
+- The `bytes` codec partial encoder replaces the chunk without checking for or reading the existing chunk if an update covers the entire chunk
+  - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
+  - Following bytes-to-bytes codecs (e.g. `zstd`) no longer decode the existing chunk, so an undecodable chunk can be replaced
+
 ### Removed
+- **Breaking**: Remove `SubchunkWriteOrder::Random` variant; use `SubchunkWriteOrder::Unordered` for the same behaviour
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
   - Configure a derived array with the corresponding `with_*` method, then call the operation
 - **Breaking**: Remove `ArrayShardedReadableExt`
@@ -213,6 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
 - Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
 - The `crc32c`, `adler32`, and `fletcher32` partial decoders return the correct bytes for a `ByteRange::Suffix` request with the checksum at the end
+- The `blosc` codec returns an error instead of panicking or returning short output when decompression yields fewer bytes than expected
 - Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
 - Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
 - Filesystem partial writes update values in place instead of reading and rewriting the entire value (included in `zarrs_filesystem` 0.3.14)
@@ -221,10 +238,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `gdeflate` codec decodes chunks of more than one page and returns an error rather than panicking if a page is corrupt
 - The `gdeflate` codec checks decoded representation bounds and validates unbounded input page by page before allocating the full decoded length
 - The `bytes` codec returns an error rather than panicking if a decoded shape's element count or byte size overflows
-- The `packbits` codec returns an error rather than panicking if a decoded shape's element count or packed size overflows
+- Partial chunk writes with `experimental_partial_encoding` no longer store a missing chunk if only the fill value is written, unless `store_empty_chunks` is enabled
+  - *Behavioural Change*: an empty partial chunk write no longer stores a missing chunk, even if `store_empty_chunks` is enabled
 - Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
   - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
+- `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
+- `ArrayOps::chunk_key` returns `ArrayError::InvalidChunkGridIndicesError` if the chunk indices do not match the dimensionality of the array
+  - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
+- Partial encoding checks whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
+- `[async_]erase_metadata` erases array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`
+- Reject optional masks of the wrong length or with values other than 0/1 when storing (which could erase chunks or store values as null), and in `optional` codec decoding
 - Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 - Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
@@ -242,10 +266,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sharding_indexed` partial encoding limits subchunk concurrency and splits the concurrent target between subchunks and inner codecs
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
 - Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- Fix the `packbits` codec:
-  - Sign extension of `int2`/`int4` data when partially decoding
-  - Sign extension of data types wider than a byte, which only extended to the end of the byte holding the sign bit
-  - Partial decoding with a non-zero `first_bit`
 - Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
 - Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
 - Fix `numcodecs.fixedscaleoffset` encoding to match `numcodecs`
@@ -263,6 +283,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `zarrs.gdeflate`: `gdeflate` (unregistered, 0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
     - `numcodecs.fletcher32`: `fletcher32` (unregistered, 0.19)
     - `zarrs.vlen_v2`: `vlen_v2` (unregistered, 0.19)
+- `blosc_decompress_bytes_partial` returns an error rather than panicking if the requested item range exceeds `c_int::MAX`
+
+- Reset the cached shard index when a sharding partial encoder erases its shard, so a subsequent partial encode does not reference subchunks of the erased shard
+- The sync `sharding_indexed` partial encoder reports `size_held` in bytes and includes its input handle, matching the async partial encoder
+- The `sharding_indexed` partial encoder rewrites the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
+- **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
+- Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
+- Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
+- Accept `optional` data type metadata without an inner data type `configuration`, which is optional in the specification
+- Reject malformed fill values of the `optional` data type, rather than binding `data_codecs` with a fill value of the wrong size
+- `ArrayBuilder` validates a `FillValue` against the data type before binding the codecs, so an invalid fill value returns `ArrayCreateError::InvalidFillValue` rather than a codec error
+- Reject `r*` (raw bits) fill values whose length differs from the data type size
+- Fix `Array::[async_]partial_encoder` leaving trailing bytes of the previous chunk if a bytes-to-bytes codec (e.g. `zstd`) re-encoded the chunk shorter, which could make it undecodable
+- The `sharding_indexed` partial encoder replaces a rewritten shard rather than erasing it first, so a failed write leaves the shard intact
+- Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
+- Treat a concurrent target of zero as unconstrained in multi-chunk and sharding operations, and avoid stalled async encoded-chunk retrieval and suffix stripping
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

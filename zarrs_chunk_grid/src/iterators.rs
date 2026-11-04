@@ -18,6 +18,7 @@ mod contiguous_indices_iterator;
 mod contiguous_linearised_indices_iterator;
 mod indices_iterator;
 mod linearised_indices_iterator;
+mod odometer;
 mod strided_indices;
 
 pub use contiguous_indices_iterator::{

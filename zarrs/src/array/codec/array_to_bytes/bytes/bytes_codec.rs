@@ -44,7 +44,7 @@ struct BytesCodecBound {
     /// Whether elements are decoded efficiently in place, and the endianness is valid for decoding in place.
     decode_in_place: bool,
     support: BytesDataTypeSupport,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl Default for BytesCodec {
@@ -111,7 +111,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if data_type.is_optional() {
@@ -259,8 +259,8 @@ impl ArrayCodecTraits for BytesCodecBound {
         self.support.data_type()
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -496,6 +496,12 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _set_partial: bool,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
+        if indexer.is_whole(shape) {
+            return Ok(plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ));
+        }
+
         // A partial write is cheaper than a whole read-modify-write even if the storage emulates it, as the bytes
         // codec writes elements in place
         let Some(data_type_size) = self.support.data_type().fixed_size() else {
@@ -539,7 +545,12 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                     &options,
                     ctx.resources(),
                 )?;
-                if !options.store_empty_chunks() && chunk.is_fill_value(&self.fill_value) {
+                if !options.store_empty_chunks()
+                    && self
+                        .fill_value
+                        .as_ref()
+                        .is_some_and(|fill| chunk.is_fill_value(fill))
+                {
                     // The chunk remains missing
                     return Ok(Outcome::Value(TaskValue::None));
                 }
@@ -561,10 +572,10 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             // An empty chunk is written in full
             Task::compute(move |ctx| update(false, ctx))
         } else {
-            // Read the first byte of the chunk to check if it exists
+            // Request an empty range to check whether the chunk exists
             Task::read(
                 ByteSource::external(key),
-                [ByteRange::FromStart(0, Some(1))],
+                [ByteRange::FromStart(0, Some(0))],
                 move |mut reads, ctx| update(reads.pop().flatten().is_some(), ctx),
             )
         };
@@ -653,7 +664,7 @@ mod tests {
             let codec = BytesCodec::new(Some(endian))
                 .with_context(
                     data_type::uint16(),
-                    FillValue::from(0u16),
+                    Some(FillValue::from(0u16)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -683,7 +694,7 @@ mod tests {
         let codec = BytesCodec::new(None)
             .with_context(
                 data_type::uint16(),
-                FillValue::from(0u16),
+                Some(FillValue::from(0u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -709,7 +720,7 @@ mod tests {
             let codec = BytesCodec::new(endian)
                 .with_context(
                     data_type::uint16(),
-                    FillValue::from(0u16),
+                    Some(FillValue::from(0u16)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -791,7 +802,7 @@ mod tests {
             let codec = BytesCodec::new(Some(endian))
                 .with_context(
                     data_type::uint16(),
-                    FillValue::from(0u16),
+                    Some(FillValue::from(0u16)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -824,7 +835,7 @@ mod tests {
         let codec = BytesCodec::default()
             .with_context(
                 data_type::uint16(),
-                FillValue::from(0u16),
+                Some(FillValue::from(0u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -864,7 +875,7 @@ mod tests {
             BytesCodec::new(None)
                 .with_context(
                     data_type::uint8().to_optional(),
-                    FillValue::from(0u8).into_optional(),
+                    Some(FillValue::from(0u8).into_optional()),
                     &options
                 )
                 .is_err()
@@ -873,7 +884,7 @@ mod tests {
             BytesCodec::new(None)
                 .with_context(
                     data_type::bytes(),
-                    FillValue::from(Vec::<u8>::new()),
+                    Some(FillValue::from(Vec::<u8>::new())),
                     &options
                 )
                 .is_err()

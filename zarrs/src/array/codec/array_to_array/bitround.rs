@@ -81,6 +81,7 @@ fn round_bytes(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_precision_loss)]
 mod tests {
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use crate::array::{ComputeResources, Resources};
@@ -119,7 +120,11 @@ mod tests {
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -153,13 +158,13 @@ mod tests {
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(
                 data_type,
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
 
-        assert_eq!(codec.fill_value(), &fill_value);
-        assert_eq!(codec.encoded_fill_value(), &FillValue::from(1.25f32));
+        assert_eq!(codec.fill_value(), Some(&fill_value));
+        assert_eq!(codec.encoded_fill_value(), Some(&FillValue::from(1.25f32)));
     }
 
     #[test]
@@ -168,13 +173,17 @@ mod tests {
         let shape = vec![NonZeroU64::new(7).unwrap()];
         let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
-        let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
+        let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123_145_182, 4_294_967_295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -200,7 +209,7 @@ mod tests {
         }
         assert_eq!(
             decoded_elements,
-            &[0, 1024, 1280, 1536, 1792, 117440512, 3758096384]
+            &[0, 1024, 1280, 1536, 1792, 117_440_512, 3_758_096_384]
         );
     }
 
@@ -216,7 +225,11 @@ mod tests {
 
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec

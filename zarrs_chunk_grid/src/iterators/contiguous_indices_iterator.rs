@@ -4,7 +4,7 @@ use itertools::izip;
 
 use super::IndicesIterator;
 use crate::iterators::indices_iterator::IndicesIntoIterator;
-use crate::{ArrayIndices, ArraySubset, IndexerError};
+use crate::{ArrayIndices, ArraySubset, Indexer, IndexerError};
 
 /// Iterates over contiguous element indices in an array subset.
 ///
@@ -40,45 +40,10 @@ impl ContiguousIndices {
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
     pub fn new(mut subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
-        if subset.dimensionality() != array_shape.len() {
-            return Err(IndexerError::new_incompatible_dimensionality(
-                subset.dimensionality(),
-                array_shape.len(),
-            ));
-        }
-        if subset.is_empty() {
-            // An empty subset references no elements, so it is always in-bounds and yields
-            // no contiguous indices.
-            return Ok(Self {
-                subset_contiguous_start: subset,
-                contiguous_elements: 0,
-            });
-        }
-        if izip!(&subset.start, &subset.shape, array_shape)
-            .any(|(&start, &size, &bound)| start.checked_add(size).is_none_or(|end| end > bound))
-        {
-            return Err(IndexerError::new_oob(
-                subset.end_exc(),
-                array_shape.to_vec(),
-            ));
-        }
-
-        // The subset of the starts of contiguous runs, in place of the subset: the trailing dimensions of a run have a
-        // length of one
-        let mut contiguous = true;
-        let mut contiguous_elements = 1;
-        for (&start, size, &array_size) in izip!(
-            subset.start.iter().rev(),
-            subset.shape.iter_mut().rev(),
-            array_shape.iter().rev(),
-        ) {
-            if !contiguous {
-                break;
-            }
-            contiguous_elements *= *size;
-            contiguous = start == 0 && *size == array_size;
-            *size = 1;
-        }
+        subset.validate(array_shape)?;
+        // The subset of the starts of contiguous runs, in place of the subset
+        let contiguous_elements =
+            shrink_to_run_starts(&subset.start, &mut subset.shape, array_shape);
         Ok(Self {
             subset_contiguous_start: subset,
             contiguous_elements,
@@ -89,11 +54,6 @@ impl ContiguousIndices {
     #[must_use]
     pub fn len(&self) -> usize {
         self.subset_contiguous_start.num_elements_usize()
-    }
-
-    /// The subset of the starts of the contiguous runs.
-    pub(crate) fn run_starts(&self) -> &ArraySubset {
-        &self.subset_contiguous_start
     }
 
     /// Returns true if the number of starting indices is zero.
@@ -122,6 +82,32 @@ impl ContiguousIndices {
     pub fn iter(&self) -> ContiguousIndicesIterator<'_> {
         <&Self as IntoIterator>::into_iter(self)
     }
+}
+
+/// Shrinks the `shape` of an in-bounds region with `start` in an array with `array_shape` to the shape of the starts of
+/// its contiguous runs, and returns the number of elements in each run.
+///
+/// The trailing dimensions of a run have a length of one in the shape of the starts of the runs. An empty region is
+/// unchanged and has runs of no elements.
+pub(crate) fn shrink_to_run_starts(start: &[u64], shape: &mut [u64], array_shape: &[u64]) -> u64 {
+    if shape.contains(&0) {
+        return 0;
+    }
+    let mut contiguous = true;
+    let mut contiguous_elements = 1;
+    for (&start, size, &array_size) in izip!(
+        start.iter().rev(),
+        shape.iter_mut().rev(),
+        array_shape.iter().rev(),
+    ) {
+        if !contiguous {
+            break;
+        }
+        contiguous_elements *= *size;
+        contiguous = start == 0 && *size == array_size;
+        *size = 1;
+    }
+    contiguous_elements
 }
 
 impl<'a> IntoIterator for &'a ContiguousIndices {

@@ -531,7 +531,18 @@ impl ArrayBuilder {
     /// Build the fill value for a data type from the builder state.
     fn build_fill_value(&self, data_type: &DataType) -> Result<FillValue, ArrayCreateError> {
         match &self.fill_value.0 {
-            ArrayBuilderFillValueImpl::FillValue(fill_value) => Ok(fill_value.clone()),
+            ArrayBuilderFillValueImpl::FillValue(fill_value) => {
+                // Validate the fill value before it is used to bind the codecs
+                data_type.metadata_fill_value(fill_value).map_err(|_| {
+                    ArrayCreateError::InvalidFillValue {
+                        data_type_name: data_type
+                            .name_v3()
+                            .map_or_else(String::new, Cow::into_owned),
+                        fill_value: fill_value.clone(),
+                    }
+                })?;
+                Ok(fill_value.clone())
+            }
             ArrayBuilderFillValueImpl::Metadata(fill_value_metadata) => {
                 // ArrayBuilder is always for V3 arrays
                 data_type.fill_value_v3(fill_value_metadata).map_err(|_| {
@@ -574,18 +585,17 @@ impl ArrayBuilder {
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
-            let subchunk_shape: ChunkShape = subchunk_shape
-                .iter()
-                .copied()
-                .map(NonZeroU64::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| {
+            let mut shape = Vec::with_capacity(subchunk_shape.len());
+            for &size in subchunk_shape {
+                shape.push(NonZeroU64::try_from(size).map_err(|_| {
                     ArrayCreateError::ChunkGridCreateError(ChunkGridCreateError::other(
                         ChunkGridCreateError::other(
                             "`subchunk_shape` shape must have all non-zero elements".to_string(),
                         ),
                     ))
-                })?;
+                })?);
+            }
+            let subchunk_shape: ChunkShape = shape;
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, data_type);
             sharding_builder
@@ -605,7 +615,7 @@ impl ArrayBuilder {
         // Reject codecs that are incompatible with the data type, e.g. `vlen-bytes` with the `string` data type
         let codec_chain_bound = codec_chain.with_context(
             data_type.clone(),
-            fill_value.clone(),
+            Some(fill_value.clone()),
             &self.creation_options(),
         )?;
 
@@ -662,6 +672,7 @@ impl ArrayBuilder {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 mod tests {
     use crate::array::Resources;
     use std::num::NonZeroU64;
@@ -839,6 +850,24 @@ mod tests {
             err.to_string(),
             "invalid fill value metadata for data type `string`: 123"
         );
+    }
+
+    #[test]
+    fn array_builder_invalid_fill_value_error() {
+        let storage = Arc::new(MemoryStore::new());
+        for fill_value in [vec![], vec![5], vec![5, 5, 5]] {
+            let result = ArrayBuilder::new(
+                vec![8],
+                vec![4],
+                data_type::raw_bits(2),
+                FillValue::new(fill_value.clone()),
+            )
+            .build(storage.clone(), "/");
+            assert!(
+                matches!(result, Err(ArrayCreateError::InvalidFillValue { .. })),
+                "{fill_value:?}: {result:?}",
+            );
+        }
     }
 
     #[test]
@@ -1036,7 +1065,7 @@ mod tests {
             vec![8, 8],
             vec![2, 2],
             data_type::float32(),
-            f32::from_bits(0x7fc00001),
+            f32::from_bits(0x7fc0_0001),
         ); // non-standard NaN
         assert_eq!(
             ab.build_metadata().unwrap().fill_value,
@@ -1074,15 +1103,27 @@ mod tests {
     }
 
     #[test]
-    fn array_builder_codec_specific_options_random() {
-        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Random);
-    }
-
-    #[test]
     fn array_builder_codec_specific_options_c() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_lexicographic() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Lexicographic);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_morton() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Morton);
+    }
+
+    #[test]
+    fn array_builder_codec_specific_options_colexicographic() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Colexicographic);
     }
 
     #[test]
@@ -1095,7 +1136,8 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8], [4], data_type::int8(), 0i8);
         builder.subchunk_shape(vec![2]).codec_specific_options(
             CodecSpecificOptions::default().with_option(
-                ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+                ShardingCodecOptions::default()
+                    .with_subchunk_write_order(SubchunkWriteOrder::Lexicographic),
             ),
         );
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
@@ -1107,7 +1149,7 @@ mod tests {
                 .codec_specific_options()
                 .get_option::<ShardingCodecOptions>()
                 .map(ShardingCodecOptions::subchunk_write_order),
-            Some(SubchunkWriteOrder::C)
+            Some(SubchunkWriteOrder::Lexicographic)
         ));
     }
 
@@ -1131,9 +1173,12 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8, 8], [4, 4], data_type::int8(), 0i8);
         builder
             .array_to_bytes_codec(codec_chain)
-            .codec_specific_options(CodecSpecificOptions::default().with_option(
-                ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
-            ));
+            .codec_specific_options(
+                CodecSpecificOptions::default().with_option(
+                    ShardingCodecOptions::default()
+                        .with_subchunk_write_order(SubchunkWriteOrder::Lexicographic),
+                ),
+            );
         let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
 
         let codecs = array.codecs_bound();
@@ -1155,7 +1200,7 @@ mod tests {
         for sharding in [outer, inner] {
             assert!(matches!(
                 sharding.options.subchunk_write_order(),
-                SubchunkWriteOrder::C
+                SubchunkWriteOrder::Lexicographic
             ));
         }
     }
@@ -1228,15 +1273,10 @@ mod tests {
 
     #[test]
     #[cfg(feature = "zstd")]
-    fn array_builder_codec_options_preserved_from_codec_object_random() {
+    fn array_builder_codec_options_preserved_from_codec_object_lexicographic() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::Random);
-    }
-
-    #[test]
-    #[cfg(feature = "zstd")]
-    fn array_builder_codec_options_preserved_from_codec_object_c() {
-        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
-        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::C);
+        array_builder_codec_options_preserved_from_codec_object_impl(
+            SubchunkWriteOrder::Lexicographic,
+        );
     }
 }

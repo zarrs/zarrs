@@ -1,7 +1,13 @@
 //! Benchmark various codecs.
-#![allow(missing_docs)]
+#![allow(
+    missing_docs,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 use std::cell::LazyCell;
+use zarrs::array::codec::PackBitsCodec;
+use zarrs::array::{ArrayBytes, ArraySubset};
 
 use zarrs::array::{CodecSpecificOptions, ComputeResources, CowBytes};
 
@@ -14,6 +20,7 @@ use zarrs::array::codec::{BloscCodec, BytesCodec, ShardingCodecBuilder, ZstdCode
 use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
 use zarrs_data_type::FillValue;
+use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
 fn codec_bytes(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
@@ -30,7 +37,7 @@ fn codec_bytes(c: &mut Criterion) {
         codec
             .with_context(
                 data_type::uint16(),
-                FillValue::from(0u16),
+                Some(FillValue::from(0u16)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap()
@@ -144,7 +151,7 @@ fn codec_sharding(c: &mut Criterion) {
                 .build_arc()
                 .with_context(
                     data_type::uint16(),
-                    FillValue::from(0u16),
+                    Some(FillValue::from(0u16)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -191,5 +198,102 @@ fn codec_sharding(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, codec_bytes, codec_blosc, codec_sharding);
+/// Encode and decode 1 Mi elements with the `packbits` codec.
+///
+/// Also partially decode 8 columns of the elements as a 1024x1024 array, which unpacks each short row separately.
+fn codec_packbits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("codec_packbits");
+    let num_elements = 1024 * 1024;
+    let shape = [std::num::NonZeroU64::new(num_elements).unwrap()];
+    let shape_2d = [std::num::NonZeroU64::new(1024).unwrap(); 2];
+    let subset = ArraySubset::new_with_ranges(&[0..1024, 0..8]);
+    let float64: Vec<f64> = (0..num_elements).map(|i| i as f64).collect();
+    let float64 = Element::into_array_bytes(&data_type::float64(), float64).unwrap();
+    let uint4: Vec<u8> = (0..num_elements).map(|i| (i % 16) as u8).collect();
+    let uint4 = Element::into_array_bytes(&data_type::uint4(), uint4).unwrap();
+    let bool: Vec<bool> = (0..num_elements).map(|i| i % 3 == 0).collect();
+    let bool = Element::into_array_bytes(&data_type::bool(), bool).unwrap();
+    let configurations = [
+        ("float64", data_type::float64(), float64.clone(), None),
+        (
+            "float64_last_bit_62",
+            data_type::float64(),
+            float64,
+            Some(62),
+        ),
+        ("uint4", data_type::uint4(), uint4, None),
+        ("bool", data_type::bool(), bool, None),
+    ];
+    for (label, data_type, bytes, last_bit) in configurations {
+        let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
+        let codec = std::sync::Arc::new(
+            PackBitsCodec::new(PackBitsPaddingEncoding::FirstByte, None, last_bit).unwrap(),
+        )
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+        let bytes = bytes.into_fixed().unwrap();
+        let encoded = codec
+            .encode(
+                ArrayBytes::new_flen(CowBytes::Borrowed(&bytes)),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
+            .unwrap()
+            .into_static();
+        group.throughput(Throughput::Bytes(bytes.len() as u64));
+        group.bench_function(BenchmarkId::new("encode", label), |b| {
+            b.iter(|| {
+                codec
+                    .encode(
+                        ArrayBytes::new_flen(CowBytes::Borrowed(&bytes)),
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
+                    .unwrap()
+            });
+        });
+        group.bench_function(BenchmarkId::new("decode", label), |b| {
+            b.iter(|| {
+                codec
+                    .decode(
+                        CowBytes::Borrowed(&encoded),
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
+                    .unwrap()
+            });
+        });
+        group.throughput(Throughput::Bytes(
+            bytes.len() as u64 / 1024 * subset.shape()[1],
+        ));
+        group.bench_function(BenchmarkId::new("partial_decode", label), |b| {
+            b.iter(|| {
+                zarrs_codec::plan::partial_decode_memory(
+                    codec.clone(),
+                    Some(CowBytes::Borrowed(&encoded)),
+                    &shape_2d,
+                    &subset,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .unwrap()
+            });
+        });
+    }
+}
+
+criterion_group!(
+    benches,
+    codec_bytes,
+    codec_blosc,
+    codec_sharding,
+    codec_packbits
+);
 criterion_main!(benches);

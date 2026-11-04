@@ -44,7 +44,7 @@ fn sync_store() -> Arc<FilesystemStore> {
 }
 
 #[cfg(feature = "async")]
-async fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableStorageTraits> {
+fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableStorageTraits> {
     Arc::new(SyncToAsyncStorageAdapter::new(
         sync_store(),
         TokioSpawnBlocking,
@@ -184,7 +184,7 @@ fn child_group_paths() {
     // In /a, there are no child group paths (only arrays)
     let group = Group::open(store, "/a").unwrap();
     let paths = group.child_group_paths().unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn child_array_paths() {
     // At root, there are no array paths (only groups)
     let group = Group::open(store.clone(), "/").unwrap();
     let paths = group.child_array_paths().unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 
     // In /a, there are two array paths: baz and foo
     let group = Group::open(store, "/a").unwrap();
@@ -213,7 +213,7 @@ fn child_array_paths() {
 #[serial]
 async fn async_child_arrays() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // Two arrays in /a
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
@@ -232,7 +232,7 @@ async fn async_child_arrays() {
 #[serial]
 async fn async_child_groups() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two groups: a and b
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -251,7 +251,7 @@ async fn async_child_groups() {
 #[serial]
 async fn async_child_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two child paths: a and b (both groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -277,7 +277,7 @@ async fn async_child_paths() {
 #[serial]
 async fn async_child_group_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are two group paths: a and b
     let group = Group::async_open(store.clone(), "/").await.unwrap();
@@ -291,7 +291,7 @@ async fn async_child_group_paths() {
     // In /a, there are no child group paths (only arrays)
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
     let paths = group.async_child_group_paths().await.unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 }
 
 #[cfg(feature = "async")]
@@ -299,12 +299,12 @@ async fn async_child_group_paths() {
 #[serial]
 async fn async_child_array_paths() {
     reset_config();
-    let store = async_store().await;
+    let store = async_store();
 
     // At root, there are no array paths (only groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
     let paths = group.async_child_array_paths().await.unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, []);
 
     // In /a, there are two array paths: baz and foo
     let group = Group::async_open(store.clone(), "/a").await.unwrap();

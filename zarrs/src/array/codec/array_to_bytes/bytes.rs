@@ -117,6 +117,7 @@ pub(crate) fn non_native_endianness() -> Endianness {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::codec::test_util::MemoryPartialDecoder;
     use crate::array::{ComputeResources, Resources};
@@ -242,7 +243,7 @@ mod tests {
 
         let codec = Arc::new(BytesCodec::new(endianness)).with_context(
             data_type,
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )?;
 
@@ -343,7 +344,11 @@ mod tests {
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None))
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec

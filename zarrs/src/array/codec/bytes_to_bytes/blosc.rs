@@ -67,6 +67,7 @@ inventory::submit! {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::codec::test_util::partial_decode_bytes;
     use crate::array::{ComputeResources, Resources};
@@ -229,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "typesize is a positive integer required if shuffling is enabled")]
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_invalid_typesize_with_shuffling() {
         codec_blosc_round_trip(JSON_INVALID1);

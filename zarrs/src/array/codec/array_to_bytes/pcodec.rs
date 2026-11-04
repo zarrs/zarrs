@@ -94,6 +94,7 @@ pub use zarrs_data_type::codec_traits::pcodec::{
 };
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation)]
 mod tests {
     use crate::array::codec::test_util::MemoryPartialDecoder;
     use crate::array::{ComputeResources, Resources};
@@ -157,7 +158,7 @@ mod tests {
 
         let codec = Arc::new(codec.clone()).with_context(
             data_type,
-            fill_value,
+            Some(fill_value),
             &CodecSpecificOptions::default(),
         )?;
         let max_encoded_size = codec.encoded_representation(chunk_shape.as_slice())?;
@@ -207,7 +208,7 @@ mod tests {
                 .collect();
             let codec = Arc::new(codec.clone()).with_context(
                 data_type,
-                fill_value,
+                Some(fill_value),
                 &CodecSpecificOptions::default(),
             )?;
             let encoded = codec.encode(
@@ -474,7 +475,11 @@ mod tests {
             PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
         )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         let encoded = codec

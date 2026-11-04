@@ -5,6 +5,7 @@
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
+|                | [`numcodecs.packbits`]             | `packbits`                          |               |
 | Array to Bytes | [`bytes`]                          | (implicit array-to-bytes)           |               |
 |                | 🚧[`zarrs.optional`]               | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   |               |
@@ -48,6 +49,7 @@
 [`bitround`]: crate::array::codec::array_to_array::bitround
 [`numcodecs.fixedscaleoffset`]: crate::array::codec::array_to_array::fixedscaleoffset
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze
+[`numcodecs.packbits`]: crate::array::codec::array_to_array::numcodecs_packbits
 
 [`bytes`]: crate::array::codec::array_to_bytes::bytes
 [`zarrs.optional`]: crate::array::codec::array_to_bytes::optional

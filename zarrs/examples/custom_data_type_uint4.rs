@@ -1,6 +1,7 @@
 //! A custom data type for `uint4`.
 //!
 //! It accepts uint compatible fill values.
+#![allow(clippy::cast_possible_truncation)]
 
 use std::any::Any;
 use std::sync::Arc;
@@ -184,7 +185,7 @@ impl ElementOwned for CustomDataTypeUInt4Element {
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt4Element>());
-        for byte in bytes.iter() {
+        for byte in &bytes {
             elements.push(CustomDataTypeUInt4Element(*byte));
         }
         Ok(elements)

@@ -58,6 +58,10 @@ impl Tensor<'_> {
     /// The layout of the elements in [`bytes`](Tensor::bytes).
     ///
     /// Always [`ElementLayout::default()`]; `zarrs` does not produce tensors in another layout yet.
+    #[expect(
+        clippy::unused_self,
+        reason = "the layout will be read from the tensor once zarrs produces packed tensors"
+    )]
     pub(crate) fn layout(&self) -> ElementLayout {
         ElementLayout::default()
     }

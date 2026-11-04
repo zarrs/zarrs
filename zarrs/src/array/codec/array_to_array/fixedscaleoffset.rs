@@ -119,14 +119,14 @@ mod tests {
         let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,
-            1000.11111111,
-            1000.22222222,
-            1000.33333333,
-            1000.44444444,
-            1000.55555556,
-            1000.66666667,
-            1000.77777778,
-            1000.88888889,
+            1_000.111_111_11,
+            1_000.222_222_22,
+            1_000.333_333_33,
+            1_000.444_444_44,
+            1_000.555_555_56,
+            1_000.666_666_67,
+            1_000.777_777_78,
+            1_000.888_888_89,
             1001.,
         ];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -136,7 +136,11 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
 
         let encoded = codec
@@ -178,7 +182,11 @@ mod tests {
         let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
         let encoded = codec
             .encode(
@@ -291,7 +299,7 @@ mod tests {
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
                 .with_context(
                     data_type,
-                    FillValue::from(0u8),
+                    Some(FillValue::from(0u8)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap();
@@ -308,9 +316,13 @@ mod tests {
             serde_json::from_str(JSON).unwrap();
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
-                .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+                .with_context(
+                    data_type,
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )
                 .unwrap();
 
-        assert_eq!(codec.encoded_fill_value(), &FillValue::from(3u8));
+        assert_eq!(codec.encoded_fill_value(), Some(&FillValue::from(3u8)));
     }
 }

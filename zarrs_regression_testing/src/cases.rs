@@ -458,9 +458,13 @@ pub(crate) enum CodecKind {
     Squeeze,
     Transpose,
     BitRound,
+    NumcodecsPackBits,
     // Array-to-bytes
     Bytes,
-    PackBits,
+    PackBits {
+        /// The `padding_encoding`, if not the default (`none`).
+        padding_encoding: Option<&'static str>,
+    },
     Pcodec,
     Sharding {
         index_at_start: bool,
@@ -495,10 +499,16 @@ impl std::fmt::Display for CodecKind {
             Self::FixedScaleOffset { astype: true } => write!(f, "fixedscaleoffset(astype=u1)"),
             Self::Reshape => write!(f, "reshape"),
             Self::Squeeze => write!(f, "squeeze"),
+            Self::NumcodecsPackBits => write!(f, "numcodecs.packbits"),
             Self::Transpose => write!(f, "transpose"),
             Self::BitRound => write!(f, "bitround"),
             Self::Bytes => write!(f, "bytes"),
-            Self::PackBits => write!(f, "packbits"),
+            Self::PackBits {
+                padding_encoding: None,
+            } => write!(f, "packbits"),
+            Self::PackBits {
+                padding_encoding: Some(padding_encoding),
+            } => write!(f, "packbits({padding_encoding})"),
             Self::Pcodec => write!(f, "pcodec"),
             Self::Sharding { index_at_start } => write!(
                 f,
@@ -554,8 +564,15 @@ pub(crate) fn codec_kinds() -> Vec<CodecKind> {
         C::Squeeze,
         C::Transpose,
         C::BitRound,
+        C::NumcodecsPackBits,
         C::Bytes,
-        C::PackBits,
+    ]);
+    // zarrs 0.20 to 0.23 omitted the `first_byte` and `last_byte` padding encoding byte of whole-byte components
+    kinds.extend(
+        [None, Some("first_byte"), Some("last_byte")]
+            .map(|padding_encoding| C::PackBits { padding_encoding }),
+    );
+    kinds.extend([
         C::Pcodec,
         C::Sharding {
             index_at_start: false,
@@ -616,11 +633,12 @@ impl CodecKind {
             Self::BitRound
             | Self::CastValue { .. }
             | Self::Bytes
-            | Self::PackBits
+            | Self::PackBits { .. }
             | Self::Pcodec
             | Self::Zfp(_)
             | Self::Zfpy(_)
             | Self::Shuffle => data_type.is_fixed(),
+            Self::NumcodecsPackBits => data_type.label == "bool",
             Self::Vlen(_) => data_type.is_variable() && !data_type.is_optional(),
             Self::Optional => data_type.is_optional(),
             _ => true,
@@ -990,6 +1008,9 @@ fn array_metadata(
             before(json!({"name": "reshape", "configuration": {"shape": [num_elements]}}))
         }
         CodecKind::Squeeze => before(json!({"name": "zarrs.squeeze", "configuration": {}})),
+        CodecKind::NumcodecsPackBits => {
+            before(json!({"name": "numcodecs.packbits", "configuration": {}}))
+        }
         CodecKind::Transpose => {
             before(json!({"name": "transpose", "configuration": {"order": [1, 0]}}))
         }
@@ -998,7 +1019,13 @@ fn array_metadata(
         }
         // Array-to-bytes
         CodecKind::Bytes => vec![bytes_codec()],
-        CodecKind::PackBits => vec![json!({"name": "packbits", "configuration": {}})],
+        CodecKind::PackBits { padding_encoding } => {
+            let configuration = padding_encoding.map_or_else(
+                || json!({}),
+                |padding_encoding| json!({"padding_encoding": padding_encoding}),
+            );
+            vec![json!({"name": "packbits", "configuration": configuration})]
+        }
         CodecKind::Pcodec => vec![json!({
             "name": "numcodecs.pcodec",
             "configuration": {

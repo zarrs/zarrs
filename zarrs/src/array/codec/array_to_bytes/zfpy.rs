@@ -126,7 +126,7 @@ mod tests {
         let codec = ZfpyCodec::new_reversible()
             .with_context(
                 data_type,
-                FillValue::from(0f32),
+                Some(FillValue::from(0f32)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

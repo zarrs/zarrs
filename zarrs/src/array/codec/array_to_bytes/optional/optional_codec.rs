@@ -11,7 +11,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::array_bytes_internal::offsets_from_usize;
 use crate::array::codec::{CodecChain, CodecChainBound};
-use crate::array::{ArrayBytes, ArrayBytesOffsets, BytesRepresentation, CowBytes, DataType};
+use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType,
+};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
@@ -32,7 +34,7 @@ struct OptionalCodecBound {
     mask_codecs: Arc<CodecChainBound>,
     data_codecs: Arc<CodecChainBound>,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 impl OptionalCodec {
@@ -232,29 +234,6 @@ impl OptionalCodecBound {
         }
     }
 
-    /// Creates a fill value for the inner type of an optional data type.
-    ///
-    /// For nested optional types, returns a null fill value (just the `[0]` suffix).
-    /// For fixed-size types, returns a zero-filled fill value.
-    /// For variable-size types, returns an empty fill value.
-    fn create_fill_value_for_inner_type(inner_type: &DataType) -> FillValue {
-        if inner_type.is_optional() {
-            // For nested optional types, the fill value is null (single 0x00 byte)
-            FillValue::new_optional_null()
-        } else {
-            match inner_type.size() {
-                DataTypeSize::Fixed(size) => {
-                    // For fixed-size types, create a zero-filled fill value
-                    FillValue::new(vec![0u8; size])
-                }
-                DataTypeSize::Variable => {
-                    // For variable-size types, use empty fill value
-                    FillValue::new(vec![])
-                }
-            }
-        }
-    }
-
     /// Creates empty dense data when there are no valid elements.
     /// The mask contains all zeros, so all elements are invalid/null.
     fn create_empty_dense_data(
@@ -310,7 +289,7 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         if !data_type.is_optional() {
@@ -321,12 +300,30 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let inner_type = data_type.as_optional().ok_or_else(|| {
             CodecCreateError::Other("optional codec requires an optional data type".to_string())
         })?;
-        let inner_fill_value =
-            OptionalCodecBound::create_fill_value_for_inner_type(inner_type.data_type());
+        if let Some(fill_value) = &fill_value
+            && data_type.metadata_fill_value(fill_value).is_err()
+        {
+            return Err(CodecCreateError::Other(format!(
+                "the optional codec requires a fill value of [0] (null) or a fill value of the inner data type followed by 1, got {fill_value} for data type `{}`",
+                data_type.name_v3().unwrap_or_default()
+            )));
+        }
+        // See "Data Codecs Fill Value" in the module docs
+        let inner_fill_value = fill_value.as_ref().and_then(|fill_value| {
+            if !inner_type.is_fill_value_null(fill_value) {
+                Some(FillValue::new(
+                    inner_type.fill_value_inner_bytes(fill_value).to_vec(),
+                ))
+            } else if inner_type.data_type().is_optional() {
+                Some(FillValue::new_optional_null())
+            } else {
+                None
+            }
+        });
         Ok(Arc::new(OptionalCodecBound {
             mask_codecs: self.mask_codecs.with_context(
                 crate::array::data_type::bool(),
-                FillValue::from(0u8),
+                Some(FillValue::from(false)),
                 codec_specific_options,
             )?,
             data_codecs: self.data_codecs.with_context(
@@ -349,8 +346,8 @@ impl ArrayCodecTraits for OptionalCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -368,20 +365,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let ArrayBytes::Optional(optional_bytes) = bytes else {
-            return Err(CodecError::Other(
-                "expected optional array bytes for optional codec".to_string(),
-            ));
-        };
-        let (dense_data, mask) = optional_bytes.into_parts();
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        if mask.len() != usize::try_from(num_elements).unwrap() {
-            return Err(CodecError::Other(format!(
-                "mask length {} does not match number of elements {}",
-                mask.len(),
-                num_elements
-            )));
-        }
+        bytes.validate(shape.num_elements_u64(), &self.data_type)?;
+        let (dense_data, mask) = bytes.into_optional()?.into_parts();
 
         let opt = self.data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
@@ -448,6 +433,14 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
                 .clone()
                 .decode(encoded_mask.into(), shape, options, resources)?;
         let mask = decoded_mask.into_fixed()?.into_vec();
+        let (mask_or, valid_count) = mask
+            .iter()
+            .fold((0u8, 0usize), |(o, n), &b| (o | b, n + usize::from(b)));
+        if mask_or > 1 {
+            return Err(CodecError::Other(
+                "optional mask values must be 0 (null) or 1 (present)".to_string(),
+            ));
+        }
 
         // Decode data
         let opt = self.data_type.as_optional().ok_or_else(|| {
@@ -455,7 +448,6 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Decode sparse data (only valid elements)
-        let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
             let sparse_data = {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
@@ -510,6 +502,62 @@ mod tests {
     use super::*;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
     use zarrs_codec::{CodecOptions, CodecTraits, UnboundArrayToBytesCodecTraits};
+
+    #[test]
+    fn codec_optional_malformed_fill_value() {
+        let bind = |data_type: &DataType, fill_value: Vec<u8>| {
+            let inner = data_type.as_optional().unwrap().data_type();
+            let data_codecs = if inner.is_fixed() {
+                build_codec_config_for_type(data_type)
+            } else {
+                r#"[{"name": "vlen-utf8"}]"#.to_string()
+            };
+            let configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
+                r#"{{"mask_codecs": [{{"name": "packbits"}}], "data_codecs": {data_codecs}}}"#
+            ))
+            .unwrap();
+            Arc::new(OptionalCodec::new_with_configuration(&configuration).unwrap()).with_context(
+                data_type.clone(),
+                Some(FillValue::new(fill_value)),
+                &CodecSpecificOptions::default(),
+            )
+        };
+        let opt_u16 = data_type::uint16().to_optional();
+        let opt_opt_u16 = opt_u16.clone().to_optional();
+        let opt_string = data_type::string().to_optional();
+        for (data_type, fill_value) in [
+            (&opt_u16, vec![0]),
+            (&opt_u16, vec![1, 2, 1]),
+            (&opt_opt_u16, vec![0]),
+            (&opt_opt_u16, vec![0, 1]),
+            (&opt_opt_u16, vec![1, 2, 1, 1]),
+            (&opt_string, vec![1]),
+            (&opt_string, vec![b'a', 1]),
+        ] {
+            if let Err(err) = bind(data_type, fill_value.clone()) {
+                panic!("{data_type:?} {fill_value:?}: {err}");
+            }
+        }
+        for (data_type, fill_value) in [
+            (&opt_u16, vec![]),
+            (&opt_u16, vec![2]),
+            (&opt_u16, vec![1, 2]),
+            (&opt_u16, vec![1, 2, 3, 1]),
+            (&opt_u16, vec![0, 0]),
+            (&opt_u16, vec![1, 2, 2]),
+            (&opt_opt_u16, vec![1, 2, 1]),
+            (&opt_opt_u16, vec![1]),
+            (&opt_string, vec![]),
+        ] {
+            let Err(err) = bind(data_type, fill_value.clone()) else {
+                panic!("{fill_value:?}");
+            };
+            assert!(
+                err.to_string().starts_with("the optional codec requires"),
+                "{fill_value:?}: {err}"
+            );
+        }
+    }
 
     #[test]
     fn codec_optional_configuration() {
@@ -597,7 +645,7 @@ mod tests {
     }
 
     fn codec_optional_round_trip_impl(
-        data_type: DataType,
+        data_type: &DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use std::num::NonZeroU64;
@@ -608,7 +656,7 @@ mod tests {
         let num_elements = chunk_shape.num_elements_usize();
 
         // Build codec configuration recursively for nested optional types
-        let data_codecs_config = build_codec_config_for_type(&data_type);
+        let data_codecs_config = build_codec_config_for_type(data_type);
 
         let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
             r#"{{
@@ -620,12 +668,12 @@ mod tests {
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration)?)
             .with_context(
                 data_type.clone(),
-                fill_value,
+                Some(fill_value),
                 &CodecSpecificOptions::default(),
             )?;
 
         // Build nested ArrayBytes structure for input
-        let input = build_nested_array_bytes(&data_type, num_elements);
+        let input = build_nested_array_bytes(data_type, num_elements);
 
         let encoded = codec.encode(
             input,
@@ -648,12 +696,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_null() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::new_optional_null(), // null/missing value: [0]
         )
         .unwrap();
@@ -662,12 +710,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_nonnull() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(Some(0u8)),
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional(),
+            &data_type::uint8().to_optional(),
             FillValue::from(0u8).into_optional(),
         )
         .unwrap();
@@ -676,7 +724,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_i32() {
         codec_optional_round_trip_impl(
-            data_type::int32().to_optional(),
+            &data_type::int32().to_optional(),
             FillValue::from(None::<i32>), // null/missing value: [0]
         )
         .unwrap();
@@ -685,7 +733,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_f32() {
         codec_optional_round_trip_impl(
-            data_type::float32().to_optional(),
+            &data_type::float32().to_optional(),
             FillValue::from(None::<f32>), // null/missing value: [0]
         )
         .unwrap();
@@ -695,7 +743,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level() {
         // Test Option<Option<u8>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional().to_optional(),
+            &data_type::uint8().to_optional().to_optional(),
             FillValue::from(None::<Option<u8>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -705,7 +753,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level_i32() {
         // Test Option<Option<i32>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::int32().to_optional().to_optional(),
+            &data_type::int32().to_optional().to_optional(),
             FillValue::from(None::<Option<i32>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -715,7 +763,7 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level() {
         // Test Option<Option<Option<u8>>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8().to_optional().to_optional().to_optional(),
+            &data_type::uint8().to_optional().to_optional().to_optional(),
             FillValue::from(None::<Option<Option<u8>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -725,7 +773,7 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_none() {
         // Test Option<Option<Option<f64>>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -737,7 +785,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -749,7 +797,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none_alt() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -763,7 +811,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_none() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -775,7 +823,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_some() {
         codec_optional_round_trip_impl(
-            data_type::float64()
+            &data_type::float64()
                 .to_optional()
                 .to_optional()
                 .to_optional(),
@@ -826,7 +874,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -878,7 +930,7 @@ mod tests {
         let data_type: DataType = data_type::uint8().to_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         // Use a non-null fill value of 255 for missing elements
-        let fill_value = FillValue::new(vec![255u8]);
+        let fill_value = FillValue::from(Some(255u8));
 
         // Create test data:
         // Element 0: Some(10)  - valid=1, data=10
@@ -901,7 +953,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1004,7 +1060,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1083,7 +1143,11 @@ mod tests {
         )
         .unwrap();
         let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
 
         let encoded = codec
@@ -1142,5 +1206,80 @@ mod tests {
         } else {
             panic!("Expected Optional ArrayBytes");
         }
+    }
+
+    #[test]
+    fn codec_optional_encode_rejects_malformed_mask() {
+        let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(
+            r#"{
+                "mask_codecs": [{"name": "packbits", "configuration": {}}],
+                "data_codecs": [{"name": "bytes", "configuration": {}}]
+            }"#,
+        )
+        .unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(
+                data_type::uint8().to_optional(),
+                Some(FillValue::from(None::<u8>)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let shape = [NonZeroU64::new(3).unwrap()];
+        for mask in [vec![1u8, 2, 0], vec![1, 0]] {
+            let input = ArrayBytes::new_flen(vec![1u8, 2, 3]).with_optional_mask(mask);
+            assert!(
+                codec
+                    .encode(
+                        input,
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default()
+                    )
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn codec_optional_decode_rejects_nonbinary_mask() {
+        let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(
+            r#"{
+                "mask_codecs": [{"name": "bytes", "configuration": {}}],
+                "data_codecs": [{"name": "bytes", "configuration": {}}]
+            }"#,
+        )
+        .unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(
+                data_type::uint8().to_optional(),
+                Some(FillValue::from(None::<u8>)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let shape = [NonZeroU64::new(3).unwrap()];
+        let encoded = |mask: [u8; 3]| {
+            let data = [10u8, 20];
+            [&3u64.to_le_bytes()[..], &2u64.to_le_bytes(), &mask, &data].concat()
+        };
+        assert!(
+            codec
+                .decode(
+                    encoded([1, 1, 0]).into(),
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )
+                .is_ok()
+        );
+        assert!(
+            codec
+                .decode(
+                    encoded([1, 2, 0]).into(),
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )
+                .is_err()
+        );
     }
 }

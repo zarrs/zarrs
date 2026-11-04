@@ -3,7 +3,9 @@
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs::array::{Array, ArrayBuilder, ArraySubset, DataType, FillValue, data_type};
+use zarrs::array::{
+    Array, ArrayBuilder, ArrayCreateError, ArraySubset, DataType, FillValue, data_type,
+};
 use zarrs::storage::store::MemoryStore;
 
 /// Test helper to create an array with optional codec
@@ -360,6 +362,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
@@ -706,4 +709,50 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(retrieved[[3, 7]], Some(Some("entry".to_string())));
 
     Ok(())
+}
+
+/// The inner data type `configuration` of the `optional` data type is optional in metadata.
+#[test]
+fn optional_data_type_missing_inner_configuration() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs_metadata::v3::MetadataV3;
+
+    let metadata: MetadataV3 =
+        serde_json::from_str(r#"{"name": "zarrs.optional", "configuration": {"name": "uint8"}}"#)?;
+    assert_eq!(
+        DataType::from_metadata(&metadata)?,
+        data_type::uint8().to_optional()
+    );
+
+    let metadata: MetadataV3 = serde_json::from_str(
+        r#"{
+            "name": "zarrs.optional",
+            "configuration": {
+                "name": "zarrs.optional",
+                "configuration": {"name": "uint8"}
+            }
+        }"#,
+    )?;
+    assert_eq!(
+        DataType::from_metadata(&metadata)?,
+        data_type::uint8().to_optional().to_optional()
+    );
+    Ok(())
+}
+
+#[test]
+fn optional_array_malformed_fill_value() {
+    let store = Arc::new(MemoryStore::new());
+    for fill_value in [vec![], vec![5, 0], vec![5], vec![5, 2], vec![5, 5, 1]] {
+        let result = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            FillValue::new(fill_value.clone()),
+        )
+        .build(store.clone(), "/");
+        assert!(
+            matches!(result, Err(ArrayCreateError::InvalidFillValue { .. })),
+            "{fill_value:?}: {result:?}",
+        );
+    }
 }

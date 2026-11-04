@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use blusc::{BLOSC2_MAX_OVERHEAD, blosc2_get_complib_info};

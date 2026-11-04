@@ -151,9 +151,13 @@ mod tests {
 
         fn metadata_fill_value(
             &self,
-            _fill_value: &FillValue,
+            fill_value: &FillValue,
         ) -> Result<FillValueMetadata, DataTypeFillValueError> {
-            Ok(FillValueMetadata::Null)
+            if fill_value.as_ne_bytes().is_empty() {
+                Ok(FillValueMetadata::Null)
+            } else {
+                Err(DataTypeFillValueError)
+            }
         }
 
         fn as_any(&self) -> &dyn std::any::Any {

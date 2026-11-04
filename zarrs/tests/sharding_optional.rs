@@ -98,7 +98,7 @@ macro_rules! decode_into_new {
 }
 
 fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
-    data_type: DataType,
+    data_type: &DataType,
     elements: &[T],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(MemoryStore::default());
@@ -112,7 +112,7 @@ fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
     let array = builder.build(store, "/")?;
     array.store_array_subset(
         &array.subset_all(),
-        T::to_array_bytes(&data_type, elements)?,
+        T::to_array_bytes(data_type, elements)?,
         &Resources::default(),
     )?;
 
@@ -148,7 +148,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     .build_arc()
     .with_context(
         data_type.clone(),
-        FillValue::new_optional_null(),
+        Some(FillValue::new_optional_null()),
         &CodecSpecificOptions::default(),
     )?;
     let options = CodecOptions::default();
@@ -228,7 +228,7 @@ async fn sharding_optional<T: ElementOwned + Clone + PartialEq + Debug>(
     element: impl Fn(u64) -> T,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let elements: Vec<T> = (0..SHAPE.iter().product()).map(element).collect();
-    sharding_optional_round_trip(data_type.clone(), &elements)?;
+    sharding_optional_round_trip(&data_type, &elements)?;
     sharding_optional_codec(data_type, &elements).await
 }
 

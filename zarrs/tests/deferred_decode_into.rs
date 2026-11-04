@@ -158,7 +158,7 @@ fn bind(chain: &CodecChain) -> Arc<dyn ArrayToBytesCodecTraits> {
     chain
         .with_context(
             data_type::uint16(),
-            FillValue::from(0u16),
+            Some(FillValue::from(0u16)),
             &CodecSpecificOptions::default(),
         )
         .unwrap()
@@ -441,7 +441,7 @@ impl zarrs_codec::ArrayCodecTraits for OrdinaryReceiver {
     fn data_type(&self) -> &zarrs_data_type::DataType {
         self.bytes.data_type()
     }
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.bytes.fill_value()
     }
 }
@@ -495,7 +495,7 @@ fn unknown_receiver_default_resolves_owned_producer_without_reallocating() {
             bytes: BytesCodec::new(Some(endian(non_native)))
                 .with_context(
                     data_type::uint16(),
-                    FillValue::from(0u16),
+                    Some(FillValue::from(0u16)),
                     &CodecSpecificOptions::default(),
                 )
                 .unwrap(),

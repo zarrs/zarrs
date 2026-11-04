@@ -148,7 +148,7 @@ impl UnboundArrayToBytesCodecTraits for OrdinaryBytes {
     fn with_context(
         &self,
         dtype: DataType,
-        fill: FillValue,
+        fill: Option<FillValue>,
         opts: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(OrdinaryReceiver(
@@ -167,7 +167,7 @@ impl ArrayCodecTraits for OrdinaryReceiver {
     fn data_type(&self) -> &DataType {
         self.0.data_type()
     }
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.0.fill_value()
     }
 }
@@ -403,7 +403,7 @@ fn deferred_decode_into(c: &mut Criterion) {
                         producers[0] = Arc::new(OwnedIntermediate(producers[0].clone()));
                     }
                     let chain = CodecChain::new(vec![], receiver, producers)
-                        .with_context(dtype, fill, &CodecSpecificOptions::default())
+                        .with_context(dtype, Some(fill), &CodecSpecificOptions::default())
                         .unwrap();
                     let encoded = chain
                         .encode(

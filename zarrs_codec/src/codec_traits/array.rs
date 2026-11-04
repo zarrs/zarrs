@@ -11,6 +11,6 @@ pub trait ArrayCodecTraits: MaybeSend + MaybeSync {
     /// Return the decoded data type bound to this codec.
     fn data_type(&self) -> &DataType;
 
-    /// Return the decoded fill value bound to this codec.
-    fn fill_value(&self) -> &FillValue;
+    /// Return the decoded fill value bound to this codec, or [`None`] if it is undefined.
+    fn fill_value(&self) -> Option<&FillValue>;
 }

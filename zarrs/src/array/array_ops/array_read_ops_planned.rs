@@ -136,6 +136,9 @@ pub(super) fn read_ranges(
     ranges: &[ByteRange],
 ) -> Result<Option<ReadBytes>, StorageError> {
     match ranges {
+        [ByteRange::FromStart(0, Some(0))] => Ok(storage
+            .size_key(key)?
+            .map(|_| smallvec![zarrs_storage::Bytes::new()])),
         [ByteRange::FromStart(0, None)] => Ok(storage.get(key)?.map(|bytes| smallvec![bytes])),
         [range] => Ok(storage
             .get_partial(key, *range)?
@@ -938,6 +941,10 @@ mod async_planned {
     ) -> Result<Option<ReadBytes>, StorageError> {
         use futures::StreamExt;
         match ranges {
+            [ByteRange::FromStart(0, Some(0))] => Ok(storage
+                .size_key(key)
+                .await?
+                .map(|_| smallvec![zarrs_storage::Bytes::new()])),
             [ByteRange::FromStart(0, None)] => {
                 Ok(storage.get(key).await?.map(|bytes| smallvec![bytes]))
             }

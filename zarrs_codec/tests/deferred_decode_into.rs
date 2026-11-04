@@ -100,7 +100,7 @@ impl ArrayCodecTraits for Receiver {
     fn data_type(&self) -> &DataType {
         panic!("unused")
     }
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         panic!("unused")
     }
 }

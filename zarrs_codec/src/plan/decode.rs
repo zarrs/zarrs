@@ -19,9 +19,7 @@ use zarrs_data_type::{DataType, FillValue};
 /// Returns true if `indexer` selects every element of a chunk of `shape` in C order.
 #[must_use]
 pub fn is_whole_chunk(indexer: &dyn Indexer, shape: &[NonZeroU64]) -> bool {
-    indexer
-        .as_array_subset()
-        .is_some_and(|subset| subset.is_whole(bytemuck::must_cast_slice(shape)))
+    indexer.covers_array(bytemuck::must_cast_slice(shape))
 }
 
 /// The scheduling hints of a task that reads all of `source` and decodes a chunk of `shape` elements of `codec`.
@@ -93,7 +91,11 @@ pub fn decode_whole<'a>(
 ) -> Result<Outcome<'a>, CodecError> {
     let data_type = codec.data_type();
     let Some(encoded) = encoded else {
-        return place_fill_value(data_type, codec.fill_value(), request);
+        return place_fill_value(
+            data_type,
+            codec.fill_value().ok_or(CodecError::UndefinedFillValue)?,
+            request,
+        );
     };
     let whole = request.indexer.is_whole(shape);
     let DecodeRequest { indexer, target } = request;
@@ -148,6 +150,8 @@ pub fn decode_whole<'a>(
 /// See [`ArrayToArrayCodecTraits::plan_decode_request`](crate::ArrayToArrayCodecTraits::plan_decode_request).
 #[derive(Debug)]
 pub enum ArrayToArrayDecodePlan<'a> {
+    /// Decode the whole encoded array, then select the requested decoded elements.
+    Whole(DecodeRequest<'a>),
     /// Decode a request for encoded elements, which are the requested decoded elements in the same order, into the same target.
     ///
     /// For example, a codec that only rearranges elements maps the indexer, and a codec with an identity decode forwards the request unchanged.

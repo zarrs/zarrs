@@ -390,7 +390,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             level,
             &coordinates,
             encoded,
-            self.storage.supports_set_partial(),
+            self.readable_writable_storage()?.supports_set_partial(),
             self.codec_options(),
         )?;
         let io = self.chunk_read_write_io(self.one_key(&chunk_indices)?)?;
@@ -416,7 +416,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             chunks.clone(),
             array_subset.clone(),
             subset_bytes,
-            self.storage.supports_set_partial(),
+            self.readable_writable_storage()?.supports_set_partial(),
         );
         drive_blocking_one(task, &self.chunk_read_write_io(keys)?, resources)?;
         Ok(())
@@ -432,13 +432,16 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
+        if indexer.is_empty() {
+            return Ok(());
+        }
         let task = self.codecs_bound().plan_partial_encode(
             SourceKey(0),
             &self.chunk_shape(chunk_indices)?,
             PlanIndexer::Borrowed(indexer),
             indexer_bytes,
             None,
-            self.storage.supports_set_partial(),
+            self.readable_writable_storage()?.supports_set_partial(),
             options,
         )?;
         let io = self.chunk_read_write_io(self.one_key(chunk_indices)?)?;
@@ -790,7 +793,9 @@ pub(super) mod async_planned {
                 level,
                 &coordinates,
                 encoded,
-                self.storage.supports_set_partial(),
+                self.async_readable_writable_storage()
+                    .await?
+                    .supports_set_partial(),
                 self.codec_options(),
             )?;
             let io = self
@@ -813,7 +818,10 @@ pub(super) mod async_planned {
             resources: &Resources,
         ) -> Result<(), ArrayError> {
             let planner = self.chunk_planner(&self.async_write_options(options));
-            let set_partial = self.storage.supports_set_partial();
+            let set_partial = self
+                .async_readable_writable_storage()
+                .await?
+                .supports_set_partial();
             let io = self
                 .async_chunk_read_write_io(self.grid_keys(chunks.clone()))
                 .await?;
@@ -856,7 +864,10 @@ pub(super) mod async_planned {
             resources: &Resources,
         ) -> Result<(), ArrayError> {
             let shape = self.chunk_shape(chunk_indices)?;
-            let set_partial = self.storage.supports_set_partial();
+            let set_partial = self
+                .async_readable_writable_storage()
+                .await?
+                .supports_set_partial();
             let io = self
                 .async_chunk_read_write_io(self.one_key(chunk_indices)?)
                 .await?;
@@ -864,6 +875,9 @@ pub(super) mod async_planned {
                 && is_shared(&indexer_bytes)
             {
                 // The task does not borrow, so its compute is offloaded to Rayon
+                if indexer.is_empty() {
+                    return Ok(());
+                }
                 let task = self.codecs_bound().plan_partial_encode(
                     SourceKey(0),
                     &shape,
@@ -874,6 +888,9 @@ pub(super) mod async_planned {
                     options,
                 )?;
                 drive_async_offload_one(task, &io, resources).await?;
+                return Ok(());
+            }
+            if indexer.is_empty() {
                 return Ok(());
             }
             let task = self.codecs_bound().plan_partial_encode(

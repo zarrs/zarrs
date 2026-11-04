@@ -102,6 +102,7 @@ fn get_squeezed_indexer(
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 mod tests {
     use crate::array::codec::test_util::{MemoryPartialDecoder, chain};
     use crate::array::{ComputeResources, Resources};
@@ -140,7 +141,11 @@ mod tests {
 
         let configuration: SqueezeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration).unwrap())
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap();
         assert_eq!(
             codec.encoded_shape(&shape).unwrap(),
@@ -186,7 +191,7 @@ mod tests {
         let codec = Arc::new(SqueezeCodec::new())
             .with_context(
                 data_type::uint8(),
-                FillValue::from(0u8),
+                Some(FillValue::from(0u8)),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();

@@ -38,7 +38,7 @@ pub fn decode_and_update<'a>(
         None => ArrayBytes::new_fill_value(
             codec.data_type(),
             shape.iter().map(|s| s.get()).product(),
-            codec.fill_value(),
+            codec.fill_value().ok_or(CodecError::UndefinedFillValue)?,
         )?,
     };
     update_array_bytes(
@@ -150,7 +150,11 @@ pub fn encode_and_set<'a>(
         ops: smallvec![op],
         then: TaskValue::None,
     };
-    if !options.store_empty_chunks() && bytes.is_fill_value(codec.fill_value()) {
+    if !options.store_empty_chunks()
+        && codec
+            .fill_value()
+            .is_some_and(|fill| bytes.is_fill_value(fill))
+    {
         return Ok(write(WriteOp::Erase(key)));
     }
     let outcome = codec.encode_step(bytes, shape, options, ctx)?;
@@ -162,6 +166,7 @@ pub fn encode_and_set<'a>(
 }
 
 /// Plan a partial encode that reads, decodes, updates, encodes and writes the whole chunk `key` of `shape`.
+/// An update covering the whole chunk replaces it without reading or decoding the existing bytes.
 ///
 /// This is the default of [`ArrayToBytesCodecTraits::plan_partial_encode`].
 /// The chunk is erased if it becomes the fill value and empty chunks are not stored (see [`encode_and_write`]).
@@ -175,6 +180,15 @@ pub fn plan_partial_encode_whole<'a>(
     bytes: ArrayBytes<'a>,
     options: &CodecOptions,
 ) -> Task<'a> {
+    if indexer.is_whole(shape) {
+        let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
+        let options = *options;
+        return Task::compute(move |ctx| {
+            indexer.validate(&shape)?;
+            bytes.validate(indexer.as_indexer().len(), codec.data_type())?;
+            encode_and_write(codec, key, &shape, bytes, &options, ctx)
+        });
+    }
     let source = ByteSource::external(key);
     let hint = whole_chunk_hint(&*codec, &source, shape);
     let shape: smallvec::SmallVec<[NonZeroU64; 4]> = shape.into();
@@ -218,7 +232,13 @@ pub fn partial_encode_request_elementwise<'a>(
         Some(len) => codec.encode(bytes, &[len], options, resources)?,
         None => {
             bytes.validate(0, codec.data_type())?;
-            ArrayBytes::new_fill_value(codec.encoded_data_type(), 0, codec.encoded_fill_value())?
+            ArrayBytes::new_fill_value(
+                codec.encoded_data_type(),
+                0,
+                codec
+                    .encoded_fill_value()
+                    .ok_or(CodecError::UndefinedFillValue)?,
+            )?
         }
     };
     Ok(PartialEncodeRequest::Mapped(indexer, bytes))

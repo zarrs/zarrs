@@ -302,7 +302,10 @@ impl ShardUpdate {
                 &options,
                 ctx.resources(),
             )?;
-            let encoded = if updated.is_fill_value(inner_codecs.fill_value()) {
+            let encoded = if inner_codecs
+                .fill_value()
+                .is_some_and(|fill| updated.is_fill_value(fill))
+            {
                 None
             } else {
                 Some(

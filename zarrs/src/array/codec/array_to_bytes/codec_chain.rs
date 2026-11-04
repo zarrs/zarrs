@@ -106,13 +106,14 @@ impl CodecChain {
     /// Bind this codec chain to a decoded data type, fill value, and codec-specific options.
     ///
     /// Each codec in the chain may read its own options type from `codec_specific_options`.
+    /// A `fill_value` of [`None`] means the fill value is undefined (see [`UnboundArrayToBytesCodecTraits::with_context`]).
     ///
     /// # Errors
     /// Returns a [`CodecCreateError`] if any codec cannot be bound to the derived context.
     pub fn with_context(
         &self,
         mut data_type: DataType,
-        mut fill_value: FillValue,
+        mut fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<CodecChainBound>, CodecCreateError> {
         let mut array_to_array = Vec::with_capacity(self.array_to_array.len());
@@ -123,21 +124,20 @@ impl CodecChain {
                 codec_specific_options,
             )?;
             data_type = bound.encoded_data_type().clone();
-            fill_value = bound.encoded_fill_value().clone();
+            fill_value = bound.encoded_fill_value().cloned();
             array_to_array.push(bound);
         }
         let array_to_bytes =
             self.array_to_bytes
                 .with_context(data_type, fill_value, codec_specific_options)?;
-        let bytes_to_bytes = self
-            .bytes_to_bytes
-            .iter()
-            .map(|codec| {
+        let mut bytes_to_bytes = Vec::with_capacity(self.bytes_to_bytes.len());
+        for codec in &self.bytes_to_bytes {
+            bytes_to_bytes.push(
                 codec
                     .clone()
-                    .with_codec_specific_options(codec_specific_options)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    .with_codec_specific_options(codec_specific_options)?,
+            );
+        }
 
         Ok(CodecChainBound::new(
             array_to_array,
@@ -295,6 +295,26 @@ impl PreparedDecoder for ArrayToArrayDecoder {
 }
 
 impl CodecChainBound {
+    fn plans_whole_array_decode(&self, shape: &[NonZeroU64]) -> Result<bool, CodecError> {
+        let mut shape = smallvec::SmallVec::<[NonZeroU64; 4]>::from_slice(shape);
+        for codec in &self.array_to_array {
+            let probe = DecodeRequest {
+                indexer: PlanIndexer::Subset(zarrs_chunk_grid::ArraySubset::new_with_shape(
+                    bytemuck::must_cast_slice::<_, u64>(&shape),
+                )),
+                target: TaskTarget::Value,
+            };
+            if matches!(
+                codec.plan_decode_request(&shape, probe)?,
+                ArrayToArrayDecodePlan::Whole(_)
+            ) {
+                return Ok(true);
+            }
+            shape = codec.encoded_shape(&shape)?.into();
+        }
+        Ok(false)
+    }
+
     /// Create a codec chain of bound codecs.
     fn new(
         array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
@@ -334,12 +354,30 @@ impl CodecChainBound {
         for (codec, decoded_shape) in std::iter::zip(&self.array_to_array, shapes) {
             match codec.plan_decode_request(decoded_shape, request)? {
                 ArrayToArrayDecodePlan::Forward(inner) => request = inner,
+                ArrayToArrayDecodePlan::Whole(original) => {
+                    let encoded_shape = codec.encoded_shape(decoded_shape)?;
+                    finishes.push((
+                        codec.clone(),
+                        decoded_shape.clone(),
+                        original.target,
+                        Some(original.indexer),
+                    ));
+                    request = DecodeRequest {
+                        indexer: PlanIndexer::Subset(
+                            zarrs_chunk_grid::ArraySubset::new_with_shape(
+                                bytemuck::must_cast_slice::<_, u64>(&encoded_shape),
+                            ),
+                        ),
+                        target: TaskTarget::Value,
+                    };
+                }
+
                 ArrayToArrayDecodePlan::Decode {
                     indexer,
                     shape,
                     target,
                 } => {
-                    finishes.push((codec.clone(), shape, target));
+                    finishes.push((codec.clone(), shape, target, None));
                     request = DecodeRequest {
                         indexer,
                         target: TaskTarget::Value,
@@ -364,8 +402,17 @@ impl CodecChainBound {
                         ));
                     };
                     let mut finishes = finishes.into_iter().rev().peekable();
-                    while let Some((codec, shape, target)) = finishes.next() {
+                    while let Some((codec, shape, target, indexer)) = finishes.next() {
                         bytes = codec.decode(bytes, &shape, &options, ctx.resources())?;
+                        if let Some(indexer) = indexer {
+                            bytes = bytes
+                                .extract_array_subset(
+                                    indexer.as_indexer(),
+                                    bytemuck::must_cast_slice(&shape),
+                                    codec.data_type(),
+                                )?
+                                .into_owned();
+                        }
                         // Only the outermost codec that decodes has the target of the request
                         if finishes.peek().is_none() {
                             return place_decoded(bytes, target);
@@ -582,7 +629,7 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(CodecChain::with_context(
@@ -792,6 +839,9 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         request: DecodeRequest<'a>,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
+        if !self.array_to_array.is_empty() && self.plans_whole_array_decode(shape)? {
+            return plan_decode_whole(self, source, shape, request, options);
+        }
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             if request.indexer.is_whole(shape) {
                 return plan_decode_whole(self, source, shape, request, options);
@@ -1136,7 +1186,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
             return encode_and_set(self, bytes, shape, key, options, ctx);
         }
         bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
-        if !options.store_empty_chunks() && bytes.is_fill_value(self.fill_value()) {
+        if !options.store_empty_chunks()
+            && self
+                .fill_value()
+                .is_some_and(|fill| bytes.is_fill_value(fill))
+        {
             return Ok(Outcome::Write {
                 ops: smallvec::smallvec![WriteOp::Erase(key)],
                 then: TaskValue::None,
@@ -1166,7 +1220,26 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         set_partial: bool,
         options: &CodecOptions,
     ) -> Result<Task<'a>, CodecError> {
+        if indexer.is_whole(shape) {
+            return Ok(plan_partial_encode_whole(
+                self, key, shape, indexer, bytes, options,
+            ));
+        }
+
         bytes.validate(indexer.as_indexer().len(), self.data_type())?;
+        if indexer.as_indexer().is_empty() {
+            return Ok(Task::compute(|_| Ok(Outcome::Done)));
+        }
+        let options_value = if !self.array_to_array.is_empty()
+            && self
+                .fill_value()
+                .is_some_and(|fill| !bytes.is_fill_value(fill))
+        {
+            options.with_store_empty_chunks(true)
+        } else {
+            *options
+        };
+        let options = &options_value;
         // A partial encode cannot be mapped through bytes-to-bytes codecs, so the whole chunk is updated
         if !self.bytes_to_bytes.is_empty() {
             return Ok(plan_partial_encode_whole(
@@ -1247,6 +1320,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<PrepareDecode, CodecError> {
+        if !self.array_to_array.is_empty() && self.plans_whole_array_decode(shape)? {
+            return Ok(PrepareDecode::Ready(Arc::new(
+                zarrs_codec::plan::SourceDecoder::new(self, source, shape),
+            )));
+        }
+
         if let Some(bytes_chain) = self.bytes_chain.clone() {
             // Requests are mapped through the array-to-array codecs as they are planned
             let shapes = self.encoded_shapes(shape)?;
@@ -1361,7 +1440,7 @@ impl ArrayCodecTraits for CodecChainBound {
         )
     }
 
-    fn fill_value(&self) -> &FillValue {
+    fn fill_value(&self) -> Option<&FillValue> {
         self.array_to_array.first().map_or_else(
             || self.array_to_bytes.fill_value(),
             |codec| codec.fill_value(),
@@ -1561,7 +1640,7 @@ mod tests {
             .unwrap()
             .with_context(
                 data_type.clone(),
-                fill_value.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
@@ -1659,7 +1738,11 @@ mod tests {
                 expected_decoded_representation,
             })],
         )
-        .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+        .with_context(
+            data_type,
+            Some(fill_value),
+            &CodecSpecificOptions::default(),
+        )
         .unwrap();
 
         zarrs_codec::plan::partial_decode_memory(

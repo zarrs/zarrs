@@ -226,12 +226,11 @@ fn input_dim_partitions(
         if input_dims.is_empty() {
             return None;
         }
-        let input_dims = input_dims
-            .iter()
-            .copied()
-            .map(usize::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
+        let mut converted_dims = Vec::with_capacity(input_dims.len());
+        for &dim in input_dims {
+            converted_dims.push(usize::try_from(dim).ok()?);
+        }
+        let input_dims = converted_dims;
         for &input_dim in &input_dims {
             let seen = seen.get_mut(input_dim)?;
             if *seen {
@@ -287,10 +286,11 @@ fn encoded_chunk_grid_for_input_dim_partitions(
     let mut array_shape = Vec::with_capacity(partitions.len());
     let mut edge_lengths = Vec::with_capacity(partitions.len());
     for partition in partitions {
-        let partition_edge_lengths = partition
-            .iter()
-            .map(|&dim| decoded_chunk_grid.chunk_edge_lengths(dim))
-            .collect::<Result<Vec<_>, _>>()?;
+        let dimensions = partition.iter().copied();
+        let mut partition_edge_lengths = Vec::with_capacity(dimensions.size_hint().0);
+        for dim in dimensions {
+            partition_edge_lengths.push(decoded_chunk_grid.chunk_edge_lengths(dim)?);
+        }
         let Some(encoded_edge_lengths) = cartesian_product_edge_lengths(&partition_edge_lengths)
         else {
             return Ok(None);
@@ -460,9 +460,11 @@ fn rectilinear_grid_to_intervals(
     {
         return Ok(None);
     }
-    let edge_lengths = (0..grid.dimensionality())
-        .map(|dim| grid.chunk_edge_lengths(dim))
-        .collect::<Result<Vec<_>, _>>()?;
+    let dimensions = 0..grid.dimensionality();
+    let mut edge_lengths = Vec::with_capacity(dimensions.size_hint().0);
+    for dim in dimensions {
+        edge_lengths.push(grid.chunk_edge_lengths(dim)?);
+    }
     for pivot in 0..shape.len() {
         let leading_is_unit = edge_lengths[..pivot]
             .iter()
@@ -519,9 +521,11 @@ fn decoded_subchunk_grid_for_input_dim_partitions(
         )));
     }
 
-    let decoded_edge_lengths = (0..decoded_chunk_grid.dimensionality())
-        .map(|dim| decoded_chunk_grid.chunk_edge_lengths(dim))
-        .collect::<Result<Vec<_>, _>>()?;
+    let dimensions = 0..decoded_chunk_grid.dimensionality();
+    let mut decoded_edge_lengths = Vec::with_capacity(dimensions.size_hint().0);
+    for dim in dimensions {
+        decoded_edge_lengths.push(decoded_chunk_grid.chunk_edge_lengths(dim)?);
+    }
     let mut local_edges = decoded_edge_lengths
         .iter()
         .map(|edges| vec![None; edges.len()])

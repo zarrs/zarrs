@@ -33,7 +33,7 @@ struct DynamicLocalSubchunkCodec;
 #[derive(Debug)]
 struct DynamicLocalSubchunkCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
 }
 
 static NEXT_SHAPE: AtomicU64 = AtomicU64::new(0);
@@ -125,7 +125,7 @@ impl UnboundArrayToBytesCodecTraits for DynamicLocalSubchunkCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(DynamicLocalSubchunkCodecBound {
@@ -144,8 +144,8 @@ impl zarrs_codec::ArrayCodecTraits for DynamicLocalSubchunkCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -318,7 +318,7 @@ struct LocalOnlyReshapeGridCodec {
 #[derive(Debug)]
 struct LocalOnlyReshapeGridCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     reject_chunk_local: bool,
 }
 
@@ -346,7 +346,7 @@ impl UnboundArrayToArrayCodecTraits for LocalOnlyReshapeGridCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         Ok(Arc::new(LocalOnlyReshapeGridCodecBound {
@@ -366,8 +366,8 @@ impl ArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -379,10 +379,11 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
         match decoded_chunk_grid {
             ChunkGridDecodedRef::None => Ok(ChunkGridEncoded::None),
             ChunkGridDecodedRef::Array(_) => Ok(ChunkGridEncoded::ChunkLocal),
-            ChunkGridDecodedRef::ChunkLocal if self.reject_chunk_local => {
-                Ok(ChunkGridEncoded::None)
-            }
-            ChunkGridDecodedRef::ChunkLocal => Ok(ChunkGridEncoded::ChunkLocal),
+            ChunkGridDecodedRef::ChunkLocal => Ok(if self.reject_chunk_local {
+                ChunkGridEncoded::None
+            } else {
+                ChunkGridEncoded::ChunkLocal
+            }),
         }
     }
 
@@ -416,8 +417,8 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
         &self.data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
@@ -476,7 +477,7 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
         Ok(Arc::new(TestSubchunkingCodecBound {
@@ -490,7 +491,7 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
 #[derive(Debug)]
 struct TestSubchunkingCodecBound {
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     expose_subchunks: bool,
 }
 
@@ -503,8 +504,8 @@ impl ArrayCodecTraits for TestSubchunkingCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -584,7 +585,11 @@ fn local_only_grid_chain(expose_subchunks: bool, reject_chunk_local: bool) -> Ar
         Arc::new(TestSubchunkingCodec { expose_subchunks }),
         vec![],
     )
-    .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+    .with_context(
+        data_type,
+        Some(fill_value),
+        &CodecSpecificOptions::default(),
+    )
     .unwrap()
 }
 

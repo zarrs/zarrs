@@ -1,8 +1,9 @@
 use std::iter::FusedIterator;
 
-use super::contiguous_indices_iterator::ContiguousIndices;
+use super::contiguous_indices_iterator::shrink_to_run_starts;
 use super::strided_indices::{StridedIndices, StridedOdometer};
-use crate::{ArraySubset, IndexerError};
+use crate::indexer::validate_start_shape;
+use crate::{ArrayIndices, ArraySubsetTraits, IndexerError};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///
@@ -37,16 +38,28 @@ impl ContiguousLinearisedIndices {
     /// # Errors
     ///
     /// Returns [`IndexerError`] if `array_shape` has an incompatible dimensionality or does not encapsulate `subset`.
-    pub fn new(subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
-        let contiguous = ContiguousIndices::new(subset, array_shape)?;
-        let runs = contiguous.run_starts();
+    ///
+    /// # Panics
+    /// Panics if the linearised indices of `subset` exceed [`u64::MAX`].
+    pub fn new(
+        subset: &(impl ArraySubsetTraits + ?Sized),
+        array_shape: &[u64],
+    ) -> Result<Self, IndexerError> {
+        let start = subset.start();
+        let mut shape: ArrayIndices = subset.shape().iter().copied().collect();
+        validate_start_shape(&start, &shape, array_shape)?;
+        // The shape of the starts of contiguous runs, in place of the shape of the subset
+        let contiguous_elements = shrink_to_run_starts(&start, &mut shape, array_shape);
         Ok(Self {
-            runs: StridedIndices::new(runs.start(), runs.shape(), array_shape),
-            contiguous_elements: contiguous.contiguous_elements(),
+            runs: StridedIndices::new(&start, &shape, array_shape),
+            contiguous_elements,
         })
     }
 
     /// Return the number of starting indices (i.e. the length of the iterator).
+    ///
+    /// # Panics
+    /// Panics if the number of starting indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn len(&self) -> usize {
         self.runs.len()
@@ -55,7 +68,7 @@ impl ContiguousLinearisedIndices {
     /// Returns true if the number of starting indices is zero.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.runs.num_elements() == 0
     }
 
     /// Return the number of contiguous elements (fixed on each iteration).
@@ -74,6 +87,9 @@ impl ContiguousLinearisedIndices {
     }
 
     /// Create a new serial iterator.
+    ///
+    /// # Panics
+    /// Panics if the number of starting indices exceeds [`usize::MAX`].
     #[must_use]
     pub fn iter(&self) -> ContiguousLinearisedIndicesIterator<'_> {
         <&Self as IntoIterator>::into_iter(self)

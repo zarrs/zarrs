@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use std::error::Error;
 use std::num::NonZeroU64;
@@ -13,9 +13,9 @@ use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    ChunkGridDecodedRef, CodecOptions, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    ArrayCached, ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps,
+    ArrayWriteOps, ChunkGridDecodedRef, CodecOptions, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::ReadableStorageTraits;
@@ -385,6 +385,200 @@ fn partial_encode_fill_value_into_missing_chunk() -> TestResult {
 }
 
 #[test]
+fn partial_encode_variable_fill_value() -> TestResult {
+    for _partial_encoding in [true, false] {
+        for store_empty_chunks in [false, true] {
+            let options = CodecOptions::default().with_store_empty_chunks(store_empty_chunks);
+            let array = ArrayBuilder::new(vec![8], vec![4], data_type::string(), "ab")
+                .subchunk_shape(vec![1])
+                .build(Arc::new(MemoryStore::default()), "/array")?
+                .with_codec_options(options);
+            let subset = ArraySubset::new_with_ranges(&[0..2]);
+
+            // Concatenated bytes match the fill, but the individual strings do not.
+            array.store_partial_chunk(&[0], &subset, &["a", "b"], &Resources::default())?;
+            assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
+            assert_eq!(
+                array.retrieve_chunk::<Vec<String>>(&[0], &Resources::default())?,
+                ["a", "b", "ab", "ab"]
+            );
+
+            // Actual fill strings still read back correctly and leave missing shards
+            // missing when empty chunks are disabled.
+            array.store_partial_chunk(&[1], &subset, &["ab", "ab"], &Resources::default())?;
+            if !store_empty_chunks {
+                assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+            }
+            assert_eq!(
+                array.retrieve_chunk::<Vec<String>>(&[1], &Resources::default())?,
+                ["ab"; 4]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn partial_encode_fill_value() -> TestResult {
+    for partial_encoding in [false, true] {
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+            MemoryStore::default(),
+        )));
+        let options = CodecOptions::default();
+        let array = ArrayBuilder::new(vec![12], vec![4], data_type::uint16(), 0u16)
+            .bytes_to_bytes_codecs(vec![])
+            .build(store.clone(), "/array")?
+            .with_codec_options(options);
+        let array_store_empty = array.with_codec_options(options.with_store_empty_chunks(true));
+        let subset = |range| ArraySubset::new_with_ranges(&[range]);
+
+        // Writing only the fill value does not store a missing chunk
+        array.store_partial_chunk(&[0], &subset(0..1), &[0u16], &Resources::default())?;
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+
+        // An empty write does not store a missing chunk, even if empty chunks are stored
+        array_store_empty.store_partial_chunk(
+            &[0],
+            &subset(0..0),
+            &[0u16; 0],
+            &Resources::default(),
+        )?;
+        assert!(array.retrieve_encoded_chunk(&[0])?.is_none());
+
+        // Writing only the fill value stores a missing chunk if empty chunks are stored
+        array_store_empty.store_partial_chunk(
+            &[0],
+            &subset(0..1),
+            &[0u16],
+            &Resources::default(),
+        )?;
+        assert_eq!(
+            array.retrieve_chunk::<Vec<u16>>(&[0], &Resources::default())?,
+            [0, 0, 0, 0]
+        );
+
+        // A partial write of other values stores a missing chunk
+        array.store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5], &Resources::default())?;
+        assert_eq!(
+            array.retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())?,
+            [1, 0, 5, 0]
+        );
+
+        // An out-of-bounds write of only the fill value to a missing chunk is an error
+        let out_of_bounds: Vec<Vec<u64>> = vec![vec![4]];
+        assert!(
+            array
+                .store_partial_chunk(&[2], &out_of_bounds, &[0u16], &Resources::default())
+                .is_err()
+        );
+
+        if partial_encoding {
+            // Writing the fill value into an existing chunk writes it in place without reading the chunk
+            store.reset();
+            for range in [0..1, 2..3] {
+                array.store_partial_chunk(&[1], &subset(range), &[0u16], &Resources::default())?;
+            }
+            assert_eq!(store.reads(), 0);
+            assert_eq!(store.bytes_written(), 4);
+            assert_eq!(store.keys_erased(), 0);
+            assert_eq!(
+                array.retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())?,
+                [0, 0, 0, 0]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "bitround")]
+#[test]
+fn partial_encode_lossy_fill_value() -> TestResult {
+    use zarrs::array::codec::BitroundCodec;
+
+    // With no mantissa bits kept, both the fill value 1.1 and the written value 1.2 encode as 1.0
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![2], vec![2], data_type::float32(), 1.1f32)
+        .array_to_array_codecs(vec![Arc::new(BitroundCodec::new(0))])
+        .bytes_to_bytes_codecs(vec![])
+        .build(store, "/array")?
+        .with_codec_options(CodecOptions::default());
+
+    // The written value is not the fill value, so the chunk is stored
+    array.store_partial_chunk(
+        &[0],
+        &ArraySubset::new_with_ranges(&[0..1]),
+        &[1.2f32],
+        &Resources::default(),
+    )?;
+    assert!(array.retrieve_encoded_chunk(&[0])?.is_some());
+    assert_eq!(
+        array.retrieve_chunk::<Vec<f32>>(&[0], &Resources::default())?[0],
+        1.0
+    );
+    Ok(())
+}
+
+/// Optional bytes of `len` elements with a short all-zero mask, and with a mask containing `2`.
+fn malformed_optional_bytes(len: usize) -> [ArrayBytes<'static>; 2] {
+    let mut nonbinary = vec![0; len];
+    nonbinary[1] = 2;
+    [vec![0; len - 1], nonbinary]
+        .map(|mask| ArrayBytes::new_flen(vec![0; len]).with_optional_mask(mask))
+}
+
+#[test]
+fn optional_malformed_masks_are_rejected() -> TestResult {
+    for _partial_encoding in [false, true] {
+        let array = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            zarrs::array::FillValue::from(None::<u8>),
+        )
+        .build(Arc::new(MemoryStore::default()), "/array")?
+        .with_codec_options(CodecOptions::default());
+        array.store_chunk(
+            &[0],
+            &[Some(1u8), None, Some(3), Some(4)],
+            &Resources::default(),
+        )?;
+        let existing = array.retrieve_encoded_chunk(&[0])?;
+        assert!(existing.is_some());
+
+        for bytes in malformed_optional_bytes(4) {
+            assert!(
+                array
+                    .store_chunk(&[0], bytes.clone(), &Resources::default())
+                    .is_err()
+            );
+            assert!(
+                array
+                    .store_chunk(&[1], bytes, &Resources::default())
+                    .is_err()
+            );
+            assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
+            assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+        }
+        for bytes in malformed_optional_bytes(3) {
+            let subset = |range| ArraySubset::new_with_ranges(&[range]);
+            assert!(
+                array
+                    .store_array_subset(&subset(1..4), bytes.clone(), &Resources::default())
+                    .is_err()
+            );
+            assert!(
+                array
+                    .store_array_subset(&subset(5..8), bytes, &Resources::default())
+                    .is_err()
+            );
+            assert_eq!(array.retrieve_encoded_chunk(&[0])?, existing);
+            assert!(array.retrieve_encoded_chunk(&[1])?.is_none());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn array_ops_subchunks_with_reshape_codec() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();
@@ -460,6 +654,7 @@ fn array_ops_subchunks_with_squeeze_codec() -> TestResult {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let data_type = data_type::uint16();
@@ -1139,6 +1334,71 @@ fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
+    builder.subchunk_shape(vec![1, 1]);
+    let array = builder.build_arc(store, "/array")?;
+    array.store_chunk(
+        &[0, 0],
+        &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+        &Resources::default(),
+    )?;
+
+    // Erasing a shard through a partial encoder must also reset its cached shard index, otherwise a subsequent
+    // partial encode references subchunks of the erased shard
+    let encoder = array.partial_encoder(&[0, 0], &Resources::default())?;
+    encoder.erase()?;
+    encoder.partial_encode(
+        &ArraySubset::new_with_ranges(&[0..1, 0..1]),
+        &ArrayBytes::new_flen(vec![42u8]),
+        &CodecOptions::default(),
+        &Resources::default(),
+    )?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?,
+        [42, 255, 255, 255, 255, 255, 255, 255, 255]
+    );
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
+    let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
+    let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
+    builder.subchunk_shape(vec![1, 1]);
+    let array = builder.build_arc(store, "/array")?;
+    array
+        .async_store_chunk(
+            &[0, 0],
+            &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
+            &Resources::default(),
+        )
+        .await?;
+
+    let encoder = array
+        .async_partial_encoder(&[0, 0], &Resources::default())
+        .await?;
+    encoder.erase().await?;
+    encoder
+        .partial_encode(
+            &ArraySubset::new_with_ranges(&[0..1, 0..1]),
+            &ArrayBytes::new_flen(vec![42u8]),
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .await?;
+    assert_eq!(
+        array
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?,
+        [42, 255, 255, 255, 255, 255, 255, 255, 255]
+    );
+    Ok(())
+}
+
 #[cfg(feature = "async")]
 mod async_cached {
     use std::sync::Arc;
@@ -1449,4 +1709,33 @@ mod async_cached {
         assert!(cached.cache().is_empty().await);
         Ok(())
     }
+}
+
+/// Chunk operations reject chunk indices with the wrong dimensionality rather than storing,
+/// erasing, or retrieving a key that does not belong to the chunk grid.
+#[test]
+fn chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
+    use zarrs::array::ArrayError;
+    use zarrs::storage::ListableStorageTraits;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .build(store.clone(), "/array")?;
+    let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);
+
+    let is_invalid = |result: Result<_, ArrayError>| {
+        matches!(result, Err(ArrayError::InvalidChunkGridIndicesError(_)))
+    };
+    for chunk_indices in [&[0][..], &[0, 0, 0]] {
+        assert!(is_invalid(array.chunk_key(chunk_indices).map(|_| ())));
+        assert!(is_invalid(unsafe {
+            array.store_encoded_chunk(chunk_indices, encoded.clone())
+        }));
+        assert!(is_invalid(array.erase_chunk(chunk_indices)));
+        assert!(is_invalid(
+            array.retrieve_encoded_chunk(chunk_indices).map(|_| ())
+        ));
+    }
+    assert!(store.list()?.is_empty());
+    Ok(())
 }

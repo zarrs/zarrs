@@ -37,9 +37,9 @@ struct FixedScaleOffsetCodecBound {
     element_type: FixedScaleOffsetElementType,
     encoded_element_type: FixedScaleOffsetElementType,
     data_type: DataType,
-    fill_value: FillValue,
+    fill_value: Option<FillValue>,
     encoded_data_type: DataType,
-    encoded_fill_value: FillValue,
+    encoded_fill_value: Option<FillValue>,
 }
 
 /// Add a byteorder to a numpy data type string (e.g. `f8` -> `<f8`, `i1` -> `|i1`) if it does not have one.
@@ -334,7 +334,7 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
     fn with_context(
         &self,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
         let element_type = get_element_type(&data_type)?;
@@ -346,14 +346,19 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         }
         let encoded_data_type = self.astype.clone().unwrap_or_else(|| self.dtype.clone());
         let encoded_element_type = get_element_type(&encoded_data_type)?;
-        let encoded_fill_value = encode_fill_value(
-            &fill_value,
-            &data_type,
-            element_type,
-            self.offset,
-            self.scale,
-            encoded_element_type,
-        )?;
+        let encoded_fill_value = fill_value
+            .as_ref()
+            .map(|fill_value| {
+                encode_fill_value(
+                    fill_value,
+                    &data_type,
+                    element_type,
+                    self.offset,
+                    self.scale,
+                    encoded_element_type,
+                )
+            })
+            .transpose()?;
         Ok(Arc::new(FixedScaleOffsetCodecBound {
             offset: self.offset,
             scale: self.scale,
@@ -376,8 +381,8 @@ impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
         &self.data_type
     }
 
-    fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+    fn fill_value(&self) -> Option<&FillValue> {
+        self.fill_value.as_ref()
     }
 }
 
@@ -403,8 +408,8 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         &self.encoded_data_type
     }
 
-    fn encoded_fill_value(&self) -> &FillValue {
-        &self.encoded_fill_value
+    fn encoded_fill_value(&self) -> Option<&FillValue> {
+        self.encoded_fill_value.as_ref()
     }
 
     fn encode<'a>(

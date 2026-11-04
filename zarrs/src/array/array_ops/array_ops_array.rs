@@ -303,6 +303,12 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {
+        if chunk_indices.len() != self.dimensionality() {
+            return Err(ArrayError::InvalidChunkGridIndicesError(
+                chunk_indices.to_vec(),
+            ));
+        }
+
         Ok(StoreKey::new(chunk_store_key_path(
             self.path(),
             &self.chunk_key_encoding,

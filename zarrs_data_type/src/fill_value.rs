@@ -227,8 +227,16 @@ impl FillValue {
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn equals_all(&self, bytes: &[u8]) -> bool {
-        let fill_value_bytes = &self.0;
+        Self::equals_all_bytes(self.as_ne_bytes(), bytes)
+    }
 
+    /// Check if `bytes` are equal to repetitions of a borrowed fill-value byte pattern.
+    ///
+    /// An empty pattern matches only empty bytes. A nonempty pattern requires at least
+    /// one complete element, and partial elements do not match.
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn equals_all_bytes(fill_value_bytes: &[u8], bytes: &[u8]) -> bool {
         // Special cases for variable length data
         if !num::Integer::is_multiple_of(&bytes.len(), &fill_value_bytes.len())
             || bytes.len() < fill_value_bytes.len()
@@ -246,62 +254,21 @@ impl FillValue {
                     && suffix.iter().all(|x| x == &fill_value)
                     && aligned.iter().all(|x| x == &fill_value_128)
             }
-            2 => {
-                let (prefix, aligned, suffix) = unsafe { bytes.align_to::<u128>() };
-                if prefix.is_empty() && suffix.is_empty() {
-                    let fill_value_128 = repeat_u128(&fill_value_bytes[..2]);
-                    aligned.iter().all(|x| x == &fill_value_128)
-                } else {
-                    bytes
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
-                }
-            }
-            4 => {
-                let (prefix, aligned, suffix) = unsafe { bytes.align_to::<u128>() };
-                if prefix.is_empty() && suffix.is_empty() {
-                    let fill_value_128 = repeat_u128(&fill_value_bytes[..4]);
-                    aligned.iter().all(|x| x == &fill_value_128)
-                } else {
-                    bytes
-                        .as_chunks::<4>()
-                        .0
-                        .iter()
-                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
-                }
-            }
-            8 => {
-                let (prefix, aligned, suffix) = unsafe { bytes.align_to::<u128>() };
-                if prefix.is_empty() && suffix.is_empty() {
-                    let fill_value_128 = repeat_u128(&fill_value_bytes[..8]);
-                    aligned.iter().all(|x| x == &fill_value_128)
-                } else {
-                    bytes
-                        .as_chunks::<8>()
-                        .0
-                        .iter()
-                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
-                }
-            }
-            16 => {
-                let (prefix, aligned, suffix) = unsafe { bytes.align_to::<u128>() };
-                if prefix.is_empty() && suffix.is_empty() {
-                    let fill_value_128 =
-                        u128::from_ne_bytes(fill_value_bytes[..16].try_into().unwrap());
-                    aligned.iter().all(|x| x == &fill_value_128)
-                } else {
-                    bytes
-                        .as_chunks::<16>()
-                        .0
-                        .iter()
-                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
-                }
+            2 | 4 | 8 | 16 => {
+                // Byte arrays permit unaligned loads, so a short prefix or tail does not
+                // force the entire buffer back to element-at-a-time comparisons.
+                let fill_value_128 = repeat_u128(fill_value_bytes);
+                let (blocks, tail) = bytes.as_chunks::<16>();
+                blocks
+                    .iter()
+                    .all(|block| u128::from_ne_bytes(*block) == fill_value_128)
+                    && tail
+                        .chunks_exact(fill_value_bytes.len())
+                        .all(|element| element == fill_value_bytes)
             }
             _ => bytes
                 .chunks_exact(fill_value_bytes.len())
-                .all(|element| element == fill_value_bytes.as_slice()),
+                .all(|element| element == fill_value_bytes),
         }
     }
 
@@ -414,6 +381,36 @@ mod tests {
             assert!(fill_value.equals_all(bytes), "{size}");
             bytes[size] ^= 1;
             assert!(!fill_value.equals_all(bytes), "{size}");
+        }
+    }
+
+    #[test]
+    fn fill_value_equals_offsets_and_tails() {
+        for size in [1usize, 2, 4, 8, 16] {
+            let pattern: Vec<u8> = (1..=u8::try_from(size).unwrap()).collect();
+            let fill_value = FillValue::from(pattern.clone());
+            for offset in 0..16 {
+                for num_elements in 0..=33 {
+                    // Start from aligned storage to exercise every byte alignment.
+                    let mut words = [0u128; 36];
+                    let storage: &mut [u8] = bytemuck::cast_slice_mut(&mut words);
+                    let len = size * num_elements;
+                    let bytes = &mut storage[offset..offset + len];
+                    bytes.copy_from_slice(&pattern.repeat(num_elements));
+                    assert_eq!(fill_value.equals_all(bytes), num_elements != 0);
+                    for index in 0..len {
+                        bytes[index] ^= 0xff;
+                        assert!(
+                            !fill_value.equals_all(bytes),
+                            "{size} {offset} {len} {index}"
+                        );
+                        bytes[index] ^= 0xff;
+                    }
+                    if size > 1 && len > 0 {
+                        assert!(!fill_value.equals_all(&bytes[..len - 1]));
+                    }
+                }
+            }
         }
     }
 

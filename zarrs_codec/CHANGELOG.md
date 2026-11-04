@@ -89,6 +89,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The bytes of each read are slices of the bytes of the request
 - A drive of a single root task that completes with one write performs the write itself, without starting a scheduler
 
+- Add `ArrayToBytesCodecTraits::is_decode_passthrough`
+- Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
+- Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
+- Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
+
 ### Changed
 - A drive of a single root task that fans out uses the parallelism of the drive for the claims of its indexed generators, rather than one, so the first claims are not oversized
 - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
@@ -114,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
   - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
   - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
+  - **Breaking**: `fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined
   - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
   - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
 - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids
@@ -125,6 +131,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Partial decoder and partial encoder trait methods that take `&CodecOptions` also take `&Resources`
 - **Breaking**: Codec trait methods and `BytesDecodeSource` methods that take `&CodecOptions` also take `&ComputeResources`
   - `plan::ComputeCtx::resources`, `plan::drive_memory_one` and the `plan::*_memory` helpers use `ComputeResources`
+
+- The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
+- **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
+- Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
+- Extract subset elements without boxed contiguous-run iterators
+- Document that a `CodecOptions` concurrent target of zero is unconstrained
+- **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, changing the grid types exposed by codec APIs
+- Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 
 ### Removed
 - **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`

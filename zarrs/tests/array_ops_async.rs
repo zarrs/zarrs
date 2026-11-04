@@ -1,14 +1,15 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::cast_possible_truncation)]
 #![cfg(feature = "async")]
 
 use std::error::Error;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::Resources;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
     ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
     FillValue, data_type,
 };
@@ -113,6 +114,7 @@ async fn retrieve_chunk_into<A: AsyncArrayReadOps>(
     Ok(output)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResult {
     populate(array).await?;
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
@@ -301,6 +303,196 @@ async fn retrieve_encoded_subchunk_missing() -> TestResult {
             .await?,
         None
     );
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn partial_encode_variable_fill_value() -> TestResult {
+    for _partial_encoding in [true, false] {
+        for store_empty_chunks in [false, true] {
+            let options = CodecOptions::default().with_store_empty_chunks(store_empty_chunks);
+            let array = ArrayBuilder::new(vec![8], vec![4], data_type::string(), "ab")
+                .subchunk_shape(vec![1])
+                .build(Arc::new(AsyncStore::new()), "/array")?
+                .with_codec_options(options);
+            let subset = ArraySubset::new_with_ranges(&[0..2]);
+
+            // Concatenated bytes match the fill, but the individual strings do not.
+            array
+                .async_store_partial_chunk(&[0], &subset, &["a", "b"], &Resources::default())
+                .await?;
+            assert!(array.async_retrieve_encoded_chunk(&[0]).await?.is_some());
+            assert_eq!(
+                array
+                    .async_retrieve_chunk::<Vec<String>>(&[0], &Resources::default())
+                    .await?,
+                ["a", "b", "ab", "ab"]
+            );
+
+            // Actual fill strings still read back correctly and leave missing shards
+            // missing when empty chunks are disabled.
+            array
+                .async_store_partial_chunk(&[1], &subset, &["ab", "ab"], &Resources::default())
+                .await?;
+            if !store_empty_chunks {
+                assert!(array.async_retrieve_encoded_chunk(&[1]).await?.is_none());
+            }
+            assert_eq!(
+                array
+                    .async_retrieve_chunk::<Vec<String>>(&[1], &Resources::default())
+                    .await?,
+                ["ab"; 4]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn partial_encode_fill_value() -> TestResult {
+    for partial_encoding in [false, true] {
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
+            AsyncStore::new(),
+        )));
+        let options = CodecOptions::default();
+        let array = ArrayBuilder::new(vec![12], vec![4], data_type::uint16(), 0u16)
+            .bytes_to_bytes_codecs(vec![])
+            .build(store.clone(), "/array")?
+            .with_codec_options(options);
+        let array_store_empty = array.with_codec_options(options.with_store_empty_chunks(true));
+        let subset = |range| ArraySubset::new_with_ranges(&[range]);
+
+        // Writing only the fill value does not store a missing chunk
+        array
+            .async_store_partial_chunk(&[0], &subset(0..1), &[0u16], &Resources::default())
+            .await?;
+        assert!(array.async_retrieve_encoded_chunk(&[0]).await?.is_none());
+
+        // An empty write does not store a missing chunk, even if empty chunks are stored
+        array_store_empty
+            .async_store_partial_chunk(&[0], &subset(0..0), &[0u16; 0], &Resources::default())
+            .await?;
+        assert!(array.async_retrieve_encoded_chunk(&[0]).await?.is_none());
+
+        // Writing only the fill value stores a missing chunk if empty chunks are stored
+        array_store_empty
+            .async_store_partial_chunk(&[0], &subset(0..1), &[0u16], &Resources::default())
+            .await?;
+        assert_eq!(
+            array
+                .async_retrieve_chunk::<Vec<u16>>(&[0], &Resources::default())
+                .await?,
+            [0, 0, 0, 0]
+        );
+
+        // A partial write of other values stores a missing chunk
+        array
+            .async_store_partial_chunk(&[1], &subset(0..3), &[1u16, 0, 5], &Resources::default())
+            .await?;
+        assert_eq!(
+            array
+                .async_retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())
+                .await?,
+            [1, 0, 5, 0]
+        );
+
+        // An out-of-bounds write of only the fill value to a missing chunk is an error
+        let out_of_bounds: Vec<Vec<u64>> = vec![vec![4]];
+        assert!(
+            array
+                .async_store_partial_chunk(&[2], &out_of_bounds, &[0u16], &Resources::default())
+                .await
+                .is_err()
+        );
+
+        if partial_encoding {
+            // Writing the fill value into an existing chunk writes it in place without reading the chunk
+            store.reset();
+            for range in [0..1, 2..3] {
+                array
+                    .async_store_partial_chunk(&[1], &subset(range), &[0u16], &Resources::default())
+                    .await?;
+            }
+            assert_eq!(store.reads(), 0);
+            assert_eq!(store.bytes_written(), 4);
+            assert_eq!(store.keys_erased(), 0);
+            assert_eq!(
+                array
+                    .async_retrieve_chunk::<Vec<u16>>(&[1], &Resources::default())
+                    .await?,
+                [0, 0, 0, 0]
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Optional bytes of `len` elements with a short all-zero mask, and with a mask containing `2`.
+fn malformed_optional_bytes(len: usize) -> [ArrayBytes<'static>; 2] {
+    let mut nonbinary = vec![0; len];
+    nonbinary[1] = 2;
+    [vec![0; len - 1], nonbinary]
+        .map(|mask| ArrayBytes::new_flen(vec![0; len]).with_optional_mask(mask))
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn optional_malformed_masks_are_rejected() -> TestResult {
+    for _partial_encoding in [false, true] {
+        let array = ArrayBuilder::new(
+            vec![8],
+            vec![4],
+            data_type::uint8().to_optional(),
+            FillValue::from(None::<u8>),
+        )
+        .build(Arc::new(AsyncStore::new()), "/array")?
+        .with_codec_options(CodecOptions::default());
+        array
+            .async_store_chunk(
+                &[0],
+                &[Some(1u8), None, Some(3), Some(4)],
+                &Resources::default(),
+            )
+            .await?;
+        let existing = array.async_retrieve_encoded_chunk(&[0]).await?;
+        assert!(existing.is_some());
+
+        for bytes in malformed_optional_bytes(4) {
+            assert!(
+                array
+                    .async_store_chunk(&[0], bytes.clone(), &Resources::default())
+                    .await
+                    .is_err()
+            );
+            assert!(
+                array
+                    .async_store_chunk(&[1], bytes, &Resources::default())
+                    .await
+                    .is_err()
+            );
+            assert_eq!(array.async_retrieve_encoded_chunk(&[0]).await?, existing);
+            assert!(array.async_retrieve_encoded_chunk(&[1]).await?.is_none());
+        }
+        for bytes in malformed_optional_bytes(3) {
+            let subset = |range| ArraySubset::new_with_ranges(&[range]);
+            assert!(
+                array
+                    .async_store_array_subset(&subset(1..4), bytes.clone(), &Resources::default())
+                    .await
+                    .is_err()
+            );
+            assert!(
+                array
+                    .async_store_array_subset(&subset(5..8), bytes, &Resources::default())
+                    .await
+                    .is_err()
+            );
+            assert_eq!(array.async_retrieve_encoded_chunk(&[0]).await?, existing);
+            assert!(array.async_retrieve_encoded_chunk(&[1]).await?.is_none());
+        }
+    }
     Ok(())
 }
 
@@ -591,5 +783,38 @@ async fn zero_concurrency_retrieve_encoded_chunks() -> TestResult {
     )
     .await??;
     assert_eq!(decoded, (1..=25).collect::<Vec<u8>>());
+    Ok(())
+}
+
+/// Chunk operations reject chunk indices with the wrong dimensionality rather than storing,
+/// erasing, or retrieving a key that does not belong to the chunk grid.
+#[tokio::test]
+async fn async_chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
+    use zarrs::array::ArrayError;
+    use zarrs::storage::AsyncListableStorageTraits;
+
+    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .build(store.clone(), "/array")?;
+    let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);
+
+    let is_invalid = |result: Result<_, ArrayError>| {
+        matches!(result, Err(ArrayError::InvalidChunkGridIndicesError(_)))
+    };
+    for chunk_indices in [&[0][..], &[0, 0, 0]] {
+        assert!(is_invalid(unsafe {
+            array
+                .async_store_encoded_chunk(chunk_indices, encoded.clone())
+                .await
+        }));
+        assert!(is_invalid(array.async_erase_chunk(chunk_indices).await));
+        assert!(is_invalid(
+            array
+                .async_retrieve_encoded_chunk(chunk_indices)
+                .await
+                .map(|_| ())
+        ));
+    }
+    assert!(store.list().await?.is_empty());
     Ok(())
 }

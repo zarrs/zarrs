@@ -23,6 +23,7 @@ use std::sync::Arc;
 pub use array_to_array::bitround::*;
 pub use array_to_array::cast_value::*;
 pub use array_to_array::fixedscaleoffset::*;
+pub use array_to_array::numcodecs_packbits::*;
 pub use array_to_array::reshape::*;
 pub use array_to_array::squeeze::*;
 #[cfg(feature = "transpose")]

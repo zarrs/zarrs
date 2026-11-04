@@ -260,7 +260,7 @@ mod tests {
             let data_type = data_type::string();
             let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?).with_context(
                 data_type.clone(),
-                FillValue::from(""),
+                Some(FillValue::from("")),
                 &CodecSpecificOptions::default(),
             )?;
 

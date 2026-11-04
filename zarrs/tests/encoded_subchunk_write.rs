@@ -99,7 +99,9 @@ fn transposed_nested_sharding_builder() -> ArrayBuilder {
 
 /// Builders of arrays whose subchunks are mapped through array-to-array codecs, with the level, indices of a subchunk
 /// and the number of elements of the array.
-fn mapped_builders() -> Result<Vec<(ArrayBuilder, usize, Vec<u64>, u16)>, Box<dyn Error>> {
+type MappedBuilder = (ArrayBuilder, usize, Vec<u64>, u16);
+
+fn mapped_builders() -> Result<Vec<MappedBuilder>, Box<dyn Error>> {
     let data_type = data_type::uint16();
     let mut reshape = ArrayBuilder::new(vec![4, 6], vec![2, 6], data_type.clone(), 0u16);
     reshape.array_to_array_codecs(vec![Arc::new(ReshapeCodec::new(ReshapeShape::new([nz(

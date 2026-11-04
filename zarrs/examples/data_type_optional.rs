@@ -8,6 +8,7 @@
 //! - The mask is compressed with the packbits codec
 //! - The data uses the bytes codec for actual values
 //! - More efficient storage for arrays with many null/missing values
+#![allow(clippy::cast_possible_truncation)]
 
 use std::sync::Arc;
 use zarrs::array::Resources;
@@ -16,6 +17,7 @@ use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, FillValue, data_type};
 use zarrs::storage::ReadableStorageTraits;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resources = Resources::default();
     // Create an in-memory store

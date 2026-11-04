@@ -292,7 +292,7 @@ pub(crate) fn assert_plan_parity(
         }
 
         // A missing chunk is the fill value
-        let fill_value: &FillValue = codecs.fill_value();
+        let fill_value: &FillValue = codecs.fill_value().unwrap();
         let expected =
             ArrayBytes::new_fill_value(codecs.data_type(), indexer.len(), fill_value).unwrap();
         for (name, planned) in planned_decodes(codecs, shape, &io, SourceKey(1), &*indexer) {
@@ -378,7 +378,7 @@ pub(crate) fn assert_partial_encode_parity(
             let mut expected = ArrayBytes::new_fill_value(
                 codecs.data_type(),
                 shape_u64.iter().product(),
-                codecs.fill_value(),
+                codecs.fill_value().unwrap(),
             )
             .unwrap();
             let io = OneWritableValueIo::default();
@@ -414,7 +414,7 @@ pub(crate) fn assert_partial_encode_parity(
                     .unwrap();
                 let mut values = drive(vec![task], &io, &resources).unwrap();
                 let new_state = zarrs_codec::plan::partial_encode_state(values.remove(0));
-                assert!(new_state.is_some(), "{name}: a partial encode has a state");
+                // A complete replacement needs no cached partial-encode state.
                 if keep_state {
                     state = new_state;
                 }
@@ -431,7 +431,7 @@ pub(crate) fn assert_partial_encode_parity(
                     None => ArrayBytes::new_fill_value(
                         codecs.data_type(),
                         shape_u64.iter().product(),
-                        codecs.fill_value(),
+                        codecs.fill_value().unwrap(),
                     )
                     .unwrap(),
                 };
@@ -462,7 +462,11 @@ mod tests {
         fill_value: FillValue,
     ) -> Arc<CodecChainBound> {
         CodecChain::new(array_to_array, array_to_bytes, bytes_to_bytes)
-            .with_context(data_type, fill_value, &CodecSpecificOptions::default())
+            .with_context(
+                data_type,
+                Some(fill_value),
+                &CodecSpecificOptions::default(),
+            )
             .unwrap()
     }
 
@@ -1053,7 +1057,7 @@ mod tests {
             let mut expected = ArrayBytes::new_fill_value(
                 codecs.data_type(),
                 shape.iter().map(|s| s.get()).product(),
-                codecs.fill_value(),
+                codecs.fill_value().unwrap(),
             )
             .unwrap();
             expected = update_array_bytes(

@@ -108,7 +108,8 @@ impl NodePath {
     /// The `relative` argument should be a relative path segment (e.g., `"sub/foo"` or `"bar"`).
     /// A leading `/` in `relative` is stripped.
     ///
-    /// Returns an error if the resulting path is invalid according to [`NodePath::validate`].
+    /// # Errors
+    /// Returns a [`NodePathError`] if the resulting path is invalid according to [`NodePath::validate`].
     pub fn join(&self, relative: &str) -> Result<Self, NodePathError> {
         // Strip leading slash if present
         let relative = relative.strip_prefix('/').unwrap_or(relative);
