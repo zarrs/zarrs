@@ -185,22 +185,12 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
             return Err(ChunkGridCreateError::new(
                 "Length of transpose codec `order` does not match `decoded_chunk_grid` dimensionality",
             ));
-        } else if self.order.0.len() != encoded_subchunk_grid.dimensionality() {
-            return Err(ChunkGridCreateError::new(
-                "Length of transpose codec `order` does not match `encoded_subchunk_grid` dimensionality",
-            ));
         }
-
-        let inverse = inverse_permutation(&self.order.0);
-        let mut chunk_shapes = Vec::with_capacity(inverse.len());
-        for &dimension in &inverse {
-            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(dimension)?;
-            chunk_shapes.push(ChunkEdgeLengths::encode(&edge_lengths));
-        }
-
-        Ok(ChunkGridDecoded::Array(ChunkGrid::new(
-            RectilinearChunkGrid::new(decoded_chunk_grid.array_shape().to_vec(), &chunk_shapes)?,
-        )))
+        Ok(ChunkGridDecoded::Array(decoded_local_subchunk_grid(
+            decoded_chunk_grid.array_shape().to_vec(),
+            &inverse_permutation(&self.order.0),
+            encoded_subchunk_grid,
+        )?))
     }
 
     fn encoded_element_indices(
@@ -340,4 +330,28 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             ),
         ))
     }
+}
+
+/// Map the edge lengths of `encoded_subchunk_grid` through `order_inverse` to a grid over `array_shape`.
+pub(super) fn decoded_local_subchunk_grid(
+    array_shape: Vec<u64>,
+    order_inverse: &[usize],
+    encoded_subchunk_grid: &ChunkGrid,
+) -> Result<ChunkGrid, ChunkGridCreateError> {
+    if order_inverse.len() != encoded_subchunk_grid.dimensionality() {
+        return Err(ChunkGridCreateError::new(
+            "Length of transpose codec `order` does not match `encoded_subchunk_grid` dimensionality",
+        ));
+    }
+    let chunk_shapes = order_inverse
+        .iter()
+        .map(|&encoded_dim| {
+            let edge_lengths = encoded_subchunk_grid.chunk_edge_lengths(encoded_dim)?;
+            Ok(ChunkEdgeLengths::encode(&edge_lengths))
+        })
+        .collect::<Result<Vec<_>, ChunkGridCreateError>>()?;
+    Ok(ChunkGrid::new(RectilinearChunkGrid::new(
+        array_shape,
+        &chunk_shapes,
+    )?))
 }
