@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Expose pure chunk-local grid mappings through array codecs
 - Map element coordinates through every array codec; packbits returns `None` as it has no individual element mappings
 - Expose `subchunk_codecs` and `subchunk_codecs_at_level` on arrays and cached arrays, in the array-to-bytes encoded domain
 - Add allocation regression checks for general array operations against main baselines, without scheduler allowances, and verify async borrowed-slice zero-copy writes

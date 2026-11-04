@@ -232,6 +232,21 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             super::squeeze_dims(decoded_coordinates.iter().copied(), decoded_shape, 0);
         Ok(Some(ArrayIndices::from(encoded_coordinates.as_slice())))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let squeeze: Vec<bool> = decoded_shape.iter().map(|dim| dim.get() == 1).collect();
+        decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(decoded_shape).to_vec(),
+            &squeeze,
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
 }
 
 #[cfg_attr(

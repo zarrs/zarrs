@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Breaking**: Require `decoded_local_subchunk_grid` on every array-to-array codec
 - **Breaking**: Require element coordinate mapping on `ArrayToArrayCodecSubchunkingTraits`, returning `None` if a codec does not map elements; export `validate_chunk_coordinates`
 - **Breaking**: Add required `ArrayToBytesCodecSubchunkingTraits::subchunk_codecs` and level access, ordered outermost first and independent of concrete subchunk shape
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`

@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ArrayIndices, ChunkGridCreateError};
+use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -40,6 +40,21 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+
+    /// Map a chunk-local subchunk grid of the encoded chunk to the decoded chunk of `decoded_shape`.
+    ///
+    /// This is the chunk-local counterpart of [`decoded_subchunk_grid`](Self::decoded_subchunk_grid), used to resolve
+    /// the subchunk grids of an individual chunk (e.g. by a partial decoder).
+    ///
+    /// Returns [`None`] if the grid cannot be represented in the decoded chunk.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the grid is incompatible with the encoded chunk.
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError>;
 
     /// Map the coordinates of an element of a decoded chunk of `decoded_shape` to its coordinates in the encoded chunk.
     ///
@@ -107,6 +122,14 @@ where
     ) -> Result<Option<ArrayIndices>, CodecError> {
         validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
         Ok(Some(decoded_coordinates.into()))
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        Ok(Some(encoded_subchunk_grid.clone()))
     }
 }
 

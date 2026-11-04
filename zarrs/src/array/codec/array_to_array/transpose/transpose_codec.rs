@@ -204,6 +204,20 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
             permute(decoded_coordinates, &self.order.0).expect("matching dimensionality"),
         ))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(decoded_shape).to_vec(),
+            &inverse_permutation(&self.order.0),
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
 }
 
 #[cfg_attr(

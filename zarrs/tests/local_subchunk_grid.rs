@@ -490,6 +490,15 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCod
             .ok_or_else(|| CodecError::Other("out of bounds".to_string()))?;
         Ok(Some(std::iter::once(index).collect()))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        _encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        // Chunk-local grids are not exercised by this codec
+        Ok(None)
+    }
 }
 
 impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
