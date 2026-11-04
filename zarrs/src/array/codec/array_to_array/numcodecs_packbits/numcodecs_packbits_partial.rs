@@ -3,18 +3,21 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecSubchunkingTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes,
+    InvalidBytesLengthError,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+    AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{OffsetBytesIterator, StorageError};
 
-use crate::array::ArraySubset;
+use super::NumcodecsPackBitsCodecBound;
+use crate::array::{ArraySubset, ChunkGrid, ChunkShape, DataType, Indexer};
 
 pub(super) struct NumcodecsPackBitsPartial<T: ?Sized> {
     input_handle: Arc<T>,
@@ -221,5 +224,140 @@ impl<T: AsyncArrayPartialEncoderTraits + ?Sized> AsyncBytesPartialEncoderTraits
 
     fn supports_partial_encode(&self) -> bool {
         self.input_handle.supports_partial_encode()
+    }
+}
+
+pub(super) struct NumcodecsPackBitsPartialDecoder<T: ?Sized, D: ?Sized> {
+    input_handle: Arc<T>,
+    decoded_shape: ChunkShape,
+    codec: Arc<NumcodecsPackBitsCodecBound>,
+    inner: Arc<D>,
+}
+
+impl<T: ?Sized, D: ?Sized> NumcodecsPackBitsPartialDecoder<T, D> {
+    pub(super) fn new(
+        input_handle: Arc<T>,
+        decoded_shape: ChunkShape,
+        codec: Arc<NumcodecsPackBitsCodecBound>,
+        inner: Arc<D>,
+    ) -> Self {
+        Self {
+            input_handle,
+            decoded_shape,
+            codec,
+            inner,
+        }
+    }
+}
+
+impl<T: ArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
+    ArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
+{
+    fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.codec.decoded_local_subchunk_grids(
+            &self.decoded_shape,
+            self.input_handle.local_subchunk_grids(options)?,
+        )
+    }
+}
+
+impl<T: ArrayPartialDecoderTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
+    ArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
+{
+    fn data_type(&self) -> &DataType {
+        self.inner.data_type()
+    }
+
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.inner.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.inner.size_held()
+    }
+
+    fn partial_decode(
+        &self,
+        indexer: &dyn Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        self.inner.partial_decode(indexer, options)
+    }
+
+    fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.inner.partial_decode_into(indexer, output_target, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.inner.supports_partial_decode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<
+    T: AsyncArrayPartialDecoderSubchunkingTraits + ?Sized,
+    D: AsyncArrayPartialDecoderTraits + ?Sized,
+> AsyncArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
+{
+    async fn local_subchunk_grids(
+        &self,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        self.codec.decoded_local_subchunk_grids(
+            &self.decoded_shape,
+            self.input_handle.local_subchunk_grids(options).await?,
+        )
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: AsyncArrayPartialDecoderTraits + ?Sized, D: AsyncArrayPartialDecoderTraits + ?Sized>
+    AsyncArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
+{
+    fn data_type(&self) -> &DataType {
+        self.inner.data_type()
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.inner.exists().await
+    }
+
+    fn size_held(&self) -> usize {
+        self.inner.size_held()
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
+        indexer: &dyn Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        self.inner.partial_decode(indexer, options).await
+    }
+
+    async fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.inner
+            .partial_decode_into(indexer, output_target, options)
+            .await
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.inner.supports_partial_decode()
     }
 }

@@ -30,7 +30,7 @@ pub struct TransposeCodec {
 
 /// A Transpose codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
-struct TransposeCodecBound {
+pub(super) struct TransposeCodecBound {
     order: TransposeOrder,
     data_type: DataType,
     fill_value: Option<FillValue>,
@@ -186,7 +186,7 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
                 "Length of transpose codec `order` does not match `decoded_chunk_grid` dimensionality",
             ));
         }
-        Ok(ChunkGridDecoded::Array(decoded_local_subchunk_grid(
+        Ok(ChunkGridDecoded::Array(untranspose_subchunk_grid(
             decoded_chunk_grid.array_shape().to_vec(),
             &inverse_permutation(&self.order.0),
             encoded_subchunk_grid,
@@ -210,7 +210,7 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
         decoded_shape: &[NonZeroU64],
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, CodecError> {
-        decoded_local_subchunk_grid(
+        untranspose_subchunk_grid(
             bytemuck::must_cast_slice(decoded_shape).to_vec(),
             &inverse_permutation(&self.order.0),
             encoded_subchunk_grid,
@@ -287,6 +287,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
+                self.clone(),
                 input_handle,
                 shape,
                 &self.data_type,
@@ -303,6 +304,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
+                self.clone(),
                 input_output_handle,
                 shape,
                 &self.data_type,
@@ -320,6 +322,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
+                self.clone(),
                 input_handle,
                 shape,
                 &self.data_type,
@@ -337,6 +340,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
+                self.clone(),
                 input_output_handle,
                 shape,
                 &self.data_type,
@@ -347,7 +351,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 }
 
 /// Map the edge lengths of `encoded_subchunk_grid` through `order_inverse` to a grid over `array_shape`.
-pub(super) fn decoded_local_subchunk_grid(
+fn untranspose_subchunk_grid(
     array_shape: Vec<u64>,
     order_inverse: &[usize],
     encoded_subchunk_grid: &ChunkGrid,
@@ -362,9 +366,9 @@ pub(super) fn decoded_local_subchunk_grid(
             "Length of transpose codec `order` does not match `encoded_subchunk_grid` dimensionality",
         ));
     }
-    if std::iter::zip(&array_shape, order_inverse)
-        .any(|(&expected, &encoded_dim)| encoded_subchunk_grid.array_shape()[encoded_dim] != expected)
-    {
+    if std::iter::zip(&array_shape, order_inverse).any(|(&expected, &encoded_dim)| {
+        encoded_subchunk_grid.array_shape()[encoded_dim] != expected
+    }) {
         return Err(ChunkGridCreateError::new(format!(
             "encoded subchunk grid array shape {:?} does not match transposed shape of {array_shape:?}",
             encoded_subchunk_grid.array_shape()

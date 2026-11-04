@@ -23,7 +23,8 @@ use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 ///   across the full array when possible, or fall back to [`ChunkGridDecoded::ChunkLocal`] or
 ///   [`ChunkGridDecoded::None`].
 /// - **Chunk-local mappings** operate on a single chunk of `decoded_shape`:
-///   - [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) maps a subchunk grid of
+///   - [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) and
+///     [`decoded_local_subchunk_grids`](Self::decoded_local_subchunk_grids) map subchunk grids of
 ///     the encoded chunk back to the decoded chunk.
 ///   - [`encoded_element_indices`](Self::encoded_element_indices) maps element indices from the
 ///     decoded chunk to the encoded chunk.
@@ -67,6 +68,27 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_shape: &[NonZeroU64],
         encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, CodecError>;
+
+    /// Map each level of a chunk-local subchunk grid hierarchy from the encoded chunk back to a decoded chunk of `decoded_shape`.
+    ///
+    /// Applies [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) to each resolved level, preserving [`None`] entries.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_shape` is invalid or any grid is incompatible with the encoded chunk.
+    fn decoded_local_subchunk_grids(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grids: Vec<Option<ChunkGrid>>,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        encoded_subchunk_grids
+            .into_iter()
+            .map(|grid| {
+                grid.map_or(Ok(None), |grid| {
+                    self.decoded_local_subchunk_grid(decoded_shape, &grid)
+                })
+            })
+            .collect()
+    }
 
     /// Map element `decoded_element_indices` in a decoded chunk of `decoded_shape` to their indices in the encoded chunk.
     ///

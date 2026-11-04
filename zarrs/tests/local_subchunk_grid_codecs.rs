@@ -137,3 +137,30 @@ fn local_subchunk_grid_absent_with_array_partial_decoder_cache() -> TestResult {
     assert!(array.local_subchunk_grid(&[0])?.is_none());
     Ok(())
 }
+
+#[test]
+fn local_subchunk_grids_preserves_hierarchy_depth_with_numcodecs_packbits() -> TestResult {
+    use subchunk_grid_cases::nz;
+    use zarrs::array::FillValue;
+    use zarrs::array::codec::NumcodecsPackBitsCodec;
+    use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+
+    let store = Arc::new(MemoryStore::default());
+    let sharding = ShardingCodecBuilder::new(vec![nz(3)], &data_type::uint8()).build_arc();
+    let mut builder = ArrayBuilder::new(
+        vec![4, 4],
+        vec![4, 4],
+        data_type::bool(),
+        FillValue::from(true),
+    );
+    builder.array_to_array_codecs(vec![Arc::new(NumcodecsPackBitsCodec)]);
+    builder.array_to_bytes_codec(sharding);
+    let array = builder.build(store, "/array")?;
+    array.store_chunk(&[0, 0], vec![false; 16])?;
+
+    let partial_decoder = array.partial_decoder(&[0, 0])?;
+    let grids = partial_decoder.local_subchunk_grids(&CodecOptions::default())?;
+    assert!(matches!(grids.as_slice(), [None]));
+    assert!(array.local_subchunk_grid(&[0, 0])?.is_none());
+    Ok(())
+}

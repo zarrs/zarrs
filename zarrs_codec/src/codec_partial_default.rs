@@ -155,7 +155,10 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<super::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options)
+        self.codec.decoded_local_subchunk_grids(
+            self.decoded_representation.shape(),
+            self.input_output_handle.local_subchunk_grids(options)?,
+        )
     }
 }
 
@@ -518,7 +521,10 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<zarrs_chunk_grid::ChunkGrid>>, CodecError> {
-        self.input_output_handle.local_subchunk_grids(options).await
+        self.codec.decoded_local_subchunk_grids(
+            self.decoded_representation.shape(),
+            self.input_output_handle.local_subchunk_grids(options).await?,
+        )
     }
 }
 

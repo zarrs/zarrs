@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
   - `ArrayToBytesCodecSubchunkingTraits::{subchunk_codecs,subchunk_codecs_at_level}` return the shape-independent codec for each subchunk level (outermost first)
   - `ArrayToArrayCodecSubchunkingTraits` maps chunk-local subchunk addressing through a codec (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
-    - `decoded_local_subchunk_grid` maps a chunk-local subchunk grid back to a decoded chunk
+    - `decoded_local_subchunk_grid[s]` map chunk-local subchunk grids back to a decoded chunk
     - `encoded_element_indices` maps element indices to an encoded chunk
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
