@@ -89,6 +89,7 @@ impl AsyncShardingPartialEncoder {
     /// Append the encoded `updated_subchunks` to the shard and replace their entries in the shard index.
     ///
     /// A [`None`] subchunk is removed. The cached `shard_index_guard` is only updated once the shard is written.
+    /// If the input/output handle does not support partial encoding, the shard is rewritten compactly instead.
     #[allow(clippy::too_many_lines)]
     async fn commit_subchunk_updates(
         &self,
@@ -96,6 +97,25 @@ impl AsyncShardingPartialEncoder {
         updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        // Rewrite the retained subchunks too if the shard is rewritten entirely anyway (e.g. in memory)
+        //  Otherwise superseded subchunks accumulate in the shard
+        let mut updated_subchunks = updated_subchunks;
+        if !self.input_output_handle.supports_partial_encode() {
+            let (retained, byte_ranges) =
+                super::retained_subchunks(shard_index_guard, &updated_subchunks);
+            if !retained.is_empty() {
+                let retained_encoded = self
+                    .input_output_handle
+                    .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
+                    .await?
+                    .ok_or_else(super::missing_retained_subchunks)?;
+                updated_subchunks.extend(
+                    std::iter::zip(retained, retained_encoded)
+                        .map(|(index, encoded)| (index, Some(encoded.into_static()))),
+                );
+            }
+        }
+
         let mut shard_index = shard_index_guard.clone();
 
         // Get the maximum offset of existing encoded chunks

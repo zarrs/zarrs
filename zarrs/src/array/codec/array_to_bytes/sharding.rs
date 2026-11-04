@@ -91,7 +91,7 @@ pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
@@ -588,6 +588,26 @@ fn subchunk_updates<'a>(
 }
 
 /// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
+/// Return the indices and byte ranges of the stored subchunks of a shard that are not in `updated_subchunks`.
+fn retained_subchunks<T>(
+    shard_index: &[u64],
+    updated_subchunks: &[(u64, T)],
+) -> (Vec<u64>, Vec<ByteRange>) {
+    let updated: HashSet<u64> = updated_subchunks.iter().map(|(index, _)| *index).collect();
+    (0..shard_index.len() / 2)
+        .filter_map(|subchunk_index| {
+            let (offset, size) = subchunk_offset_size(shard_index, subchunk_index)?;
+            let subchunk_index = subchunk_index as u64;
+            (!updated.contains(&subchunk_index))
+                .then_some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
+        })
+        .unzip()
+}
+
+fn missing_retained_subchunks() -> CodecError {
+    CodecError::from("the shard is missing but its index references stored subchunks")
+}
+
 fn invalid_shard_index() -> CodecError {
     CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
 }
