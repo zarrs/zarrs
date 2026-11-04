@@ -70,6 +70,28 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_shape: &[NonZeroU64],
         decoded_coordinates: &[u64],
     ) -> Result<Option<ArrayIndices>, CodecError>;
+
+    /// Map the chunk-local subchunk grids of each level of the encoded chunk to the decoded chunk of `decoded_shape`.
+    ///
+    /// This applies [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) to each level of a subchunk grid
+    /// hierarchy (e.g. of a wrapped partial decoder). A level that is not resolvable remains [`None`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if a grid is incompatible with the encoded chunk.
+    fn decoded_local_subchunk_grids(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grids: Vec<Option<ChunkGrid>>,
+    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
+        encoded_subchunk_grids
+            .into_iter()
+            .map(|grid| {
+                grid.map_or(Ok(None), |grid| {
+                    self.decoded_local_subchunk_grid(decoded_shape, &grid)
+                })
+            })
+            .collect()
+    }
 }
 
 /// Check that `coordinates` are in bounds of a chunk of `shape`.
