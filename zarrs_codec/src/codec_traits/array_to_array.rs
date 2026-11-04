@@ -92,6 +92,53 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
             })
             .collect()
     }
+
+    /// Map the indices of a subchunk of a decoded chunk of `decoded_shape` to the indices of the same subchunk in the
+    /// chunk-local `encoded_subchunk_grid` of the encoded chunk.
+    ///
+    /// The `decoded_subchunk_indices` index the
+    /// [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) of `encoded_subchunk_grid`.
+    /// The default implementation locates the encoded subchunk by the
+    /// [`encoded_coordinates`](Self::encoded_coordinates) of the first element of the decoded subchunk.
+    ///
+    /// Returns [`None`] if the subchunk grid cannot be represented in the decoded chunk, or the codec does not map
+    /// elements to elements of the encoded chunk.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_subchunk_indices` are out of bounds, or the subchunk cannot be located in
+    /// `encoded_subchunk_grid`.
+    fn encoded_subchunk_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+        decoded_subchunk_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        let Some(decoded_subchunk_grid) =
+            self.decoded_local_subchunk_grid(decoded_shape, encoded_subchunk_grid)?
+        else {
+            return Ok(None);
+        };
+        let subset = decoded_subchunk_grid
+            .subset(decoded_subchunk_indices)?
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "subchunk indices {decoded_subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
+                    decoded_subchunk_grid.grid_shape()
+                ))
+            })?;
+        let Some(encoded_coordinates) = self.encoded_coordinates(decoded_shape, subset.start())?
+        else {
+            return Ok(None);
+        };
+        encoded_subchunk_grid
+            .chunk_indices(&encoded_coordinates)?
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "encoded coordinates {encoded_coordinates:?} are out of bounds of the encoded subchunk grid"
+                ))
+            })
+            .map(Some)
+    }
 }
 
 /// Check that `coordinates` are in bounds of a chunk of `shape`.

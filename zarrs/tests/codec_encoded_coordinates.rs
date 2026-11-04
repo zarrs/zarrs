@@ -223,6 +223,35 @@ fn check_grid(
         .unwrap();
     assert_eq!(decoded_grid.array_shape(), decoded_shape_u64);
 
+    for indices in ArraySubset::new_with_shape(decoded_grid.grid_shape()).indices() {
+        let subset = decoded_grid.subset(&indices).unwrap().unwrap();
+        let encoded_coordinates = codec
+            .encoded_coordinates(decoded_shape, subset.start())
+            .unwrap()
+            .unwrap();
+        let expected = encoded_grid
+            .chunk_indices(&encoded_coordinates)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            codec
+                .encoded_subchunk_indices(decoded_shape, encoded_grid, &indices)
+                .unwrap()
+                .unwrap(),
+            expected
+        );
+    }
+    for invalid in [
+        vec![],
+        decoded_grid.grid_shape().to_vec(),
+        vec![0; decoded_shape.len() + 1],
+    ] {
+        assert!(
+            codec
+                .encoded_subchunk_indices(decoded_shape, encoded_grid, &invalid)
+                .is_err()
+        );
+    }
     // Each decoded subchunk maps to exactly one encoded subchunk, and vice versa
     let mut decoded_to_encoded = std::collections::HashMap::new();
     let mut encoded_to_decoded = std::collections::HashMap::new();
@@ -382,5 +411,33 @@ fn local_grid_hierarchy_preserves_order_none_and_errors() {
         codec
             .decoded_local_subchunk_grids(&shape(&[6, 4]), vec![None, Some(wrong)])
             .is_err()
+    );
+}
+
+#[test]
+fn unavailable_subchunk_indices_are_none() {
+    use zarrs::array::codec::NumcodecsPackBitsCodec;
+    let packbits = NumcodecsPackBitsCodec::new()
+        .with_context(
+            data_type::bool(),
+            Some(false.into()),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    let grid = ChunkGrid::new(RegularChunkGrid::new(vec![3, 4], shape(&[3, 1])).unwrap());
+    assert!(
+        packbits
+            .encoded_subchunk_indices(&shape(&[3, 4]), &grid, &[0, 0])
+            .unwrap()
+            .is_none()
+    );
+    let reshape = bind(Arc::new(ReshapeCodec::new(
+        ReshapeShape::new(vec![ReshapeDim::from(shape(&[3])[0]), ReshapeDim::auto()]).unwrap(),
+    )));
+    assert!(
+        reshape
+            .encoded_subchunk_indices(&shape(&[2, 6]), &grid, &[0, 0])
+            .unwrap()
+            .is_none()
     );
 }
