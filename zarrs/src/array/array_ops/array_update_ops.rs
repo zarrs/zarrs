@@ -1,9 +1,9 @@
+#[cfg(doc)]
+use super::ArrayOps;
 use super::{
-    Arc, Array, ArrayError, ArrayIndices, ArrayReadOps, ArraySubsetTraits, ArrayWriteOps, Indexer,
+    Arc, Array, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, ArrayWriteOps, Indexer,
     IntoArrayBytes, ReadableStorageTraits,
 };
-#[cfg(doc)]
-use super::{ArrayOps, ArraySubset};
 use zarrs_codec::{ArrayPartialEncoderTraits, CowBytes};
 
 /// Synchronous array read/write update operations.
@@ -127,13 +127,13 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         subchunk_indices: &[u64],
         bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        let (encoder, local_indices) =
-            subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices)?;
+        let (encoder, subset) =
+            subchunk_partial_encoder_and_local_subset(self, level, subchunk_indices)?;
         // SAFETY: The caller upholds the safety requirements, the subchunk is only located in its chunk.
         unsafe {
-            encoder.store_encoded_subchunk_at_level(
+            encoder.store_encoded_subchunk_by_subset(
                 level,
-                &local_indices,
+                &subset,
                 bytes,
                 self.codec_options(),
             )?;
@@ -168,24 +168,21 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(), ArrayError> {
-        let (encoder, local_indices) =
-            subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices)?;
-        encoder.erase_subchunk_at_level(level, &local_indices, self.codec_options())?;
+        let (encoder, subset) =
+            subchunk_partial_encoder_and_local_subset(self, level, subchunk_indices)?;
+        encoder.erase_subchunk_by_subset(level, &subset, self.codec_options())?;
         Ok(())
     }
 }
 
-/// Initialise the partial encoder of the chunk holding a subchunk, and locate the subchunk in its `level` subchunk
-/// grid.
-fn subchunk_partial_encoder_and_local_indices<A: ArrayUpdateOps + ?Sized>(
+/// Initialise the partial encoder of the chunk holding the subchunk at `subchunk_indices` of the `level` subchunk grid,
+/// and return the subset of the subchunk relative to the chunk.
+fn subchunk_partial_encoder_and_local_subset<A: ArrayUpdateOps + ?Sized>(
     array: &A,
     level: usize,
     subchunk_indices: &[u64],
-) -> Result<(Arc<dyn ArrayPartialEncoderTraits>, ArrayIndices), ArrayError> {
+) -> Result<(Arc<dyn ArrayPartialEncoderTraits>, ArraySubset), ArrayError> {
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
-    let encoder = array.partial_encoder(&chunk_indices)?;
-    let local_indices =
-        super::local_subchunk_indices(encoder.as_ref(), level, &subset, array.codec_options())?;
-    Ok((encoder, local_indices))
+    Ok((array.partial_encoder(&chunk_indices)?, subset))
 }

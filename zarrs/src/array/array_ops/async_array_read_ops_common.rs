@@ -24,7 +24,7 @@ pub(super) async fn async_retrieve_encoded_subchunk_at_level<A: AsyncArrayReadOp
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let partial_decoder = array.async_partial_decoder(&chunk_indices).await?;
-    async_retrieve_encoded_subchunk_in(
+    async_retrieve_encoded_subchunk_by_subset(
         partial_decoder.as_ref(),
         level,
         &subset,
@@ -35,16 +35,14 @@ pub(super) async fn async_retrieve_encoded_subchunk_at_level<A: AsyncArrayReadOp
 
 /// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid with the asynchronous
 /// `partial_decoder` of its chunk.
-pub(super) async fn async_retrieve_encoded_subchunk_in(
+pub(super) async fn async_retrieve_encoded_subchunk_by_subset(
     partial_decoder: &dyn AsyncArrayPartialDecoderTraits,
     level: usize,
     subset: &ArraySubset,
     options: &CodecOptions,
 ) -> Result<Option<EncodedSubchunk>, ArrayError> {
-    let local_indices =
-        super::async_local_subchunk_indices(partial_decoder, level, subset, options).await?;
     Ok(partial_decoder
-        .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
+        .retrieve_encoded_subchunk_by_subset(level, subset, options)
         .await?)
 }
 

@@ -218,15 +218,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         bytes: zarrs_codec::CowBytes<'_>,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
-        match self
-            .async_encoded_subchunk_encoder(level, chunk_indices, subset)
-            .await?
-        {
-            EncodedSubchunkEncoder::Storage(encoder, indices) => {
+        match self.async_encoded_subchunk_encoder(chunk_indices).await? {
+            EncodedSubchunkEncoder::Storage(encoder) => {
                 // SAFETY: The caller upholds the safety requirements.
                 unsafe {
                     encoder
-                        .store_encoded_subchunk_at_level(level, &indices, bytes, options)
+                        .store_encoded_subchunk_by_subset(level, subset, bytes, options)
                         .await?;
                 }
                 Ok(())
@@ -234,12 +231,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             EncodedSubchunkEncoder::Memory(update) => {
                 // SAFETY: The caller upholds the safety requirements.
                 unsafe {
-                    update.encoder.store_encoded_subchunk_at_level(
-                        level,
-                        &update.indices,
-                        bytes,
-                        options,
-                    )?;
+                    update
+                        .encoder
+                        .store_encoded_subchunk_by_subset(level, subset, bytes, options)?;
                 }
                 self.async_store_updated_chunk(chunk_indices, update).await
             }
@@ -255,20 +249,17 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         subset: &ArraySubset,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
-        match self
-            .async_encoded_subchunk_encoder(level, chunk_indices, subset)
-            .await?
-        {
-            EncodedSubchunkEncoder::Storage(encoder, indices) => {
+        match self.async_encoded_subchunk_encoder(chunk_indices).await? {
+            EncodedSubchunkEncoder::Storage(encoder) => {
                 encoder
-                    .erase_subchunk_at_level(level, &indices, options)
+                    .erase_subchunk_by_subset(level, subset, options)
                     .await?;
                 Ok(())
             }
             EncodedSubchunkEncoder::Memory(update) => {
                 update
                     .encoder
-                    .erase_subchunk_at_level(level, &update.indices, options)?;
+                    .erase_subchunk_by_subset(level, subset, options)?;
                 self.async_store_updated_chunk(chunk_indices, update).await
             }
         }
@@ -280,9 +271,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     /// If the store does not support partial writes, the encoded chunk is updated in memory.
     async fn async_encoded_subchunk_encoder(
         &self,
-        level: usize,
         chunk_indices: &[u64],
-        subset: &ArraySubset,
     ) -> Result<EncodedSubchunkEncoder, ArrayError> {
         let options = self.codec_options();
         let storage = self.async_readable_writable_storage().await?;
@@ -290,17 +279,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             let encoder = self
                 .async_partial_encoder_with_storage(storage, chunk_indices, options)
                 .await?;
-            let indices =
-                super::async_local_subchunk_indices(encoder.as_ref(), level, subset, options)
-                    .await?;
-            Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
+            Ok(EncodedSubchunkEncoder::Storage(encoder))
         } else {
             let existing = self.async_retrieve_encoded_chunk(chunk_indices).await?;
             Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate::new(
                 self,
                 chunk_indices,
-                level,
-                subset,
                 existing,
             )?))
         }
@@ -447,7 +431,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
 /// A partial encoder for updating an encoded subchunk, and the indices of the subchunk in its chunk.
 enum EncodedSubchunkEncoder {
     /// A partial encoder of the chunk in the store.
-    Storage(Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayIndices),
+    Storage(Arc<dyn AsyncArrayPartialEncoderTraits>),
     /// A partial encoder of the chunk in memory, for a store without partial writes.
     Memory(InMemoryChunkUpdate),
 }

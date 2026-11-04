@@ -238,13 +238,28 @@ where
         bytes: zarrs_codec::CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let subchunk_indices = self
-            .async_encoded_subchunk_indices(level, subchunk_indices, options)
-            .await?;
-        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        let subset =
+            zarrs_codec::async_local_subchunk_subset(self, level, subchunk_indices, options)
+                .await?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe {
+            self.store_encoded_subchunk_by_subset(level, &subset, bytes, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        bytes: zarrs_codec::CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subset = self.encoded_subset(subset)?;
+        // SAFETY: The subchunk is unchanged, only its subset is mapped.
         unsafe {
             self.input_output_handle
-                .store_encoded_subchunk_at_level(level, &subchunk_indices, bytes, options)
+                .store_encoded_subchunk_by_subset(level, &encoded_subset, bytes, options)
                 .await
         }
     }
@@ -255,11 +270,21 @@ where
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let subchunk_indices = self
-            .async_encoded_subchunk_indices(level, subchunk_indices, options)
-            .await?;
+        let subset =
+            zarrs_codec::async_local_subchunk_subset(self, level, subchunk_indices, options)
+                .await?;
+        self.erase_subchunk_by_subset(level, &subset, options).await
+    }
+
+    async fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subset = self.encoded_subset(subset)?;
         self.input_output_handle
-            .erase_subchunk_at_level(level, &subchunk_indices, options)
+            .erase_subchunk_by_subset(level, &encoded_subset, options)
             .await
     }
 }

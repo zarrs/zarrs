@@ -25,7 +25,7 @@ pub(super) fn retrieve_encoded_subchunk_at_level<A: ArrayReadOps + ?Sized>(
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let partial_decoder = array.partial_decoder(&chunk_indices)?;
-    retrieve_encoded_subchunk_in(
+    retrieve_encoded_subchunk_by_subset(
         partial_decoder.as_ref(),
         level,
         &subset,
@@ -35,14 +35,13 @@ pub(super) fn retrieve_encoded_subchunk_at_level<A: ArrayReadOps + ?Sized>(
 
 /// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid with the `partial_decoder`
 /// of its chunk.
-pub(super) fn retrieve_encoded_subchunk_in(
+pub(super) fn retrieve_encoded_subchunk_by_subset(
     partial_decoder: &dyn ArrayPartialDecoderTraits,
     level: usize,
     subset: &ArraySubset,
     options: &CodecOptions,
 ) -> Result<Option<EncodedSubchunk>, ArrayError> {
-    let local_indices = super::local_subchunk_indices(partial_decoder, level, subset, options)?;
-    Ok(partial_decoder.retrieve_encoded_subchunk_at_level(level, &local_indices, options)?)
+    Ok(partial_decoder.retrieve_encoded_subchunk_by_subset(level, subset, options)?)
 }
 
 /// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.

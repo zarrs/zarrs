@@ -43,6 +43,17 @@ where
             .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
             .await
     }
+
+    async fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, CodecError> {
+        self.encoder
+            .retrieve_encoded_subchunk_by_subset(level, subset, options)
+            .await
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -140,6 +151,37 @@ where
         let result = self
             .encoder
             .erase_subchunk_at_level(level, subchunk_indices, options)
+            .await;
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
+
+    async unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: The caller upholds the safety requirements.
+        let result = unsafe {
+            self.encoder
+                .store_encoded_subchunk_by_subset(level, subset, bytes, options)
+                .await
+        };
+        self.cache.invalidate_chunk(&self.chunk_indices).await;
+        result
+    }
+
+    async fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let result = self
+            .encoder
+            .erase_subchunk_by_subset(level, subset, options)
             .await;
         self.cache.invalidate_chunk(&self.chunk_indices).await;
         result

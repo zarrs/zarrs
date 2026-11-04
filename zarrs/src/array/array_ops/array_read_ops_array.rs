@@ -187,7 +187,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
         let options = self.codec_options();
         let partial_decoder = self.encoded_subchunk_partial_decoder(&chunk_indices, options)?;
-        super::array_read_ops_common::retrieve_encoded_subchunk_in(
+        super::array_read_ops_common::retrieve_encoded_subchunk_by_subset(
             partial_decoder.as_ref(),
             level,
             &subset,

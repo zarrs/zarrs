@@ -19,13 +19,14 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size, subchunk_grid,
 };
 use crate::array::{
-    ArrayBytes, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType,
+    ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChainBound, CowBytes, DataType,
     transmute_to_bytes,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, EncodedSubchunk, update_array_bytes,
+    BytesPartialEncoderTraits, CodecError, CodecOptions, EncodedSubchunk, subset_subchunk_indices,
+    update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -266,21 +267,15 @@ impl ShardingPartialEncoder {
         Ok(())
     }
 
-    /// Create an in-memory partial encoder of the level zero subchunk enclosing the subchunk at `subchunk_indices` of
-    /// the `level` subchunk grid.
+    /// Create an in-memory partial encoder of the level zero subchunk enclosing the shard-local `subset` of a subchunk
+    /// at a deeper level.
     fn enclosing_subchunk_encoder(
         &self,
         shard_index: &[u64],
-        level: usize,
-        subchunk_indices: &[u64],
+        subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<EnclosingSubchunkEncoder, CodecError> {
-        let enclosing = enclosing_subchunk(
-            &self.chunk_grid,
-            &self.inner_codecs,
-            level,
-            subchunk_indices,
-        )?;
+        let enclosing = enclosing_subchunk(&self.chunk_grid, subset)?;
         let index = subchunk_linear_index(&self.chunk_grid, &enclosing.indices)?;
         let existing = match super::subchunk_byte_range(
             Some(shard_index),
@@ -293,14 +288,7 @@ impl ShardingPartialEncoder {
                 .map(CowBytes::into_bytes),
             None => None,
         };
-        EnclosingSubchunkEncoder::new(
-            &self.inner_codecs,
-            index,
-            existing,
-            &enclosing,
-            level,
-            options,
-        )
+        EnclosingSubchunkEncoder::new(&self.inner_codecs, index, existing, enclosing, options)
     }
 }
 
@@ -318,16 +306,31 @@ impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let subset = super::sharding_encoded_subchunk::subchunk_subset_at_level(
+            &self.chunk_grid,
+            &self.inner_codecs,
+            level,
+            subchunk_indices,
+        )?;
+        self.retrieve_encoded_subchunk_by_subset(level, &subset, options)
+    }
+
+    fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
         // Hold the lock while reading, so a concurrent update cannot move the subchunk
         let shard_index = self.shard_index.lock().unwrap();
         let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
-        super::sharding_encoded_subchunk::retrieve_encoded_subchunk_at_level(
+        super::sharding_encoded_subchunk::retrieve_encoded_subchunk_by_subset(
             &handle,
             &self.chunk_grid,
             &self.inner_codecs,
             Some(shard_index.as_slice()),
             level,
-            subchunk_indices,
+            subset,
             options,
         )
     }
@@ -507,9 +510,27 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         bytes: CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let subset = super::sharding_encoded_subchunk::subchunk_subset_at_level(
+            &self.chunk_grid,
+            &self.inner_codecs,
+            level,
+            subchunk_indices,
+        )?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe { self.store_encoded_subchunk_by_subset(level, &subset, bytes, options) }
+    }
+
+    unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
         if level == 0 {
-            let index = subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
+            let subchunk_indices = subset_subchunk_indices(&self.chunk_grid, subset)?;
+            let index = subchunk_linear_index(&self.chunk_grid, &subchunk_indices)?;
             return self.commit_subchunk_updates(
                 &mut shard_index,
                 vec![(index, Some(bytes))],
@@ -518,13 +539,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         }
 
         // Update the enclosing level zero subchunk in memory
-        let enclosing =
-            self.enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)?;
+        let enclosing = self.enclosing_subchunk_encoder(&shard_index, subset, options)?;
         // SAFETY: The caller upholds the safety requirements, the subchunk is only located in the enclosing subchunk.
         unsafe {
-            enclosing.encoder.store_encoded_subchunk_at_level(
+            enclosing.encoder.store_encoded_subchunk_by_subset(
                 level - 1,
-                &enclosing.nested_indices,
+                &enclosing.nested_subset,
                 bytes,
                 options,
             )?;
@@ -544,9 +564,25 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let subset = super::sharding_encoded_subchunk::subchunk_subset_at_level(
+            &self.chunk_grid,
+            &self.inner_codecs,
+            level,
+            subchunk_indices,
+        )?;
+        self.erase_subchunk_by_subset(level, &subset, options)
+    }
+
+    fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
         if level == 0 {
-            let index = subchunk_linear_index(&self.chunk_grid, subchunk_indices)?;
+            let subchunk_indices = subset_subchunk_indices(&self.chunk_grid, subset)?;
+            let index = subchunk_linear_index(&self.chunk_grid, &subchunk_indices)?;
             if super::subchunk_offset_size(&shard_index, usize::try_from(index).unwrap()).is_none()
             {
                 // The subchunk is not stored
@@ -556,15 +592,14 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         }
 
         // Update the enclosing level zero subchunk in memory
-        let enclosing =
-            self.enclosing_subchunk_encoder(&shard_index, level, subchunk_indices, options)?;
+        let enclosing = self.enclosing_subchunk_encoder(&shard_index, subset, options)?;
         if !enclosing.exists()? {
             // The enclosing subchunk is not stored
             return Ok(());
         }
         enclosing
             .encoder
-            .erase_subchunk_at_level(level - 1, &enclosing.nested_indices, options)?;
+            .erase_subchunk_by_subset(level - 1, &enclosing.nested_subset, options)?;
         let updated = match enclosing.take_update() {
             InMemoryBytesUpdate::Stored(bytes) => Some(CowBytes::from(bytes)),
             InMemoryBytesUpdate::Erased => None,

@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Works with any array-to-bytes codec implementing the `zarrs_codec` subchunking traits, not just `sharding_indexed`
   - Nested subchunk grid levels are supported, and the `sharding_indexed` codec reads only the shard indexes and the target subchunk
   - Chunks are never decoded, even if the codecs of the array cache a decoded chunk for partial decoding
+  - Subchunks are addressed in time linear in the depth of the codecs, without resolving subchunk grid hierarchies
   - Returns an `EncodedSubchunk`, which holds the encoded domain shape needed to decode the bytes alongside them
   - Encoded subchunks are exposed through array-to-array codecs, which map subchunk indices into the domain they wrap
     - The bytes remain in the encoded domain: the data type is that of the subchunk codec, and the shape can differ in extent and dimensionality from the subchunk grid (e.g. `[3]` rather than `[1, 3]` for a `reshape` codec)

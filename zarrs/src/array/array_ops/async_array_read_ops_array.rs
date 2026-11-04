@@ -241,7 +241,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         let partial_decoder = self
             .async_encoded_subchunk_partial_decoder(&chunk_indices, options)
             .await?;
-        super::async_array_read_ops_common::async_retrieve_encoded_subchunk_in(
+        super::async_array_read_ops_common::async_retrieve_encoded_subchunk_by_subset(
             partial_decoder.as_ref(),
             level,
             &subset,

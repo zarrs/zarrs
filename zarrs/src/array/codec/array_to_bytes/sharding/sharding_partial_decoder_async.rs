@@ -192,13 +192,29 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
-        super::sharding_encoded_subchunk::async_retrieve_encoded_subchunk_at_level(
+        let subset = super::sharding_encoded_subchunk::subchunk_subset_at_level(
+            &self.subchunk_grid,
+            &self.inner_codecs,
+            level,
+            subchunk_indices,
+        )?;
+        self.retrieve_encoded_subchunk_by_subset(level, &subset, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        super::sharding_encoded_subchunk::async_retrieve_encoded_subchunk_by_subset(
             &self.input_handle,
             &self.subchunk_grid,
             &self.inner_codecs,
             self.shard_index.as_deref(),
             level,
-            subchunk_indices,
+            subset,
             options,
         )
         .await

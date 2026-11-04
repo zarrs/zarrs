@@ -1,5 +1,5 @@
 use super::{
-    Array, ArrayError, ArrayIndices, ArraySubsetTraits, AsyncArrayReadOps, AsyncArrayWriteOps,
+    Array, ArrayError, ArraySubset, ArraySubsetTraits, AsyncArrayReadOps, AsyncArrayWriteOps,
     AsyncReadableStorageTraits, Indexer, IntoArrayBytes, MaybeSend,
 };
 #[cfg(doc)]
@@ -73,12 +73,12 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         subchunk_indices: &[u64],
         bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        let (encoder, local_indices) =
-            async_subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices).await?;
+        let (encoder, subset) =
+            async_subchunk_partial_encoder_and_local_subset(self, level, subchunk_indices).await?;
         // SAFETY: The caller upholds the safety requirements, the subchunk is only located in its chunk.
         unsafe {
             encoder
-                .store_encoded_subchunk_at_level(level, &local_indices, bytes, self.codec_options())
+                .store_encoded_subchunk_by_subset(level, &subset, bytes, self.codec_options())
                 .await?;
         }
         Ok(())
@@ -98,32 +98,24 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(), ArrayError> {
-        let (encoder, local_indices) =
-            async_subchunk_partial_encoder_and_local_indices(self, level, subchunk_indices).await?;
+        let (encoder, subset) =
+            async_subchunk_partial_encoder_and_local_subset(self, level, subchunk_indices).await?;
         encoder
-            .erase_subchunk_at_level(level, &local_indices, self.codec_options())
+            .erase_subchunk_by_subset(level, &subset, self.codec_options())
             .await?;
         Ok(())
     }
 }
 
-/// Initialise the partial encoder of the chunk holding a subchunk, and locate the subchunk in its `level` subchunk
-/// grid.
+/// Initialise the partial encoder of the chunk holding the subchunk at `subchunk_indices` of the `level` subchunk grid,
+/// and return the subset of the subchunk relative to the chunk.
 #[cfg(feature = "async")]
-async fn async_subchunk_partial_encoder_and_local_indices<A: AsyncArrayUpdateOps + ?Sized>(
+async fn async_subchunk_partial_encoder_and_local_subset<A: AsyncArrayUpdateOps + ?Sized>(
     array: &A,
     level: usize,
     subchunk_indices: &[u64],
-) -> Result<(Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayIndices), ArrayError> {
+) -> Result<(Arc<dyn AsyncArrayPartialEncoderTraits>, ArraySubset), ArrayError> {
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
-    let encoder = array.async_partial_encoder(&chunk_indices).await?;
-    let local_indices = super::async_local_subchunk_indices(
-        encoder.as_ref(),
-        level,
-        &subset,
-        array.codec_options(),
-    )
-    .await?;
-    Ok((encoder, local_indices))
+    Ok((array.async_partial_encoder(&chunk_indices).await?, subset))
 }

@@ -176,6 +176,16 @@ impl zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits for SyncPartialDecod
         self.0
             .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
     }
+
+    async fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &crate::array::ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, CodecError> {
+        self.0
+            .retrieve_encoded_subchunk_by_subset(level, subset, options)
+    }
 }
 
 #[cfg(feature = "async")]

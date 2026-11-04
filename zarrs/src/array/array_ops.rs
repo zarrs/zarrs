@@ -60,9 +60,7 @@ use super::{
     StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits;
-use zarrs_codec::{ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, RecommendedConcurrency};
+use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};
 #[cfg(feature = "async")]
 use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits,
@@ -106,76 +104,6 @@ fn subchunk_chunk_and_local_subset<A: ArrayOps + ?Sized>(
     let chunk_origin = array.chunk_origin(&chunk_indices)?;
     let local_subset = subchunk_subset.relative_to(&chunk_origin)?;
     Ok((chunk_indices, local_subset))
-}
-
-/// Return the indices of the chunk of `chunk_grid` which encloses `subset`.
-///
-/// A subchunk must be enclosed by exactly one chunk of an inner grid for its bytes to be a single encoded subchunk, so
-/// a subset spanning several is an error.
-pub(crate) fn enclosing_chunk_indices(
-    chunk_grid: &ChunkGrid,
-    subset: &ArraySubset,
-) -> Result<ArrayIndices, zarrs_codec::CodecError> {
-    let chunks = chunk_grid.chunks_in_array_subset(subset)?.ok_or_else(|| {
-        zarrs_codec::CodecError::Other(format!(
-            "subchunk subset {subset:?} is out of bounds of a subchunk grid with shape {:?}",
-            chunk_grid.grid_shape()
-        ))
-    })?;
-    if chunks.num_elements() != 1 {
-        return Err(zarrs_codec::CodecError::Other(format!(
-            "subchunk subset {subset:?} spans multiple subchunks of an inner subchunk grid"
-        )));
-    }
-    Ok(chunks.start().into())
-}
-
-/// Return the indices of the chunk of `chunk_grid` whose subset is `subset`.
-///
-/// A subchunk located through one subchunk grid must be exactly a subchunk of another for its encoded bytes to be
-/// those of the addressed subchunk, so a subset that is only part of a chunk is an error.
-pub(crate) fn subset_chunk_indices(
-    chunk_grid: &ChunkGrid,
-    subset: &ArraySubset,
-) -> Result<ArrayIndices, zarrs_codec::CodecError> {
-    let indices = enclosing_chunk_indices(chunk_grid, subset)?;
-    let chunk_subset = chunk_grid.subset(&indices)?;
-    if chunk_subset.as_ref() != Some(subset) {
-        return Err(zarrs_codec::CodecError::Other(format!(
-            "subchunk subset {subset:?} is not a subchunk of an inner subchunk grid, the enclosing subchunk is {chunk_subset:?}"
-        )));
-    }
-    Ok(indices)
-}
-
-/// Return the indices of the subchunk at the chunk-local `subset` in the `level` subchunk grid of the partial decoder
-/// or encoder of its chunk.
-fn local_subchunk_indices(
-    partial: &(impl ArrayPartialDecoderSubchunkingTraits + ?Sized),
-    level: usize,
-    subset: &ArraySubset,
-    options: &CodecOptions,
-) -> Result<ArrayIndices, ArrayError> {
-    let grid = partial
-        .local_subchunk_grid_at_level(level, options)?
-        .ok_or(ArrayError::MissingSubchunkGrid)?;
-    Ok(subset_chunk_indices(&grid, subset)?)
-}
-
-/// Return the indices of the subchunk at the chunk-local `subset` in the `level` subchunk grid of the asynchronous
-/// partial decoder or encoder of its chunk.
-#[cfg(feature = "async")]
-async fn async_local_subchunk_indices(
-    partial: &(impl AsyncArrayPartialDecoderSubchunkingTraits + ?Sized),
-    level: usize,
-    subset: &ArraySubset,
-    options: &CodecOptions,
-) -> Result<ArrayIndices, ArrayError> {
-    let grid = partial
-        .local_subchunk_grid_at_level(level, options)
-        .await?
-        .ok_or(ArrayError::MissingSubchunkGrid)?;
-    Ok(subset_chunk_indices(&grid, subset)?)
 }
 
 mod array_mut_ops;

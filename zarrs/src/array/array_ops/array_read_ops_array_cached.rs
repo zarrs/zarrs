@@ -389,7 +389,7 @@ where
                 .array()
                 .encoded_subchunk_partial_decoder(&chunk_indices, options)?,
         };
-        super::array_read_ops_common::retrieve_encoded_subchunk_in(
+        super::array_read_ops_common::retrieve_encoded_subchunk_by_subset(
             partial_decoder.as_ref(),
             level,
             &subset,
