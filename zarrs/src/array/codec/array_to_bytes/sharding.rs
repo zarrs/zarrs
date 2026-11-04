@@ -653,6 +653,27 @@ fn slice_stored_subchunks(
         .collect()
 }
 
+/// Sort `subchunks` into the `write_order` of a whole shard encode.
+fn sort_by_subchunk_write_order<T>(
+    subchunks: &mut [(u64, T)],
+    write_order: SubchunkWriteOrder,
+    subchunk_grid: &RegularBoundedChunkGrid,
+) {
+    let num_subchunks =
+        usize::try_from(subchunk_grid.grid_shape().iter().product::<u64>()).unwrap();
+    let mut position = vec![0; num_subchunks];
+    for (i, subchunk_index) in
+        sharding_codec::subchunk_order_iterator(write_order, num_subchunks, subchunk_grid)
+            .into_iter()
+            .enumerate()
+    {
+        position[subchunk_index] = i;
+    }
+    subchunks.sort_unstable_by_key(|(subchunk_index, _)| {
+        position[usize::try_from(*subchunk_index).unwrap()]
+    });
+}
+
 fn missing_stored_subchunks() -> CodecError {
     CodecError::from("the shard is missing but its index references stored subchunks")
 }

@@ -35,7 +35,6 @@ pub(crate) struct AsyncShardingPartialEncoder {
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
     shard_index: Arc<AsyncMutex<Vec<u64>>>,
-    #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
     sharding_options: ShardingCodecOptions,
 }
 
@@ -92,7 +91,7 @@ impl AsyncShardingPartialEncoder {
     async fn commit_subchunk_updates(
         &self,
         shard_index_guard: &mut Vec<u64>,
-        updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
+        mut updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let mut shard_index = shard_index_guard.clone();
@@ -122,6 +121,14 @@ impl AsyncShardingPartialEncoder {
         // `partial_encode` carries every retained subchunk into the update if the shard cannot be partially encoded
         debug_assert!(rewrite || self.input_output_handle.supports_partial_encode());
         let max_data_offset = if rewrite { 0 } else { max_data_offset };
+        if rewrite {
+            // Lay out the rewritten shard like a whole shard encode
+            super::sort_by_subchunk_write_order(
+                &mut updated_subchunks,
+                self.sharding_options.subchunk_write_order(),
+                &self.chunk_grid,
+            );
+        }
 
         // Get the offset for new data
         let index_encoded_size =
