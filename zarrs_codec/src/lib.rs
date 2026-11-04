@@ -49,6 +49,9 @@ pub use codec_traits::bytes_partial_async::{
     AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
 
+mod subchunk_addressing;
+pub use subchunk_addressing::subset_subchunk_indices;
+
 mod recommended_concurrency;
 pub use recommended_concurrency::RecommendedConcurrency;
 
