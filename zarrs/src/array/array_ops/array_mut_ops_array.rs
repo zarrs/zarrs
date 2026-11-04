@@ -30,8 +30,10 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         let subchunk_grids = codecs_bound
             .decoded_subchunk_grids((&self.chunk_grid).into())
             .map_err(|err| CodecCreateError::from(err.to_string()))?;
+        let subchunk_codecs = codecs_bound.subchunk_codecs();
         self.codecs_bound = codecs_bound;
         self.subchunk_grids = subchunk_grids;
+        self.subchunk_codecs = subchunk_codecs;
         self.codec_specific_options = opts.clone();
         Ok(self)
     }

@@ -7,6 +7,9 @@ use super::{
 };
 #[cfg(doc)]
 use super::{Array, ArrayMutOps};
+#[cfg(doc)]
+use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
+use zarrs_codec::ArrayToBytesCodecTraits;
 
 /// Core array operations.
 pub trait ArrayOps {
@@ -149,6 +152,32 @@ pub trait ArrayOps {
     /// Returns [`ChunkGridDecodedRef::None`] if `level` is beyond the subchunk grid hierarchy.
     #[must_use]
     fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_>;
+
+    /// Return the level-zero subchunk codec, if any.
+    ///
+    /// Returns [`None`] if the array does not expose subchunks.
+    /// See [`subchunk_codecs`](Self::subchunk_codecs).
+    #[must_use]
+    fn subchunk_codec(&self) -> Option<&Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codec_at_level(0)
+    }
+
+    /// Return the subchunk codecs for each level of [`subchunk_grids`](Self::subchunk_grids), outermost first.
+    ///
+    /// Each codec encodes and decodes subchunks in the input domain of the subchunking codec at
+    /// that level; see [`ArrayToBytesCodecSubchunkingTraits::subchunk_codecs`].
+    #[must_use]
+    fn subchunk_codecs(&self) -> &[Arc<dyn ArrayToBytesCodecTraits>];
+
+    /// Return the subchunk codec at `level`, if any.
+    ///
+    /// Level zero is the outermost subchunk grid and increasing levels move inward.
+    /// Returns [`None`] if `level` is beyond the subchunk grid hierarchy.
+    /// See [`subchunk_codecs`](Self::subchunk_codecs).
+    #[must_use]
+    fn subchunk_codec_at_level(&self, level: usize) -> Option<&Arc<dyn ArrayToBytesCodecTraits>> {
+        self.subchunk_codecs().get(level)
+    }
 
     /// Return the store key of the chunk at `chunk_indices`.
     ///

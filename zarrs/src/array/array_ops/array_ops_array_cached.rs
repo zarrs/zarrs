@@ -1,4 +1,5 @@
 use inherent::inherent;
+use zarrs_codec::ArrayToBytesCodecTraits;
 
 use super::{
     Arc, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArrayMetadata, ArrayMetadataOptions,
@@ -165,6 +166,20 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
     pub fn subchunk_grid_at_level(&self, level: usize) -> ChunkGridDecodedRef<'_> {
         self.array().subchunk_grid_at_level(level)
     }
+
+    #[must_use]
+    pub fn subchunk_codec(&self) -> Option<&Arc<dyn ArrayToBytesCodecTraits>>;
+
+    #[allow(clippy::must_use_candidate)]
+    pub fn subchunk_codecs(&self) -> &[Arc<dyn ArrayToBytesCodecTraits>] {
+        self.array().subchunk_codecs()
+    }
+
+    #[must_use]
+    pub fn subchunk_codec_at_level(
+        &self,
+        level: usize,
+    ) -> Option<&Arc<dyn ArrayToBytesCodecTraits>>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> Result<StoreKey, ArrayError> {

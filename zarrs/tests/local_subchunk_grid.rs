@@ -184,6 +184,19 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for DynamicLocalSubchunkCod
     ) -> Result<Vec<ChunkGridDecoded>, zarrs::array::ChunkGridCreateError> {
         Ok(vec![ChunkGridDecoded::ChunkLocal])
     }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        // The subchunks are leaves, so they must not be encoded by this codec again
+        vec![
+            zarrs::array::codec::BytesCodec::default()
+                .with_context(
+                    self.data_type.clone(),
+                    self.fill_value.clone(),
+                    &CodecSpecificOptions::default(),
+                )
+                .expect("bytes codec supports the data type"),
+        ]
+    }
 }
 
 impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
@@ -309,6 +322,10 @@ fn dynamic_local_subchunk_grids_can_differ_by_chunk() -> Result<(), Box<dyn std:
         reopened.subchunk_grid_at_level(0),
         ChunkGridDecodedRef::ChunkLocal
     ));
+    assert_eq!(
+        subchunk_codec_depth(reopened.subchunk_codecs()),
+        reopened.subchunk_grids().len()
+    );
 
     let first = reopened.local_subchunk_grid_at_level(0, &[0, 0])?.unwrap();
     let second = reopened.local_subchunk_grid(&[1, 0])?.unwrap();
@@ -555,7 +572,7 @@ impl UnboundArrayToBytesCodecTraits for TestSubchunkingCodec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TestSubchunkingCodecBound {
     data_type: DataType,
     fill_value: Option<FillValue>,
@@ -602,6 +619,18 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for TestSubchunkingCodecBou
             }
         };
         Ok(vec![subchunk_grid])
+    }
+
+    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
+        if self.expose_subchunks {
+            // The subchunks are leaves, so their codec must not expose subchunks itself
+            vec![ArrayToBytesCodecTraits::into_dyn(Arc::new(Self {
+                expose_subchunks: false,
+                ..self.clone()
+            }))]
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -677,6 +706,20 @@ fn codec_chain_discovers_chunk_local_grid_after_global_mapping_fails() {
             .unwrap(),
         ChunkGridDecoded::ChunkLocal
     ));
+    assert_eq!(
+        subchunk_codec_depth(&chain.subchunk_codecs()),
+        chain
+            .decoded_subchunk_grids((&decoded_chunk_grid).into())
+            .unwrap()
+            .len()
+    );
+}
+
+/// Return the depth of a subchunk codec hierarchy by walking the level zero codecs.
+fn subchunk_codec_depth(codecs: &[Arc<dyn ArrayToBytesCodecTraits>]) -> usize {
+    codecs.first().map_or(0, |codec| {
+        1 + subchunk_codec_depth(&codec.subchunk_codecs())
+    })
 }
 
 #[test]
