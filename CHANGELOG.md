@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
 ### Added
+- Add per-operation `Resources` and `ComputeResources` in `zarrs_codec`
 - Map exact encoded subsets through array codecs; reshape returns `None` for rectangles that select different elements
 - Expose pure chunk-local grid mappings through array codecs
 - Map element coordinates through every array codec; packbits returns `None` as it has no individual element mappings
