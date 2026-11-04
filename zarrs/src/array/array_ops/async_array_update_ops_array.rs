@@ -11,7 +11,7 @@ use super::{
     IntoArrayBytes, MaybeSend, recommended_codec_concurrency,
 };
 use crate::array::codec::InMemoryBytesUpdate;
-use crate::array::{ArrayIndices, update_array_bytes};
+use crate::array::{ArrayIndices, ArraySubset, update_array_bytes};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecError, CodecTraits,
 };
@@ -170,9 +170,56 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         subchunk_indices: &[u64],
         bytes: zarrs_codec::CowBytes<'_>,
     ) -> Result<(), ArrayError> {
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe {
+            self.async_store_encoded_subchunk_in_chunk(level, &chunk_indices, &subset, bytes)
+                .await
+        }
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_erase_subchunk_at_level(
+        &self,
+        level: usize,
+        subchunk_indices: &[u64],
+    ) -> Result<(), ArrayError> {
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        self.async_erase_subchunk_in_chunk(level, &chunk_indices, &subset)
+            .await
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_partial_encoder(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        self.async_partial_encoder_with_options(chunk_indices, self.codec_options())
+            .await
+    }
+}
+
+impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Store the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid of the chunk at
+    /// `chunk_indices`, as located by `subchunk_chunk_and_local_subset`.
+    ///
+    /// # Safety
+    /// See [`async_store_encoded_subchunk_at_level`](AsyncArrayUpdateOps::async_store_encoded_subchunk_at_level).
+    pub(super) async unsafe fn async_store_encoded_subchunk_in_chunk(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         match self
-            .async_encoded_subchunk_encoder(level, subchunk_indices)
+            .async_encoded_subchunk_encoder(level, chunk_indices, subset)
             .await?
         {
             EncodedSubchunkEncoder::Storage(encoder, indices) => {
@@ -194,23 +241,22 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                         options,
                     )?;
                 }
-                self.async_store_updated_chunk(update).await
+                self.async_store_updated_chunk(chunk_indices, update).await
             }
         }
     }
 
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_subchunk(&self, subchunk_indices: &[u64]) -> Result<(), ArrayError>;
-
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_subchunk_at_level(
+    /// Erase the subchunk at the chunk-local `subset` of the `level` subchunk grid of the chunk at `chunk_indices`, as
+    /// located by `subchunk_chunk_and_local_subset`.
+    pub(super) async fn async_erase_subchunk_in_chunk(
         &self,
         level: usize,
-        subchunk_indices: &[u64],
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         match self
-            .async_encoded_subchunk_encoder(level, subchunk_indices)
+            .async_encoded_subchunk_encoder(level, chunk_indices, subset)
             .await?
         {
             EncodedSubchunkEncoder::Storage(encoder, indices) => {
@@ -223,68 +269,57 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                 update
                     .encoder
                     .erase_subchunk_at_level(level, &update.indices, options)?;
-                self.async_store_updated_chunk(update).await
+                self.async_store_updated_chunk(chunk_indices, update).await
             }
         }
     }
 
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_partial_encoder(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        self.async_partial_encoder_with_options(chunk_indices, self.codec_options())
-            .await
-    }
-}
-
-impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
-    /// Initialise the partial encoder that updates the encoded subchunk at `subchunk_indices` of the `level` subchunk
-    /// grid, and locate the subchunk in its chunk.
+    /// Initialise the partial encoder that updates the encoded subchunk at the chunk-local `subset` of the `level`
+    /// subchunk grid of the chunk at `chunk_indices`, and locate the subchunk in its local subchunk grid.
     ///
     /// If the store does not support partial writes, the encoded chunk is updated in memory.
     async fn async_encoded_subchunk_encoder(
         &self,
         level: usize,
-        subchunk_indices: &[u64],
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
     ) -> Result<EncodedSubchunkEncoder, ArrayError> {
         let options = self.codec_options();
-        let (chunk_indices, subset) =
-            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
         let storage = self.async_readable_writable_storage().await?;
         if storage.supports_set_partial() {
             let encoder = self
-                .async_partial_encoder_with_storage(storage, &chunk_indices, options)
+                .async_partial_encoder_with_storage(storage, chunk_indices, options)
                 .await?;
             let indices =
-                super::async_local_subchunk_indices(encoder.as_ref(), level, &subset, options)
+                super::async_local_subchunk_indices(encoder.as_ref(), level, subset, options)
                     .await?;
             Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
         } else {
-            let existing = self.async_retrieve_encoded_chunk(&chunk_indices).await?;
+            let existing = self.async_retrieve_encoded_chunk(chunk_indices).await?;
             Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate::new(
                 self,
                 chunk_indices,
                 level,
-                &subset,
+                subset,
                 existing,
             )?))
         }
     }
 
-    /// Store the encoded chunk updated by an in-memory partial encoder if it changed, or erase it if it is empty.
+    /// Store the encoded chunk at `chunk_indices` updated by an in-memory partial encoder if it changed, or erase it if
+    /// it is empty.
     async fn async_store_updated_chunk(
         &self,
+        chunk_indices: &[u64],
         update: InMemoryChunkUpdate,
     ) -> Result<(), ArrayError> {
-        let (chunk_indices, update) = update.finish();
-        match update {
+        match update.finish() {
             // SAFETY: The bytes were encoded by the codecs of the array.
             InMemoryBytesUpdate::Stored(updated) => unsafe {
-                self.async_store_encoded_chunk(&chunk_indices, updated.into())
+                self.async_store_encoded_chunk(chunk_indices, updated.into())
                     .await
             },
-            InMemoryBytesUpdate::Erased => self.async_erase_chunk(&chunk_indices).await,
+            InMemoryBytesUpdate::Erased => self.async_erase_chunk(chunk_indices).await,
             // The chunk is unchanged
             InMemoryBytesUpdate::Unchanged => Ok(()),
         }

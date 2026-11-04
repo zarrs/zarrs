@@ -211,12 +211,12 @@ where
         subchunk_indices: &[u64],
         bytes: zarrs_codec::CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        let (chunk_indices, _) =
+        let (chunk_indices, subset) =
             super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
         // SAFETY: The caller upholds the safety requirements.
         let result = unsafe {
             self.array()
-                .async_store_encoded_subchunk_at_level(level, subchunk_indices, bytes)
+                .async_store_encoded_subchunk_in_chunk(level, &chunk_indices, &subset, bytes)
                 .await
         };
         self.cache().invalidate_chunk(&chunk_indices).await;
@@ -232,11 +232,11 @@ where
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(), ArrayError> {
-        let (chunk_indices, _) =
+        let (chunk_indices, subset) =
             super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
         let result = self
             .array()
-            .async_erase_subchunk_at_level(level, subchunk_indices)
+            .async_erase_subchunk_in_chunk(level, &chunk_indices, &subset)
             .await;
         self.cache().invalidate_chunk(&chunk_indices).await;
         result

@@ -160,10 +160,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         subchunk_indices: &[u64],
         bytes: zarrs_codec::CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        self.update_encoded_subchunk(level, subchunk_indices, |encoder, indices, options| {
-            // SAFETY: The caller upholds the safety requirements.
-            unsafe { encoder.store_encoded_subchunk_at_level(level, indices, bytes, options) }
-        })
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe { self.store_encoded_subchunk_in_chunk(level, &chunk_indices, &subset, bytes) }
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -175,9 +175,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<(), ArrayError> {
-        self.update_encoded_subchunk(level, subchunk_indices, |encoder, indices, options| {
-            encoder.erase_subchunk_at_level(level, indices, options)
-        })
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        self.erase_subchunk_in_chunk(level, &chunk_indices, &subset)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -190,15 +190,47 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
 }
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
-    /// Update the encoded subchunk at `subchunk_indices` of the `level` subchunk grid with the partial encoder of its
-    /// chunk.
+    /// Store the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid of the chunk at
+    /// `chunk_indices`, as located by `subchunk_chunk_and_local_subset`.
+    ///
+    /// # Safety
+    /// See [`store_encoded_subchunk_at_level`](ArrayUpdateOps::store_encoded_subchunk_at_level).
+    pub(super) unsafe fn store_encoded_subchunk_in_chunk(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
+        bytes: zarrs_codec::CowBytes<'_>,
+    ) -> Result<(), ArrayError> {
+        self.update_encoded_subchunk(level, chunk_indices, subset, |encoder, indices, options| {
+            // SAFETY: The caller upholds the safety requirements.
+            unsafe { encoder.store_encoded_subchunk_at_level(level, indices, bytes, options) }
+        })
+    }
+
+    /// Erase the subchunk at the chunk-local `subset` of the `level` subchunk grid of the chunk at `chunk_indices`, as
+    /// located by `subchunk_chunk_and_local_subset`.
+    pub(super) fn erase_subchunk_in_chunk(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
+    ) -> Result<(), ArrayError> {
+        self.update_encoded_subchunk(level, chunk_indices, subset, |encoder, indices, options| {
+            encoder.erase_subchunk_at_level(level, indices, options)
+        })
+    }
+
+    /// Update the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid with the partial encoder of
+    /// the chunk at `chunk_indices`.
     ///
     /// If the store does not support partial writes, the encoded chunk is updated in memory and stored whole if it
     /// changed.
     fn update_encoded_subchunk(
         &self,
         level: usize,
-        subchunk_indices: &[u64],
+        chunk_indices: &[u64],
+        subset: &ArraySubset,
         update: impl FnOnce(
             &dyn ArrayPartialEncoderTraits,
             &[u64],
@@ -206,27 +238,23 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         ) -> Result<(), zarrs_codec::CodecError>,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
-        let (chunk_indices, subset) =
-            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
         let storage = self.readable_writable_storage()?;
         if storage.supports_set_partial() {
-            let encoder = self.partial_encoder_with_storage(storage, &chunk_indices, options)?;
+            let encoder = self.partial_encoder_with_storage(storage, chunk_indices, options)?;
             let local_indices =
-                super::local_subchunk_indices(encoder.as_ref(), level, &subset, options)?;
+                super::local_subchunk_indices(encoder.as_ref(), level, subset, options)?;
             update(encoder.as_ref(), &local_indices, options)?;
             Ok(())
         } else {
-            let existing = self.retrieve_encoded_chunk(&chunk_indices)?;
-            let in_memory =
-                InMemoryChunkUpdate::new(self, chunk_indices, level, &subset, existing)?;
+            let existing = self.retrieve_encoded_chunk(chunk_indices)?;
+            let in_memory = InMemoryChunkUpdate::new(self, chunk_indices, level, subset, existing)?;
             update(in_memory.encoder.as_ref(), &in_memory.indices, options)?;
-            let (chunk_indices, update) = in_memory.finish();
-            match update {
+            match in_memory.finish() {
                 // SAFETY: The bytes were encoded by the codecs of the array.
                 InMemoryBytesUpdate::Stored(updated) => unsafe {
-                    self.store_encoded_chunk(&chunk_indices, updated.into())
+                    self.store_encoded_chunk(chunk_indices, updated.into())
                 },
-                InMemoryBytesUpdate::Erased => self.erase_chunk(&chunk_indices),
+                InMemoryBytesUpdate::Erased => self.erase_chunk(chunk_indices),
                 // The chunk is unchanged
                 InMemoryBytesUpdate::Unchanged => Ok(()),
             }
@@ -340,7 +368,6 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
 /// An encoded chunk updated in memory by a partial encoder, for a store without partial writes.
 pub(super) struct InMemoryChunkUpdate {
-    chunk_indices: ArrayIndices,
     buffer: Arc<InMemoryBytesEncoder>,
     /// The partial encoder of the chunk in memory.
     pub(super) encoder: Arc<dyn ArrayPartialEncoderTraits>,
@@ -353,7 +380,7 @@ impl InMemoryChunkUpdate {
     /// chunk-local `subset` in its `level` subchunk grid.
     pub(super) fn new<A: ArrayOps + ?Sized>(
         array: &A,
-        chunk_indices: ArrayIndices,
+        chunk_indices: &[u64],
         level: usize,
         subset: &ArraySubset,
         existing: Option<Bytes>,
@@ -362,21 +389,20 @@ impl InMemoryChunkUpdate {
         let buffer = Arc::new(InMemoryBytesEncoder::new(existing));
         let encoder = array.codecs_bound().partial_encoder(
             buffer.clone(),
-            &array.chunk_shape(&chunk_indices)?,
+            &array.chunk_shape(chunk_indices)?,
             options,
         )?;
         let indices = super::local_subchunk_indices(encoder.as_ref(), level, subset, options)?;
         Ok(Self {
-            chunk_indices,
             buffer,
             encoder,
             indices,
         })
     }
 
-    /// Finish the update, returning the chunk indices and the update of the encoded chunk to store.
-    pub(super) fn finish(self) -> (ArrayIndices, InMemoryBytesUpdate) {
+    /// Finish the update, returning the update of the encoded chunk to store.
+    pub(super) fn finish(self) -> InMemoryBytesUpdate {
         drop(self.encoder);
-        (self.chunk_indices, self.buffer.take_update())
+        self.buffer.take_update()
     }
 }
