@@ -209,10 +209,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         let storage = self.readable_writable_storage()?;
         if storage.supports_set_partial() {
             let encoder = self.partial_encoder_with_storage(storage, &chunk_indices, options)?;
-            let local_indices = super::local_subchunk_indices(
-                encoder.local_subchunk_grid_at_level(level, options)?,
-                &subset,
-            )?;
+            let local_indices =
+                super::local_subchunk_indices(encoder.as_ref(), level, &subset, options)?;
             update(encoder.as_ref(), &local_indices, options)?;
             Ok(())
         } else {
@@ -367,10 +365,7 @@ impl InMemoryChunkUpdate {
             &array.chunk_shape(&chunk_indices)?,
             options,
         )?;
-        let indices = super::local_subchunk_indices(
-            encoder.local_subchunk_grid_at_level(level, options)?,
-            subset,
-        )?;
+        let indices = super::local_subchunk_indices(encoder.as_ref(), level, subset, options)?;
         Ok(Self {
             chunk_indices,
             buffer,

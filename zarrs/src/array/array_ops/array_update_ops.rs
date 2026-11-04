@@ -185,9 +185,7 @@ fn subchunk_partial_encoder_and_local_indices<A: ArrayUpdateOps + ?Sized>(
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let encoder = array.partial_encoder(&chunk_indices)?;
-    let local_indices = super::local_subchunk_indices(
-        encoder.local_subchunk_grid_at_level(level, array.codec_options())?,
-        &subset,
-    )?;
+    let local_indices =
+        super::local_subchunk_indices(encoder.as_ref(), level, &subset, array.codec_options())?;
     Ok((encoder, local_indices))
 }

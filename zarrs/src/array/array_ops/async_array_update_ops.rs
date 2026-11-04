@@ -118,11 +118,12 @@ async fn async_subchunk_partial_encoder_and_local_indices<A: AsyncArrayUpdateOps
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let encoder = array.async_partial_encoder(&chunk_indices).await?;
-    let local_indices = super::local_subchunk_indices(
-        encoder
-            .local_subchunk_grid_at_level(level, array.codec_options())
-            .await?,
+    let local_indices = super::async_local_subchunk_indices(
+        encoder.as_ref(),
+        level,
         &subset,
-    )?;
+        array.codec_options(),
+    )
+    .await?;
     Ok((encoder, local_indices))
 }

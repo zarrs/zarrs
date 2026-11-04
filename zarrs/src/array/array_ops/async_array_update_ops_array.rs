@@ -256,10 +256,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             let encoder = self
                 .async_partial_encoder_with_storage(storage, &chunk_indices, options)
                 .await?;
-            let indices = super::local_subchunk_indices(
-                encoder.local_subchunk_grid_at_level(level, options).await?,
-                &subset,
-            )?;
+            let indices =
+                super::async_local_subchunk_indices(encoder.as_ref(), level, &subset, options)
+                    .await?;
             Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
         } else {
             let existing = self

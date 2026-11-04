@@ -60,7 +60,9 @@ use super::{
     StorageTransformerChain,
 };
 use crate::config::MetadataEraseVersion;
-use zarrs_codec::{ArrayCodecTraits, RecommendedConcurrency};
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncArrayPartialDecoderSubchunkingTraits;
+use zarrs_codec::{ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, RecommendedConcurrency};
 #[cfg(feature = "async")]
 use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, AsyncWritableStorageTraits,
@@ -146,12 +148,33 @@ pub(crate) fn subset_chunk_indices(
     Ok(indices)
 }
 
-/// Return the indices of the subchunk at `subset` in the chunk-local subchunk `grid` of a partial decoder or encoder.
+/// Return the indices of the subchunk at the chunk-local `subset` in the `level` subchunk grid of the partial decoder
+/// or encoder of its chunk.
 fn local_subchunk_indices(
-    grid: Option<ChunkGrid>,
+    partial: &(impl ArrayPartialDecoderSubchunkingTraits + ?Sized),
+    level: usize,
     subset: &ArraySubset,
+    options: &CodecOptions,
 ) -> Result<ArrayIndices, ArrayError> {
-    let grid = grid.ok_or(ArrayError::MissingSubchunkGrid)?;
+    let grid = partial
+        .local_subchunk_grid_at_level(level, options)?
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
+    Ok(subset_chunk_indices(&grid, subset)?)
+}
+
+/// Return the indices of the subchunk at the chunk-local `subset` in the `level` subchunk grid of the asynchronous
+/// partial decoder or encoder of its chunk.
+#[cfg(feature = "async")]
+async fn async_local_subchunk_indices(
+    partial: &(impl AsyncArrayPartialDecoderSubchunkingTraits + ?Sized),
+    level: usize,
+    subset: &ArraySubset,
+    options: &CodecOptions,
+) -> Result<ArrayIndices, ArrayError> {
+    let grid = partial
+        .local_subchunk_grid_at_level(level, options)
+        .await?
+        .ok_or(ArrayError::MissingSubchunkGrid)?;
     Ok(subset_chunk_indices(&grid, subset)?)
 }
 

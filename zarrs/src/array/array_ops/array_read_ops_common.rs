@@ -26,10 +26,8 @@ pub(super) fn retrieve_encoded_subchunk_at_level<A: ArrayReadOps + ?Sized>(
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let options = array.codec_options();
     let partial_decoder = array.partial_decoder(&chunk_indices)?;
-    let local_indices = super::local_subchunk_indices(
-        partial_decoder.local_subchunk_grid_at_level(level, options)?,
-        &subset,
-    )?;
+    let local_indices =
+        super::local_subchunk_indices(partial_decoder.as_ref(), level, &subset, options)?;
     Ok(partial_decoder.retrieve_encoded_subchunk_at_level(level, &local_indices, options)?)
 }
 

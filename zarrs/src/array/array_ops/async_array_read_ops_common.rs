@@ -25,12 +25,9 @@ pub(super) async fn async_retrieve_encoded_subchunk_at_level<A: AsyncArrayReadOp
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
     let options = array.codec_options();
     let partial_decoder = array.async_partial_decoder(&chunk_indices).await?;
-    let local_indices = super::local_subchunk_indices(
-        partial_decoder
-            .local_subchunk_grid_at_level(level, options)
-            .await?,
-        &subset,
-    )?;
+    let local_indices =
+        super::async_local_subchunk_indices(partial_decoder.as_ref(), level, &subset, options)
+            .await?;
     Ok(partial_decoder
         .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
         .await?)
