@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use zarrs_chunk_grid::{ChunkGrid, Indexer};
+use zarrs_chunk_grid::{ArraySubset, ChunkGrid, Indexer};
 use zarrs_data_type::DataType;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
@@ -102,6 +102,35 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
         let _ = (level, subchunk_indices, options);
         Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid.
+    ///
+    /// This is [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level), with the subchunk
+    /// addressed by its subset of the chunk handled by this decoder rather than by its indices. The `subset` must be
+    /// exactly a subchunk of the `level` grid returned by [`local_subchunk_grids`](Self::local_subchunk_grids).
+    ///
+    /// Addressing by subset makes retrieval linear in the depth of the codecs: a decoder that wraps another maps the
+    /// subset into the domain it wraps (e.g. with
+    /// [`ArrayToArrayCodecSubchunkingTraits::encoded_subset`](crate::ArrayToArrayCodecSubchunkingTraits::encoded_subset)),
+    /// and a decoder of nested subchunks locates the enclosing subchunk in its own subchunk grid, so neither resolves
+    /// the subchunk grid hierarchy.
+    ///
+    /// The default implementation locates the subchunk in the `level` subchunk grid and calls
+    /// [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level). A decoder that implements
+    /// that method by calling this one must override this method.
+    ///
+    /// # Errors
+    /// See [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level). Also returns a
+    /// [`CodecError`] if `subset` is not exactly a subchunk of the `level` subchunk grid.
+    fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let subchunk_indices = crate::local_subchunk_indices(self, level, subset, options)?;
+        self.retrieve_encoded_subchunk_at_level(level, &subchunk_indices, options)
     }
 }
 
@@ -268,6 +297,34 @@ pub trait ArrayPartialEncoderTraits:
         Err(CodecError::UnsupportedEncodedSubchunk)
     }
 
+    /// Store the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid, without decoding it.
+    ///
+    /// This is [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level), with the subchunk addressed
+    /// by its subset rather than by its indices, as for
+    /// [`retrieve_encoded_subchunk_by_subset`](ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset).
+    ///
+    /// The default implementation locates the subchunk in the `level` subchunk grid and calls
+    /// [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level). An encoder that implements that
+    /// method by calling this one must override this method.
+    ///
+    /// # Safety
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level). Also returns a [`CodecError`]
+    /// if `subset` is not exactly a subchunk of the `level` subchunk grid.
+    unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices = crate::local_subchunk_indices(self, level, subset, options)?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe { self.store_encoded_subchunk_at_level(level, &subchunk_indices, bytes, options) }
+    }
+
     /// Erase the subchunk at `subchunk_indices` of the outermost subchunk grid.
     ///
     /// This is a compatibility wrapper around [`erase_subchunk_at_level`](Self::erase_subchunk_at_level).
@@ -303,6 +360,29 @@ pub trait ArrayPartialEncoderTraits:
     ) -> Result<(), CodecError> {
         let _ = (level, subchunk_indices, options);
         Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Erase the subchunk at the chunk-local `subset` of the `level` subchunk grid, so that it has the fill value.
+    ///
+    /// This is [`erase_subchunk_at_level`](Self::erase_subchunk_at_level), with the subchunk addressed by its subset
+    /// rather than by its indices, as for
+    /// [`retrieve_encoded_subchunk_by_subset`](ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset).
+    ///
+    /// The default implementation locates the subchunk in the `level` subchunk grid and calls
+    /// [`erase_subchunk_at_level`](Self::erase_subchunk_at_level). An encoder that implements that method by calling
+    /// this one must override this method.
+    ///
+    /// # Errors
+    /// See [`erase_subchunk_at_level`](Self::erase_subchunk_at_level). Also returns a [`CodecError`] if `subset` is
+    /// not exactly a subchunk of the `level` subchunk grid.
+    fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices = crate::local_subchunk_indices(self, level, subset, options)?;
+        self.erase_subchunk_at_level(level, &subchunk_indices, options)
     }
 
     /// Returns whether this encoder supports partial encoding.

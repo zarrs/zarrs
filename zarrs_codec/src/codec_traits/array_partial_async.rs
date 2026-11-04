@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use zarrs_chunk_grid::{ChunkGrid, Indexer};
+use zarrs_chunk_grid::{ArraySubset, ChunkGrid, Indexer};
 use zarrs_data_type::DataType;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
@@ -97,6 +97,25 @@ pub trait AsyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
         let _ = (level, subchunk_indices, options);
         Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid.
+    ///
+    /// See [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset`](crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset).
+    ///
+    /// # Errors
+    /// See [`retrieve_encoded_subchunk_at_level`](Self::retrieve_encoded_subchunk_at_level). Also returns a
+    /// [`CodecError`] if `subset` is not exactly a subchunk of the `level` subchunk grid.
+    async fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let subchunk_indices =
+            crate::async_local_subchunk_indices(self, level, subset, options).await?;
+        self.retrieve_encoded_subchunk_at_level(level, &subchunk_indices, options)
+            .await
     }
 }
 
@@ -261,6 +280,32 @@ pub trait AsyncArrayPartialEncoderTraits:
         Err(CodecError::UnsupportedEncodedSubchunk)
     }
 
+    /// Store the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid, without decoding it.
+    ///
+    /// See [`ArrayPartialEncoderTraits::store_encoded_subchunk_by_subset`](crate::ArrayPartialEncoderTraits::store_encoded_subchunk_by_subset).
+    ///
+    /// # Safety
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level).
+    ///
+    /// # Errors
+    /// See [`store_encoded_subchunk_at_level`](Self::store_encoded_subchunk_at_level). Also returns a [`CodecError`]
+    /// if `subset` is not exactly a subchunk of the `level` subchunk grid.
+    async unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices =
+            crate::async_local_subchunk_indices(self, level, subset, options).await?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe {
+            self.store_encoded_subchunk_at_level(level, &subchunk_indices, bytes, options)
+                .await
+        }
+    }
+
     /// Erase the subchunk at `subchunk_indices` of the outermost subchunk grid.
     ///
     /// See [`ArrayPartialEncoderTraits::erase_subchunk`](crate::ArrayPartialEncoderTraits::erase_subchunk).
@@ -292,6 +337,25 @@ pub trait AsyncArrayPartialEncoderTraits:
     ) -> Result<(), CodecError> {
         let _ = (level, subchunk_indices, options);
         Err(CodecError::UnsupportedEncodedSubchunk)
+    }
+
+    /// Erase the subchunk at the chunk-local `subset` of the `level` subchunk grid, so that it has the fill value.
+    ///
+    /// See [`ArrayPartialEncoderTraits::erase_subchunk_by_subset`](crate::ArrayPartialEncoderTraits::erase_subchunk_by_subset).
+    ///
+    /// # Errors
+    /// See [`erase_subchunk_at_level`](Self::erase_subchunk_at_level). Also returns a [`CodecError`] if `subset` is
+    /// not exactly a subchunk of the `level` subchunk grid.
+    async fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let subchunk_indices =
+            crate::async_local_subchunk_indices(self, level, subset, options).await?;
+        self.erase_subchunk_at_level(level, &subchunk_indices, options)
+            .await
     }
 
     /// Returns whether this encoder supports partial encoding.

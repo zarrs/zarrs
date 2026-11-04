@@ -51,6 +51,13 @@ pub use codec_traits::bytes_partial_async::{
 mod encoded_subchunk;
 pub use encoded_subchunk::EncodedSubchunk;
 
+mod subchunk_addressing;
+#[cfg(feature = "async")]
+pub use subchunk_addressing::{async_local_subchunk_indices, async_local_subchunk_subset};
+pub use subchunk_addressing::{
+    local_subchunk_indices, local_subchunk_subset, subset_subchunk_indices,
+};
+
 mod recommended_concurrency;
 pub use recommended_concurrency::RecommendedConcurrency;
 

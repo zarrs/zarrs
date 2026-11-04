@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -132,6 +132,46 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
                     "encoded coordinates {encoded_coordinates:?} are out of bounds of the encoded subchunk grid"
                 ))
             })
+    }
+
+    /// Map a subset of a decoded chunk of `decoded_shape`, such as a subchunk, to the subset of the encoded chunk holding
+    /// the same elements.
+    ///
+    /// This addresses encoded subchunks through the codec by subset, without resolving subchunk grids (see
+    /// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset`]).
+    /// The default implementation maps the first and last elements of the subset with
+    /// [`encoded_coordinates`](Self::encoded_coordinates) to the first and last elements of the encoded subset. This holds
+    /// for a subchunk of a [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) of a codec that maps a
+    /// subchunk to a rectangular region and preserves the order of its corners, such as `transpose`, `squeeze` and
+    /// `reshape`. A codec that does not should override it.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_subset` is empty, out of bounds of the decoded chunk, or does not map to a
+    /// subset of the encoded chunk.
+    ///
+    /// [`ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset`]: crate::ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_by_subset
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<ArraySubset, CodecError> {
+        let last = decoded_subset.end_inc().ok_or_else(|| {
+            CodecError::Other(format!(
+                "the subset {decoded_subset:?} is empty and cannot be mapped to the encoded chunk"
+            ))
+        })?;
+        let start = self.encoded_coordinates(decoded_shape, decoded_subset.start())?;
+        let last = self.encoded_coordinates(decoded_shape, &last)?;
+        if start.len() != last.len()
+            || std::iter::zip(&start, &last).any(|(start, last)| last < start)
+        {
+            return Err(CodecError::Other(format!(
+                "the subset {decoded_subset:?} does not map to a subset of the encoded chunk"
+            )));
+        }
+        Ok(ArraySubset::from(
+            std::iter::zip(start, last).map(|(start, last)| start..last + 1),
+        ))
     }
 
     /// Map the indices of a subchunk of the `level` subchunk grid of a decoded chunk of `decoded_shape` to the indices

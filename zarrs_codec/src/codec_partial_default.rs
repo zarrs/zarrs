@@ -147,19 +147,10 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
 }
 
 impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits> {
-    /// Map subchunk indices of the `level` decoded local subchunk grid to the `encoded_subchunk_grid` at that level.
-    fn encoded_subchunk_indices(
-        &self,
-        level: usize,
-        encoded_subchunk_grid: Option<&super::ChunkGrid>,
-        subchunk_indices: &[u64],
-    ) -> Result<zarrs_chunk_grid::ArrayIndices, CodecError> {
-        self.codec.encoded_subchunk_indices_at_level(
-            self.decoded_representation.shape(),
-            level,
-            encoded_subchunk_grid,
-            subchunk_indices,
-        )
+    /// Map a chunk-local subchunk `subset` to the domain of the partial codec this wraps.
+    fn encoded_subset(&self, subset: &ArraySubset) -> Result<ArraySubset, CodecError> {
+        self.codec
+            .encoded_subset(self.decoded_representation.shape(), subset)
     }
 }
 
@@ -184,18 +175,18 @@ where
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
-            level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?
-                .as_ref(),
-            subchunk_indices,
-        )?;
-        self.input_output_handle.retrieve_encoded_subchunk_at_level(
-            level,
-            &encoded_subchunk_indices,
-            options,
-        )
+        let subset = crate::local_subchunk_subset(self, level, subchunk_indices, options)?;
+        self.retrieve_encoded_subchunk_by_subset(level, &subset, options)
+    }
+
+    fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        self.input_output_handle
+            .retrieve_encoded_subchunk_by_subset(level, &self.encoded_subset(subset)?, options)
     }
 }
 
@@ -327,18 +318,23 @@ where
         bytes: CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
-            level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?
-                .as_ref(),
-            subchunk_indices,
-        )?;
-        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        let subset = crate::local_subchunk_subset(self, level, subchunk_indices, options)?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe { self.store_encoded_subchunk_by_subset(level, &subset, bytes, options) }
+    }
+
+    unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // SAFETY: The subchunk is unchanged, only its subset is mapped.
         unsafe {
-            self.input_output_handle.store_encoded_subchunk_at_level(
+            self.input_output_handle.store_encoded_subchunk_by_subset(
                 level,
-                &encoded_subchunk_indices,
+                &self.encoded_subset(subset)?,
                 bytes,
                 options,
             )
@@ -351,15 +347,21 @@ where
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
+        let subset = crate::local_subchunk_subset(self, level, subchunk_indices, options)?;
+        self.erase_subchunk_by_subset(level, &subset, options)
+    }
+
+    fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.input_output_handle.erase_subchunk_by_subset(
             level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?
-                .as_ref(),
-            subchunk_indices,
-        )?;
-        self.input_output_handle
-            .erase_subchunk_at_level(level, &encoded_subchunk_indices, options)
+            &self.encoded_subset(subset)?,
+            options,
+        )
     }
 }
 
@@ -614,16 +616,21 @@ where
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<EncodedSubchunk>, CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
-            level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)
-                .await?
-                .as_ref(),
-            subchunk_indices,
-        )?;
+        let subset =
+            crate::async_local_subchunk_subset(self, level, subchunk_indices, options).await?;
+        self.retrieve_encoded_subchunk_by_subset(level, &subset, options)
+            .await
+    }
+
+    async fn retrieve_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<Option<EncodedSubchunk>, CodecError> {
+        let encoded_subset = self.encoded_subset(subset)?;
         self.input_output_handle
-            .retrieve_encoded_subchunk_at_level(level, &encoded_subchunk_indices, options)
+            .retrieve_encoded_subchunk_by_subset(level, &encoded_subset, options)
             .await
     }
 }
@@ -767,18 +774,27 @@ where
         bytes: CowBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
-            level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)
-                .await?
-                .as_ref(),
-            subchunk_indices,
-        )?;
-        // SAFETY: The subchunk is unchanged, only its indices are mapped.
+        let subset =
+            crate::async_local_subchunk_subset(self, level, subchunk_indices, options).await?;
+        // SAFETY: The caller upholds the safety requirements.
+        unsafe {
+            self.store_encoded_subchunk_by_subset(level, &subset, bytes, options)
+                .await
+        }
+    }
+
+    async unsafe fn store_encoded_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        bytes: CowBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subset = self.encoded_subset(subset)?;
+        // SAFETY: The subchunk is unchanged, only its subset is mapped.
         unsafe {
             self.input_output_handle
-                .store_encoded_subchunk_at_level(level, &encoded_subchunk_indices, bytes, options)
+                .store_encoded_subchunk_by_subset(level, &encoded_subset, bytes, options)
                 .await
         }
     }
@@ -789,16 +805,20 @@ where
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let encoded_subchunk_indices = self.encoded_subchunk_indices(
-            level,
-            self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)
-                .await?
-                .as_ref(),
-            subchunk_indices,
-        )?;
+        let subset =
+            crate::async_local_subchunk_subset(self, level, subchunk_indices, options).await?;
+        self.erase_subchunk_by_subset(level, &subset, options).await
+    }
+
+    async fn erase_subchunk_by_subset(
+        &self,
+        level: usize,
+        subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let encoded_subset = self.encoded_subset(subset)?;
         self.input_output_handle
-            .erase_subchunk_at_level(level, &encoded_subchunk_indices, options)
+            .erase_subchunk_by_subset(level, &encoded_subset, options)
             .await
     }
 }
