@@ -24,7 +24,6 @@ use zarrs_codec::{
     BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
 };
 use zarrs_storage::StorageError;
-use zarrs_storage::byte_range::ByteRange;
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
@@ -105,7 +104,7 @@ impl ShardingPartialEncoder {
                 let retained_encoded = self
                     .input_output_handle
                     .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-                    .ok_or_else(super::missing_retained_subchunks)?;
+                    .ok_or_else(super::missing_stored_subchunks)?;
                 updated_subchunks.extend(
                     std::iter::zip(retained, retained_encoded)
                         .map(|(index, encoded)| (index, Some(encoded.into_static()))),
@@ -347,37 +346,22 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             data_type,
         )?;
 
-        // Get the byte ranges of the subchunks that need to be retrieved
-        //   This only includes chunks that are not entirely replaced by the update.
-        //   Sorting byte ranges may improves store retrieve efficiency in some cases
-        let (subchunks_straddling, byte_ranges): (Vec<u64>, Vec<ByteRange>) = updates
-            .iter()
-            .filter(|update| !update.fully_covered)
-            .filter_map(|update| {
-                let (offset, size) = super::subchunk_offset_size(
-                    &shard_index_guard,
-                    usize::try_from(update.subchunk_index).unwrap(),
-                )?;
-                Some((
-                    update.subchunk_index,
-                    ByteRange::FromStart(offset, Some(size)),
-                ))
-            })
-            .sorted_by_key(|(_, byte_range)| *byte_range)
-            .unzip();
-
-        // Read the straddling subchunks
-        let mut subchunks_encoded: HashMap<u64, Vec<u8>> = self
-            .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
-            .map(|bytes| {
-                std::iter::zip(
-                    subchunks_straddling,
-                    bytes.into_iter().map(CowBytes::into_vec),
-                )
-                .collect()
-            })
-            .unwrap_or_default();
+        // Read the subchunks that are not entirely replaced by the update
+        let (subchunks_straddling, byte_ranges) = super::stored_subchunk_byte_ranges(
+            &shard_index_guard,
+            updates
+                .iter()
+                .filter(|update| !update.fully_covered)
+                .map(|update| update.subchunk_index),
+        );
+        let mut subchunks_encoded = if subchunks_straddling.is_empty() {
+            HashMap::new()
+        } else {
+            let subchunks_encoded = self
+                .input_output_handle
+                .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?;
+            super::collect_stored_subchunks(subchunks_straddling, subchunks_encoded)?
+        };
 
         // Decode, update and encode all of the intersecting subchunks
         let updates = updates
