@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use futures::lock::Mutex as AsyncMutex;
@@ -88,7 +88,6 @@ impl AsyncShardingPartialEncoder {
     /// Append the encoded `updated_subchunks` to the shard and replace their entries in the shard index.
     ///
     /// A [`None`] subchunk is removed. The cached `shard_index_guard` is only updated once the shard is written.
-    /// If the input/output handle does not support partial encoding, the shard is rewritten compactly instead.
     #[allow(clippy::too_many_lines)]
     async fn commit_subchunk_updates(
         &self,
@@ -96,25 +95,6 @@ impl AsyncShardingPartialEncoder {
         updated_subchunks: Vec<(u64, Option<CowBytes<'_>>)>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        // Rewrite the retained subchunks too if the shard is rewritten entirely anyway (e.g. in memory)
-        //  Otherwise superseded subchunks accumulate in the shard
-        let mut updated_subchunks = updated_subchunks;
-        if !self.input_output_handle.supports_partial_encode() {
-            let (retained, byte_ranges) =
-                super::retained_subchunks(shard_index_guard, &updated_subchunks);
-            if !retained.is_empty() {
-                let retained_encoded = self
-                    .input_output_handle
-                    .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
-                    .await?
-                    .ok_or_else(super::missing_stored_subchunks)?;
-                updated_subchunks.extend(
-                    std::iter::zip(retained, retained_encoded)
-                        .map(|(index, encoded)| (index, Some(encoded.into_static()))),
-                );
-            }
-        }
-
         let mut shard_index = shard_index_guard.clone();
 
         // Get the maximum offset of existing encoded chunks
@@ -139,6 +119,8 @@ impl AsyncShardingPartialEncoder {
             shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
         }
         let rewrite = shard_index.par_iter().all(|&x| x == u64::MAX);
+        // `partial_encode` carries every retained subchunk into the update if the shard cannot be partially encoded
+        debug_assert!(rewrite || self.input_output_handle.supports_partial_encode());
         let max_data_offset = if rewrite { 0 } else { max_data_offset };
 
         // Get the offset for new data
@@ -363,22 +345,46 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
             data_type,
         )?;
 
-        // Read the subchunks that are not entirely replaced by the update
-        let (subchunks_straddling, byte_ranges) = super::stored_subchunk_byte_ranges(
-            &shard_index_guard,
-            updates
+        // Read the stored subchunks that are not entirely replaced by the update
+        //   If the shard cannot be partially encoded (e.g. a bytes-to-bytes codec follows, or the store lacks
+        //   `set_partial`), it is rewritten entirely. Read it once, and also retain the subchunks outside the
+        //   update, so that superseded subchunks do not accumulate in the shard.
+        let compact = !self.input_output_handle.supports_partial_encode();
+        let (subchunks_read, byte_ranges) = if compact {
+            let fully_covered: HashSet<u64> = updates
                 .iter()
-                .filter(|update| !update.fully_covered)
-                .map(|update| update.subchunk_index),
-        );
-        let mut subchunks_encoded = if subchunks_straddling.is_empty() {
+                .filter(|update| update.fully_covered)
+                .map(|update| update.subchunk_index)
+                .collect();
+            super::stored_subchunk_byte_ranges(
+                &shard_index_guard,
+                (0..shard_index_guard.len() as u64 / 2)
+                    .filter(|subchunk_index| !fully_covered.contains(subchunk_index)),
+            )
+        } else {
+            super::stored_subchunk_byte_ranges(
+                &shard_index_guard,
+                updates
+                    .iter()
+                    .filter(|update| !update.fully_covered)
+                    .map(|update| update.subchunk_index),
+            )
+        };
+        let mut subchunks_encoded = if subchunks_read.is_empty() {
             HashMap::new()
+        } else if compact {
+            let shard = self
+                .input_output_handle
+                .decode(options)
+                .await?
+                .ok_or_else(super::missing_stored_subchunks)?;
+            super::slice_stored_subchunks(&shard, subchunks_read, &byte_ranges)?
         } else {
             let subchunks_encoded = self
                 .input_output_handle
                 .partial_decode_many(Box::new(byte_ranges.into_iter()), options)
                 .await?;
-            super::collect_stored_subchunks(subchunks_straddling, subchunks_encoded)?
+            super::collect_stored_subchunks(subchunks_read, subchunks_encoded)?
         };
 
         // Decode, update and encode all of the intersecting subchunks
@@ -397,7 +403,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 updates.len(),
                 options,
             )?;
-        let updated_subchunks = updates
+        let mut updated_subchunks = updates
             .concurrent_limit(subchunk_concurrent_limit)
             .map(|(update, subchunk_encoded)| {
                 let subchunk_decoded = if let Some(subchunk_encoded) = subchunk_encoded {
@@ -433,6 +439,13 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                 }
             })
             .collect::<Result<Vec<_>, CodecError>>()?;
+
+        // Carry the retained subchunks (those left unread by the update) into the rewrite
+        updated_subchunks.extend(
+            subchunks_encoded
+                .into_iter()
+                .map(|(subchunk_index, encoded)| (subchunk_index, Some(CowBytes::from(encoded)))),
+        );
 
         self.commit_subchunk_updates(&mut shard_index_guard, updated_subchunks, options)
             .await

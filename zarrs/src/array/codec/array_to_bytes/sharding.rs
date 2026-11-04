@@ -92,7 +92,7 @@ pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
@@ -588,22 +588,6 @@ fn subchunk_updates<'a>(
     }
 }
 
-/// Return the indices and byte ranges of the stored subchunks of a shard that are not in `updated_subchunks`.
-fn retained_subchunks<T>(
-    shard_index: &[u64],
-    updated_subchunks: &[(u64, T)],
-) -> (Vec<u64>, Vec<ByteRange>) {
-    let updated: HashSet<u64> = updated_subchunks.iter().map(|(index, _)| *index).collect();
-    (0..shard_index.len() / 2)
-        .filter_map(|subchunk_index| {
-            let (offset, size) = subchunk_offset_size(shard_index, subchunk_index)?;
-            let subchunk_index = subchunk_index as u64;
-            (!updated.contains(&subchunk_index))
-                .then_some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
-        })
-        .unzip()
-}
-
 /// Return the indices and byte ranges of the stored subchunks among `subchunk_indices`, sorted by byte range.
 ///
 /// Sorting byte ranges may improve store retrieve efficiency in some cases.
@@ -648,6 +632,25 @@ fn collect_stored_subchunks(
         subchunks_encoded.into_iter().map(CowBytes::into_vec),
     )
     .collect())
+}
+
+/// Slice the encoded subchunks at `byte_ranges` out of the entire encoded `shard`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if a byte range is beyond the end of the shard.
+fn slice_stored_subchunks(
+    shard: &[u8],
+    subchunk_indices: Vec<u64>,
+    byte_ranges: &[ByteRange],
+) -> Result<HashMap<u64, Vec<u8>>, CodecError> {
+    std::iter::zip(subchunk_indices, byte_ranges)
+        .map(|(subchunk_index, byte_range)| {
+            let range = byte_range
+                .checked_range_usize(shard.len())
+                .ok_or_else(invalid_shard_index)?;
+            Ok((subchunk_index, shard[range].to_vec()))
+        })
+        .collect()
 }
 
 fn missing_stored_subchunks() -> CodecError {
