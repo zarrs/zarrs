@@ -261,10 +261,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     .await?;
             Ok(EncodedSubchunkEncoder::Storage(encoder, indices))
         } else {
-            let existing = self
-                .async_retrieve_encoded_chunk(&chunk_indices)
-                .await?
-                .map(|bytes| bytes.to_vec());
+            let existing = self.async_retrieve_encoded_chunk(&chunk_indices).await?;
             Ok(EncodedSubchunkEncoder::Memory(InMemoryChunkUpdate::new(
                 self,
                 chunk_indices,

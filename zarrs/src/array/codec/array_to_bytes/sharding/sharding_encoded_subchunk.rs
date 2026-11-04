@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use bytes::Bytes;
+
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
@@ -117,7 +119,7 @@ impl EnclosingSubchunkEncoder {
     pub(crate) fn new(
         inner_codecs: &Arc<CodecChainBound>,
         index: u64,
-        existing: Option<Vec<u8>>,
+        existing: Option<Bytes>,
         enclosing: &EnclosingSubchunk,
         level: usize,
         options: &CodecOptions,

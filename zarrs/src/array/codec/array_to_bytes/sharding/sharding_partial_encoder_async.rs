@@ -300,7 +300,7 @@ impl AsyncShardingPartialEncoder {
                 .input_output_handle
                 .partial_decode(byte_range, options)
                 .await?
-                .map(CowBytes::into_vec),
+                .map(CowBytes::into_bytes),
             None => None,
         };
         EnclosingSubchunkEncoder::new(

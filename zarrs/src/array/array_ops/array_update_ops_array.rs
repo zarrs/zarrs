@@ -1,6 +1,8 @@
 use inherent::inherent;
 use std::sync::Arc;
 
+use bytes::Bytes;
+
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
@@ -214,9 +216,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             update(encoder.as_ref(), &local_indices, options)?;
             Ok(())
         } else {
-            let existing = self
-                .retrieve_encoded_chunk(&chunk_indices)?
-                .map(|bytes| bytes.to_vec());
+            let existing = self.retrieve_encoded_chunk(&chunk_indices)?;
             let in_memory =
                 InMemoryChunkUpdate::new(self, chunk_indices, level, &subset, existing)?;
             update(in_memory.encoder.as_ref(), &in_memory.indices, options)?;
@@ -356,7 +356,7 @@ impl InMemoryChunkUpdate {
         chunk_indices: ArrayIndices,
         level: usize,
         subset: &ArraySubset,
-        existing: Option<Vec<u8>>,
+        existing: Option<Bytes>,
     ) -> Result<Self, ArrayError> {
         let options = array.codec_options();
         let buffer = Arc::new(InMemoryBytesEncoder::new(existing));

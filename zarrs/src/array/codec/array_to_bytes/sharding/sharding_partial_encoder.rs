@@ -290,7 +290,7 @@ impl ShardingPartialEncoder {
             Some(byte_range) => self
                 .input_output_handle
                 .partial_decode(byte_range, options)?
-                .map(CowBytes::into_vec),
+                .map(CowBytes::into_bytes),
             None => None,
         };
         EnclosingSubchunkEncoder::new(
