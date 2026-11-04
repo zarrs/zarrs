@@ -30,7 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits with `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` for resolving ordered subchunk-grid hierarchies
   - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
   - `ArrayToBytesCodecSubchunkingTraits::{subchunk_codecs,subchunk_codecs_at_level}` return the shape-independent codec for each subchunk level (outermost first)
-  - `ArrayToArrayCodecSubchunkingTraits::encoded_element_indices` maps element indices to an encoded chunk (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
+  - `ArrayToArrayCodecSubchunkingTraits` maps chunk-local subchunk addressing through a codec (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
+    - `decoded_local_subchunk_grid` maps a chunk-local subchunk grid back to a decoded chunk
+    - `encoded_element_indices` maps element indices to an encoded chunk
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible

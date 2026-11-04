@@ -232,6 +232,21 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
             super::squeeze_dims(decoded_element_indices.iter().copied(), decoded_shape, 0);
         Ok(Some(ArrayIndices::from(encoded_element_indices.as_slice())))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let squeeze: Vec<bool> = decoded_shape.iter().map(|dim| dim.get() == 1).collect();
+        decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(decoded_shape).to_vec(),
+            &squeeze,
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
 }
 
 #[cfg_attr(
@@ -347,13 +362,16 @@ pub(super) fn decoded_local_subchunk_grid(
     squeeze: &[bool],
     encoded_subchunk_grid: &ChunkGrid,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
-    let expected_encoded_dimensionality =
-        squeeze.iter().filter(|&&squeeze| !squeeze).count().max(1);
-    if encoded_subchunk_grid.dimensionality() != expected_encoded_dimensionality {
+    let mut expected_encoded_shape: Vec<u64> = std::iter::zip(&array_shape, squeeze)
+        .filter_map(|(&len, &squeeze)| (!squeeze).then_some(len))
+        .collect();
+    if expected_encoded_shape.is_empty() {
+        expected_encoded_shape.push(1);
+    }
+    if encoded_subchunk_grid.array_shape() != expected_encoded_shape {
         return Err(ChunkGridCreateError::new(format!(
-            "encoded subchunk grid dimensionality {} is incompatible with squeezed dimensionality {}",
-            encoded_subchunk_grid.dimensionality(),
-            expected_encoded_dimensionality
+            "encoded subchunk grid array shape {:?} is incompatible with squeezed shape {expected_encoded_shape:?}",
+            encoded_subchunk_grid.array_shape(),
         )));
     }
 

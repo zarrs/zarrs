@@ -204,6 +204,20 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
             permute(decoded_element_indices, &self.order.0).expect("matching dimensionality"),
         ))
     }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        decoded_local_subchunk_grid(
+            bytemuck::must_cast_slice(decoded_shape).to_vec(),
+            &inverse_permutation(&self.order.0),
+            encoded_subchunk_grid,
+        )
+        .map(Some)
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
 }
 
 #[cfg_attr(
@@ -338,10 +352,23 @@ pub(super) fn decoded_local_subchunk_grid(
     order_inverse: &[usize],
     encoded_subchunk_grid: &ChunkGrid,
 ) -> Result<ChunkGrid, ChunkGridCreateError> {
+    if order_inverse.len() != array_shape.len() {
+        return Err(ChunkGridCreateError::new(
+            "Length of transpose codec `order` does not match array dimensionality",
+        ));
+    }
     if order_inverse.len() != encoded_subchunk_grid.dimensionality() {
         return Err(ChunkGridCreateError::new(
             "Length of transpose codec `order` does not match `encoded_subchunk_grid` dimensionality",
         ));
+    }
+    if std::iter::zip(&array_shape, order_inverse)
+        .any(|(&expected, &encoded_dim)| encoded_subchunk_grid.array_shape()[encoded_dim] != expected)
+    {
+        return Err(ChunkGridCreateError::new(format!(
+            "encoded subchunk grid array shape {:?} does not match transposed shape of {array_shape:?}",
+            encoded_subchunk_grid.array_shape()
+        )));
     }
     let chunk_shapes = order_inverse
         .iter()

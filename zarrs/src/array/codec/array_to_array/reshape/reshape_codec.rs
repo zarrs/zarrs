@@ -4,7 +4,10 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ArrayIndices, ChunkShape, DataType, FillValue, ravel_indices, unravel_index};
+use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
+use crate::array::{
+    ArrayIndices, ChunkGrid, ChunkShape, DataType, FillValue, ravel_indices, unravel_index,
+};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -176,6 +179,19 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
             &encoded_shape,
             decoded_element_indices,
         )))
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        reshape_rectilinear_grid(
+            &self.encoded_shape(decoded_shape)?,
+            decoded_shape,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
     }
 }
 
