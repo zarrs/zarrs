@@ -151,17 +151,13 @@ impl<T: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToAr
     fn encoded_subchunk_indices(
         &self,
         level: usize,
-        encoded_subchunk_grid: Option<super::ChunkGrid>,
+        encoded_subchunk_grid: Option<&super::ChunkGrid>,
         subchunk_indices: &[u64],
     ) -> Result<zarrs_chunk_grid::ArrayIndices, CodecError> {
-        let encoded_subchunk_grid = encoded_subchunk_grid.ok_or_else(|| {
-            CodecError::Other(format!(
-                "there is no resolvable subchunk grid at level {level}"
-            ))
-        })?;
-        self.codec.encoded_subchunk_indices(
+        self.codec.encoded_subchunk_indices_at_level(
             self.decoded_representation.shape(),
-            &encoded_subchunk_grid,
+            level,
+            encoded_subchunk_grid,
             subchunk_indices,
         )
     }
@@ -191,7 +187,8 @@ where
         let encoded_subchunk_indices = self.encoded_subchunk_indices(
             level,
             self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?,
+                .local_subchunk_grid_at_level(level, options)?
+                .as_ref(),
             subchunk_indices,
         )?;
         self.input_output_handle.retrieve_encoded_subchunk_at_level(
@@ -333,7 +330,8 @@ where
         let encoded_subchunk_indices = self.encoded_subchunk_indices(
             level,
             self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?,
+                .local_subchunk_grid_at_level(level, options)?
+                .as_ref(),
             subchunk_indices,
         )?;
         // SAFETY: The subchunk is unchanged, only its indices are mapped.
@@ -356,7 +354,8 @@ where
         let encoded_subchunk_indices = self.encoded_subchunk_indices(
             level,
             self.input_output_handle
-                .local_subchunk_grid_at_level(level, options)?,
+                .local_subchunk_grid_at_level(level, options)?
+                .as_ref(),
             subchunk_indices,
         )?;
         self.input_output_handle
@@ -619,7 +618,8 @@ where
             level,
             self.input_output_handle
                 .local_subchunk_grid_at_level(level, options)
-                .await?,
+                .await?
+                .as_ref(),
             subchunk_indices,
         )?;
         self.input_output_handle
@@ -771,7 +771,8 @@ where
             level,
             self.input_output_handle
                 .local_subchunk_grid_at_level(level, options)
-                .await?,
+                .await?
+                .as_ref(),
             subchunk_indices,
         )?;
         // SAFETY: The subchunk is unchanged, only its indices are mapped.
@@ -792,7 +793,8 @@ where
             level,
             self.input_output_handle
                 .local_subchunk_grid_at_level(level, options)
-                .await?,
+                .await?
+                .as_ref(),
             subchunk_indices,
         )?;
         self.input_output_handle

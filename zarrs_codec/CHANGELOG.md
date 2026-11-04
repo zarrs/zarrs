@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
 - Add `ArrayToArrayCodecSubchunkingTraits::{decoded_local_subchunk_grid,encoded_coordinates}` to map chunk-local subchunk grids and element coordinates through an array-to-array codec
   - Add `validate_chunk_coordinates`
-  - Add `ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices` to map subchunk indices through an array-to-array codec
+  - Add `ArrayToArrayCodecSubchunkingTraits::{encoded_subchunk_indices,encoded_subchunk_indices_at_level}` to map subchunk indices through an array-to-array codec
   - Add `ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids` to map each level of a chunk-local subchunk grid hierarchy
   - The default array-to-array partial decoder maps chunk-local subchunk grids through its codec, rather than passing them through unchanged
 

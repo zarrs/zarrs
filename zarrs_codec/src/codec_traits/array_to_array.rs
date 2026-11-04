@@ -133,6 +133,34 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
                 ))
             })
     }
+
+    /// Map the indices of a subchunk of the `level` subchunk grid of a decoded chunk of `decoded_shape` to the indices
+    /// of the same subchunk in the `level` chunk-local `encoded_subchunk_grid` of the encoded chunk.
+    ///
+    /// This is [`encoded_subchunk_indices`](Self::encoded_subchunk_indices) for the subchunk grid at a level of a
+    /// hierarchy (e.g. of a wrapped partial codec), which is [`None`] if it is not resolvable.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `encoded_subchunk_grid` is [`None`] or
+    /// [`encoded_subchunk_indices`](Self::encoded_subchunk_indices) fails.
+    fn encoded_subchunk_indices_at_level(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        level: usize,
+        encoded_subchunk_grid: Option<&ChunkGrid>,
+        decoded_subchunk_indices: &[u64],
+    ) -> Result<ArrayIndices, CodecError> {
+        let encoded_subchunk_grid = encoded_subchunk_grid.ok_or_else(|| {
+            CodecError::Other(format!(
+                "there is no resolvable subchunk grid at level {level}"
+            ))
+        })?;
+        self.encoded_subchunk_indices(
+            decoded_shape,
+            encoded_subchunk_grid,
+            decoded_subchunk_indices,
+        )
+    }
 }
 
 /// Check that `coordinates` are in bounds of a chunk of `shape`.

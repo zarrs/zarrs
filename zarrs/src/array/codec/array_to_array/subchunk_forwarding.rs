@@ -9,29 +9,6 @@
 //! [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids`]: zarrs_codec::ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids
 //! [`ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices`]: zarrs_codec::ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices
 
-use std::num::NonZeroU64;
-
-use zarrs_codec::{ArrayToArrayCodecTraits, CodecError};
-
-use crate::array::{ArrayIndices, ChunkGrid};
-
-/// Map subchunk indices of the `level` chunk-local subchunk grid to the `encoded_subchunk_grid` of a wrapped partial
-/// codec at that level.
-pub(super) fn encoded_subchunk_indices(
-    codec: &dyn ArrayToArrayCodecTraits,
-    decoded_shape: &[NonZeroU64],
-    level: usize,
-    encoded_subchunk_grid: Option<ChunkGrid>,
-    subchunk_indices: &[u64],
-) -> Result<ArrayIndices, CodecError> {
-    let encoded_subchunk_grid = encoded_subchunk_grid.ok_or_else(|| {
-        CodecError::Other(format!(
-            "there is no resolvable subchunk grid at level {level}"
-        ))
-    })?;
-    codec.encoded_subchunk_indices(decoded_shape, &encoded_subchunk_grid, subchunk_indices)
-}
-
 /// Implement the subchunking traits of an array-to-array partial codec by forwarding to the partial codec it wraps.
 ///
 /// - `impl_subchunk_forwarding!(Partial, inner, codec, shape)` maps grids and indices through the
@@ -50,11 +27,13 @@ macro_rules! impl_subchunk_forwarding {
                 subchunk_indices: &[u64],
                 options: &zarrs_codec::CodecOptions,
             ) -> Result<$crate::array::ArrayIndices, zarrs_codec::CodecError> {
-                $crate::array::codec::array_to_array::subchunk_forwarding::encoded_subchunk_indices(
+                zarrs_codec::ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices_at_level(
                     self.$codec.as_ref(),
                     &self.$shape,
                     level,
-                    self.$inner.local_subchunk_grid_at_level(level, options)?,
+                    self.$inner
+                        .local_subchunk_grid_at_level(level, options)?
+                        .as_ref(),
                     subchunk_indices,
                 )
             }
@@ -69,13 +48,14 @@ macro_rules! impl_subchunk_forwarding {
                 subchunk_indices: &[u64],
                 options: &zarrs_codec::CodecOptions,
             ) -> Result<$crate::array::ArrayIndices, zarrs_codec::CodecError> {
-                $crate::array::codec::array_to_array::subchunk_forwarding::encoded_subchunk_indices(
+                zarrs_codec::ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices_at_level(
                     self.$codec.as_ref(),
                     &self.$shape,
                     level,
                     self.$inner
                         .local_subchunk_grid_at_level(level, options)
-                        .await?,
+                        .await?
+                        .as_ref(),
                     subchunk_indices,
                 )
             }
