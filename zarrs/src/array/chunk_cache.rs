@@ -133,18 +133,10 @@ mod chunk_cache_type_sealed {
         ChunkCacheTypeAsyncPartialDecoder,
     };
 
-    pub trait Sealed {
-        /// Whether encoded subchunks can be retrieved through a cached value.
-        ///
-        /// If `false`, encoded subchunks are retrieved from the array, bypassing the cache.
-        const ENCODED_SUBCHUNKS: bool = true;
-    }
+    pub trait Sealed {}
 
     impl Sealed for ChunkCacheTypeEncoded {}
-    impl Sealed for ChunkCacheTypeDecoded {
-        // A decoded chunk does not hold its encoded subchunks
-        const ENCODED_SUBCHUNKS: bool = false;
-    }
+    impl Sealed for ChunkCacheTypeDecoded {}
     impl Sealed for ChunkCacheTypePartialDecoder {}
     #[cfg(feature = "async")]
     impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
@@ -160,6 +152,21 @@ mod chunk_cache_type_sealed {
             chunk_indices: &[u64],
             options: &CodecOptions,
         ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
+
+        /// Return a partial decoder of the chunk at `chunk_indices` for retrieving encoded subchunks through the
+        /// cache, which never decodes the chunk.
+        ///
+        /// Returns [`None`] if the cache cannot serve encoded subchunks without decoding, in which case they are
+        /// retrieved from the array.
+        fn encoded_subchunk_partial_decoder<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Option<Arc<dyn ArrayPartialDecoderTraits>>, ArrayError>
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
@@ -205,6 +212,21 @@ mod chunk_cache_type_sealed {
             TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
 
+        /// Return an asynchronous partial decoder of the chunk at `chunk_indices` for retrieving encoded subchunks
+        /// through the cache, which never decodes the chunk.
+        ///
+        /// Returns [`None`] if the cache cannot serve encoded subchunks without decoding, in which case they are
+        /// retrieved from the array.
+        async fn async_encoded_subchunk_partial_decoder<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &CodecOptions,
+        ) -> Result<Option<Arc<dyn AsyncArrayPartialDecoderTraits>>, ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+
         async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
             cache: &C,
             array: &Array<TStorage>,
@@ -230,7 +252,7 @@ mod chunk_cache_type_sealed {
 
 #[cfg(feature = "async")]
 pub(crate) use chunk_cache_type_sealed::SealedAsync;
-pub(crate) use chunk_cache_type_sealed::{Sealed, SealedSync};
+pub(crate) use chunk_cache_type_sealed::SealedSync;
 
 /// A chunk cache.
 ///

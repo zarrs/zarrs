@@ -5,8 +5,8 @@ use crate::array::{
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, EncodedSubchunk,
-    InvalidNumberOfElementsError, copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError, CodecOptions,
+    EncodedSubchunk, InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::{MaybeSend, MaybeSync};
 
@@ -24,10 +24,24 @@ pub(super) fn retrieve_encoded_subchunk_at_level<A: ArrayReadOps + ?Sized>(
 ) -> Result<Option<EncodedSubchunk>, ArrayError> {
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
-    let options = array.codec_options();
     let partial_decoder = array.partial_decoder(&chunk_indices)?;
-    let local_indices =
-        super::local_subchunk_indices(partial_decoder.as_ref(), level, &subset, options)?;
+    retrieve_encoded_subchunk_in(
+        partial_decoder.as_ref(),
+        level,
+        &subset,
+        array.codec_options(),
+    )
+}
+
+/// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid with the `partial_decoder`
+/// of its chunk.
+pub(super) fn retrieve_encoded_subchunk_in(
+    partial_decoder: &dyn ArrayPartialDecoderTraits,
+    level: usize,
+    subset: &ArraySubset,
+    options: &CodecOptions,
+) -> Result<Option<EncodedSubchunk>, ArrayError> {
+    let local_indices = super::local_subchunk_indices(partial_decoder, level, subset, options)?;
     Ok(partial_decoder.retrieve_encoded_subchunk_at_level(level, &local_indices, options)?)
 }
 

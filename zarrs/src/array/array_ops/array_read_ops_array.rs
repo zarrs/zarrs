@@ -182,7 +182,18 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let options = self.codec_options();
+        let partial_decoder = self.encoded_subchunk_partial_decoder(&chunk_indices, options)?;
+        super::array_read_ops_common::retrieve_encoded_subchunk_in(
+            partial_decoder.as_ref(),
+            level,
+            &subset,
+            options,
+        )
+    }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunk<T: FromArrayBytes>(
@@ -402,6 +413,22 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Initialise a partial decoder of the chunk at `chunk_indices` for retrieving encoded subchunks, which never
+    /// decodes the chunk.
+    pub(in crate::array) fn encoded_subchunk_partial_decoder(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
+        let input_handle = Arc::new((self.readable_storage()?, chunk_key));
+        Ok(self.codecs_bound().encoded_subchunk_partial_decoder(
+            input_handle,
+            &self.chunk_shape(chunk_indices)?,
+            options,
+        )?)
     }
 
     pub(in crate::array) fn partial_decoder_with_options(

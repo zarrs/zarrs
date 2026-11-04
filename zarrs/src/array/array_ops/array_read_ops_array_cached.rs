@@ -14,7 +14,7 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    Sealed as _, SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+    SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
@@ -375,16 +375,26 @@ where
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
-        if C::Value::ENCODED_SUBCHUNKS {
-            super::array_read_ops_common::retrieve_encoded_subchunk_at_level(
-                self,
-                level,
-                subchunk_indices,
-            )
-        } else {
-            self.array()
-                .retrieve_encoded_subchunk_at_level(level, subchunk_indices)
-        }
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let options = self.codec_options();
+        let partial_decoder = match C::Value::encoded_subchunk_partial_decoder(
+            self.cache(),
+            self.array(),
+            &chunk_indices,
+            options,
+        )? {
+            Some(partial_decoder) => partial_decoder,
+            None => self
+                .array()
+                .encoded_subchunk_partial_decoder(&chunk_indices, options)?,
+        };
+        super::array_read_ops_common::retrieve_encoded_subchunk_in(
+            partial_decoder.as_ref(),
+            level,
+            &subset,
+            options,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]

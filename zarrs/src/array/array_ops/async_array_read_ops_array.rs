@@ -234,7 +234,21 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         level: usize,
         subchunk_indices: &[u64],
-    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError>;
+    ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let options = self.codec_options();
+        let partial_decoder = self
+            .async_encoded_subchunk_partial_decoder(&chunk_indices, options)
+            .await?;
+        super::async_array_read_ops_common::async_retrieve_encoded_subchunk_in(
+            partial_decoder.as_ref(),
+            level,
+            &subset,
+            options,
+        )
+        .await
+    }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_subchunk<T: FromArrayBytes>(
@@ -446,6 +460,25 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Initialise an asynchronous partial decoder of the chunk at `chunk_indices` for retrieving encoded subchunks,
+    /// which never decodes the chunk.
+    pub(in crate::array) async fn async_encoded_subchunk_partial_decoder(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
+        let chunk_key = self.chunk_key(chunk_indices)?;
+        let input_handle = Arc::new((self.async_readable_storage().await?, chunk_key));
+        Ok(self
+            .codecs_bound()
+            .async_encoded_subchunk_partial_decoder(
+                input_handle,
+                &self.chunk_shape(chunk_indices)?,
+                options,
+            )
+            .await?)
     }
 
     pub(in crate::array) async fn async_partial_decoder_with_options(

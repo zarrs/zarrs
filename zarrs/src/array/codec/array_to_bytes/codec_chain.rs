@@ -94,7 +94,22 @@ pub struct CodecChainBound {
     array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    cache_index: Option<usize>, // for partial decoders
+    /// The codec index of the partial decoder cache, if any.
+    cache_index: Option<usize>,
+    /// The codec index of the partial decoder cache when retrieving encoded subchunks, if any.
+    ///
+    /// This is only ever a bytes cache, as encoded subchunks are retrieved without decoding an array.
+    encoded_subchunk_cache_index: Option<usize>,
+}
+
+/// Combine the codec indices where a partial decoder cache must and should be inserted.
+fn combine_cache_index(must: Option<usize>, should: Option<usize>) -> Option<usize> {
+    match (must, should) {
+        (Some(m), Some(s)) => Some(m.max(s)),
+        (Some(m), None) => Some(m),
+        (None, Some(s)) => Some(s),
+        (None, None) => None,
+    }
 }
 
 impl CodecChain {
@@ -147,6 +162,7 @@ impl CodecChain {
             }
             codec_index += 1;
         }
+        let bytes_cache_index_must = cache_index_must;
 
         {
             let codec = &self.array_to_bytes;
@@ -160,6 +176,10 @@ impl CodecChain {
             codec_index += 1;
         }
 
+        // Retrieving encoded subchunks partially decodes the array-to-bytes codec, so it needs no array cache
+        let encoded_subchunk_cache_index =
+            combine_cache_index(bytes_cache_index_must, cache_index_should);
+
         for codec in self.array_to_array.iter().rev() {
             let capability = codec.partial_decoder_capability();
             if !capability.partial_read {
@@ -171,18 +191,14 @@ impl CodecChain {
             codec_index += 1;
         }
 
-        let cache_index = match (cache_index_must, cache_index_should) {
-            (Some(m), Some(s)) => Some(m.max(s)),
-            (Some(m), None) => Some(m),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        };
+        let cache_index = combine_cache_index(cache_index_must, cache_index_should);
 
         Ok(Arc::new(CodecChainBound {
             array_to_array,
             array_to_bytes,
             bytes_to_bytes,
             cache_index,
+            encoded_subchunk_cache_index,
         }))
     }
 
@@ -305,6 +321,202 @@ impl CodecChain {
 }
 
 impl CodecChainBound {
+    /// Returns whether a partial decoder of the codec chain caches a decoded array.
+    ///
+    /// Such a partial decoder decodes the whole chunk when it is created, so it is not used to retrieve encoded
+    /// subchunks.
+    pub(crate) fn partial_decoder_caches_arrays(&self) -> bool {
+        self.cache_index
+            .is_some_and(|cache_index| cache_index > self.bytes_to_bytes.len())
+    }
+
+    /// Initialise a partial decoder for retrieving encoded subchunks.
+    ///
+    /// Unlike [`partial_decoder`](ArrayToBytesCodecTraits::partial_decoder), this never caches a decoded array, so it
+    /// does not decode the chunk. Only encoded or intermediate bytes are cached, where a bytes-to-bytes codec cannot
+    /// partially decode.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    pub(crate) fn encoded_subchunk_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        let cache_index = self.encoded_subchunk_cache_index;
+        self.partial_decoder_with_cache_index(input_handle, shape, options, cache_index)
+    }
+
+    /// Initialise an asynchronous partial decoder for retrieving encoded subchunks.
+    ///
+    /// See [`encoded_subchunk_partial_decoder`](Self::encoded_subchunk_partial_decoder).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if initialisation fails.
+    #[cfg(feature = "async")]
+    pub(crate) async fn async_encoded_subchunk_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        let cache_index = self.encoded_subchunk_cache_index;
+        self.async_partial_decoder_with_cache_index(input_handle, shape, options, cache_index)
+            .await
+    }
+
+    /// Initialise a partial decoder with a partial decoder cache at codec `cache_index`.
+    fn partial_decoder_with_cache_index(
+        self: Arc<Self>,
+        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+        cache_index: Option<usize>,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        let (array_representations, bytes_representations) = self.get_representations(shape)?;
+        let mut codec_index = 0;
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            if Some(codec_index) == cache_index {
+                input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
+            }
+            codec_index += 1;
+            input_handle =
+                Arc::clone(codec).partial_decoder(input_handle, bytes_representation, options)?;
+        }
+
+        if Some(codec_index) == cache_index {
+            input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
+        }
+
+        let mut input_handle = {
+            let (shape, _data_type) = array_representations.last().unwrap();
+            codec_index += 1;
+            self.array_to_bytes
+                .clone()
+                .partial_decoder(input_handle, shape, options)?
+        };
+
+        for (codec, representations) in std::iter::zip(
+            self.array_to_array.iter().rev(),
+            array_representations.windows(2).rev(),
+        ) {
+            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
+                unreachable!()
+            };
+            if Some(codec_index) == cache_index {
+                // The cache wraps the input handle, which decodes to this codec's encoded representation
+                input_handle = Arc::new(ArrayPartialDecoderCache::new(
+                    &*input_handle,
+                    encoded_shape.clone(),
+                    encoded_data_type.clone(),
+                    options,
+                )?);
+            }
+            codec_index += 1;
+            input_handle = codec
+                .clone()
+                .partial_decoder(input_handle, shape, options)?;
+        }
+
+        if Some(codec_index) == cache_index {
+            let (shape, data_type) = array_representations.first().unwrap();
+            input_handle = Arc::new(ArrayPartialDecoderCache::new(
+                &*input_handle,
+                shape.clone(),
+                data_type.clone(),
+                options,
+            )?);
+        }
+
+        Ok(input_handle)
+    }
+
+    /// Initialise an asynchronous partial decoder with a partial decoder cache at codec `cache_index`.
+    #[cfg(feature = "async")]
+    async fn async_partial_decoder_with_cache_index(
+        self: Arc<Self>,
+        mut input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+        cache_index: Option<usize>,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        let (array_representations, bytes_representations) = self.get_representations(shape)?;
+        let mut codec_index = 0;
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            if Some(codec_index) == cache_index {
+                input_handle =
+                    Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
+            }
+            codec_index += 1;
+            input_handle = codec
+                .clone()
+                .async_partial_decoder(input_handle, bytes_representation, options)
+                .await?;
+        }
+
+        if Some(codec_index) == cache_index {
+            input_handle =
+                Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
+        }
+
+        let mut input_handle = {
+            let (shape, _data_type) = array_representations.last().unwrap();
+            codec_index += 1;
+            self.array_to_bytes
+                .clone()
+                .async_partial_decoder(input_handle, shape, options)
+                .await?
+        };
+
+        for (codec, representations) in std::iter::zip(
+            self.array_to_array.iter().rev(),
+            array_representations.windows(2).rev(),
+        ) {
+            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
+                unreachable!()
+            };
+            if Some(codec_index) == cache_index {
+                // The cache wraps the input handle, which decodes to this codec's encoded representation
+                input_handle = Arc::new(
+                    ArrayPartialDecoderCache::async_new(
+                        &*input_handle,
+                        encoded_shape.clone(),
+                        encoded_data_type.clone(),
+                        options,
+                    )
+                    .await?,
+                );
+            }
+            codec_index += 1;
+            input_handle = codec
+                .clone()
+                .async_partial_decoder(input_handle, shape, options)
+                .await?;
+        }
+
+        if Some(codec_index) == cache_index {
+            let (shape, data_type) = array_representations.first().unwrap();
+            input_handle = Arc::new(
+                ArrayPartialDecoderCache::async_new(
+                    &*input_handle,
+                    shape.clone(),
+                    data_type.clone(),
+                    options,
+                )
+                .await?,
+            );
+        }
+
+        Ok(input_handle)
+    }
+
     fn get_array_representations(
         &self,
         shape: &[NonZeroU64],
@@ -682,69 +894,12 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-        let mut codec_index = 0;
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-            }
-            codec_index += 1;
-            input_handle =
-                Arc::clone(codec).partial_decoder(input_handle, bytes_representation, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            input_handle = Arc::new(BytesPartialDecoderCache::new(&*input_handle, options)?);
-        }
-
-        let mut input_handle = {
-            let (shape, _data_type) = array_representations.last().unwrap();
-            codec_index += 1;
-            self.array_to_bytes
-                .clone()
-                .partial_decoder(input_handle, shape, options)?
-        };
-
-        for (codec, representations) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.windows(2).rev(),
-        ) {
-            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
-                unreachable!()
-            };
-            if Some(codec_index) == self.cache_index {
-                // The cache wraps the input handle, which decodes to this codec's encoded representation
-                input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                    input_handle,
-                    encoded_shape.clone(),
-                    encoded_data_type.clone(),
-                    options,
-                )?);
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .partial_decoder(input_handle, shape, options)?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            let (shape, data_type) = array_representations.first().unwrap();
-            input_handle = Arc::new(ArrayPartialDecoderCache::new(
-                input_handle,
-                shape.clone(),
-                data_type.clone(),
-                options,
-            )?);
-        }
-
-        Ok(input_handle)
+        let cache_index = self.cache_index;
+        self.partial_decoder_with_cache_index(input_handle, shape, options, cache_index)
     }
 
     fn partial_encoder(
@@ -788,81 +943,13 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
     #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
-        mut input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-        let mut codec_index = 0;
-        for (codec, bytes_representation) in std::iter::zip(
-            self.bytes_to_bytes.iter().rev(),
-            bytes_representations.iter().rev().skip(1),
-        ) {
-            if Some(codec_index) == self.cache_index {
-                input_handle =
-                    Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .async_partial_decoder(input_handle, bytes_representation, options)
-                .await?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            input_handle =
-                Arc::new(BytesPartialDecoderCache::async_new(&*input_handle, options).await?);
-        }
-
-        let mut input_handle = {
-            let (shape, _data_type) = array_representations.last().unwrap();
-            codec_index += 1;
-            self.array_to_bytes
-                .clone()
-                .async_partial_decoder(input_handle, shape, options)
-                .await?
-        };
-
-        for (codec, representations) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.windows(2).rev(),
-        ) {
-            let [(shape, _), (encoded_shape, encoded_data_type)] = representations else {
-                unreachable!()
-            };
-            if Some(codec_index) == self.cache_index {
-                // The cache wraps the input handle, which decodes to this codec's encoded representation
-                input_handle = Arc::new(
-                    ArrayPartialDecoderCache::async_new(
-                        input_handle,
-                        encoded_shape.clone(),
-                        encoded_data_type.clone(),
-                        options,
-                    )
-                    .await?,
-                );
-            }
-            codec_index += 1;
-            input_handle = codec
-                .clone()
-                .async_partial_decoder(input_handle, shape, options)
-                .await?;
-        }
-
-        if Some(codec_index) == self.cache_index {
-            let (shape, data_type) = array_representations.first().unwrap();
-            input_handle = Arc::new(
-                ArrayPartialDecoderCache::async_new(
-                    input_handle,
-                    shape.clone(),
-                    data_type.clone(),
-                    options,
-                )
-                .await?,
-            );
-        }
-
-        Ok(input_handle)
+        let cache_index = self.cache_index;
+        self.async_partial_decoder_with_cache_index(input_handle, shape, options, cache_index)
+            .await
     }
 
     #[cfg(feature = "async")]
@@ -1284,6 +1371,44 @@ mod tests {
             &decoded_region,
             &decoded_partial_chunk_true,
         );
+    }
+
+    #[test]
+    fn codec_chain_encoded_subchunk_partial_decoder_caches_no_array() {
+        // vlen cannot partially decode, so partial decoders cache the decoded array above it. Encoded subchunk partial
+        // decoders cache its encoded bytes instead, as vlen cannot partially read either.
+        let codec = CodecChain::new(
+            vec![],
+            Arc::new(crate::array::codec::array_to_bytes::vlen::VlenCodec::default()),
+            vec![],
+        )
+        .with_context(
+            data_type::string(),
+            Some(FillValue::from("")),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(codec.cache_index, Some(1));
+        assert!(codec.partial_decoder_caches_arrays());
+        assert_eq!(codec.encoded_subchunk_cache_index, Some(0));
+
+        // A bytes-to-bytes codec that cannot partially decode is cached by both
+        let codec = CodecChain::new(
+            vec![],
+            Arc::new(BytesCodec::new(Some(crate::array::Endianness::native()))),
+            vec![Arc::new(RepresentationCheckingBytesCodec {
+                expected_decoded_representation: BytesRepresentation::FixedSize(8),
+            })],
+        )
+        .with_context(
+            data_type::uint16(),
+            Some(FillValue::from(0u16)),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(codec.cache_index, Some(1));
+        assert!(!codec.partial_decoder_caches_arrays());
+        assert_eq!(codec.encoded_subchunk_cache_index, Some(1));
     }
 
     #[test]

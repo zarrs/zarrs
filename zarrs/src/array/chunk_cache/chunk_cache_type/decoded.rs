@@ -135,6 +135,20 @@ impl SealedSync for ChunkCacheTypeDecoded {
         )?))
     }
 
+    fn encoded_subchunk_partial_decoder<TStorage, C>(
+        _cache: &C,
+        _array: &Array<TStorage>,
+        _chunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn ArrayPartialDecoderTraits>>, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized,
+    {
+        // A decoded chunk does not hold its encoded subchunks
+        Ok(None)
+    }
+
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,
@@ -197,6 +211,20 @@ impl SealedAsync for ChunkCacheTypeDecoded {
             chunk_indices,
         )?));
         Ok(Arc::new(decoder) as Arc<dyn AsyncArrayPartialDecoderTraits>)
+    }
+
+    async fn async_encoded_subchunk_partial_decoder<TStorage, C>(
+        _cache: &C,
+        _array: &Array<TStorage>,
+        _chunk_indices: &[u64],
+        _options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncArrayPartialDecoderTraits>>, ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        // A decoded chunk does not hold its encoded subchunks
+        Ok(None)
     }
 
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(

@@ -193,10 +193,11 @@ pub(crate) fn retrieve_encoded_subchunk_at_level(
     let subchunk_handle: Arc<dyn BytesPartialDecoderTraits> = Arc::new(
         ByteIntervalPartialDecoder::new(input_handle.clone(), offset, length),
     );
-    let partial_decoder =
-        inner_codecs
-            .clone()
-            .partial_decoder(subchunk_handle, &enclosing.shape, options)?;
+    let partial_decoder = inner_codecs.clone().encoded_subchunk_partial_decoder(
+        subchunk_handle,
+        &enclosing.shape,
+        options,
+    )?;
     let nested_grid = partial_decoder
         .local_subchunk_grid_at_level(level - 1, options)?
         .ok_or(CodecError::UnsupportedEncodedSubchunk)?;
@@ -239,7 +240,7 @@ pub(crate) async fn async_retrieve_encoded_subchunk_at_level(
     );
     let partial_decoder = inner_codecs
         .clone()
-        .async_partial_decoder(subchunk_handle, &enclosing.shape, options)
+        .async_encoded_subchunk_partial_decoder(subchunk_handle, &enclosing.shape, options)
         .await?;
     let nested_grid = partial_decoder
         .local_subchunk_grid_at_level(level - 1, options)

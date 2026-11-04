@@ -1,35 +1,28 @@
 //! A cache for partial decoders.
 
-use std::sync::Arc;
-
 use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
-    EncodedSubchunk,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::StorageError;
 
-/// A cache for an [`ArrayPartialDecoderTraits`] or [`AsyncArrayPartialDecoderTraits`] partial decoder.
-///
-/// The decoded chunk is cached, and encoded subchunks are retrieved through the input handle.
-pub(crate) struct ArrayPartialDecoderCache<T: ?Sized> {
-    /// The input handle, retained only if it exposes subchunks.
-    input_handle: Option<Arc<T>>,
+/// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
+pub(crate) struct ArrayPartialDecoderCache {
     shape: ChunkShape,
     data_type: DataType,
     cache: ArrayBytes<'static>,
     local_subchunk_grids: Vec<Option<ChunkGrid>>,
 }
 
-impl ArrayPartialDecoderCache<dyn ArrayPartialDecoderTraits> {
+impl ArrayPartialDecoderCache {
     /// Create a new partial decoder cache.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
     pub(crate) fn new(
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: &dyn ArrayPartialDecoderTraits,
         shape: ChunkShape,
         data_type: DataType,
         options: &CodecOptions,
@@ -42,27 +35,24 @@ impl ArrayPartialDecoderCache<dyn ArrayPartialDecoderTraits> {
             )?
             .into_owned();
         Ok(Self {
-            input_handle: (!local_subchunk_grids.is_empty()).then_some(input_handle),
             shape,
             data_type,
             cache: bytes,
             local_subchunk_grids,
         })
     }
-}
 
-#[cfg(feature = "async")]
-impl ArrayPartialDecoderCache<dyn AsyncArrayPartialDecoderTraits> {
+    #[cfg(feature = "async")]
     /// Create a new asynchronous partial decoder cache.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
     pub(crate) async fn async_new(
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        input_handle: &dyn AsyncArrayPartialDecoderTraits,
         shape: ChunkShape,
         data_type: DataType,
         options: &CodecOptions,
-    ) -> Result<Self, CodecError> {
+    ) -> Result<ArrayPartialDecoderCache, CodecError> {
         let local_subchunk_grids = input_handle.local_subchunk_grids(options).await?;
         let bytes = input_handle
             .partial_decode(
@@ -72,7 +62,6 @@ impl ArrayPartialDecoderCache<dyn AsyncArrayPartialDecoderTraits> {
             .await?
             .into_owned();
         Ok(Self {
-            input_handle: (!local_subchunk_grids.is_empty()).then_some(input_handle),
             shape,
             data_type,
             cache: bytes,
@@ -81,39 +70,22 @@ impl ArrayPartialDecoderCache<dyn AsyncArrayPartialDecoderTraits> {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits
-    for ArrayPartialDecoderCache<dyn ArrayPartialDecoderTraits>
-{
+impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(self.local_subchunk_grids.clone())
     }
-
-    fn retrieve_encoded_subchunk_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<EncodedSubchunk>, CodecError> {
-        let Some(input_handle) = &self.input_handle else {
-            return Err(CodecError::UnsupportedEncodedSubchunk);
-        };
-        input_handle.retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
-    }
 }
 
-impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache<dyn ArrayPartialDecoderTraits> {
+impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
 
     fn size_held(&self) -> usize {
-        self.input_handle
-            .as_ref()
-            .map_or(0, |input_handle| input_handle.size_held())
-            + self.cache.size()
+        self.cache.size()
     }
 
     fn data_type(&self) -> &DataType {
@@ -138,37 +110,19 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache<dyn ArrayPartialDeco
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderSubchunkingTraits
-    for ArrayPartialDecoderCache<dyn AsyncArrayPartialDecoderTraits>
-{
+impl AsyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
     async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
         Ok(self.local_subchunk_grids.clone())
     }
-
-    async fn retrieve_encoded_subchunk_at_level(
-        &self,
-        level: usize,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<EncodedSubchunk>, CodecError> {
-        let Some(input_handle) = &self.input_handle else {
-            return Err(CodecError::UnsupportedEncodedSubchunk);
-        };
-        input_handle
-            .retrieve_encoded_subchunk_at_level(level, subchunk_indices, options)
-            .await
-    }
 }
 
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderTraits
-    for ArrayPartialDecoderCache<dyn AsyncArrayPartialDecoderTraits>
-{
+impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -178,20 +132,15 @@ impl AsyncArrayPartialDecoderTraits
     }
 
     fn size_held(&self) -> usize {
-        self.input_handle
-            .as_ref()
-            .map_or(0, |input_handle| input_handle.size_held())
-            + self.cache.size()
+        self.cache.size()
     }
 
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::array::Indexer,
-        _options: &CodecOptions,
+        options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let array_shape = bytemuck::must_cast_slice(&self.shape);
-        self.cache
-            .extract_array_subset(indexer, array_shape, &self.data_type)
+        ArrayPartialDecoderTraits::partial_decode(self, indexer, options)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -202,6 +151,7 @@ impl AsyncArrayPartialDecoderTraits
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
@@ -217,8 +167,9 @@ mod tests {
         builder
     }
 
+    /// The cache holds only the decoded chunk, so it exposes local subchunk grids but not encoded subchunks.
     #[test]
-    fn array_partial_decoder_cache_forwards_encoded_subchunks()
+    fn array_partial_decoder_cache_holds_only_the_decoded_chunk()
     -> Result<(), Box<dyn std::error::Error>> {
         let array = sharded_array_builder()
             .build(Arc::new(zarrs_storage::store::MemoryStore::new()), "/")?;
@@ -226,23 +177,42 @@ mod tests {
         let options = CodecOptions::default();
         let decoder = array.partial_decoder(&[0, 0])?;
         let cache = ArrayPartialDecoderCache::new(
-            decoder.clone(),
+            decoder.as_ref(),
             array.chunk_shape(&[0, 0])?,
             array.data_type().clone(),
             &options,
         )?;
-        let expected = decoder.retrieve_encoded_subchunk_at_level(0, &[1, 0], &options)?;
-        assert!(expected.is_some());
         assert_eq!(
-            cache.retrieve_encoded_subchunk_at_level(0, &[1, 0], &options)?,
-            expected
+            ArrayPartialDecoderTraits::size_held(&cache),
+            64 * size_of::<u16>()
         );
+        let grid_shapes = |grids: Vec<Option<ChunkGrid>>| -> Vec<Option<Vec<u64>>> {
+            grids
+                .iter()
+                .map(|grid| grid.as_ref().map(|grid| grid.grid_shape().to_vec()))
+                .collect()
+        };
+        assert_eq!(
+            grid_shapes(ArrayPartialDecoderSubchunkingTraits::local_subchunk_grids(
+                &cache, &options
+            )?),
+            grid_shapes(decoder.local_subchunk_grids(&options)?)
+        );
+        assert!(matches!(
+            ArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level(
+                &cache,
+                0,
+                &[1, 0],
+                &options
+            ),
+            Err(CodecError::UnsupportedEncodedSubchunk)
+        ));
         Ok(())
     }
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn async_array_partial_decoder_cache_forwards_encoded_subchunks()
+    async fn async_array_partial_decoder_cache_holds_only_the_decoded_chunk()
     -> Result<(), Box<dyn std::error::Error>> {
         let array = sharded_array_builder()
             .build(Arc::new(zarrs_storage::store::AsyncMemoryStore::new()), "/")?;
@@ -252,22 +222,26 @@ mod tests {
         let options = CodecOptions::default();
         let decoder = array.async_partial_decoder(&[0, 0]).await?;
         let cache = ArrayPartialDecoderCache::async_new(
-            decoder.clone(),
+            decoder.as_ref(),
             array.chunk_shape(&[0, 0])?,
             array.data_type().clone(),
             &options,
         )
         .await?;
-        let expected = decoder
-            .retrieve_encoded_subchunk_at_level(0, &[1, 0], &options)
-            .await?;
-        assert!(expected.is_some());
         assert_eq!(
-            cache
-                .retrieve_encoded_subchunk_at_level(0, &[1, 0], &options)
-                .await?,
-            expected
+            AsyncArrayPartialDecoderTraits::size_held(&cache),
+            64 * size_of::<u16>()
         );
+        assert!(matches!(
+            AsyncArrayPartialDecoderSubchunkingTraits::retrieve_encoded_subchunk_at_level(
+                &cache,
+                0,
+                &[1, 0],
+                &options
+            )
+            .await,
+            Err(CodecError::UnsupportedEncodedSubchunk)
+        ));
         Ok(())
     }
 }

@@ -4,8 +4,8 @@ use crate::array::{
     ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, AsyncArrayReadOps, Indexer,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, EncodedSubchunk,
-    InvalidNumberOfElementsError, copy_fill_value_into,
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, CodecError, CodecOptions,
+    EncodedSubchunk, InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::MaybeSync;
 
@@ -23,11 +23,26 @@ pub(super) async fn async_retrieve_encoded_subchunk_at_level<A: AsyncArrayReadOp
 ) -> Result<Option<EncodedSubchunk>, ArrayError> {
     let (chunk_indices, subset) =
         super::subchunk_chunk_and_local_subset(array, level, subchunk_indices)?;
-    let options = array.codec_options();
     let partial_decoder = array.async_partial_decoder(&chunk_indices).await?;
+    async_retrieve_encoded_subchunk_in(
+        partial_decoder.as_ref(),
+        level,
+        &subset,
+        array.codec_options(),
+    )
+    .await
+}
+
+/// Retrieve the encoded subchunk at the chunk-local `subset` of the `level` subchunk grid with the asynchronous
+/// `partial_decoder` of its chunk.
+pub(super) async fn async_retrieve_encoded_subchunk_in(
+    partial_decoder: &dyn AsyncArrayPartialDecoderTraits,
+    level: usize,
+    subset: &ArraySubset,
+    options: &CodecOptions,
+) -> Result<Option<EncodedSubchunk>, ArrayError> {
     let local_indices =
-        super::async_local_subchunk_indices(partial_decoder.as_ref(), level, &subset, options)
-            .await?;
+        super::async_local_subchunk_indices(partial_decoder, level, subset, options).await?;
     Ok(partial_decoder
         .retrieve_encoded_subchunk_at_level(level, &local_indices, options)
         .await?)

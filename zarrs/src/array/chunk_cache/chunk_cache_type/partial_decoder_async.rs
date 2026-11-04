@@ -40,6 +40,26 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
             .map_err(cache_error)
     }
 
+    async fn async_encoded_subchunk_partial_decoder<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn AsyncArrayPartialDecoderTraits>>, ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        // A cached partial decoder that caches a decoded array does not retrieve encoded subchunks
+        if array.codecs_bound().partial_decoder_caches_arrays() {
+            Ok(None)
+        } else {
+            Self::async_partial_decoder(cache, array, chunk_indices, options)
+                .await
+                .map(Some)
+        }
+    }
+
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,

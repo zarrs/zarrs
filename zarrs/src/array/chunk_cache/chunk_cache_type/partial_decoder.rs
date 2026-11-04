@@ -35,6 +35,24 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
             .map_err(cache_error)
     }
 
+    fn encoded_subchunk_partial_decoder<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<dyn ArrayPartialDecoderTraits>>, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized,
+    {
+        // A cached partial decoder that caches a decoded array does not retrieve encoded subchunks
+        if array.codecs_bound().partial_decoder_caches_arrays() {
+            Ok(None)
+        } else {
+            Self::partial_decoder(cache, array, chunk_indices, options).map(Some)
+        }
+    }
+
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
         cache: &C,
         array: &Array<TStorage>,

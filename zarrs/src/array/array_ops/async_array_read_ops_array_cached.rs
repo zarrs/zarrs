@@ -14,8 +14,8 @@ use crate::array::array_bytes_internal::{
     build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCache, Sealed as _, SealedAsync, async_retrieve_chunk_bytes,
-    async_retrieve_chunk_overlap_bytes, fill_value_bytes,
+    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
+    fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
@@ -449,18 +449,31 @@ where
         level: usize,
         subchunk_indices: &[u64],
     ) -> Result<Option<zarrs_codec::EncodedSubchunk>, ArrayError> {
-        if C::Value::ENCODED_SUBCHUNKS {
-            super::async_array_read_ops_common::async_retrieve_encoded_subchunk_at_level(
-                self,
-                level,
-                subchunk_indices,
-            )
-            .await
-        } else {
-            self.array()
-                .async_retrieve_encoded_subchunk_at_level(level, subchunk_indices)
-                .await
-        }
+        let (chunk_indices, subset) =
+            super::subchunk_chunk_and_local_subset(self, level, subchunk_indices)?;
+        let options = self.codec_options();
+        let partial_decoder = match C::Value::async_encoded_subchunk_partial_decoder(
+            self.cache(),
+            self.array(),
+            &chunk_indices,
+            options,
+        )
+        .await?
+        {
+            Some(partial_decoder) => partial_decoder,
+            None => {
+                self.array()
+                    .async_encoded_subchunk_partial_decoder(&chunk_indices, options)
+                    .await?
+            }
+        };
+        super::async_array_read_ops_common::async_retrieve_encoded_subchunk_in(
+            partial_decoder.as_ref(),
+            level,
+            &subset,
+            options,
+        )
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
