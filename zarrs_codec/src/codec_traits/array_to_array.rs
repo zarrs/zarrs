@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -26,9 +26,10 @@ use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 ///   - [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) and
 ///     [`decoded_local_subchunk_grids`](Self::decoded_local_subchunk_grids) map subchunk grids of
 ///     the encoded chunk back to the decoded chunk.
-///   - [`encoded_element_indices`](Self::encoded_element_indices) and
-///     [`encoded_subchunk_indices`](Self::encoded_subchunk_indices) map element indices and
-///     subchunk indices from the decoded chunk to the encoded chunk.
+///   - [`encoded_element_indices`](Self::encoded_element_indices),
+///     [`encoded_subchunk_indices`](Self::encoded_subchunk_indices), and
+///     [`encoded_subset`](Self::encoded_subset) map element indices, subchunk indices, and
+///     exact rectangular subsets from the decoded chunk to the encoded chunk.
 ///
 /// Implement [`ArrayToArrayCodecSubchunkingIdentityTraits`] instead of this trait when the codec
 /// preserves chunk shape and element ordering.
@@ -160,6 +161,20 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
             })
             .map(Some)
     }
+
+    /// Map `decoded_subset` of a decoded chunk of `decoded_shape` to the subset of the encoded chunk containing the exact same elements.
+    ///
+    /// Returns [`None`] if the elements of `decoded_subset` do not form an axis-aligned rectangular
+    /// subset in the encoded chunk, or if the codec does not map individual elements.
+    /// Implementations can use [`validate_chunk_subset`] to validate `decoded_subset`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_shape` is invalid or `decoded_subset` is empty or out of bounds of `decoded_shape`.
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError>;
 }
 
 /// Check that `element_indices` are in bounds of a chunk of `shape`.
@@ -177,6 +192,20 @@ pub fn validate_chunk_element_indices(
     } else {
         Err(CodecError::Other(format!(
             "element indices {element_indices:?} are out of bounds of a chunk with shape {shape:?}"
+        )))
+    }
+}
+
+/// Check that `subset` is nonempty and in bounds of a chunk of `shape`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `subset` is empty, has a different dimensionality to `shape`, or is out of bounds.
+pub fn validate_chunk_subset(shape: &[NonZeroU64], subset: &ArraySubset) -> Result<(), CodecError> {
+    if !subset.is_empty() && subset.inbounds_shape(bytemuck::must_cast_slice(shape)) {
+        Ok(())
+    } else {
+        Err(CodecError::Other(format!(
+            "subset {subset:?} is empty or out of bounds of a chunk with shape {shape:?}"
         )))
     }
 }
@@ -214,6 +243,15 @@ where
     ) -> Result<Option<ArrayIndices>, CodecError> {
         validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
         Ok(Some(decoded_element_indices.into()))
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        validate_chunk_subset(decoded_shape, decoded_subset)?;
+        Ok(Some(decoded_subset.clone()))
     }
 
     fn decoded_local_subchunk_grid(
