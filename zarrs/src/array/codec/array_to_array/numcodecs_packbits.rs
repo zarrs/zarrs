@@ -28,7 +28,7 @@ mod numcodecs_packbits_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs_chunk_grid::{ArrayIndices, ChunkGrid};
+use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
@@ -224,13 +224,13 @@ impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
         Ok(ChunkGridDecoded::None)
     }
 
+    // Packed elements are not aligned to the encoded bytes, so no element, subset, or grid mappings exist
     fn encoded_coordinates(
         &self,
         decoded_shape: &[NonZeroU64],
         decoded_coordinates: &[u64],
     ) -> Result<Option<ArrayIndices>, CodecError> {
         zarrs_codec::validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
-        // Packed elements are not aligned to the encoded bytes
         Ok(None)
     }
 
@@ -239,7 +239,15 @@ impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
         _decoded_shape: &[NonZeroU64],
         _encoded_subchunk_grid: &ChunkGrid,
     ) -> Result<Option<ChunkGrid>, CodecError> {
-        // Packed elements are not aligned to the encoded bytes
+        Ok(None)
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
         Ok(None)
     }
 }

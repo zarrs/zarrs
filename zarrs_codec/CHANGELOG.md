@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Breaking**: Require exact `ArrayToArrayCodecSubchunkingTraits::encoded_subset`, returning `None` for subsets that are not encoded rectangles; `ArrayToArrayCodecSubchunkingIdentityTraits` implements it; export `validate_chunk_subset`
 - Add `ArrayToArrayCodecSubchunkingTraits::encoded_subchunk_indices` using concrete local grids and element coordinate mappings, returning `None` if the grid cannot be represented in the decoded chunk
 - Add `ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids` to map complete local hierarchies while preserving unresolved levels
 - **Breaking**: Require `decoded_local_subchunk_grid` on every array-to-array codec

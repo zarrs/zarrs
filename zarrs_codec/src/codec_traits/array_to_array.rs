@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::{ArrayIndices, ChunkGrid, ChunkGridCreateError};
+use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -139,6 +139,24 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
             })
             .map(Some)
     }
+
+    /// Map a subset of a decoded chunk of `decoded_shape`, such as a subchunk, to the subset of the encoded chunk holding
+    /// the same elements.
+    ///
+    /// The mapping must be exact: the encoded subset holds exactly the elements of `decoded_subset`.
+    /// Returns [`None`] if those elements do not form a rectangular subset of the encoded chunk (or the codec does not
+    /// map elements to elements of the encoded chunk), rather than a subset that holds different elements.
+    ///
+    /// Codecs that preserve element ordering and chunk shape get this from
+    /// [`ArrayToArrayCodecSubchunkingIdentityTraits`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_subset` is empty or out of bounds of the decoded chunk.
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError>;
 }
 
 /// Check that `coordinates` are in bounds of a chunk of `shape`.
@@ -160,8 +178,24 @@ pub fn validate_chunk_coordinates(
     }
 }
 
+/// Check that `subset` is nonempty and in bounds of a chunk of `shape`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `subset` is empty, has a different dimensionality to `shape`, or is out of bounds.
+pub fn validate_chunk_subset(shape: &[NonZeroU64], subset: &ArraySubset) -> Result<(), CodecError> {
+    if !subset.is_empty() && subset.inbounds_shape(bytemuck::must_cast_slice(shape)) {
+        Ok(())
+    } else {
+        Err(CodecError::Other(format!(
+            "subset {subset:?} is empty or out of bounds of a chunk with shape {shape:?}"
+        )))
+    }
+}
+
 /// Marker trait for array-to-array codecs with identity subchunking mappings.
 ///
+/// This implements [`ArrayToArrayCodecSubchunkingTraits`] with mappings that leave chunk grids, element coordinates,
+/// and subsets unchanged.
 /// Implement this trait only when the codec preserves element ordering and chunk shape.
 pub trait ArrayToArrayCodecSubchunkingIdentityTraits {}
 
@@ -191,6 +225,15 @@ where
     ) -> Result<Option<ArrayIndices>, CodecError> {
         validate_chunk_coordinates(decoded_shape, decoded_coordinates)?;
         Ok(Some(decoded_coordinates.into()))
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        validate_chunk_subset(decoded_shape, decoded_subset)?;
+        Ok(Some(decoded_subset.clone()))
     }
 
     fn decoded_local_subchunk_grid(
