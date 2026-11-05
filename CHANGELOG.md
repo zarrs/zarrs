@@ -198,6 +198,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix index endianness handling to use the actual index data type rather than `uint64`
 - Return an error rather than panicking if the encoded index length exceeds the chunk length
 
+#### `blosc`
+- Decode directly into preallocated output on native and WebAssembly backends
+- Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
+- Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
+
 #### `zstd`
 - Reuse per-thread compression and bulk decompression contexts
   - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
@@ -221,8 +226,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
   - Represent `offset` and `scale` as `f64` rather than `f32`
   - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-- `blosc`: Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- `blosc`: Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
 - `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - `bytes`: Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
 - `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt

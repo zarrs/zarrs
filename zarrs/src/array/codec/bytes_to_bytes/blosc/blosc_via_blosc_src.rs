@@ -167,24 +167,23 @@ pub fn blosc_nbytes(src: &[u8]) -> Option<usize> {
     (uncompressed_bytes > 0 && cbytes > 0 && blocksize > 0).then_some(uncompressed_bytes)
 }
 
-/// Decompress a blosc buffer.
+/// Decompress a blosc buffer into the `destsize` bytes at `dest`.
 ///
-/// # Errors
-/// Returns a [`BloscError`] if decompression fails or does not yield `destsize` bytes.
-pub fn blosc_decompress_bytes(
+/// # Safety
+/// `dest` must be valid for writes of `destsize` bytes.
+unsafe fn blosc_decompress_raw(
     src: &[u8],
+    dest: *mut u8,
     destsize: usize,
     numinternalthreads: usize,
-) -> Result<Vec<u8>, BloscError> {
-    let numinternalthreads = internal_threads(destsize, numinternalthreads);
-
-    let mut dest: Vec<u8> = Vec::with_capacity(destsize);
+) -> Result<(), BloscError> {
+    // SAFETY: `dest` is valid for writes of `destsize` bytes, and blosc writes at most `destsize` bytes.
     let decompressed = unsafe {
         blosc_decompress_ctx(
             src.as_ptr().cast::<c_void>(),
-            dest.as_mut_ptr().cast::<c_void>(),
+            dest.cast::<c_void>(),
             destsize,
-            numinternalthreads,
+            internal_threads(destsize, numinternalthreads),
         )
     };
     if decompressed <= 0 {
@@ -194,12 +193,37 @@ pub fn blosc_decompress_bytes(
             "blosc_decompress_ctx returned {decompressed} bytes, expected {destsize}"
         )))
     } else {
-        // SAFETY: blosc initialised `destsize` bytes, which is the capacity of `dest`
-        unsafe {
-            dest.set_len(destsize);
-        }
-        Ok(dest)
+        Ok(())
     }
+}
+
+/// Decompress a blosc buffer.
+///
+/// # Errors
+/// Returns a [`BloscError`] if decompression fails or does not yield `destsize` bytes.
+pub fn blosc_decompress_bytes(
+    src: &[u8],
+    destsize: usize,
+    numinternalthreads: usize,
+) -> Result<Vec<u8>, BloscError> {
+    let mut dest: Vec<u8> = Vec::with_capacity(destsize);
+    // SAFETY: `dest` has a capacity of `destsize` bytes.
+    unsafe { blosc_decompress_raw(src, dest.as_mut_ptr(), destsize, numinternalthreads)? };
+    // SAFETY: blosc initialised `destsize` bytes, which is the capacity of `dest`
+    unsafe {
+        dest.set_len(destsize);
+    }
+    Ok(dest)
+}
+
+/// Decompress a blosc buffer into `dest`, which must be the length of the uncompressed bytes.
+pub(super) fn blosc_decompress_bytes_into(
+    src: &[u8],
+    dest: &mut [u8],
+    numinternalthreads: usize,
+) -> Result<(), BloscError> {
+    // SAFETY: `dest` is valid for writes of its length.
+    unsafe { blosc_decompress_raw(src, dest.as_mut_ptr(), dest.len(), numinternalthreads) }
 }
 
 /// Partially decompress a blosc buffer at a given byte offset and length.

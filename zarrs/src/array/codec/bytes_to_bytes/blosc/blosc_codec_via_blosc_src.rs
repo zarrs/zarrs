@@ -1,5 +1,7 @@
+use super::super::blosc_impl::blosc_decompress_bytes_into;
 use std::ffi::c_char;
 use std::sync::Arc;
+use zarrs_codec::InvalidBytesLengthError;
 
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
 use zarrs_plugin::ZarrVersion;
@@ -126,6 +128,20 @@ impl BloscCodec {
             n_threads,
         )
         .map_err(|err: BloscError| CodecError::Other(err.to_string()))
+    }
+
+    fn do_decode_into(
+        encoded_value: &[u8],
+        output: &mut [u8],
+        n_threads: usize,
+    ) -> Result<(), CodecError> {
+        let decoded_len = blosc_validate(encoded_value)
+            .ok_or_else(|| CodecError::from("blosc encoded value is invalid"))?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        blosc_decompress_bytes_into(encoded_value, output, n_threads)
+            .map_err(|e| CodecError::from(e.to_string()))
     }
 
     fn do_decode(encoded_value: &[u8], n_threads: usize) -> Result<Vec<u8>, CodecError> {
@@ -267,6 +283,22 @@ impl BytesToBytesCodecTraits for BloscCodec {
         Ok(Arc::new(
             blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),
         ))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let n_threads = 1;
+        Self::do_decode_into(&encoded_value, output, n_threads)
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
     }
 
     fn encoded_representation(
