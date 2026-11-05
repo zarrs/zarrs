@@ -1,4 +1,8 @@
 use std::sync::Arc;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, InvalidBytesLengthError,
+    decode_into_array_bytes_target,
+};
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
@@ -179,6 +183,71 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
     }
 }
 
+impl PcodecCodecBound {
+    /// Decompress `bytes` into `output`.
+    ///
+    /// Returns `false` without writing to `output` if `output` cannot be decompressed into, which is the case if `output` is not aligned to the element type or is not the number of elements of `shape`.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the number of decompressed elements does not fill `output`.
+    /// This is reported rather than decoding `bytes` again, since that cannot succeed.
+    /// If there are more decompressed elements than `output` holds, the reported length is one element more than the length of `output`.
+    fn decompress_into(
+        &self,
+        bytes: &[u8],
+        shape: &[NonZeroU64],
+        output: &mut [u8],
+    ) -> Result<bool, CodecError> {
+        // An element count that overflows is not the length of `output`
+        let Some(num_elements) = shape
+            .iter()
+            .try_fold(self.elements_per_element, |count, d| {
+                count.checked_mul(usize::try_from(d.get()).ok()?)
+            })
+        else {
+            return Ok(false);
+        };
+        macro_rules! pcodec_decompress_into {
+            ( $t:ty ) => {
+                match bytemuck::try_cast_slice_mut::<u8, $t>(output) {
+                    Ok(output) if output.len() == num_elements => {
+                        let progress = pco::standalone::simple_decompress_into(bytes, output)
+                            .map_err(|err| CodecError::Other(err.to_string()))?;
+                        if progress.finished && progress.n_processed == num_elements {
+                            Ok(true)
+                        } else {
+                            let decoded_elements = if progress.finished {
+                                progress.n_processed
+                            } else {
+                                num_elements.saturating_add(1)
+                            };
+                            let element_size = size_of::<$t>();
+                            Err(InvalidBytesLengthError::new(
+                                decoded_elements.saturating_mul(element_size),
+                                num_elements.saturating_mul(element_size),
+                            )
+                            .into())
+                        }
+                    }
+                    _ => Ok(false),
+                }
+            };
+        }
+
+        match self.element_type {
+            PcodecElementType::U16 => pcodec_decompress_into!(u16),
+            PcodecElementType::U32 => pcodec_decompress_into!(u32),
+            PcodecElementType::U64 => pcodec_decompress_into!(u64),
+            PcodecElementType::I16 => pcodec_decompress_into!(i16),
+            PcodecElementType::I32 => pcodec_decompress_into!(i32),
+            PcodecElementType::I64 => pcodec_decompress_into!(i64),
+            PcodecElementType::F16 => pcodec_decompress_into!(half::f16),
+            PcodecElementType::F32 => pcodec_decompress_into!(f32),
+            PcodecElementType::F64 => pcodec_decompress_into!(f64),
+        }
+    }
+}
+
 impl ArrayCodecTraits for PcodecCodecBound {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -267,6 +336,27 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
             PcodecElementType::F64 => pcodec_decode!(f64),
         }?;
         Ok(ArrayBytes::from(bytes))
+    }
+
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        mut output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let bytes = input.into_bytes(options, resources)?;
+        // Decompress directly into an output that is one contiguous region
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+            && let Some(output) = output.as_mut_slice()
+            && self.decompress_into(&bytes, shape, output)?
+        {
+            return Ok(());
+        }
+
+        let bytes = self.decode(bytes, shape, options, resources)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn encoded_representation(
