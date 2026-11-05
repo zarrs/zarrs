@@ -346,4 +346,56 @@ mod tests {
             );
         }
     }
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn decode_capacity_is_capped_by_the_decoded_size() {
+        let codec = ZstdCodec::new(1, false);
+        let decode = |encoded: &[u8], representation: BytesRepresentation| {
+            codec
+                .decode(
+                    CowBytes::from(encoded),
+                    &representation,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .map(|decoded| decoded.to_vec())
+        };
+
+        // The codec writes the content size, so the bulk path is used (requires the zstd `experimental` feature)
+        let zeros = vec![0u8; 1024 * 1024];
+        let encoded = codec
+            .encode(
+                CowBytes::from(zeros.as_slice()),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            zstd::bulk::Decompressor::upper_bound(&encoded),
+            Some(zeros.len())
+        );
+
+        // A frame claiming more than the decoded size is rejected rather than allocating its claimed size
+        assert!(decode(&encoded, BytesRepresentation::FixedSize(16)).is_err());
+        assert!(decode(&encoded, BytesRepresentation::BoundedSize(16)).is_err());
+        assert_eq!(
+            decode(&encoded, BytesRepresentation::UnboundedSize).unwrap(),
+            zeros
+        );
+
+        // A frame without a content size is bounded by its block count, and decodes into the smaller decoded size
+        let data = b"a frame without a content size".repeat(10);
+        let encoded = zstd::encode_all(data.as_slice(), 1).unwrap();
+        assert!(
+            zstd::bulk::Decompressor::upper_bound(&encoded).is_some_and(|bound| bound > data.len())
+        );
+        assert_eq!(
+            decode(&encoded, BytesRepresentation::FixedSize(data.len() as u64)).unwrap(),
+            data
+        );
+        assert_eq!(
+            decode(&encoded, BytesRepresentation::UnboundedSize).unwrap(),
+            data
+        );
+    }
 }
