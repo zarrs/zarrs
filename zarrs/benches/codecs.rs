@@ -380,7 +380,7 @@ fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::
                 };
                 codec
                     .decode_into(
-                        encoded.clone(),
+                        encoded.clone().into(),
                         &shape,
                         &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                         &options,

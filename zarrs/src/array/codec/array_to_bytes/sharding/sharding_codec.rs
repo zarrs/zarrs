@@ -33,12 +33,13 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToBytesCodecTraits, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -484,7 +485,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         }
         if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {
             self.decode_into(
-                encoded_shard,
+                encoded_shard.into(),
                 shape,
                 &mut buffers.target()?,
                 options,
@@ -659,12 +660,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn decode_into(
         &self,
-        encoded_shard: CowBytes<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
+        let encoded_shard = input.into_bytes(options, resources)?;
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
         if output_target.subset().shape() != shard_shape_u64 {
             // Subchunks are placed by their position in the shard, which needs a target with the shard shape
@@ -721,7 +723,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 let size: usize = size.try_into().unwrap();
                 let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
                 self.inner_codecs.decode_into(
-                    encoded_chunk,
+                    encoded_chunk.into(),
                     &chunk_subset.chunk_shape().expect("nonempty subchunk"),
                     &mut output_target_subchunk,
                     options,
