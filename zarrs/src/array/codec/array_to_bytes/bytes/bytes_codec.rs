@@ -15,7 +15,7 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
-    Endianness, bytes_codec_partial,
+    BytesDataTypeTraitsArc, Endianness, bytes_codec_partial,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -34,12 +34,14 @@ pub struct BytesCodec {
 }
 
 /// A `bytes` codec implementation bound to a data type and fill value.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct BytesCodecBound {
     endian: Option<Endianness>,
     passthrough: bool,
     decode_in_place: bool,
     data_type: DataType,
+    /// The `bytes` codec support of `data_type`.
+    bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
 }
 
@@ -134,7 +136,8 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        let codec = data_type.codec_bytes()?;
+        let bytes = data_type.codec_bytes_arc()?;
+        let codec = &*bytes;
         let passthrough = codec.is_decode_passthrough(self.endian);
         // Decode one element to check the endianness before a decoder writes to an output.
         let decode_in_place = !passthrough
@@ -149,6 +152,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
             passthrough,
             decode_in_place,
             data_type,
+            bytes,
             fill_value,
         }))
     }
@@ -194,10 +198,7 @@ impl BytesCodecBound {
         if self.passthrough {
             Some(InPlace::Copy)
         } else if self.decode_in_place {
-            Some(InPlace::Decode(
-                self.data_type.codec_bytes().ok()?,
-                self.endian,
-            ))
+            Some(InPlace::Decode(&*self.bytes, self.endian))
         } else {
             None
         }
@@ -288,7 +289,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.bytes.encode(bytes, self.endian)?)
     }
 
     fn decode<'a>(
@@ -302,7 +303,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         let bytes = if self.passthrough {
             bytes
         } else {
-            self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+            self.bytes.decode(bytes, self.endian)?
         };
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
@@ -322,6 +323,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -338,6 +340,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -355,6 +358,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -372,6 +376,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -432,7 +437,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                         }
                     }
                     None => {
-                        let decoded = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
+                        let decoded = self.bytes.decode(bytes, self.endian)?;
                         Ok(output.copy_from_slice(&decoded)?)
                     }
                 }

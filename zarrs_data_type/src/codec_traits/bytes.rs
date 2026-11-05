@@ -25,7 +25,7 @@ pub enum BytesCodecDecodeInPlaceError {
 }
 
 /// Traits for a data type supporting the `bytes` codec.
-pub trait BytesDataTypeTraits {
+pub trait BytesDataTypeTraits: std::fmt::Debug {
     /// Returns whether decoding with `endianness` is the identity on the encoded bytes.
     ///
     /// An implementation returning `true` guarantees that, for every valid input, the decoded
@@ -255,6 +255,7 @@ mod tests {
     use super::*;
 
     /// A data type with a `decode` that drops the last byte.
+    #[derive(Debug)]
     struct LengthChanging;
 
     impl BytesDataTypeTraits for LengthChanging {

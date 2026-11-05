@@ -127,7 +127,7 @@ pub fn round_bytes_float64(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) 
 ///
 /// The bitround codec rounds the mantissa of floating point data types or
 /// rounds integers from the most significant set bit to the specified number of bits.
-pub trait BitroundDataTypeTraits {
+pub trait BitroundDataTypeTraits: std::fmt::Debug {
     /// The number of bits to round to for floating point types.
     ///
     /// Returns `None` for integer types where rounding is from the MSB.

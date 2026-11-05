@@ -119,7 +119,7 @@ pub enum CastValueError {
 }
 
 /// Traits for a data type supporting the `cast_value` codec.
-pub trait CastValueDataTypeTraits {
+pub trait CastValueDataTypeTraits: std::fmt::Debug {
     /// Returns `true` if the data type is integral.
     fn cast_value_is_integral(&self) -> bool;
 

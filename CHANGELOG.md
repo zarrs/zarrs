@@ -200,6 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Return an error rather than panicking if the encoded index length exceeds the chunk length
 
 #### `bytes`
+- Cache data type codec support when binding, and re-export `BytesDataTypeTraitsArc`
 - Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
 - Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - Reject short decoded byte ranges in synchronous and asynchronous partial decoding
@@ -244,7 +245,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): cached codec support; `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification

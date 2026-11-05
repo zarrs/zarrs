@@ -44,7 +44,7 @@ pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecCo
 // Re-export extension trait and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bytes::{
     BytesCodecDecodeInPlaceError, BytesCodecEndiannessMissingError, BytesDataTypeExt,
-    BytesDataTypePlugin, BytesDataTypeTraits, impl_bytes_data_type_traits,
+    BytesDataTypePlugin, BytesDataTypeTraits, BytesDataTypeTraitsArc, impl_bytes_data_type_traits,
 };
 // Re-export Endianness for convenience
 pub use zarrs_metadata::Endianness;
