@@ -201,6 +201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cast_value`: Add the `cast_value` array-to-array codec
 - `zstd`: Reuse per-thread compression and bulk decompression contexts
   - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
+  - Use bulk decompression bounds on WebAssembly when available
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
 - `transpose`: Support optional data types, permuting values and validity masks together
 - `reshape`: Remove warnings now that the codec is stable
