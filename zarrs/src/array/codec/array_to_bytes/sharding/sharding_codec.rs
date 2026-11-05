@@ -33,13 +33,13 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToBytesCodecTraits, build_nested_optional_target, copy_fill_value_into,
-    extract_target_views,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
+    build_nested_optional_target, copy_fill_value_into, extract_target_views,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -487,7 +487,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             {
                 let (mut data_view, mut mask_views) = buffers.views()?;
                 self.decode_into(
-                    encoded_shard,
+                    encoded_shard.into(),
                     shape,
                     build_nested_optional_target(&mut data_view, &mut mask_views),
                     options,
@@ -663,12 +663,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn decode_into(
         &self,
-        encoded_shard: CowBytes<'_>,
+        input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
+        let encoded_shard = input.into_bytes(options, resources)?;
         let data_type = self.data_type();
         let fill_value = &self.fill_value;
 
@@ -739,7 +740,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 let size: usize = size.try_into().unwrap();
                 let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
                 self.inner_codecs.decode_into(
-                    encoded_chunk,
+                    encoded_chunk.into(),
                     &chunk_subset.chunk_shape().expect("nonempty subchunk"),
                     output_target_subchunk,
                     options,
