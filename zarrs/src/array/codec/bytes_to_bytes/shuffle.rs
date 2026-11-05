@@ -278,4 +278,67 @@ mod tests {
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
     }
+
+    #[test]
+    fn codec_shuffle_decode_into() {
+        let codec = ShuffleCodec::new(2);
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &crate::array::transmute_to_bytes_vec((0..32u16).collect::<Vec<_>>()),
+            2,
+            |_| Vec::new(),
+        );
+
+        // The input must be a multiple of the element size
+        assert!(
+            codec
+                .decode_into(
+                    CowBytes::from(vec![0u8; 3]),
+                    &BytesRepresentation::FixedSize(3),
+                    &mut [0; 3],
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn codec_shuffle_direct_output_matches_elements() {
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        for elementsize in [1usize, 2, 3, 4, 5, 8, 16, 32] {
+            let codec = ShuffleCodec::new(elementsize);
+            for count in [0usize, 1, 7, 8, 9, 64, 1003] {
+                let data: Vec<u8> = (0..elementsize * count)
+                    .map(|i| u8::try_from(i * 7 % 251).unwrap())
+                    .collect();
+                let encoded = codec
+                    .encode(CowBytes::Borrowed(&data), &options, &resources)
+                    .unwrap();
+                let mut output = vec![0xa5; data.len()];
+                codec
+                    .decode_into(
+                        encoded,
+                        &BytesRepresentation::FixedSize(data.len() as u64),
+                        &mut output,
+                        &options,
+                        &resources,
+                    )
+                    .unwrap();
+                assert_eq!(output, data, "{elementsize}x{count}");
+            }
+        }
+        assert!(
+            ShuffleCodec::new(0)
+                .decode_into(
+                    CowBytes::Borrowed(&[]),
+                    &BytesRepresentation::FixedSize(0),
+                    &mut [],
+                    &options,
+                    &resources
+                )
+                .is_err()
+        );
+    }
 }

@@ -162,6 +162,26 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         Ok(CowBytes::from(decoded_value))
     }
 
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        if encoded_value.len() != output.len() {
+            return Err(InvalidBytesLengthError::new(encoded_value.len(), output.len()).into());
+        }
+        // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`; unshuffle only writes to this view.
+        let output = unsafe { &mut *(std::ptr::from_mut(output) as *mut [MaybeUninit<u8>]) };
+        self.unshuffle(&encoded_value, output)
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
