@@ -14,10 +14,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
-    optional_innermost,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks, optional_innermost};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubset, ArraySubsetTraits,
@@ -27,7 +24,8 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
-    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
+    InvalidNumberOfElementsError, build_nested_optional_target, copy_fill_value_into,
+    decode_into_array_bytes_target, extract_target_views,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};

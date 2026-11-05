@@ -3,11 +3,10 @@ use futures::{StreamExt, TryStreamExt};
 use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
-    copy_fill_value_into,
+    build_nested_optional_target, copy_fill_value_into, extract_target_views,
 };
 use zarrs_storage::MaybeSync;
 
-use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
 

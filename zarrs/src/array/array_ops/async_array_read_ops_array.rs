@@ -5,9 +5,7 @@ use zarrs_codec::{CowBytes, Resources};
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::super::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks, optional_nesting_depth,
-};
+use super::super::array_bytes_internal::{merge_chunks, optional_nesting_depth};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndices};
 use super::async_array_read_ops_common::AsyncRetrieveInto;
@@ -18,7 +16,7 @@ use super::{
 use crate::array::{ArrayBytes, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
+    CodecError, InvalidNumberOfElementsError, build_nested_optional_target, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
 

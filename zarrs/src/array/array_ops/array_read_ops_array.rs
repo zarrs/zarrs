@@ -2,9 +2,7 @@ use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::{CowBytes, Resources};
 
-use super::super::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks, optional_nesting_depth,
-};
+use super::super::array_bytes_internal::{merge_chunks, optional_nesting_depth};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::super::{ArrayBytesFixedDisjointView, ArrayIndices};
 use super::{
@@ -18,7 +16,7 @@ use rayon::iter::ParallelIterator;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
-    InvalidNumberOfElementsError, copy_fill_value_into,
+    InvalidNumberOfElementsError, build_nested_optional_target, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
 

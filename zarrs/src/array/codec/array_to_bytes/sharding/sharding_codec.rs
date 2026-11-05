@@ -22,9 +22,7 @@ use super::{
     sharding_index_shape, sharding_partial_encoder, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::chunk_grid::{
     ChunkEdgeLengths, RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid,
@@ -40,7 +38,8 @@ use zarrs_codec::{
     BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    UnboundArrayToBytesCodecTraits, build_nested_optional_target, copy_fill_value_into,
+    extract_target_views,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{

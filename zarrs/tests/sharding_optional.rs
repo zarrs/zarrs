@@ -13,8 +13,8 @@ use zarrs::array::{
 };
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesFixedDisjointView, CodecOptions, CodecSpecificOptions, Resources,
+    UnboundArrayToBytesCodecTraits, build_nested_optional_target,
 };
 
 const SHAPE: [u64; 2] = [8, 6];
@@ -38,21 +38,6 @@ fn optional_innermost(data_type: &DataType) -> (&DataType, usize) {
         depth += 1;
     }
     (data_type, depth)
-}
-
-/// Build a decode target from views of the data and validity masks (outer to inner).
-fn nested_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((mask_view, mask_views)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(nested_target(data_view, mask_views)),
-            mask_view,
-        )
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
 }
 
 /// Decode `$subset` of fixed length (optional) `$data_type` data with `$decode_into` into a new target.
@@ -85,7 +70,7 @@ macro_rules! decode_into_new {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let $target = nested_target(&mut data_view, &mut mask_views);
+            let $target = build_nested_optional_target(&mut data_view, &mut mask_views);
             $decode_into?;
         }
         masks
