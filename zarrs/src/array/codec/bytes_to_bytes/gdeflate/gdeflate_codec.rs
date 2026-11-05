@@ -1,3 +1,4 @@
+use super::gdeflate_decode_into;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -136,6 +137,21 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
             &encoded_value,
             decoded_representation,
         )?))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        gdeflate_decode_into(&encoded_value, output)
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
     }
 
     fn encoded_representation(

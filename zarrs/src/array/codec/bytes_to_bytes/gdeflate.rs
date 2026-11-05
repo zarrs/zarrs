@@ -197,6 +197,31 @@ impl<'a> GDeflatePageDecoder<'a> {
     }
 }
 
+/// Decode into a buffer whose length must match the decoded length in the header.
+fn gdeflate_decode_into(encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    if decoded_value.len() != header.decoded_len {
+        return Err(InvalidBytesLengthError::new(header.decoded_len, decoded_value.len()).into());
+    }
+
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = decoded_value;
+    for _ in 0..header.num_pages {
+        let (page, rest) =
+            remaining.split_at_mut(remaining.len().min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED));
+        pages.decode_next(page)?;
+        remaining = rest;
+    }
+    if remaining.is_empty() {
+        Ok(())
+    } else {
+        Err(
+            InvalidBytesLengthError::new(header.decoded_len - remaining.len(), header.decoded_len)
+                .into(),
+        )
+    }
+}
+
 /// Decode `encoded_value`, which must decode to at most the size of `decoded_representation`.
 fn gdeflate_decode(
     encoded_value: &[u8],
@@ -704,5 +729,27 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gdeflate_decode_into() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &decoded,
+            1,
+            |encoded| {
+                // A truncated stream, and pages that are not deflate streams
+                let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+                let mut corrupt = encoded.to_vec();
+                corrupt[header_length..].fill(0xFF);
+                vec![encoded[..encoded.len() - 10].to_vec(), corrupt]
+            },
+        );
     }
 }
