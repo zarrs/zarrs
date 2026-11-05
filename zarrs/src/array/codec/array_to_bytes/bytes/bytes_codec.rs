@@ -634,4 +634,45 @@ mod tests {
                 .is_err()
         );
     }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn decode_deferred_zstd_input() {
+        use zarrs_codec::{BytesDecodeSource, BytesToBytesCodecTraits};
+
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        let producer = crate::array::codec::ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        for endian in [Endianness::Little, Endianness::Big] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    Some(FillValue::from(0u16)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            let encoded = if endian == Endianness::Little {
+                values.map(u16::to_le_bytes).concat()
+            } else {
+                values.map(u16::to_be_bytes).concat()
+            };
+            let compressed = producer
+                .encode(encoded.into(), &options, &ComputeResources::default())
+                .unwrap();
+            for representation in [
+                BytesRepresentation::FixedSize(8),
+                BytesRepresentation::BoundedSize(8),
+            ] {
+                let input = ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    &producer,
+                    compressed.clone(),
+                    representation,
+                ));
+                let (output, result) = decode_into_view(&codec, input, &shape, &[2, 2]);
+                result.unwrap();
+                assert_eq!(output, values);
+            }
+        }
+    }
 }

@@ -51,3 +51,47 @@ pub(crate) fn into_owned_with_spare_capacity(
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) fn check_bytes_decode_into(
+    codec: &dyn zarrs_codec::BytesToBytesCodecTraits,
+    decoded: &[u8],
+    length_step: usize,
+    invalid: impl Fn(&[u8]) -> Vec<Vec<u8>>,
+) {
+    use zarrs_codec::{BytesRepresentation, CodecError, CodecOptions, ComputeResources, CowBytes};
+
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let len = decoded.len();
+    let encoded = codec
+        .encode(CowBytes::Borrowed(decoded), &options, &resources)
+        .unwrap();
+    let decode_into = |encoded: CowBytes<'_>, output: &mut [u8]| {
+        codec.decode_into(
+            encoded,
+            &BytesRepresentation::FixedSize(len as u64),
+            output,
+            &options,
+            &resources,
+        )
+    };
+
+    let mut output = vec![0; len];
+    decode_into(encoded.clone(), &mut output).unwrap();
+    assert_eq!(output, decoded);
+
+    // An output of the wrong length is reported as an invalid length
+    assert!(matches!(
+        decode_into(encoded.clone(), &mut vec![0; len + length_step]),
+        Err(CodecError::UnexpectedChunkDecodedSize(_))
+    ));
+    assert!(matches!(
+        decode_into(encoded.clone(), &mut output[..len - length_step]),
+        Err(CodecError::UnexpectedChunkDecodedSize(_))
+    ));
+
+    for invalid in invalid(&encoded) {
+        assert!(decode_into(CowBytes::from(invalid), &mut output).is_err());
+    }
+}

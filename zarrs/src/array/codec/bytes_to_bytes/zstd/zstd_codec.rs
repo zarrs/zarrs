@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::sync::Arc;
+use zarrs_codec::InvalidBytesLengthError;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zstd::zstd_safe;
@@ -229,6 +230,38 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 .map_err(CodecError::from)
                 .map(CowBytes::from)
         }
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        // The decoded size in the frame headers (if all present) reports an output of the wrong length without
+        // decompressing. Never materialise an oversized frame just to improve a length diagnostic.
+        if let Ok(Some(decoded_len)) = zstd::zstd_safe::find_decompressed_size(&encoded_value)
+            && decoded_len != output.len() as u64
+        {
+            return Err(InvalidBytesLengthError::new(
+                usize::try_from(decoded_len).unwrap_or(usize::MAX),
+                output.len(),
+            )
+            .into());
+        }
+        let decoded_len = with_decompressor(|decompressor| {
+            decompressor.decompress_to_buffer(&encoded_value, output)
+        })?;
+        if decoded_len != output.len() {
+            return Err(InvalidBytesLengthError::new(decoded_len, output.len()).into());
+        }
+        Ok(())
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
     }
 
     fn encoded_representation(
