@@ -24,7 +24,7 @@ use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
-use super::PackBitsDataTypeExt;
+use super::{PackBitsDataTypeExt, PackBitsDataTypeTraitsArc};
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]
@@ -35,12 +35,12 @@ pub struct PackBitsCodec {
 }
 
 /// A `packbits` codec implementation bound to a data type and fill value.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct PackBitsCodecBound {
     pub(super) padding_encoding: PackBitsPaddingEncoding,
     pub(super) layout: PackBitsLayout,
-    /// Whether decoded bytes are converted to and from the byte order of `layout` with the `bytes` codec.
-    pub(super) convert_bytes: bool,
+    /// The `packbits` codec support of `data_type` if decoded bytes are converted to and from the byte order of `layout` with the `bytes` codec.
+    pub(super) convert_bytes: Option<PackBitsDataTypeTraitsArc>,
     /// The number of packed bits of an element.
     pub(super) element_size_bits: u64,
     pub(super) data_type: DataType,
@@ -237,10 +237,15 @@ impl PackBitsCodec {
                 CodecCreateError::Other("the packed element size in bits overflows u64".to_string())
             })?;
 
+        let convert_bytes = if components.convert_bytes {
+            Some(data_type.codec_packbits_arc()?)
+        } else {
+            None
+        };
         Ok(PackBitsCodecBound {
             padding_encoding: self.padding_encoding,
             layout: PackBitsLayout::new(components, first_bit, last_bit, bit_order),
-            convert_bytes: components.convert_bytes,
+            convert_bytes,
             element_size_bits,
             data_type,
             fill_value,
@@ -289,32 +294,30 @@ impl PackBitsCodecBound {
     /// Convert decoded bytes to the byte order of the packed components, if they differ.
     ///
     /// # Errors
-    /// Returns an error if the data type does not support the `packbits` codec.
+    /// Returns an error if the endianness of the components is invalid for the data type.
     pub(super) fn bytes_to_components<'a>(
         &self,
         bytes: CowBytes<'a>,
     ) -> Result<CowBytes<'a>, CodecError> {
-        if !self.convert_bytes {
-            return Ok(bytes);
+        match &self.convert_bytes {
+            Some(packbits) => Ok(packbits.encode(bytes, Some(self.layout.endianness))?),
+            None => Ok(bytes),
         }
-        let packbits = self.data_type.codec_packbits()?;
-        Ok(packbits.encode(bytes, Some(self.layout.endianness))?)
     }
 
     /// Convert unpacked components to decoded bytes, if they differ.
     ///
     /// # Errors
-    /// Returns an error if the data type does not support the `packbits` codec.
+    /// Returns an error if the endianness of the components is invalid for the data type.
     pub(super) fn components_to_bytes(
         &self,
         components: Vec<u8>,
     ) -> Result<CowBytes<'static>, CodecError> {
         let components = CowBytes::from(components);
-        if !self.convert_bytes {
-            return Ok(components);
+        match &self.convert_bytes {
+            Some(packbits) => Ok(packbits.decode(components, Some(self.layout.endianness))?),
+            None => Ok(components),
         }
-        let packbits = self.data_type.codec_packbits()?;
-        Ok(packbits.decode(components, Some(self.layout.endianness))?)
     }
 
     /// Returns the size in bytes of an encoded array with `shape`.

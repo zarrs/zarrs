@@ -65,7 +65,7 @@ impl CodecTraitsV3 for PackBitsCodec {
 
 // Re-export extension trait from zarrs_data_type
 pub use zarrs_data_type::codec_traits::packbits::{
-    PackBitsDataTypeExt, PackBitsDataTypePlugin, PackBitsDataTypeTraits,
+    PackBitsDataTypeExt, PackBitsDataTypePlugin, PackBitsDataTypeTraits, PackBitsDataTypeTraitsArc,
     impl_pack_bits_data_type_traits,
 };
 
@@ -1172,7 +1172,7 @@ mod tests {
                 Some(fill_value),
                 PackBitsBitOrder::LsbFirst,
             )?;
-            assert!(!codec.convert_bytes, "{data_type}");
+            assert!(codec.convert_bytes.is_none(), "{data_type}");
             if codec.layout.component_size_bytes > 1 {
                 assert_eq!(codec.layout.endianness, Endianness::native(), "{data_type}");
             }
@@ -1183,6 +1183,7 @@ mod tests {
     /// Decoded bytes that are converted with the `bytes` codec pack as if they were read directly.
     #[test]
     fn codec_packbits_converts_bytes() -> Result<(), Box<dyn std::error::Error>> {
+        use super::PackBitsDataTypeExt;
         use zarrs_codec::ArrayToBytesCodecTraits;
 
         let options = CodecOptions::default();
@@ -1200,7 +1201,7 @@ mod tests {
                 )?;
             // Convert to the other byte order, so that bytes are swapped on any host
             let mut converted = codec.clone();
-            converted.convert_bytes = true;
+            converted.convert_bytes = Some(data_type.codec_packbits_arc()?);
             converted.layout.endianness = match Endianness::native() {
                 Endianness::Little => Endianness::Big,
                 Endianness::Big => Endianness::Little,

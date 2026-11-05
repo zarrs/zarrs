@@ -185,6 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
 - **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
 - Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
+- Cache data type codec support when binding for byte-order conversion, and re-export `PackBitsDataTypeTraitsArc`
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
