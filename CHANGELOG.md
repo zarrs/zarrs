@@ -208,6 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
 - Use bulk decompression bounds on WebAssembly when available
 - Cap the decompression buffer by the decoded size rather than the content size claimed by a frame header
+- Decode directly into preallocated output, validating frame lengths against the decoded size
 
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)

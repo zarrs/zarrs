@@ -51,3 +51,56 @@ pub(crate) fn into_owned_with_spare_capacity(
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) fn check_bytes_decode_into(
+    codec: &dyn zarrs_codec::BytesToBytesCodecDecodeInto,
+    decoded: &[u8],
+    length_step: usize,
+    invalid: impl Fn(&[u8]) -> Vec<Vec<u8>>,
+) {
+    use std::mem::MaybeUninit;
+    use zarrs_codec::{BytesRepresentation, CodecError, CodecOptions, ComputeResources, CowBytes};
+
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let len = decoded.len();
+    assert!(codec.as_decode_into().is_some());
+    let encoded = codec
+        .encode(CowBytes::Borrowed(decoded), &options, &resources)
+        .unwrap();
+    let decode_into = |encoded: CowBytes<'_>, output: &mut [MaybeUninit<u8>]| {
+        codec.decode_into(
+            encoded,
+            &BytesRepresentation::FixedSize(len as u64),
+            output,
+            &options,
+            &resources,
+        )
+    };
+
+    let mut output = vec![MaybeUninit::uninit(); len];
+    decode_into(encoded.clone(), &mut output).unwrap();
+    // SAFETY: a successful `decode_into` initialises the output.
+    assert_eq!(
+        unsafe { crate::slice_assume_init_mut(&mut output) },
+        decoded
+    );
+
+    // An output of the wrong length is reported as an invalid length
+    assert!(matches!(
+        decode_into(
+            encoded.clone(),
+            &mut vec![MaybeUninit::uninit(); len + length_step]
+        ),
+        Err(CodecError::UnexpectedChunkDecodedSize(_))
+    ));
+    assert!(matches!(
+        decode_into(encoded.clone(), &mut output[..len - length_step]),
+        Err(CodecError::UnexpectedChunkDecodedSize(_))
+    ));
+
+    for invalid in invalid(&encoded) {
+        assert!(decode_into(CowBytes::from(invalid), &mut output).is_err());
+    }
+}
