@@ -338,10 +338,7 @@ async fn get_subchunk_partial_decoder(
         .await
         .map_err(|err| {
             if let CodecError::InvalidByteRangeError(_) = err {
-                CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                )
+                super::shard_index_out_of_bounds()
             } else {
                 err
             }
