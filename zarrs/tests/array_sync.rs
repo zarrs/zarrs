@@ -7,7 +7,10 @@ use zarrs::array::Resources;
 
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
+    build_nested_optional_target,
+};
 
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
@@ -598,10 +601,8 @@ fn retrieve_optional_into_vecs(
             ArrayBytesFixedDisjointView::new(mask_slice, 1, &shape, full_subset)?
         };
 
-        let target = ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
-            &mut mask_view,
-        );
+        let target =
+            build_nested_optional_target(&mut data_view, std::slice::from_mut(&mut mask_view));
         array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
     }
 

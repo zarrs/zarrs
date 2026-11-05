@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Export `build_nested_optional_target` and `extract_target_views` from `zarrs_codec` for shared optional decode targets, with masks ordered outermost to innermost
 - Add per-operation `Resources` and `ComputeResources`
 - Export pure `subset_subchunk_indices`, requiring an in-bounds subset exactly equal to one grid subchunk
 - **Breaking**: Require exact `ArrayToArrayCodecSubchunkingTraits::encoded_subset`, returning `None` for subsets that are not encoded rectangles; `ArrayToArrayCodecSubchunkingIdentityTraits` implements it; export `validate_chunk_subset`

@@ -8,8 +8,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::{ArraySubset, DataType, Indexer};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
-    ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
+    ArrayBytesVariableLength, CodecError,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -86,7 +86,7 @@ impl FixedDecodeBuffers {
 
     /// Return views of the data and each validity mask covering the entire array.
     ///
-    /// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
+    /// Mask views are returned outer-to-inner, matching the convention of [`zarrs_codec::build_nested_optional_target`].
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the views cannot be created.
@@ -138,50 +138,15 @@ impl FixedDecodeBuffers {
     }
 }
 
-/// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
-/// The `mask_views` slice should be ordered from outermost to innermost mask.
-pub(crate) fn build_nested_optional_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((first_mask, rest_masks)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(build_nested_optional_target(data_view, rest_masks)),
-            first_mask,
-        )
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
-}
-
 /// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
 ///
 /// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
-/// [`build_nested_optional_target`].
+/// [`zarrs_codec::build_nested_optional_target`].
 pub(crate) fn wrap_optional_masks(bytes: ArrayBytes<'_>, masks: Vec<Vec<u8>>) -> ArrayBytes<'_> {
     masks
         .into_iter()
         .rev()
         .fold(bytes, ArrayBytes::with_optional_mask)
-}
-
-/// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
-///
-/// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
-pub(crate) fn extract_target_views<'a, 'b>(
-    target: &'b ArrayBytesDecodeIntoTarget<'a>,
-) -> (
-    &'b ArrayBytesFixedDisjointView<'a>,
-    Vec<&'b ArrayBytesFixedDisjointView<'a>>,
-) {
-    match target {
-        ArrayBytesDecodeIntoTarget::Fixed(view) => (view, vec![]),
-        ArrayBytesDecodeIntoTarget::Optional(inner, mask_view) => {
-            let (data_view, mut mask_views) = extract_target_views(inner);
-            mask_views.insert(0, mask_view);
-            (data_view, mask_views)
-        }
-    }
 }
 
 /// Split keyed optional array bytes into keyed inner data and keyed validity masks.
@@ -376,7 +341,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
 mod tests {
     use super::*;
     use crate::array::{FillValue, data_type};
-    use zarrs_codec::copy_fill_value_into;
+    use zarrs_codec::{build_nested_optional_target, copy_fill_value_into};
 
     #[test]
     fn copy_fill_value_into_matches_materialised_fill() {

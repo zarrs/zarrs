@@ -12,7 +12,7 @@ use super::{
     recommended_codec_concurrency,
 };
 use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
+    merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
 };
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
@@ -21,7 +21,8 @@ use crate::array::chunk_cache::{
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, build_nested_optional_target,
+    decode_into_array_bytes_target,
 };
 use zarrs_storage::Bytes;
 

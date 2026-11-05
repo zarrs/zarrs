@@ -8,9 +8,11 @@ use criterion::{
 use std::hint::black_box;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, FillValue,
-    copy_fill_value_into, data_type,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArraySubset, FillValue, copy_fill_value_into,
+    data_type,
 };
+
+use zarrs_codec::build_nested_optional_target;
 
 fn fill_value(c: &mut Criterion) {
     for element_size in [1usize, 2, 4, 8, 16] {
@@ -113,17 +115,6 @@ fn optional_fill_value(c: &mut Criterion) {
     }
 }
 
-fn nested_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((mask, rest)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(Box::new(nested_target(data_view, rest)), mask)
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
-}
-
 fn fill_output(c: &mut Criterion) {
     let shape = [64, 1024];
     for depth in [0usize, 1, 3] {
@@ -178,7 +169,8 @@ fn fill_output(c: &mut Criterion) {
                                     .unwrap()
                                 })
                                 .collect();
-                            let target = nested_target(&mut data_view, &mut mask_views);
+                            let target =
+                                build_nested_optional_target(&mut data_view, &mut mask_views);
                             copy_fill_value_into(
                                 black_box(&data_type),
                                 black_box(&fill_value),
