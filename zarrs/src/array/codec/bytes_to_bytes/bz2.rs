@@ -257,4 +257,20 @@ mod tests {
         let answer: Vec<u16> = vec![2, 6];
         assert_eq!(answer, decoded);
     }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_bz2_decode_into() {
+        let codec_configuration: Bz2CodecConfiguration = serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = Bz2Codec::new_with_configuration(&codec_configuration).unwrap();
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &b"decode directly into this buffer".repeat(32),
+            1,
+            |encoded| {
+                // A truncated stream, and bytes that are not a bz2 stream
+                vec![encoded[..encoded.len() / 2].to_vec(), vec![0u8; 64]]
+            },
+        );
+    }
 }

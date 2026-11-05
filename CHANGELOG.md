@@ -212,6 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
+- `bz2`: Decode streams directly into preallocated output (requires `bz2`)
 - `zlib`: Decode directly into preallocated output (requires `zlib`)
 - `gzip`: Decode streams directly into preallocated output with bounded oversized-stream detection
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`

@@ -1,5 +1,6 @@
 use std::io::{Cursor, Read};
 use std::sync::Arc;
+use zarrs_codec::read_decoded_bytes_into;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
@@ -109,6 +110,21 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
         Ok(CowBytes::from(out))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        read_decoded_bytes_into(bzip2::bufread::BzDecoder::new(&encoded_value[..]), output)
+    }
+
+    fn is_decode_into_efficient(&self) -> bool {
+        true
     }
 
     fn encoded_representation(
