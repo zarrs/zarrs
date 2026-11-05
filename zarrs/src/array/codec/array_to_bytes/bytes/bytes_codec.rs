@@ -5,8 +5,8 @@ use std::sync::Arc;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
-    bytes_codec_partial,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraitsArc,
+    Endianness, bytes_codec_partial,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -31,10 +31,12 @@ pub struct BytesCodec {
 }
 
 /// A `bytes` codec implementation bound to a data type and fill value.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct BytesCodecBound {
     endian: Option<Endianness>,
     data_type: DataType,
+    /// The `bytes` codec support of `data_type`.
+    bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
 }
 
@@ -129,10 +131,11 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        data_type.codec_bytes()?;
+        let bytes = data_type.codec_bytes_arc()?;
         Ok(Arc::new(BytesCodecBound {
             endian: self.endian,
             data_type,
+            bytes,
             fill_value,
         }))
     }
@@ -239,7 +242,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.bytes.encode(bytes, self.endian)?)
     }
 
     fn decode<'a>(
@@ -250,7 +253,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = decoded_len(&self.data_type, shape)?;
-        let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
+        let bytes = self.bytes.decode(bytes, self.endian)?;
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
         bytes_decoded.validate(num_elements, &self.data_type)?;
@@ -269,6 +272,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -285,6 +289,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -302,6 +307,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -319,6 +325,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))

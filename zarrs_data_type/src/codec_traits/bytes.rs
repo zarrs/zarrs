@@ -9,7 +9,7 @@ use zarrs_metadata::Endianness;
 pub struct BytesCodecEndiannessMissingError;
 
 /// Traits for a data type supporting the `bytes` codec.
-pub trait BytesDataTypeTraits {
+pub trait BytesDataTypeTraits: std::fmt::Debug {
     /// Returns whether decoding with `endianness` preserves the native in-memory bytes.
     ///
     /// The default implementation is conservative and returns `false`.

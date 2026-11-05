@@ -175,6 +175,29 @@ impl DataType {
         self.as_ref().as_any().downcast_ref::<T>()
     }
 
+    /// Downcast this data type to a shared `Arc<T>`, without cloning the data type.
+    ///
+    /// Returns [`None`] if this data type is not of type `T`.
+    #[must_use]
+    pub fn downcast_arc<T: DataTypeTraits>(&self) -> Option<Arc<T>> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let any: Arc<dyn Any + Send + Sync> = self.0.clone();
+            any.downcast::<T>().ok()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            // `Any` is a supertrait, so this is the type id of the concrete data type rather than one reported by `as_any`
+            if (&*self.0 as &dyn Any).is::<T>() {
+                let ptr = Arc::into_raw(self.0.clone()).cast::<T>();
+                // SAFETY: the concrete type of the allocation is `T`, as checked above, so the pointer to it is a valid `*const T` from `Arc::into_raw` (as in `Arc::downcast`)
+                Some(unsafe { Arc::from_raw(ptr) })
+            } else {
+                None
+            }
+        }
+    }
+
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
@@ -260,7 +283,7 @@ pub trait DataTypeTraitsV2 {
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
-pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
+pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
     /// The configuration of the data type.
     fn configuration(&self, version: ZarrVersion) -> Configuration;
 

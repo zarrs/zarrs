@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
 use super::bytes_codec::{decoded_len, fixed_size};
-use super::{BytesDataTypeExt, Endianness};
+use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -22,6 +22,8 @@ pub(crate) struct BytesCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
+    /// The `bytes` codec support of `data_type`.
+    bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
     endian: Option<Endianness>,
 }
@@ -32,6 +34,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
+        bytes: BytesDataTypeTraitsArc,
         fill_value: Option<&FillValue>,
         endian: Option<Endianness>,
     ) -> Self {
@@ -39,6 +42,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
             input_output_handle,
             shape: shape.to_vec(),
             data_type: data_type.clone(),
+            bytes,
             fill_value: fill_value.cloned(),
             endian,
         }
@@ -67,12 +71,12 @@ impl<T: ?Sized> BytesCodecPartial<T> {
 
     /// Decode bytes, applying endianness conversion if required.
     fn decode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
-        Ok(self.data_type.codec_bytes()?.decode(bytes, self.endian)?)
+        Ok(self.bytes.decode(bytes, self.endian)?)
     }
 
     /// Encode bytes, applying endianness conversion if required.
     fn encode_bytes<'a>(&self, bytes: CowBytes<'a>) -> Result<CowBytes<'a>, CodecError> {
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.bytes.encode(bytes, self.endian)?)
     }
 
     /// Validate `indexer` against the chunk, returning the data type size.

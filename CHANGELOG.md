@@ -225,6 +225,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
 - `blosc`: Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
 - `blosc`: Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
+- `bytes`: Cache data type codec support when binding, and re-export `BytesDataTypeTraitsArc`
 - `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
 - `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
@@ -232,7 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): cached codec support; `Any`/`Debug` trait bounds; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
