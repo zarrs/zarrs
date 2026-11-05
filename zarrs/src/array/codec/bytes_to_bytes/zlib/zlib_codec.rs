@@ -1,3 +1,4 @@
+use crate::array::codec::bytes_to_bytes::{DecompressProgress, decompress_stream_into};
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
@@ -6,8 +7,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -111,6 +113,10 @@ impl BytesToBytesCodecTraits for ZlibCodec {
         Ok(CowBytes::from(out))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -123,5 +129,31 @@ impl BytesToBytesCodecTraits for ZlibCodec {
                     size + (size >> 12) + (size >> 14) + (size >> 25) + 13,
                 )
             })
+    }
+}
+
+// SAFETY: `decompress_stream_into` fails unless the decompressor reports that it initialised all of `output`.
+unsafe impl BytesToBytesCodecDecodeInto for ZlibCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [std::mem::MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let mut decompressor = flate2::Decompress::new(true);
+        decompress_stream_into(&encoded_value, output, |input, output| {
+            let (total_in, total_out) = (decompressor.total_in(), decompressor.total_out());
+            // `Finish` would report output that is too short as a decompression error
+            let status = decompressor
+                .decompress_uninit(input, output, flate2::FlushDecompress::None)
+                .map_err(std::io::Error::from)?;
+            Ok(DecompressProgress {
+                consumed: usize::try_from(decompressor.total_in() - total_in).unwrap(),
+                produced: usize::try_from(decompressor.total_out() - total_out).unwrap(),
+                stream_end: status == flate2::Status::StreamEnd,
+            })
+        })
     }
 }

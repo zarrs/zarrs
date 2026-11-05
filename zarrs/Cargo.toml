@@ -55,7 +55,7 @@ bytes.workspace = true
 bzip2 = { version = "0.6.0", optional = true }
 crc32c = { version = "0.6.5", optional = true }
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
-flate2 = { version = "1.1.1", optional = true }
+flate2 = { version = "1.1.9", optional = true }
 futures = { version = "0.3.29", optional = true }
 gdeflate-sys = { version = "0.4.1", optional = true }
 half.workspace = true

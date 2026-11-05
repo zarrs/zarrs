@@ -52,6 +52,68 @@ pub(crate) fn into_owned_with_spare_capacity(
     }
 }
 
+/// The progress of one call of a streaming decompressor.
+#[cfg(any(feature = "bz2", feature = "zlib"))]
+pub(crate) struct DecompressProgress {
+    /// The number of input bytes consumed.
+    pub(crate) consumed: usize,
+    /// The number of output bytes initialised.
+    pub(crate) produced: usize,
+    /// Whether the end of the stream was reached.
+    pub(crate) stream_end: bool,
+}
+
+/// Decompress the stream `input` into `output`, which may be uninitialised, with a streaming decompressor.
+///
+/// `decompress` decompresses a prefix of its input into a prefix of its output, initialising the first [`DecompressProgress::produced`] bytes of its output.
+/// It stops at the first decoded byte past the end of `output` rather than decoding the remainder, so a stream that is much larger than `output` is not expanded.
+/// Bytes after the end of the stream are ignored.
+///
+/// Every byte of `output` is initialised on success.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`](zarrs_codec::InvalidBytesLengthError) if the length of the decoded bytes is not the length of `output`, an IO error if the stream is incomplete, or the first error of `decompress`.
+/// If the decoded bytes are too long, the reported length is one more than the length of `output`.
+#[cfg(any(feature = "bz2", feature = "zlib"))]
+pub(crate) fn decompress_stream_into(
+    input: &[u8],
+    output: &mut [std::mem::MaybeUninit<u8>],
+    mut decompress: impl FnMut(
+        &[u8],
+        &mut [std::mem::MaybeUninit<u8>],
+    ) -> Result<DecompressProgress, zarrs_codec::CodecError>,
+) -> Result<(), zarrs_codec::CodecError> {
+    use zarrs_codec::InvalidBytesLengthError;
+
+    let len = output.len();
+    let (mut consumed, mut produced) = (0, 0);
+    loop {
+        let progress = if produced < len {
+            decompress(&input[consumed..], &mut output[produced..])?
+        } else {
+            // The output is full, so only the end of the stream or an extra byte remains
+            decompress(&input[consumed..], &mut [std::mem::MaybeUninit::uninit()])?
+        };
+        consumed += progress.consumed;
+        produced += progress.produced;
+        if produced > len {
+            return Err(InvalidBytesLengthError::new(len.saturating_add(1), len).into());
+        } else if progress.stream_end {
+            return if produced == len {
+                Ok(())
+            } else {
+                Err(InvalidBytesLengthError::new(produced, len).into())
+            };
+        } else if progress.consumed == 0 && progress.produced == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "the compressed stream is incomplete",
+            )
+            .into());
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn check_bytes_decode_into(
     codec: &dyn zarrs_codec::BytesToBytesCodecDecodeInto,
