@@ -193,6 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Copy only the packed bytes that are unpacked when unpacking part of a chunk
 - Pack and unpack one-bit components of one byte (e.g. `bool`) eight at a time, about 20 and 14 times faster
+- Cache data type codec support when binding for byte-order conversion, and re-export `PackBitsDataTypeTraitsArc`
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
