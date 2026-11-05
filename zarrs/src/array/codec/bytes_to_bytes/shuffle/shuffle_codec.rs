@@ -6,7 +6,8 @@ use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ComputeResources, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -38,6 +39,36 @@ impl ShuffleCodec {
                 "this shuffle codec configuration variant is unsupported".to_string(),
             )),
         }
+    }
+
+    /// Return the number of elements in `len` bytes.
+    ///
+    /// # Errors
+    /// Returns an error if `len` is not an integer multiple of the elementsize.
+    fn element_count(&self, len: usize) -> Result<usize, CodecError> {
+        if !len.is_multiple_of(self.elementsize) {
+            return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
+        }
+        Ok(len / self.elementsize)
+    }
+
+    /// Unshuffle `encoded_value` into `decoded_value`, which must be the same length.
+    fn unshuffle(&self, encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+        if encoded_value.len() != decoded_value.len() {
+            return Err(
+                InvalidBytesLengthError::new(decoded_value.len(), encoded_value.len()).into(),
+            );
+        }
+
+        let count = self.element_count(encoded_value.len())?;
+        for i in 0..self.elementsize {
+            let offset = i * count;
+            for byte_index in 0..count {
+                let j = byte_index * self.elementsize + i;
+                decoded_value[j] = encoded_value[offset + byte_index];
+            }
+        }
+        Ok(())
     }
 }
 
@@ -90,12 +121,8 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        if !decoded_value.len().is_multiple_of(self.elementsize) {
-            return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
-        }
-
+        let count = self.element_count(decoded_value.len())?;
         let mut encoded_value = vec![0u8; decoded_value.len()];
-        let count = encoded_value.len().div_ceil(self.elementsize);
         for i in 0..count {
             let offset = i * self.elementsize;
             for byte_index in 0..self.elementsize {
@@ -113,19 +140,8 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        if !encoded_value.len().is_multiple_of(self.elementsize) {
-            return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
-        }
-
         let mut decoded_value = vec![0u8; encoded_value.len()];
-        let count = decoded_value.len().div_ceil(self.elementsize);
-        for i in 0..self.elementsize {
-            let offset = i * count;
-            for byte_index in 0..count {
-                let j = byte_index * self.elementsize + i;
-                decoded_value[j] = encoded_value[offset + byte_index];
-            }
-        }
+        self.unshuffle(&encoded_value, &mut decoded_value)?;
         Ok(CowBytes::from(decoded_value))
     }
 
