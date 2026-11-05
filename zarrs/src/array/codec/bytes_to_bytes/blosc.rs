@@ -396,4 +396,19 @@ mod tests {
         let answer: Vec<u16> = vec![2, 6];
         assert_eq!(answer, decoded);
     }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_blosc_decode_into() {
+        let codec_configuration: BloscCodecConfiguration =
+            serde_json::from_str(JSON_VALID1).unwrap();
+        let codec = BloscCodec::new_with_configuration(&codec_configuration).unwrap();
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &crate::array::transmute_to_bytes_vec((0..4096u16).collect::<Vec<_>>()),
+            1,
+            // Bytes that are not a blosc buffer
+            |_| vec![vec![0u8; 64]],
+        );
+    }
 }
