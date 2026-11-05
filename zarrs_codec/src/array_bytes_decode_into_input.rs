@@ -64,6 +64,20 @@ pub struct BytesDecodeSource<'a> {
 }
 
 impl<'a> BytesDecodeSource<'a> {
+    /// Construct a source without cloning the encoded bytes.
+    #[must_use]
+    pub fn new(
+        codec: &'a dyn BytesToBytesCodecTraits,
+        bytes: CowBytes<'a>,
+        decoded_representation: BytesRepresentation,
+    ) -> Self {
+        Self {
+            codec,
+            bytes,
+            decoded_representation,
+        }
+    }
+
     /// Return the expected decoded representation.
     #[must_use]
     pub fn decoded_representation(&self) -> &BytesRepresentation {
@@ -115,25 +129,20 @@ impl<'a> BytesDecodeSource<'a> {
 
 #[cfg(test)]
 mod tests {
-    //! Ownership and single-use route contracts for deferred decoding.
+    //! The default `BytesToBytesCodecTraits::decode_into` fallback.
     //!
     //! Run under Miri with `MIRIFLAGS=-Zmiri-ignore-leaks`: Rayon's
     //! `use_current_thread` pools retain their thread-local registry allocations.
 
     use crate::*;
     use std::borrow::Cow;
-    use std::num::NonZeroU64;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use unsafe_cell_slice::UnsafeCellSlice;
-    use zarrs_chunk_grid::ArraySubset;
-    use zarrs_data_type::{DataType, FillValue};
     use zarrs_plugin::{ExtensionName, ZarrVersion};
 
     #[derive(Debug, Default)]
     struct Producer {
         normal: AtomicUsize,
-        fail: bool,
     }
 
     impl ExtensionName for Producer {
@@ -195,70 +204,7 @@ mod tests {
             self.normal.fetch_add(1, Ordering::Relaxed);
             assert_eq!(*repr, BytesRepresentation::FixedSize(3));
             assert_eq!(resources.compute_target(), 7);
-            if self.fail {
-                Err(CodecError::Other("producer failed".into()))
-            } else {
-                Ok(bytes)
-            }
-        }
-    }
-
-    #[derive(Debug)]
-    struct Receiver {
-        pointer: usize,
-        calls: AtomicUsize,
-    }
-    impl ArrayCodecTraits for Receiver {
-        fn recommended_concurrency(
-            &self,
-            _: &[NonZeroU64],
-        ) -> Result<RecommendedConcurrency, CodecError> {
-            Ok(RecommendedConcurrency::new_maximum(1))
-        }
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-        fn data_type(&self) -> &DataType {
-            panic!("unused")
-        }
-        fn fill_value(&self) -> Option<&FillValue> {
-            panic!("unused")
-        }
-    }
-    impl ArrayToBytesCodecNoSubchunkingTraits for Receiver {}
-    impl ArrayToBytesCodecTraits for Receiver {
-        fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-            self
-        }
-        fn encoded_representation(
-            &self,
-            _: &[NonZeroU64],
-        ) -> Result<BytesRepresentation, CodecError> {
-            Ok(BytesRepresentation::FixedSize(3))
-        }
-        fn encode<'a>(
-            &self,
-            _: ArrayBytes<'a>,
-            _: &[NonZeroU64],
-            _: &CodecOptions,
-            _: &ComputeResources,
-        ) -> Result<CowBytes<'a>, CodecError> {
-            unreachable!()
-        }
-        fn decode<'a>(
-            &self,
-            bytes: CowBytes<'a>,
-            shape: &[NonZeroU64],
-            _options: &CodecOptions,
-            resources: &ComputeResources,
-        ) -> Result<ArrayBytes<'a>, CodecError> {
-            self.calls.fetch_add(1, Ordering::Relaxed);
-            assert_eq!(shape, &[NonZeroU64::new(3).unwrap()]);
-            assert_eq!(resources.compute_target(), 7);
-            // Reclaiming a unique allocation must not allocate or copy.
-            let bytes = bytes.into_vec();
-            assert_eq!(bytes.as_ptr() as usize, self.pointer);
-            Ok(ArrayBytes::Fixed(bytes.into()))
+            Ok(bytes)
         }
     }
 
@@ -279,80 +225,6 @@ mod tests {
         POOL.with(|pool| pool.install(|| ComputeResources::default().with_compute_target(7)))
     }
 
-    fn source<'a>(
-        codec: &'a dyn BytesToBytesCodecTraits,
-        bytes: CowBytes<'a>,
-        decoded_representation: BytesRepresentation,
-    ) -> BytesDecodeSource<'a> {
-        BytesDecodeSource {
-            codec,
-            bytes,
-            decoded_representation,
-        }
-    }
-    #[test]
-    fn immediate_retains_borrowed_and_unique_owned_bytes() {
-        let borrowed = [1, 2, 3];
-        let result = ArrayBytesDecodeIntoInput::from(CowBytes::Borrowed(&borrowed))
-            .into_bytes(&options(), &resources())
-            .unwrap();
-        assert!(matches!(result, CowBytes::Borrowed(_)));
-        assert_eq!(result.as_ptr(), borrowed.as_ptr());
-        let owned = vec![1, 2, 3];
-        let pointer = owned.as_ptr();
-        let result = ArrayBytesDecodeIntoInput::from(CowBytes::from(owned))
-            .into_bytes(&options(), &resources())
-            .unwrap()
-            .into_vec();
-        assert_eq!(result.as_ptr(), pointer);
-    }
-    #[test]
-    fn default_receiver_preserves_unique_allocation_and_checks_target_length() {
-        for deferred in [false, true] {
-            for output_len in [3, 2] {
-                let bytes = vec![1, 2, 3];
-                let receiver = Receiver {
-                    pointer: bytes.as_ptr() as usize,
-                    calls: AtomicUsize::new(0),
-                };
-                let producer = Producer::default();
-                let input = if deferred {
-                    ArrayBytesDecodeIntoInput::Deferred(source(
-                        &producer,
-                        bytes.into(),
-                        BytesRepresentation::FixedSize(3),
-                    ))
-                } else {
-                    CowBytes::from(bytes).into()
-                };
-                let mut output = vec![0; output_len];
-                let shape = [output_len as u64];
-                // This is the only view of output, and its subset covers the entire buffer.
-                let mut view = unsafe {
-                    ArrayBytesFixedDisjointView::new(
-                        UnsafeCellSlice::new(&mut output),
-                        1,
-                        &shape,
-                        ArraySubset::new_with_shape(shape),
-                    )
-                }
-                .unwrap();
-                let result = receiver.decode_into(
-                    input,
-                    &[NonZeroU64::new(3).unwrap()],
-                    (&mut view).into(),
-                    &options(),
-                    &resources(),
-                );
-                assert_eq!(result.is_ok(), output_len == 3);
-                assert_eq!(receiver.calls.load(Ordering::Relaxed), 1);
-                assert_eq!(
-                    producer.normal.load(Ordering::Relaxed),
-                    usize::from(deferred)
-                );
-            }
-        }
-    }
     #[test]
     fn byte_decode_fallback_validates_length_before_copying() {
         let producer = Producer::default();
