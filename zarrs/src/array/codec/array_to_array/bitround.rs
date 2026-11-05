@@ -41,7 +41,6 @@ use std::sync::Arc;
 pub use bitround_codec::BitroundCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::DataType;
 use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
@@ -66,20 +65,10 @@ impl CodecTraitsV3 for BitroundCodec {
 
 // Re-export the trait, plugin, and macro from zarrs_data_type
 pub use zarrs_data_type::codec_traits::bitround::{
-    BitroundDataTypeExt, BitroundDataTypePlugin, BitroundDataTypeTraits, impl_bitround_codec,
-    round_bytes_float16, round_bytes_float32, round_bytes_float64, round_bytes_int8,
-    round_bytes_int16, round_bytes_int32, round_bytes_int64,
+    BitroundDataTypeExt, BitroundDataTypePlugin, BitroundDataTypeTraits, BitroundDataTypeTraitsArc,
+    impl_bitround_codec, round_bytes_float16, round_bytes_float32, round_bytes_float64,
+    round_bytes_int8, round_bytes_int16, round_bytes_int32, round_bytes_int64,
 };
-
-fn round_bytes(
-    bytes: &mut [u8],
-    data_type: &DataType,
-    keepbits: u32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let bitround = data_type.codec_bitround()?;
-    bitround.round(bytes, keepbits);
-    Ok(())
-}
 
 #[cfg(test)]
 #[allow(clippy::cast_precision_loss)]
