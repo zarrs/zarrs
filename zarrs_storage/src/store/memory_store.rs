@@ -78,9 +78,7 @@ impl ReadableStorageTraits for MemoryStore {
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         let data_map = self.data_map.read().unwrap();
-        data_map
-            .get(key)
-            .map_or_else(|| Ok(None), |entry| Ok(Some(entry.len() as u64)))
+        Ok(data_map.get(key).map(|entry| entry.len() as u64))
     }
 
     fn supports_get_partial(&self) -> bool {
