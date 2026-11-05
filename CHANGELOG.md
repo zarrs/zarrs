@@ -215,6 +215,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cap the decompression buffer by the decoded size rather than the content size claimed by a frame header
 - Decode directly into preallocated output, validating frame lengths against the decoded size
 
+#### `zarrs.gdeflate`
+- Decode directly into preallocated output (requires `gdeflate`)
+- Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
+- Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
+
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
@@ -237,8 +242,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
 - `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - `bytes`: Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
-- `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
-- `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
 - `numcodecs.zlib`: Read configurations without a `level` (as written by `zarr-python` by default) or with the zlib default level of -1 ([#503](https://github.com/zarrs/zarrs/issues/503))
 
 ### Data types

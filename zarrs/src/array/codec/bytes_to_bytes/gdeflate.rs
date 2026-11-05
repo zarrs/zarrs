@@ -44,6 +44,7 @@
 
 mod gdeflate_codec;
 
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 pub use gdeflate_codec::GDeflateCodec;
@@ -160,7 +161,8 @@ impl<'a> GDeflatePageDecoder<'a> {
     /// Decode the next page into `out`, which must be the decoded length of the page.
     ///
     /// This is a full page of decoded bytes except for the last page.
-    fn decode_next(&mut self, out: &mut [u8]) -> Result<(), CodecError> {
+    /// `out` may be uninitialised, and is initialised on success.
+    fn decode_next(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), CodecError> {
         debug_assert!(self.page < self.num_pages);
         let encoded_value = self.encoded_value;
 
@@ -190,10 +192,40 @@ impl<'a> GDeflatePageDecoder<'a> {
         };
 
         self.decompressor
-            .decompress_page(in_page, out.as_mut_ptr(), out.len())?;
+            .decompress_page(in_page, out.as_mut_ptr().cast::<u8>(), out.len())?;
         self.page += 1;
         self.page_offset += page_size_compressed;
         Ok(())
+    }
+}
+
+/// Decode into a buffer whose length must match the decoded length in the header.
+fn gdeflate_decode_into(
+    encoded_value: &[u8],
+    decoded_value: &mut [MaybeUninit<u8>],
+) -> Result<(), CodecError> {
+    let header = gdeflate_decode_header(encoded_value)?;
+    if decoded_value.len() != header.decoded_len {
+        return Err(InvalidBytesLengthError::new(header.decoded_len, decoded_value.len()).into());
+    }
+
+    let mut pages = GDeflatePageDecoder::new(encoded_value, &header)?;
+    let mut remaining = decoded_value;
+    for _ in 0..header.num_pages {
+        let (page, rest) =
+            remaining.split_at_mut(remaining.len().min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED));
+        pages.decode_next(page)?;
+        remaining = rest;
+    }
+    // `gdeflate_decode_header` ensures there are enough pages for the decoded length, but check
+    // anyway: the `BytesToBytesCodecDecodeInto` implementation relies on every byte being decoded.
+    if remaining.is_empty() {
+        Ok(())
+    } else {
+        Err(
+            InvalidBytesLengthError::new(header.decoded_len - remaining.len(), header.decoded_len)
+                .into(),
+        )
     }
 }
 
@@ -223,8 +255,10 @@ fn gdeflate_decode(
     for _ in 0..header.num_pages {
         let page_len = remaining.min(GDEFLATE_PAGE_SIZE_UNCOMPRESSED);
         let page_start = decoded_value.len();
-        decoded_value.resize(page_start + page_len, 0);
-        pages.decode_next(&mut decoded_value[page_start..])?;
+        decoded_value.reserve(page_len);
+        pages.decode_next(&mut decoded_value.spare_capacity_mut()[..page_len])?;
+        // SAFETY: decoding the page initialised the `page_len` bytes after `page_start`.
+        unsafe { decoded_value.set_len(page_start + page_len) };
         remaining -= page_len;
     }
     if remaining == 0 {
@@ -704,5 +738,27 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gdeflate_decode_into() {
+        let configuration: GDeflateCodecConfiguration = serde_json::from_str(JSON_VALID).unwrap();
+        let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
+        let decoded: Vec<u8> = (0..GDEFLATE_PAGE_SIZE_UNCOMPRESSED + 1000)
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &decoded,
+            1,
+            |encoded| {
+                // A truncated stream, and pages that are not deflate streams
+                let header_length = GDEFLATE_STATIC_HEADER_LENGTH + 2 * size_of::<u64>();
+                let mut corrupt = encoded.to_vec();
+                corrupt[header_length..].fill(0xFF);
+                vec![encoded[..encoded.len() - 10].to_vec(), corrupt]
+            },
+        );
     }
 }
