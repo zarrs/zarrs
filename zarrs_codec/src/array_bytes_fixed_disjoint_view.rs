@@ -93,6 +93,23 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         })
     }
 
+    /// The `length` bytes starting at element `element_index` of the underlying array.
+    ///
+    /// # Safety
+    /// The region must belong to this view and must not be accessed through any other reference while the returned slice is live.
+    ///
+    /// # Panics
+    /// Panics if the byte offset of `element_index` exceeds [`usize::MAX`].
+    #[expect(
+        clippy::mut_from_ref,
+        reason = "regions of a disjoint view are exclusive"
+    )]
+    unsafe fn region_mut(&self, element_index: u64, length: usize) -> &mut [u8] {
+        let offset = usize::try_from(element_index * self.data_type_size as u64).unwrap();
+        debug_assert!(offset + length <= self.bytes.len());
+        unsafe { self.bytes.index_mut(offset..offset + length) }
+    }
+
     /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
     ///
     /// An empty `subset` references no elements, so it is accepted irrespective of its start.
@@ -172,9 +189,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         let uniform = fill_value.iter().all(|&byte| byte == fill_value[0]);
         let mut regions = self.contiguous_linearised_indices().iter();
         let (first_index, _) = regions.next().expect("a nonempty view has a region");
-        let first_offset = usize::try_from(first_index * self.data_type_size as u64).unwrap();
         // SAFETY: this region belongs to the disjoint view and is only accessed here.
-        let first = unsafe { self.bytes.index_mut(first_offset..first_offset + length) };
+        let first = unsafe { self.region_mut(first_index, length) };
         if uniform {
             first.fill(fill_value[0]);
         } else {
@@ -191,9 +207,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
 
         // Reuse the first filled region rather than constructing a temporary row.
         for (index, _) in regions {
-            let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
             // SAFETY: the regions of an array subset are disjoint, including from `first`.
-            let target = unsafe { self.bytes.index_mut(offset..offset + length) };
+            let target = unsafe { self.region_mut(index, length) };
             if uniform {
                 target.fill(fill_value[0]);
             } else {
@@ -213,32 +228,56 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
     pub fn copy_from_slice(&mut self, subset_bytes: &[u8]) -> Result<(), InvalidBytesLengthError> {
+        self.try_copy_from_slice_with(subset_bytes, |source, destination| {
+            destination.copy_from_slice(source);
+            Ok(())
+        })
+    }
+
+    /// Copy bytes into the view with a custom copy for each contiguous region.
+    ///
+    /// The `subset_bytes` must be the same length as the byte length of the elements in the view.
+    /// The total length is validated before `copy` is called.
+    ///
+    /// `copy` receives each source region and its destination in C order. The regions
+    /// have equal lengths and contain whole elements. This can transform bytes as
+    /// they are copied, for example to change their endianness. Empty views do not
+    /// invoke `copy`.
+    ///
+    /// If `copy` returns an error, no subsequent regions are visited. Writes made
+    /// before the error may already have modified the view, including writes by
+    /// the failing callback.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] converted into `E` if the length of `subset_bytes` is not the same as the byte length of the elements in the view, or the first error returned by `copy`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn try_copy_from_slice_with<E: From<InvalidBytesLengthError>>(
+        &mut self,
+        subset_bytes: &[u8],
+        mut copy: impl FnMut(&[u8], &mut [u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
         if subset_bytes.len() != self.bytes_in_subset_len {
-            return Err(InvalidBytesLengthError::new(
-                subset_bytes.len(),
-                self.bytes_in_subset_len,
-            ));
+            return Err(
+                InvalidBytesLengthError::new(subset_bytes.len(), self.bytes_in_subset_len).into(),
+            );
         }
         let data_type_size = self.data_type_size as u64;
-        let bytes_copied = self.contiguous_linearised_indices().iter().fold(
-            0,
-            |subset_offset: usize,
-             (array_subset_element_index, contiguous_elements): (u64, u64)| {
-                let output_offset =
-                    usize::try_from(array_subset_element_index * data_type_size).unwrap();
-                let length = usize::try_from(contiguous_elements * data_type_size).unwrap();
-                debug_assert!((output_offset + length) <= self.bytes.len());
-                debug_assert!((subset_offset + length) <= subset_bytes.len());
-                let subset_offset_end = subset_offset + length;
-                unsafe {
-                    self.bytes
-                        .index_mut(output_offset..output_offset + length)
-                        .copy_from_slice(&subset_bytes[subset_offset..subset_offset_end]);
-                }
-                subset_offset_end
-            },
-        );
-        debug_assert_eq!(bytes_copied, subset_bytes.len());
+        let mut subset_offset = 0;
+        for (array_subset_element_index, contiguous_elements) in
+            self.contiguous_linearised_indices()
+        {
+            let length = usize::try_from(contiguous_elements * data_type_size).unwrap();
+            debug_assert!((subset_offset + length) <= subset_bytes.len());
+            let subset_offset_end = subset_offset + length;
+            // SAFETY: this destination region belongs exclusively to the disjoint view.
+            copy(&subset_bytes[subset_offset..subset_offset_end], unsafe {
+                self.region_mut(array_subset_element_index, length)
+            })?;
+            subset_offset = subset_offset_end;
+        }
+        debug_assert_eq!(subset_offset, subset_bytes.len());
 
         Ok(())
     }
