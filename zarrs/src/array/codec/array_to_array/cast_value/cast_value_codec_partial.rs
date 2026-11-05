@@ -14,14 +14,19 @@ use zarrs_storage::StorageError;
 use super::cast_value_codec::{CastBytesContext, ScalarMap, cast_bytes};
 use crate::array::{DataType, Indexer};
 use zarrs_data_type::codec_traits::cast_value::{
-    CastValueDataTypeExt, CastValueKernel, CastValueOutOfRangeMode, CastValueRoundingMode,
+    CastValueDataTypeTraits, CastValueDataTypeTraitsArc, CastValueKernel, CastValueOutOfRangeMode,
+    CastValueRoundingMode,
 };
 
 /// Partial encoder and decoder for the `cast_value` codec.
 pub(crate) struct CastValueCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     decoded_data_type: DataType,
+    /// The `cast_value` codec support of `decoded_data_type`.
+    decoded_cast_value: CastValueDataTypeTraitsArc,
     encoded_data_type: DataType,
+    /// The `cast_value` codec support of `encoded_data_type`.
+    encoded_cast_value: CastValueDataTypeTraitsArc,
     encode_scalar_map: Option<ScalarMap>,
     decode_scalar_map: Option<ScalarMap>,
     rounding: CastValueRoundingMode,
@@ -35,7 +40,9 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
     pub(crate) fn new(
         input_output_handle: Arc<T>,
         decoded_data_type: &DataType,
+        decoded_cast_value: CastValueDataTypeTraitsArc,
         encoded_data_type: &DataType,
+        encoded_cast_value: CastValueDataTypeTraitsArc,
         encode_scalar_map: Option<ScalarMap>,
         decode_scalar_map: Option<ScalarMap>,
         rounding: CastValueRoundingMode,
@@ -43,14 +50,14 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
         encode_kernel: Option<CastValueKernel>,
         decode_kernel: Option<CastValueKernel>,
     ) -> Result<Self, CodecError> {
-        decoded_data_type.codec_castvalue()?;
-        encoded_data_type.codec_castvalue()?;
         require_fixed(decoded_data_type)?;
         require_fixed(encoded_data_type)?;
         Ok(Self {
             input_output_handle,
             decoded_data_type: decoded_data_type.clone(),
+            decoded_cast_value,
             encoded_data_type: encoded_data_type.clone(),
+            encoded_cast_value,
             encode_scalar_map,
             decode_scalar_map,
             rounding,
@@ -63,13 +70,11 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
     fn cast(
         &self,
         bytes: ArrayBytes<'_>,
-        source_data_type: &DataType,
-        target_data_type: &DataType,
+        (source_data_type, source): (&DataType, &dyn CastValueDataTypeTraits),
+        (target_data_type, target): (&DataType, &dyn CastValueDataTypeTraits),
         scalar_map: Option<&ScalarMap>,
         kernel: Option<CastValueKernel>,
     ) -> Result<ArrayBytes<'static>, CodecError> {
-        let source = source_data_type.codec_castvalue()?;
-        let target = target_data_type.codec_castvalue()?;
         Ok(ArrayBytes::from(cast_bytes(
             &bytes.into_fixed()?,
             &CastBytesContext {
@@ -88,8 +93,8 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
     fn encode(&self, bytes: ArrayBytes<'_>) -> Result<ArrayBytes<'static>, CodecError> {
         self.cast(
             bytes,
-            &self.decoded_data_type,
-            &self.encoded_data_type,
+            (&self.decoded_data_type, &*self.decoded_cast_value),
+            (&self.encoded_data_type, &*self.encoded_cast_value),
             self.encode_scalar_map.as_ref(),
             self.encode_kernel,
         )
@@ -98,8 +103,8 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
     fn decode(&self, bytes: ArrayBytes<'_>) -> Result<ArrayBytes<'static>, CodecError> {
         self.cast(
             bytes,
-            &self.encoded_data_type,
-            &self.decoded_data_type,
+            (&self.encoded_data_type, &*self.encoded_cast_value),
+            (&self.decoded_data_type, &*self.decoded_cast_value),
             self.decode_scalar_map.as_ref(),
             self.decode_kernel,
         )
