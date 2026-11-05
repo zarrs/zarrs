@@ -93,6 +93,7 @@ pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroU64;
+use std::ops::Range;
 use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
 use zarrs_codec::{ComputeResources, CowBytes};
@@ -629,6 +630,48 @@ fn invalid_shard_index() -> CodecError {
     CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
 }
 
+/// The shard index references bytes outside of the encoded subchunks of a shard.
+fn shard_index_out_of_bounds() -> CodecError {
+    CodecError::Other(
+        "The shard index references out-of-bounds bytes. The chunk may be corrupted.".to_string(),
+    )
+}
+
+/// Return the byte range of the encoded subchunks in a shard of `shard_len` bytes, excluding its index.
+///
+/// `shard_len` must be at least `index_encoded_size`.
+fn shard_data_region(
+    shard_len: usize,
+    index_encoded_size: usize,
+    index_location: ShardingIndexLocation,
+) -> Range<usize> {
+    match index_location {
+        ShardingIndexLocation::Start => index_encoded_size..shard_len,
+        ShardingIndexLocation::End => 0..shard_len - index_encoded_size,
+    }
+}
+
+/// Returns the byte range of the subchunk at `subchunk_index` in a shard index.
+///
+/// Returns [`None`] if the subchunk is empty.
+///
+/// # Errors
+/// Returns an error if the byte range overflows or is not within `data_region`.
+fn checked_subchunk_range(
+    shard_index: &[u64],
+    subchunk_index: usize,
+    data_region: &Range<usize>,
+) -> Result<Option<Range<usize>>, CodecError> {
+    subchunk_offset_size(shard_index, subchunk_index)
+        .map(|(offset, size)| {
+            ByteRange::FromStart(offset, Some(size))
+                .checked_range_usize(data_region.end)
+                .filter(|range| range.start >= data_region.start)
+                .ok_or_else(shard_index_out_of_bounds)
+        })
+        .transpose()
+}
+
 fn get_concurrent_target_and_resources(
     inner_codecs: &CodecChainBound,
     subchunk_shape: &[NonZeroU64],
@@ -722,6 +765,26 @@ mod tests {
     use zarrs_codec::{
         BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
     };
+
+    #[test]
+    fn checked_subchunk_range_within_data_region() {
+        let data_region = 8..16;
+        let range = |offset, size| checked_subchunk_range(&[offset, size], 0, &data_region);
+        assert_eq!(range(u64::MAX, u64::MAX).unwrap(), None);
+        assert_eq!(range(8, 8).unwrap(), Some(8..16));
+        assert_eq!(range(10, 0).unwrap(), Some(10..10));
+        assert_eq!(range(16, 0).unwrap(), Some(16..16));
+        // Into the index
+        assert!(range(7, 1).is_err());
+        assert!(range(0, 0).is_err());
+        // Beyond the shard
+        assert!(range(16, 1).is_err());
+        assert!(range(17, 0).is_err());
+        // Half-missing or overflowing
+        assert!(range(u64::MAX, 0).is_err());
+        assert!(range(8, u64::MAX).is_err());
+        assert!(range(u64::MAX - 1, 2).is_err());
+    }
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {

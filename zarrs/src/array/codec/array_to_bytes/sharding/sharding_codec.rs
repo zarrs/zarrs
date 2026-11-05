@@ -18,8 +18,9 @@ use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
     CodecChain, RequireDivisibleSubchunks, ShardingCodecConfiguration,
     ShardingCodecConfigurationV1, ShardingCodecOptions, ShardingIndexLocation, SubchunkWriteOrder,
-    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_shape, sharding_partial_encoder, subchunk_grid,
+    calculate_chunks_per_shard, checked_subchunk_range, compute_index_encoded_size,
+    decode_shard_index, shard_data_region, sharding_index_shape, sharding_partial_encoder,
+    subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
@@ -575,67 +576,54 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
         // Get index metadata
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
-        let index_encoded_size =
-            compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
+        let index_encoded_size = usize::try_from(compute_index_encoded_size(
+            self.index_codecs.as_ref(),
+            &index_shape,
+        )?)
+        .unwrap();
+        let data_region = shard_data_region(bytes.len(), index_encoded_size, self.index_location);
+        let num_subchunks = shard_index.len() / 2;
 
-        // Check if compaction is needed (no-op optimization)
-        let mut needs_compaction = false;
-        let mut chunks_size = 0;
-        for &[offset, size] in shard_index.as_chunks::<2>().0 {
-            if offset != u64::MAX && size != u64::MAX {
-                chunks_size += size;
+        // Validate the byte ranges of the encoded subchunks and sum their sizes
+        let mut data_size = 0usize;
+        for subchunk_index in 0..num_subchunks {
+            if let Some(byte_range) =
+                checked_subchunk_range(&shard_index, subchunk_index, &data_region)?
+            {
+                data_size = data_size.saturating_add(byte_range.len());
             }
         }
-        if chunks_size != bytes.len() as u64 - index_encoded_size {
-            needs_compaction = true;
+
+        // Skip compaction if it would not shrink the shard.
+        // Subchunks sharing bytes are copied separately, so their total size can exceed the data region.
+        if data_size >= data_region.len() {
+            return Ok(None);
         }
-
-        if !needs_compaction {
-            return Ok(None); // No compaction needed
-        }
-
-        // Calculate compact size
-        let data_size: usize = shard_index
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .filter(|chunk| chunk[0] != u64::MAX)
-            .map(|chunk| usize::try_from(chunk[1]).unwrap())
-            .sum();
-
-        let compact_size = data_size + usize::try_from(index_encoded_size).unwrap();
+        let compact_size = data_size + index_encoded_size;
 
         // Build compacted shard
         let mut compact_shard = vec![0u8; compact_size];
         let mut new_index = vec![u64::MAX; shard_index.len()];
 
         let mut write_offset = match self.index_location {
-            ShardingIndexLocation::Start => usize::try_from(index_encoded_size).unwrap(),
+            ShardingIndexLocation::Start => index_encoded_size,
             ShardingIndexLocation::End => 0,
         };
 
-        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
-            if old_offset != u64::MAX && size != u64::MAX {
-                let old_offset_usize = usize::try_from(old_offset).unwrap();
-                let size_usize = usize::try_from(size).unwrap();
-
-                // Validate bounds
-                if old_offset_usize + size_usize > bytes.len() {
-                    return Err(CodecError::Other(
-                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                            .to_string(),
-                    ));
-                }
-
+        for subchunk_index in 0..num_subchunks {
+            if let Some(byte_range) =
+                checked_subchunk_range(&shard_index, subchunk_index, &data_region)?
+            {
                 // Copy chunk data
-                compact_shard[write_offset..write_offset + size_usize]
-                    .copy_from_slice(&bytes[old_offset_usize..old_offset_usize + size_usize]);
+                let size = byte_range.len();
+                compact_shard[write_offset..write_offset + size]
+                    .copy_from_slice(&bytes[byte_range]);
 
                 // Update index
-                new_index[i * 2] = u64::try_from(write_offset).unwrap();
-                new_index[i * 2 + 1] = size;
+                new_index[subchunk_index * 2] = u64::try_from(write_offset).unwrap();
+                new_index[subchunk_index * 2 + 1] = u64::try_from(size).unwrap();
 
-                write_offset += size_usize;
+                write_offset += size;
             }
         }
 
