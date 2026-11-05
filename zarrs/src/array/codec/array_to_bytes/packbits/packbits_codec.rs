@@ -177,13 +177,24 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         &self,
         data_type: DataType,
         fill_value: Option<FillValue>,
-        _codec_specific_options: &CodecSpecificOptions,
+        codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        Ok(Arc::new(self.bind(
-            data_type,
-            fill_value,
+        let bound = self.bind(
+            data_type.clone(),
+            fill_value.clone(),
             PackBitsBitOrder::LsbFirst,
-        )?))
+        )?;
+        // A data type supporting `packbits` need not support `bytes`, so keep the packbits codec if binding fails.
+        if self.padding_encoding == PackBitsPaddingEncoding::None
+            && bound.layout.first_bit == 0
+            && Some(bound.element_size_bits) == data_type.fixed_size().map(|size| size as u64 * 8)
+            && let Ok(codec) =
+                crate::array::codec::BytesCodec::new(Some(zarrs_metadata::Endianness::Little))
+                    .with_context(data_type, fill_value, codec_specific_options)
+        {
+            return Ok(codec);
+        }
+        Ok(Arc::new(bound))
     }
 }
 

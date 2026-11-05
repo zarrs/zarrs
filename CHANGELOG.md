@@ -183,6 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
 - **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
 - Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
+- Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
@@ -197,6 +198,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Decoding can reuse shared data and aligned index bytes with pass-through codec chains, and encoding avoids offset-width conversion when the stored width matches `index_data_type`
 - Fix index endianness handling to use the actual index data type rather than `uint64`
 - Return an error rather than panicking if the encoded index length exceeds the chunk length
+
+#### `bytes`
+- Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
+- Return an error rather than panicking if a decoded shape's element count or byte size overflows
+- Reject short decoded byte ranges in synchronous and asynchronous partial decoding
 
 #### `blosc`
 - Decode directly into preallocated output on native and WebAssembly backends
@@ -234,8 +240,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
   - Represent `offset` and `scale` as `f64` rather than `f32`
   - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-- `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
-- `bytes`: Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
 
 ### Data types
 

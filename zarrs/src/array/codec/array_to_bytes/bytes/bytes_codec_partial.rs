@@ -177,6 +177,7 @@ where
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), self.fill_value()?)?
         };
 
+        decoded.validate(indexer.len(), &self.data_type)?;
         Ok(decoded)
     }
 
@@ -231,6 +232,7 @@ where
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), self.fill_value()?)?
         };
 
+        decoded.validate(indexer.len(), &self.data_type)?;
         Ok(decoded)
     }
 

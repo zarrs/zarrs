@@ -725,3 +725,50 @@ fn operation_options_reach_producer_and_rejection_is_not_retried() {
         assert_eq!(output, [0xa5; 8]);
     }
 }
+
+#[test]
+fn full_width_packbits_forwards_deferred_placement() {
+    use zarrs::array::codec::PackBitsCodec;
+    use zarrs::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+
+    let calls = Arc::default();
+    let codec = PackBitsCodec::new(PackBitsPaddingEncoding::None, None, None).unwrap();
+    let chain = bind(&CodecChain::new(
+        vec![],
+        Arc::new(codec),
+        vec![producer(&calls, 1, true, false, false)],
+    ));
+    let (_, pointer) = run(chain.as_ref(), false);
+    assert_eq!(
+        *calls.lock().unwrap(),
+        [Call {
+            id: 1,
+            direct: true,
+            representation: BytesRepresentation::FixedSize(8),
+            pointer,
+        }]
+    );
+}
+
+#[test]
+fn packbits_padding_retains_ordinary_producer_route() {
+    use zarrs::array::codec::PackBitsCodec;
+    use zarrs::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+    for padding in [
+        PackBitsPaddingEncoding::FirstByte,
+        PackBitsPaddingEncoding::LastByte,
+    ] {
+        let calls = Arc::default();
+        let codec = PackBitsCodec::new(padding, None, None).unwrap();
+        let chain = bind(&CodecChain::new(
+            vec![],
+            Arc::new(codec),
+            vec![producer(&calls, 1, true, false, false)],
+        ));
+        run(chain.as_ref(), false);
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert!(!calls[0].direct);
+        assert_eq!(calls[0].representation, BytesRepresentation::FixedSize(9));
+    }
+}
