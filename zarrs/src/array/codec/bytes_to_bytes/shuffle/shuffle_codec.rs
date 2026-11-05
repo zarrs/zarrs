@@ -6,9 +6,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -72,9 +72,10 @@ impl ShuffleCodec {
         encoded_value: &[u8],
         decoded_value: &mut [MaybeUninit<u8>],
     ) -> Result<(), CodecError> {
+        // Shuffling preserves the length, so the decoded length is the encoded length
         if encoded_value.len() != decoded_value.len() {
             return Err(
-                InvalidBytesLengthError::new(decoded_value.len(), encoded_value.len()).into(),
+                InvalidBytesLengthError::new(encoded_value.len(), decoded_value.len()).into(),
             );
         }
 
@@ -165,11 +166,29 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         Ok(CowBytes::from(decoded_value))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
     ) -> BytesRepresentation {
         *decoded_representation
+    }
+}
+
+// SAFETY: `unshuffle` initialises every byte of `output` from the equal-length encoded bytes.
+unsafe impl BytesToBytesCodecDecodeInto for ShuffleCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        self.unshuffle(&encoded_value, output)
     }
 }
 
