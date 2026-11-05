@@ -526,7 +526,9 @@ impl ReadableStorageTraits for FilesystemStore {
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         let key_path = self.key_to_fspath(key);
-        std::fs::metadata(key_path).map_or_else(|_| Ok(None), |metadata| Ok(Some(metadata.len())))
+        Ok(std::fs::metadata(key_path)
+            .ok()
+            .map(|metadata| metadata.len()))
     }
 
     fn supports_get_partial(&self) -> bool {
