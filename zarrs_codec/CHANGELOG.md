@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `read_decoded_bytes_into` for exact-length streaming decoding, stopping after the first extra decoded byte
 - Add `BytesToBytesCodecTraits::{decode_into,is_decode_into_efficient}`, `BytesDecodeSource::{decode_into,is_decode_into_efficient}`, `copy_decoded_bytes_into`, and `ArrayBytesFixedDisjointView::{contiguous_bytes_len,as_mut_slice}` for exact-length decoding into output views
 - Add `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` for single-use deferred decoding into array targets
 - Add `ArrayBytesFixedDisjointView::try_copy_from_slice_with` for fallible transformations of contiguous regions
