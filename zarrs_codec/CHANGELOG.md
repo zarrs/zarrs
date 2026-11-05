@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `ArrayBytesFixedDisjointView::try_copy_from_slice_with` for fallible transformations of contiguous regions
 - Export `build_nested_optional_target` and `extract_target_views` from `zarrs_codec` for shared optional decode targets, with masks ordered outermost to innermost
 - Add per-operation `Resources` and `ComputeResources`
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`, the codecs held by `Codec::ArrayTo{Array,Bytes}`
