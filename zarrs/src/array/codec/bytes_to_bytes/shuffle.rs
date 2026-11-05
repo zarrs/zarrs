@@ -115,6 +115,33 @@ mod tests {
         assert_eq!(bytes, decoded.to_vec());
     }
     #[test]
+    fn codec_shuffle_elementsize_zero() {
+        let configuration: ShuffleCodecConfiguration =
+            serde_json::from_str(r#"{"elementsize":0}"#).unwrap();
+        assert!(ShuffleCodec::new_with_configuration(&configuration).is_err());
+
+        let codec = ShuffleCodec::new(0);
+        assert!(
+            codec
+                .encode(
+                    CowBytes::Borrowed(&[]),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode(
+                    CowBytes::Borrowed(&[]),
+                    &BytesRepresentation::FixedSize(0),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .is_err()
+        );
+    }
+    #[test]
     fn codec_shuffle_partial_decode() {
         let elements: Vec<u16> = (0..8).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);

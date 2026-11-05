@@ -32,6 +32,11 @@ impl ShuffleCodec {
         configuration: &ShuffleCodecConfiguration,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
+            ShuffleCodecConfiguration::V1(configuration) if configuration.elementsize == 0 => {
+                Err(PluginCreateError::Other(
+                    "the shuffle codec elementsize must be non-zero".to_string(),
+                ))
+            }
             ShuffleCodecConfiguration::V1(configuration) => Ok(Self {
                 elementsize: configuration.elementsize,
             }),
@@ -44,8 +49,13 @@ impl ShuffleCodec {
     /// Return the number of elements in `len` bytes.
     ///
     /// # Errors
-    /// Returns an error if `len` is not an integer multiple of the elementsize.
+    /// Returns an error if the elementsize is zero or `len` is not an integer multiple of it.
     fn element_count(&self, len: usize) -> Result<usize, CodecError> {
+        if self.elementsize == 0 {
+            return Err(CodecError::Other(
+                "the shuffle codec elementsize must be non-zero".to_string(),
+            ));
+        }
         if !len.is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }

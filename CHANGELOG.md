@@ -210,6 +210,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `reshape`: Remove warnings now that the codec is stable
 - `reshape`: Fix empty partial reads and writes, which are now mapped to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
 - `shuffle`: Avoid a redundant copy
+- `shuffle`: Reject an `elementsize` of zero, which panicked when encoding or decoding an empty chunk
 - `crc32c`/`adler32`/`fletcher32`: Reuse the input allocation (if possible) when appending/stripping the checksum
 - `crc32c`/`adler32`/`fletcher32`: Fix partial decoders returning incorrect bytes for a `ByteRange::Suffix` request with the checksum at the end
 - `numcodecs.fletcher32`: Fix checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
