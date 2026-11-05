@@ -41,6 +41,7 @@ pub use codec_traits::array_to_bytes::{
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::{
     BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, copy_decoded_bytes_into,
+    read_decoded_bytes_into,
 };
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 

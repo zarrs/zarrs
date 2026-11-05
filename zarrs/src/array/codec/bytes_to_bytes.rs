@@ -104,3 +104,48 @@ pub(crate) fn check_bytes_decode_into(
         assert!(decode_into(CowBytes::from(invalid), &mut output).is_err());
     }
 }
+
+/// Check that `codec` reports a stream that decodes to far more than the output as a length error, and ignores bytes after the end of a stream.
+#[cfg(all(test, any(feature = "bz2", feature = "gzip", feature = "zlib")))]
+pub(crate) fn check_stream_decode_into_bounds(
+    codec: &dyn zarrs_codec::BytesToBytesCodecDecodeInto,
+) {
+    use std::mem::MaybeUninit;
+    use zarrs_codec::{BytesRepresentation, CodecError, CodecOptions, ComputeResources, CowBytes};
+
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let decode_into = |encoded: &[u8], output: &mut [MaybeUninit<u8>]| {
+        codec.decode_into(
+            CowBytes::from(encoded),
+            &BytesRepresentation::FixedSize(output.len() as u64),
+            output,
+            &options,
+            &resources,
+        )
+    };
+
+    // A stream that decodes to 8 MiB is rejected for an 8 byte output
+    let oversized = codec
+        .encode(CowBytes::from(vec![0u8; 8 << 20]), &options, &resources)
+        .unwrap();
+    assert!(matches!(
+        decode_into(&oversized, &mut [MaybeUninit::uninit(); 8]),
+        Err(CodecError::UnexpectedChunkDecodedSize(_))
+    ));
+
+    // Bytes after the end of the stream are ignored
+    let decoded = b"bytes after the end of the stream".repeat(4);
+    let mut encoded = codec
+        .encode(CowBytes::from(decoded.as_slice()), &options, &resources)
+        .unwrap()
+        .into_vec();
+    encoded.extend_from_slice(b"trailing");
+    let mut output = vec![MaybeUninit::uninit(); decoded.len()];
+    decode_into(&encoded, &mut output).unwrap();
+    // SAFETY: a successful `decode_into` initialises the output.
+    assert_eq!(
+        unsafe { crate::slice_assume_init_mut(&mut output) },
+        decoded
+    );
+}
