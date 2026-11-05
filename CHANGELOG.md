@@ -240,6 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bz2`: Decode streams directly into preallocated, uninitialised output (requires `bz2`)
 - `zlib`: Decode streams directly into preallocated, uninitialised output (requires `zlib`)
 - `gzip`: Decode streams directly into preallocated output with bounded oversized-stream detection
+- `bitround`: Cache data type codec support when binding, and re-export `BitroundDataTypeTraitsArc` (requires `bitround`)
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
 - `transpose`: Support optional data types, permuting values and validity masks together
 - `reshape`: Remove warnings now that the codec is stable

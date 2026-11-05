@@ -4,7 +4,7 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
-    bitround_codec_partial, round_bytes,
+    BitroundDataTypeTraits, BitroundDataTypeTraitsArc, bitround_codec_partial,
 };
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
@@ -30,6 +30,8 @@ pub struct BitroundCodec {
 struct BitroundCodecBound {
     keepbits: u32,
     data_type: DataType,
+    /// The `bitround` codec support of `data_type`.
+    bitround: BitroundDataTypeTraitsArc,
     fill_value: Option<FillValue>,
     encoded_fill_value: Option<FillValue>,
 }
@@ -94,13 +96,14 @@ impl CodecTraits for BitroundCodec {
 fn encode_fill_value(
     fill_value: &FillValue,
     data_type: &DataType,
+    bitround: &dyn BitroundDataTypeTraits,
     keepbits: u32,
 ) -> Result<FillValue, CodecCreateError> {
     let mut fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?
         .into_fixed()
         .map_err(CodecCreateError::other)?
         .to_vec();
-    round_bytes(&mut fill_value_bytes, data_type, keepbits).map_err(CodecCreateError::other)?;
+    bitround.round(&mut fill_value_bytes, keepbits);
     Ok(FillValue::new(fill_value_bytes))
 }
 
@@ -115,14 +118,15 @@ impl UnboundArrayToArrayCodecTraits for BitroundCodec {
         fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
-        data_type.codec_bitround()?;
+        let bitround = data_type.codec_bitround_arc()?;
         let encoded_fill_value = fill_value
             .as_ref()
-            .map(|fill_value| encode_fill_value(fill_value, &data_type, self.keepbits))
+            .map(|fill_value| encode_fill_value(fill_value, &data_type, &*bitround, self.keepbits))
             .transpose()?;
         Ok(Arc::new(BitroundCodecBound {
             keepbits: self.keepbits,
             data_type,
+            bitround,
             fill_value,
             encoded_fill_value,
         }))
@@ -181,7 +185,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
-        bytes.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
+        bytes.with_mut(|bytes| self.bitround.round(bytes, self.keepbits));
         Ok(ArrayBytes::from(bytes))
     }
 
@@ -205,8 +209,9 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_handle,
             &self.data_type,
+            self.bitround.clone(),
             self.keepbits,
-        )?))
+        )))
     }
 
     fn partial_encoder(
@@ -219,8 +224,9 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_output_handle,
             &self.data_type,
+            self.bitround.clone(),
             self.keepbits,
-        )?))
+        )))
     }
 
     #[cfg(feature = "async")]
@@ -234,8 +240,9 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_handle,
             &self.data_type,
+            self.bitround.clone(),
             self.keepbits,
-        )?))
+        )))
     }
 
     #[cfg(feature = "async")]
@@ -249,7 +256,8 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_output_handle,
             &self.data_type,
+            self.bitround.clone(),
             self.keepbits,
-        )?))
+        )))
     }
 }
