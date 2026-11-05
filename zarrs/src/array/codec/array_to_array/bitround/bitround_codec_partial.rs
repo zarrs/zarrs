@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{BitroundDataTypeExt, round_bytes};
+use super::BitroundDataTypeTraitsArc;
 use crate::array::DataType;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
@@ -17,6 +17,8 @@ use zarrs_storage::StorageError;
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     data_type: DataType,
+    /// The `bitround` codec support of `data_type`.
+    bitround: BitroundDataTypeTraitsArc,
     keepbits: u32,
 }
 
@@ -25,14 +27,15 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
     pub(crate) fn new(
         input_output_handle: Arc<T>,
         data_type: &DataType,
+        bitround: BitroundDataTypeTraitsArc,
         keepbits: u32,
-    ) -> Result<Self, CodecError> {
-        data_type.codec_bitround()?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             input_output_handle,
             data_type: data_type.clone(),
+            bitround,
             keepbits,
-        })
+        }
     }
 }
 
@@ -99,7 +102,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
+        bytes_copy.with_mut(|bytes| self.bitround.round(bytes, self.keepbits));
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
@@ -185,7 +188,7 @@ where
     ) -> Result<(), CodecError> {
         // For bitround codec, we need to apply the rounding to the input bytes before encoding
         let mut bytes_copy = bytes.clone().into_fixed()?;
-        bytes_copy.with_mut(|bytes| round_bytes(bytes, &self.data_type, self.keepbits))?;
+        bytes_copy.with_mut(|bytes| self.bitround.round(bytes, self.keepbits));
         let rounded_bytes = ArrayBytes::from(bytes_copy);
 
         self.input_output_handle
