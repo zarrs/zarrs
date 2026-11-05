@@ -275,7 +275,7 @@ fn subchunk_byte_range(
         })?;
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         Ok(subchunk_offset_size(shard_index, shard_index_idx)
-            .map(|(offset, size)| ByteRange::new(offset..offset + size)))
+            .map(|(offset, size)| ByteRange::FromStart(offset, Some(size))))
     } else {
         Ok(None)
     }
@@ -784,6 +784,63 @@ mod tests {
         assert!(range(u64::MAX, 0).is_err());
         assert!(range(8, u64::MAX).is_err());
         assert!(range(u64::MAX - 1, 2).is_err());
+    }
+
+    #[test]
+    fn codec_sharding_decode_rejects_corrupt_subchunk_ranges() {
+        const INDEX_SIZE: usize = size_of::<[u64; 8]>();
+        let shape = [NonZeroU64::new(4).unwrap()];
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
+            let codec = Arc::new(
+                ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap()], &data_type::uint16())
+                    .index_bytes_to_bytes_codecs(vec![])
+                    .index_location(location)
+                    .build(),
+            )
+            .with_context(
+                data_type::uint16(),
+                Some(FillValue::from(0u16)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+            for (offset, size) in [
+                (u64::MAX - 1, 2),
+                (1, u64::MAX),
+                (u64::MAX, 0),
+                // Within the shard, but in its index
+                (0, 1),
+                (INDEX_SIZE as u64, 1),
+            ] {
+                let mut index = [u64::MAX; 8];
+                index[6] = offset;
+                index[7] = size;
+                let encoded: Vec<u8> = index.into_iter().flat_map(u64::to_le_bytes).collect();
+                let error = codec
+                    .decode(encoded.clone().into(), &shape, &options, &resources)
+                    .unwrap_err();
+                assert!(error.to_string().contains("out-of-bounds bytes"), "{error}");
+
+                let mut output = vec![0u8; 8];
+                let error = codec
+                    .decode_into(
+                        CowBytes::from(encoded).into(),
+                        &shape,
+                        zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
+                            &mut super::indexer_tests::fixed_view(
+                                &mut output,
+                                &[4],
+                                ArraySubset::new_with_shape(vec![4]),
+                            ),
+                        ),
+                        &options,
+                        &resources,
+                    )
+                    .unwrap_err();
+                assert!(error.to_string().contains("out-of-bounds bytes"), "{error}");
+            }
+        }
     }
 
     fn get_concurrent_target(parallel: bool) -> usize {

@@ -1,5 +1,5 @@
 use std::num::NonZeroU64;
-use std::ops::IndexMut;
+use std::ops::{IndexMut, Range};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
@@ -512,6 +512,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             options,
             resources,
         )?;
+        let data_region = self.data_region(encoded_shard.len(), chunks_per_shard.as_slice())?;
 
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, resources) = split_compute_resources(
@@ -526,28 +527,20 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let decode_subchunk = |chunk_index: usize| {
             let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
-            // Read the offset/size
-            let offset = shard_index[chunk_index * 2];
-            let size = shard_index[chunk_index * 2 + 1];
-            let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
-                ArrayBytes::new_fill_value(data_type, chunk_subset.num_elements(), fill_value)?
-            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                return Err(CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                ));
-            } else {
-                let offset: usize = offset.try_into().unwrap();
-                let size: usize = size.try_into().unwrap();
-                let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
+            let chunk_bytes = if let Some(byte_range) =
+                checked_subchunk_range(&shard_index, chunk_index, &data_region)?
+            {
+                let encoded_chunk = encoded_shard.clone().slice(byte_range);
                 self.inner_codecs.decode(
                     encoded_chunk,
                     &chunk_subset.chunk_shape().expect("nonempty subchunk"),
                     options,
                     &resources,
                 )?
+            } else {
+                ArrayBytes::new_fill_value(data_type, chunk_subset.num_elements(), fill_value)?
             };
-            Ok((chunk_bytes, chunk_subset))
+            Ok::<_, CodecError>((chunk_bytes, chunk_subset))
         };
 
         // Decode the subchunks
@@ -675,6 +668,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             options,
             resources,
         )?;
+        let data_region = self.data_region(encoded_shard.len(), chunks_per_shard.as_slice())?;
 
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, resources) = split_compute_resources(
@@ -713,20 +707,10 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             let output_target_subchunk =
                 build_nested_optional_target(&mut output_view_subchunk, &mut mask_views_subchunk);
 
-            // Read the offset/size
-            let offset = shard_index[chunk_index * 2];
-            let size = shard_index[chunk_index * 2 + 1];
-            if offset == u64::MAX && size == u64::MAX {
-                copy_fill_value_into(data_type, fill_value, output_target_subchunk)?;
-            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                return Err(CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                ));
-            } else {
-                let offset: usize = offset.try_into().unwrap();
-                let size: usize = size.try_into().unwrap();
-                let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
+            if let Some(byte_range) =
+                checked_subchunk_range(&shard_index, chunk_index, &data_region)?
+            {
+                let encoded_chunk = encoded_shard.clone().slice(byte_range);
                 self.inner_codecs.decode_into(
                     encoded_chunk.into(),
                     &chunk_subset.chunk_shape().expect("nonempty subchunk"),
@@ -734,6 +718,8 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                     options,
                     &resources,
                 )?;
+            } else {
+                copy_fill_value_into(data_type, fill_value, output_target_subchunk)?;
             }
 
             Ok::<_, CodecError>(())
@@ -1295,6 +1281,24 @@ impl ShardingCodecBound {
     ///
     /// # Panics
     /// Panics if the encoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
+    /// Return the byte range of the encoded subchunks in an encoded shard of `shard_len` bytes.
+    ///
+    /// `shard_len` must be at least the encoded size of the shard index.
+    fn data_region(
+        &self,
+        shard_len: usize,
+        chunks_per_shard: &[NonZeroU64],
+    ) -> Result<Range<usize>, CodecError> {
+        let index_shape = sharding_index_shape(chunks_per_shard);
+        let index_encoded_size =
+            compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
+        Ok(shard_data_region(
+            shard_len,
+            usize::try_from(index_encoded_size).unwrap(),
+            self.index_location,
+        ))
+    }
+
     pub(crate) fn decode_index(
         &self,
         encoded_shard: &[u8],

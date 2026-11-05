@@ -171,7 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix decoding optional data types, which could be encoded but not decoded
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers
 - Fix async `partial_decode_into` to use the same subchunk-aware path as sync decoding
-- Reject shard-index byte ranges that overflow or lie outside encoded subchunks before compaction, and skip compactions that would not shrink the shard
+- Reject shard-index byte ranges that overflow or lie outside encoded subchunks when compacting or decoding, and skip compactions that would not shrink the shard
 - Fix the partial encoder
   - Rewrite the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
   - Replace a rewritten shard rather than erasing it first, so a failed write leaves the shard intact
