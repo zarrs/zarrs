@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -62,8 +63,12 @@ impl ShuffleCodec {
         Ok(len / self.elementsize)
     }
 
-    /// Unshuffle `encoded_value` into `decoded_value`, which must be the same length.
-    fn unshuffle(&self, encoded_value: &[u8], decoded_value: &mut [u8]) -> Result<(), CodecError> {
+    /// Unshuffle `encoded_value` into `decoded_value`, which must be the same length and is initialised.
+    fn unshuffle(
+        &self,
+        encoded_value: &[u8],
+        decoded_value: &mut [MaybeUninit<u8>],
+    ) -> Result<(), CodecError> {
         if encoded_value.len() != decoded_value.len() {
             return Err(
                 InvalidBytesLengthError::new(decoded_value.len(), encoded_value.len()).into(),
@@ -126,8 +131,16 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let count = self.element_count(decoded_value.len())?;
-        let mut encoded_value = vec![0u8; decoded_value.len()];
-        shuffle(self.elementsize, count, &decoded_value, &mut encoded_value);
+        let len = decoded_value.len();
+        let mut encoded_value = Vec::with_capacity(len);
+        shuffle(
+            self.elementsize,
+            count,
+            &decoded_value,
+            &mut encoded_value.spare_capacity_mut()[..len],
+        );
+        // SAFETY: `shuffle` initialised the first `len <= capacity` elements.
+        unsafe { encoded_value.set_len(len) };
         Ok(CowBytes::from(encoded_value))
     }
 
@@ -138,8 +151,14 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let mut decoded_value = vec![0u8; encoded_value.len()];
-        self.unshuffle(&encoded_value, &mut decoded_value)?;
+        let len = encoded_value.len();
+        let mut decoded_value = Vec::with_capacity(len);
+        self.unshuffle(
+            &encoded_value,
+            &mut decoded_value.spare_capacity_mut()[..len],
+        )?;
+        // SAFETY: `unshuffle` succeeded, so it initialised the first `len <= capacity` elements.
+        unsafe { decoded_value.set_len(len) };
         Ok(CowBytes::from(decoded_value))
     }
 
@@ -152,9 +171,11 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
 }
 
 /// Shuffle `count` elements of `elementsize` bytes: byte `i` of element `k` of `decoded` goes to `encoded[i * count + k]`.
-fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [u8]) {
+///
+/// `decoded` and `encoded` must have `count * elementsize` bytes, and every byte of `encoded` is initialised.
+fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => encoded.copy_from_slice(decoded),
+        1 => write_bytes(encoded, decoded),
         2 => shuffle_swar::<2>(count, decoded, encoded),
         4 => shuffle_swar::<4>(count, decoded, encoded),
         8 => shuffle_swar::<8>(count, decoded, encoded),
@@ -162,17 +183,17 @@ fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [u8])
         _ => {
             for (k, element) in decoded.chunks_exact(elementsize).enumerate() {
                 for (i, byte) in element.iter().enumerate() {
-                    encoded[i * count + k] = *byte;
+                    encoded[i * count + k].write(*byte);
                 }
             }
         }
     }
 }
 
-/// The inverse of [`shuffle`].
-fn unshuffle(elementsize: usize, count: usize, encoded: &[u8], decoded: &mut [u8]) {
+/// The inverse of [`shuffle`], which initialises every byte of `decoded`.
+fn unshuffle(elementsize: usize, count: usize, encoded: &[u8], decoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => decoded.copy_from_slice(encoded),
+        1 => write_bytes(decoded, encoded),
         2 => unshuffle_rows::<2>(count, encoded, decoded),
         4 => unshuffle_swar::<4>(count, encoded, decoded),
         8 => unshuffle_swar::<8>(count, encoded, decoded),
@@ -180,7 +201,7 @@ fn unshuffle(elementsize: usize, count: usize, encoded: &[u8], decoded: &mut [u8
         _ => {
             for (i, lane) in encoded.chunks_exact(count.max(1)).enumerate() {
                 for (k, byte) in lane.iter().enumerate() {
-                    decoded[k * elementsize + i] = *byte;
+                    decoded[k * elementsize + i].write(*byte);
                 }
             }
         }
@@ -216,7 +237,7 @@ fn transpose_8x8(rows: &mut [u64; 8]) {
 /// [`shuffle`] 8 elements at a time with 8x8 byte transposes, in 8-byte groups of each element.
 ///
 /// Each group is transposed for all elements before the next, so a pass writes 8 lanes.
-fn shuffle_swar<const N: usize>(count: usize, decoded: &[u8], encoded: &mut [u8]) {
+fn shuffle_swar<const N: usize>(count: usize, decoded: &[u8], encoded: &mut [MaybeUninit<u8>]) {
     const { assert!(N <= 8 || N.is_multiple_of(8)) };
     // A constant group width keeps the row copies inline
     let width = if N <= 8 { N } else { 8 };
@@ -231,20 +252,23 @@ fn shuffle_swar<const N: usize>(count: usize, decoded: &[u8], encoded: &mut [u8]
             });
             transpose_8x8(&mut rows);
             for (i, row) in rows.iter().enumerate().take(width) {
-                encoded[(8 * group + i) * count + 8 * b..][..8].copy_from_slice(&row.to_le_bytes());
+                write_bytes(
+                    &mut encoded[(8 * group + i) * count + 8 * b..][..8],
+                    &row.to_le_bytes(),
+                );
             }
         }
     }
     let start = blocks.len() * 8;
     for (k, element) in remainder.iter().enumerate() {
         for (i, byte) in element.iter().enumerate() {
-            encoded[i * count + start + k] = *byte;
+            encoded[i * count + start + k].write(*byte);
         }
     }
 }
 
 /// [`unshuffle`] 8 elements at a time with 8x8 byte transposes, in 8-byte groups of each element.
-fn unshuffle_swar<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [u8]) {
+fn unshuffle_swar<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [MaybeUninit<u8>]) {
     const { assert!(N <= 8 || N.is_multiple_of(8)) };
     let width = if N <= 8 { N } else { 8 };
     let elements = &mut decoded.as_chunks_mut::<N>().0[..count];
@@ -261,14 +285,17 @@ fn unshuffle_swar<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [u
             });
             transpose_8x8(&mut rows);
             for (element, row) in block.iter_mut().zip(rows) {
-                element[8 * group..][..width].copy_from_slice(&row.to_le_bytes()[..width]);
+                write_bytes(
+                    &mut element[8 * group..][..width],
+                    &row.to_le_bytes()[..width],
+                );
             }
         }
     }
     let start = blocks.len() * 8;
     for (k, element) in remainder.iter_mut().enumerate() {
         for (i, byte) in element.iter_mut().enumerate() {
-            *byte = encoded[i * count + start + k];
+            byte.write(encoded[i * count + start + k]);
         }
     }
 }
@@ -276,10 +303,20 @@ fn unshuffle_swar<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [u
 /// [`unshuffle`] one element at a time, building each element from its lanes.
 ///
 /// Faster than [`unshuffle_swar`] for 2-byte elements, where the compiler vectorises it.
-fn unshuffle_rows<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [u8]) {
+fn unshuffle_rows<const N: usize>(count: usize, encoded: &[u8], decoded: &mut [MaybeUninit<u8>]) {
     let elements = &mut decoded.as_chunks_mut::<N>().0[..count];
     let lanes: [&[u8]; N] = std::array::from_fn(|i| &encoded[i * count..][..count]);
     for (k, element) in elements.iter_mut().enumerate() {
-        *element = std::array::from_fn(|i| lanes[i][k]);
+        *element = std::array::from_fn(|i| MaybeUninit::new(lanes[i][k]));
     }
+}
+
+/// Initialise `dst` with `src`, which has the same length.
+///
+/// This is `<[MaybeUninit<u8>]>::write_copy_of_slice`, which is newer than the MSRV.
+fn write_bytes(dst: &mut [MaybeUninit<u8>], src: &[u8]) {
+    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the view of `src` is only read.
+    let src: &[MaybeUninit<u8>] =
+        unsafe { std::slice::from_raw_parts(src.as_ptr().cast::<MaybeUninit<u8>>(), src.len()) };
+    dst.copy_from_slice(src);
 }
