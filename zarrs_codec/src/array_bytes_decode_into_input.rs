@@ -64,6 +64,41 @@ pub struct BytesDecodeSource<'a> {
 }
 
 impl<'a> BytesDecodeSource<'a> {
+    /// Return the expected decoded representation.
+    #[must_use]
+    pub fn decoded_representation(&self) -> &BytesRepresentation {
+        &self.decoded_representation
+    }
+
+    /// Whether the producer avoids a full-size decoded intermediate and copy.
+    ///
+    /// This does not promise to avoid decoder state or workspace allocations.
+    #[must_use]
+    pub fn is_decode_into_efficient(&self) -> bool {
+        self.codec.is_decode_into_efficient()
+    }
+
+    /// Consume this source and decode into `output`.
+    ///
+    /// On error, `output` may have been partially written.
+    ///
+    /// # Errors
+    /// Returns a decoding error, including when decoded bytes do not fill `output`.
+    pub fn decode_into(
+        self,
+        output: &mut [u8],
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        self.codec.decode_into(
+            self.bytes,
+            &self.decoded_representation,
+            output,
+            options,
+            resources,
+        )
+    }
+
     /// Consume this source and decode normally.
     ///
     /// # Errors
@@ -317,5 +352,30 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn byte_decode_fallback_validates_length_before_copying() {
+        let producer = Producer::default();
+        for len in [2, 3, 4] {
+            let mut output = vec![0xa5; len];
+            let result = producer.decode_into(
+                vec![1, 2, 3].into(),
+                &BytesRepresentation::FixedSize(3),
+                &mut output,
+                &options(),
+                &resources(),
+            );
+            assert_eq!(result.is_ok(), len == 3);
+            assert_eq!(
+                output,
+                if len == 3 {
+                    vec![1, 2, 3]
+                } else {
+                    vec![0xa5; len]
+                }
+            );
+        }
+        assert_eq!(producer.normal.load(Ordering::Relaxed), 3);
+        assert!(!producer.is_decode_into_efficient());
     }
 }

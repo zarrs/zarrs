@@ -2,21 +2,24 @@
 
 use std::sync::Arc;
 
+use zarrs_codec::{
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
+};
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
-    bytes_codec_partial,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraits,
+    Endianness, bytes_codec_partial,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
-use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
-};
+
 #[cfg(feature = "async")]
 use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -34,6 +37,8 @@ pub struct BytesCodec {
 #[derive(Debug, Clone)]
 struct BytesCodecBound {
     endian: Option<Endianness>,
+    passthrough: bool,
+    decode_in_place: bool,
     data_type: DataType,
     fill_value: Option<FillValue>,
 }
@@ -129,9 +134,20 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        data_type.codec_bytes()?;
+        let codec = data_type.codec_bytes()?;
+        let passthrough = codec.is_decode_passthrough(self.endian);
+        // Decode one element to check the endianness before a decoder writes to an output.
+        let decode_in_place = !passthrough
+            && codec.is_decode_in_place_efficient()
+            && data_type.fixed_size().is_some_and(|size| {
+                codec
+                    .decode_in_place(&mut vec![0; size], self.endian)
+                    .is_ok()
+            });
         Ok(Arc::new(BytesCodecBound {
             endian: self.endian,
+            passthrough,
+            decode_in_place,
             data_type,
             fill_value,
         }))
@@ -170,6 +186,42 @@ pub(super) fn decoded_len(
     let len = usize::try_from(num_bytes)
         .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
     Ok((num_elements, len))
+}
+
+impl BytesCodecBound {
+    /// How encoded elements can be decoded as they are copied to the output.
+    fn in_place(&self) -> Option<InPlace<'_>> {
+        if self.passthrough {
+            Some(InPlace::Copy)
+        } else if self.decode_in_place {
+            Some(InPlace::Decode(
+                self.data_type.codec_bytes().ok()?,
+                self.endian,
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+/// How encoded elements are decoded as they are copied into an output.
+#[derive(Clone, Copy)]
+enum InPlace<'a> {
+    /// The encoded elements are the decoded elements.
+    Copy,
+    /// The elements are decoded in place after they are copied.
+    Decode(&'a dyn BytesDataTypeTraits, Option<Endianness>),
+}
+
+/// Copy a contiguous region of encoded elements into an output and decode them in place.
+fn decode_copy(
+    codec: &dyn BytesDataTypeTraits,
+    endian: Option<Endianness>,
+) -> impl Fn(&[u8], &mut [u8]) -> Result<(), CodecError> {
+    move |source, destination| {
+        destination.copy_from_slice(source);
+        Ok(codec.decode_in_place(destination, endian)?)
+    }
 }
 
 impl ArrayCodecTraits for BytesCodecBound {
@@ -222,10 +274,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         if !self.data_type.is_fixed() || self.data_type.is_optional() {
             return Ok(false);
         }
-        Ok(self
-            .data_type
-            .codec_bytes()?
-            .is_decode_passthrough(self.endian))
+        Ok(self.passthrough)
     }
 
     fn encode<'a>(
@@ -250,7 +299,11 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = decoded_len(&self.data_type, shape)?;
-        let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
+        let bytes = if self.passthrough {
+            bytes
+        } else {
+            self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+        };
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
         bytes_decoded.validate(num_elements, &self.data_type)?;
@@ -324,6 +377,75 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         )))
     }
 
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        match output_target {
+            ArrayBytesDecodeIntoTarget::Fixed(output) if self.data_type.is_fixed() => {
+                let (num_elements, expected_len) = decoded_len(&self.data_type, shape)?;
+                if output.num_elements() != num_elements {
+                    return Err("the decoded element count does not match the output target".into());
+                }
+                let in_place = self.in_place();
+                let input = match input {
+                    ArrayBytesDecodeIntoInput::Deferred(source)
+                        if source.is_decode_into_efficient()
+                            && in_place.is_some()
+                            && source.decoded_representation()
+                                == &BytesRepresentation::FixedSize(expected_len as u64) =>
+                    {
+                        if let Some(bytes) = output.as_mut_slice()
+                            && bytes.len() == expected_len
+                        {
+                            source.decode_into(bytes, options, resources)?;
+                            return match in_place {
+                                Some(InPlace::Decode(codec, endian)) => {
+                                    Ok(codec.decode_in_place(bytes, endian)?)
+                                }
+                                _ => Ok(()),
+                            };
+                        }
+                        ArrayBytesDecodeIntoInput::Deferred(source)
+                    }
+                    input @ (ArrayBytesDecodeIntoInput::Bytes(_)
+                    | ArrayBytesDecodeIntoInput::Deferred(_)) => input,
+                };
+
+                // Keep owned intermediates intact when direct output is unsuitable.
+                let bytes = input.into_bytes(options, resources)?;
+                if bytes.len() != expected_len {
+                    return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
+                }
+                match in_place {
+                    Some(InPlace::Copy) => Ok(output.copy_from_slice(&bytes)?),
+                    Some(InPlace::Decode(codec, endian)) => {
+                        if output.contiguous_bytes_len() == expected_len {
+                            output.try_copy_from_slice_with(&bytes, decode_copy(codec, endian))
+                        } else {
+                            let decoded = codec.decode(bytes, endian)?;
+                            Ok(output.copy_from_slice(&decoded)?)
+                        }
+                    }
+                    None => {
+                        let decoded = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
+                        Ok(output.copy_from_slice(&decoded)?)
+                    }
+                }
+            }
+            target @ (ArrayBytesDecodeIntoTarget::Fixed(_)
+            | ArrayBytesDecodeIntoTarget::Optional(..)) => {
+                let bytes = input.into_bytes(options, resources)?;
+                let decoded = self.decode(bytes, shape, options, resources)?;
+                decode_into_array_bytes_target(&decoded, target)
+            }
+        }
+    }
+
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
@@ -336,7 +458,94 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::data_type;
+    use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, data_type};
+    use unsafe_cell_slice::UnsafeCellSlice;
+    fn decode_into_view(
+        codec: &Arc<dyn ArrayToBytesCodecTraits>,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        chunk_shape: &[NonZeroU64],
+        array_shape: &[u64],
+    ) -> (Vec<u16>, Result<(), CodecError>) {
+        let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+        let mut output = vec![0u16; num_elements];
+        let result = {
+            let mut view = unsafe {
+                // SAFETY: the only view of output, used synchronously.
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                    size_of::<u16>(),
+                    array_shape,
+                    ArraySubset::new_with_shape(bytemuck::must_cast_slice::<_, u64>(chunk_shape)),
+                )
+            }
+            .unwrap();
+            codec.decode_into(
+                input,
+                chunk_shape,
+                (&mut view).into(),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
+        };
+        (output, result)
+    }
+
+    #[test]
+    fn decode_into_endianness_and_noncontiguous_views() {
+        let values = [1u16, 2, 3, 4];
+        let shape = [NonZeroU64::new(2).unwrap(); 2];
+        for (endian, encoded) in [
+            (Endianness::Little, values.map(u16::to_le_bytes).concat()),
+            (Endianness::Big, values.map(u16::to_be_bytes).concat()),
+        ] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    Some(FillValue::from(0u16)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            for (array_shape, expected) in [
+                ([2, 2], values.to_vec()),
+                ([2, 4], vec![1, 2, 0, 0, 3, 4, 0, 0]),
+            ] {
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(encoded.as_slice()).into(),
+                    &shape,
+                    &array_shape,
+                );
+                result.unwrap();
+                assert_eq!(output, expected);
+
+                let (output, result) = decode_into_view(
+                    &codec,
+                    CowBytes::from(&encoded[1..]).into(),
+                    &shape,
+                    &array_shape,
+                );
+                assert!(result.is_err());
+                assert!(output.iter().all(|&value| value == 0));
+            }
+        }
+        let codec = BytesCodec::new(None)
+            .with_context(
+                data_type::uint16(),
+                Some(FillValue::from(0u16)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        for array_shape in [[2, 2], [2, 4]] {
+            let (output, result) = decode_into_view(
+                &codec,
+                CowBytes::from(&[1; 8][..]).into(),
+                &shape,
+                &array_shape,
+            );
+            assert!(result.is_err());
+            assert!(output.iter().all(|&value| value == 0));
+        }
+    }
 
     #[test]
     fn decoded_size_overflow() {

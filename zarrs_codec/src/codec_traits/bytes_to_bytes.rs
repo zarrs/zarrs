@@ -5,8 +5,8 @@ use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use crate::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecPartialDefault, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, RecommendedConcurrency,
-    Resources,
+    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, InvalidBytesLengthError,
+    RecommendedConcurrency, Resources,
 };
 
 /// Traits for bytes to bytes codecs.
@@ -72,6 +72,35 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError>;
+
+    /// Decode chunk bytes into a preallocated output buffer.
+    ///
+    /// The decoded bytes must fill `output` exactly.
+    /// On error, `output` may have been partially written.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or the decoded length is not the length of `output`.
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let decoded_value =
+            self.decode(encoded_value, decoded_representation, options, resources)?;
+        Ok(copy_decoded_bytes_into(&decoded_value, output)?)
+    }
+
+    /// Whether decoding into a target avoids a full-size decoded intermediate
+    /// allocation and its separate copy.
+    ///
+    /// This cost hint does not promise to avoid decoder state or workspace
+    /// allocations. Both decoding routes remain usable when it is `false`.
+    fn is_decode_into_efficient(&self) -> bool {
+        false
+    }
 
     /// Initialises a partial decoder.
     ///
@@ -157,5 +186,39 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
             *decoded_representation,
             self.into_dyn(),
         )))
+    }
+}
+
+/// Copy `decoded_value` into `output`, which must be the same length.
+///
+/// This is for implementations of [`BytesToBytesCodecTraits::decode_into`] that decode into an allocation.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the length of `decoded_value` is not the length of `output`.
+pub fn copy_decoded_bytes_into(
+    decoded_value: &[u8],
+    output: &mut [u8],
+) -> Result<(), InvalidBytesLengthError> {
+    if decoded_value.len() != output.len() {
+        return Err(InvalidBytesLengthError::new(
+            decoded_value.len(),
+            output.len(),
+        ));
+    }
+    output.copy_from_slice(decoded_value);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn copy_decoded_bytes_into_length() {
+        let mut output = [0; 3];
+        copy_decoded_bytes_into(&[1, 2, 3], &mut output).unwrap();
+        assert_eq!(output, [1, 2, 3]);
+        assert!(copy_decoded_bytes_into(&[1, 2], &mut output).is_err());
+        assert!(copy_decoded_bytes_into(&[1, 2, 3, 4], &mut output).is_err());
+        assert_eq!(output, [1, 2, 3]);
     }
 }
