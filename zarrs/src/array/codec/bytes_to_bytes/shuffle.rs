@@ -115,6 +115,40 @@ mod tests {
         assert_eq!(bytes, decoded.to_vec());
     }
     #[test]
+    fn codec_shuffle_matches_reference() {
+        for elementsize in [1usize, 2, 3, 4, 5, 8, 16, 32] {
+            let codec = ShuffleCodec::new(elementsize);
+            for count in [0usize, 1, 7, 8, 9, 64, 1003] {
+                let data: Vec<u8> = (0..elementsize * count)
+                    .map(|i| u8::try_from(i * 7 % 251).unwrap())
+                    .collect();
+                let mut expected = vec![0u8; data.len()];
+                for k in 0..count {
+                    for i in 0..elementsize {
+                        expected[i * count + k] = data[k * elementsize + i];
+                    }
+                }
+                let encoded = codec
+                    .encode(
+                        CowBytes::Borrowed(&data),
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
+                    .unwrap();
+                assert_eq!(*encoded, *expected, "encode {elementsize}x{count}");
+                let decoded = codec
+                    .decode(
+                        encoded,
+                        &BytesRepresentation::FixedSize(data.len() as u64),
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
+                    .unwrap();
+                assert_eq!(*decoded, *data, "decode {elementsize}x{count}");
+            }
+        }
+    }
+    #[test]
     fn codec_shuffle_elementsize_zero() {
         let configuration: ShuffleCodecConfiguration =
             serde_json::from_str(r#"{"elementsize":0}"#).unwrap();
