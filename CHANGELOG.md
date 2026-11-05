@@ -228,13 +228,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `blosc`: Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
 - `blosc`: Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
 - `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
+- `bytes`: Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
 - `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
 - `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
 - `numcodecs.zlib`: Read configurations without a `level` (as written by `zarr-python` by default) or with the zlib default level of -1 ([#503](https://github.com/zarrs/zarrs/issues/503))
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification

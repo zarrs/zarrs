@@ -7,8 +7,8 @@ use zarrs_chunk_grid::iterators::{
 };
 use zarrs_chunk_grid::{ArraySubset, IndexerError};
 
-use crate::small_copy::{with_small_len, write_copy_of_slice};
-use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
+use crate::small_copy::with_small_len;
+use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError, write_copy_of_slice};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///
@@ -173,6 +173,32 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         self.contiguous_linearised_indices()
             .contiguous_elements_usize()
             * self.data_type_size
+    }
+
+    /// Return the complete view as a mutable slice if it occupies one contiguous region.
+    ///
+    /// Returns [`None`] if the view is empty or occupies more than one contiguous region of the
+    /// underlying bytes.
+    ///
+    /// The slice covers only the bytes of this view. It does not alias the bytes of any other
+    /// view of the same array bytes, since [`new`](Self::new) requires views to be disjoint.
+    ///
+    /// # Safety
+    /// The bytes may be uninitialised, so they must be written before they are read.
+    /// The caller must never write uninitialised values to the slice, and must initialise all of it before reporting success to the owner of the view's bytes, which may then assume that they are initialised.
+    /// For example, an [`ArrayToBytesCodecTraits::decode_into`](crate::ArrayToBytesCodecTraits::decode_into) implementation must initialise the slice before returning `Ok`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    #[must_use]
+    pub unsafe fn as_mut_slice(&mut self) -> Option<&mut [MaybeUninit<u8>]> {
+        let indices = self.contiguous_linearised_indices();
+        if indices.len() != 1 {
+            return None;
+        }
+        let (index, _) = indices.iter().next()?;
+        // SAFETY: this mutable borrow exclusively accesses the single region of this disjoint view.
+        Some(unsafe { self.region_mut(index, self.bytes_in_subset_len) })
     }
 
     /// Fill the view with the fill value.
@@ -461,6 +487,8 @@ mod tests {
             }
             .unwrap();
             assert_eq!(view0.shape(), shape);
+            // SAFETY: the slice is not used.
+            assert!(unsafe { view0.as_mut_slice() }.is_none());
 
             view0.copy_from_slice(&[11, 12, 14, 15]).unwrap();
             assert!(view0.copy_from_slice(&[11, 12, 14, 15, 255]).is_err()); // wrong length
@@ -492,6 +520,8 @@ mod tests {
                 )
             }
             .unwrap();
+            // SAFETY: the slice is only measured, then the view is filled.
+            assert_eq!(unsafe { view1.as_mut_slice() }.unwrap().len(), 2);
             view1.fill(&[255]).unwrap();
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
@@ -655,6 +685,8 @@ mod tests {
             }
             .unwrap();
             assert_eq!(view.num_elements(), 0);
+            // SAFETY: the slice is not used.
+            assert!(unsafe { view.as_mut_slice() }.is_none());
             view.copy_from_slice(&[]).unwrap();
             view.fill(&[1, 2]).unwrap();
         }

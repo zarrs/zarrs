@@ -10,7 +10,12 @@ pub struct BytesCodecEndiannessMissingError;
 
 /// Traits for a data type supporting the `bytes` codec.
 pub trait BytesDataTypeTraits {
-    /// Returns whether decoding with `endianness` preserves the native in-memory bytes.
+    /// Returns whether decoding with `endianness` is the identity on the encoded bytes.
+    ///
+    /// An implementation returning `true` guarantees that, for every valid input, the decoded
+    /// bytes are the encoded bytes unchanged (i.e. already in native in-memory byte order), with
+    /// no validation or transformation of values.
+    /// The `bytes` codec may then skip [`decode`](Self::decode) and use its input directly.
     ///
     /// The default implementation is conservative and returns `false`.
     #[allow(unused_variables)]
@@ -42,6 +47,27 @@ pub trait BytesDataTypeTraits {
         bytes: CowBytes<'a>,
         endianness: Option<Endianness>,
     ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError>;
+
+    /// Decode the bytes of a fixed-size data type from a specified endianness in place, if supported.
+    ///
+    /// This is equivalent to [`decode`](BytesDataTypeTraits::decode) but transforms `bytes` in place without allocating.
+    ///
+    /// The default implementation returns [`None`], indicating that in-place decoding is unsupported.
+    /// The `bytes` codec then decodes with [`decode`](BytesDataTypeTraits::decode).
+    ///
+    /// An implementation must return an error for an invalid `endianness` regardless of the values in `bytes`.
+    /// The `bytes` codec decodes one zero-valued element when it is created, and decodes in place only if that succeeds, so that an invalid `endianness` is an error that leaves its output unwritten.
+    ///
+    /// # Errors
+    /// Returns a [`BytesCodecEndiannessMissingError`] if `endianness` is [`None`] but must be specified.
+    #[allow(unused_variables)]
+    fn decode_in_place(
+        &self,
+        bytes: &mut [u8],
+        endianness: Option<Endianness>,
+    ) -> Option<Result<(), BytesCodecEndiannessMissingError>> {
+        None
+    }
 }
 
 // Generate the codec support infrastructure using the generic macro
@@ -99,6 +125,15 @@ macro_rules! _impl_bytes_data_type_traits {
             > {
                 Ok(bytes)
             }
+
+            fn decode_in_place(
+                &self,
+                _bytes: &mut [u8],
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Option<Result<(), $crate::codec_traits::bytes::BytesCodecEndiannessMissingError>>
+            {
+                Some(Ok(()))
+            }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
@@ -147,6 +182,26 @@ macro_rules! _impl_bytes_data_type_traits {
                 $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 self.encode(bytes, endianness)
+            }
+
+            fn decode_in_place(
+                &self,
+                bytes: &mut [u8],
+                endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Option<Result<(), $crate::codec_traits::bytes::BytesCodecEndiannessMissingError>>
+            {
+                const COMPONENT_SIZE: usize = $component_size;
+                let Some(endianness) = endianness else {
+                    return Some(Err(
+                        $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
+                    ));
+                };
+                if endianness != ::zarrs_metadata::Endianness::native() {
+                    for chunk in bytes.as_chunks_mut::<COMPONENT_SIZE>().0 {
+                        chunk.reverse();
+                    }
+                }
+                Some(Ok(()))
             }
         }
         $crate::register_data_type_extension_codec!(

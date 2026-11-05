@@ -1,6 +1,8 @@
+use std::mem::MaybeUninit;
+
 use crate::{
     BytesRepresentation, BytesToBytesCodecTraits, CodecError, CodecOptions, ComputeResources,
-    CowBytes,
+    CowBytes, copy_decoded_bytes_into,
 };
 
 /// Immediate or deferred encoded input for an array-to-bytes decoder.
@@ -64,6 +66,44 @@ pub struct BytesDecodeSource<'a> {
 }
 
 impl<'a> BytesDecodeSource<'a> {
+    /// Return the expected decoded representation.
+    #[must_use]
+    pub fn decoded_representation(&self) -> &BytesRepresentation {
+        &self.decoded_representation
+    }
+
+    /// Consume this source and decode into `output`, which may be uninitialised.
+    ///
+    /// This decodes with the producer's [`BytesToBytesCodecDecodeInto`](crate::BytesToBytesCodecDecodeInto) implementation if it has one.
+    /// Otherwise, it decodes normally and copies the decoded bytes into `output`.
+    ///
+    /// Every byte of `output` is initialised on success.
+    /// On error, `output` may have been partially written.
+    ///
+    /// # Errors
+    /// Returns a decoding error, including when decoded bytes do not fill `output`.
+    pub fn decode_into(
+        self,
+        output: &mut [MaybeUninit<u8>],
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        if let Some(codec) = self.codec.as_decode_into() {
+            codec.decode_into(
+                self.bytes,
+                &self.decoded_representation,
+                output,
+                options,
+                resources,
+            )
+        } else {
+            let decoded_value =
+                self.codec
+                    .decode(self.bytes, &self.decoded_representation, options, resources)?;
+            Ok(copy_decoded_bytes_into(&decoded_value, output)?)
+        }
+    }
+
     /// Consume this source and decode normally.
     ///
     /// # Errors
@@ -87,6 +127,7 @@ mod tests {
 
     use crate::*;
     use std::borrow::Cow;
+    use std::mem::MaybeUninit;
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -317,5 +358,33 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn byte_decode_fallback_validates_length_before_copying() {
+        let producer = Producer::default();
+        for len in [2, 3, 4] {
+            let mut output = vec![MaybeUninit::new(0xa5); len];
+            let result = source(
+                &producer,
+                vec![1, 2, 3].into(),
+                BytesRepresentation::FixedSize(3),
+            )
+            .decode_into(&mut output, &options(), &resources());
+            assert_eq!(result.is_ok(), len == 3);
+            assert_eq!(
+                output
+                    .into_iter()
+                    // SAFETY: the output is initialised.
+                    .map(|byte| unsafe { byte.assume_init() })
+                    .collect::<Vec<u8>>(),
+                if len == 3 {
+                    vec![1, 2, 3]
+                } else {
+                    vec![0xa5; len]
+                }
+            );
+        }
+        assert_eq!(producer.normal.load(Ordering::Relaxed), 3);
+        assert!(producer.as_decode_into().is_none());
     }
 }

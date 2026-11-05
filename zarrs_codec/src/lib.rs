@@ -39,7 +39,9 @@ pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
-pub use codec_traits::bytes_to_bytes::BytesToBytesCodecTraits;
+pub use codec_traits::bytes_to_bytes::{
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, copy_decoded_bytes_into,
+};
 pub use codec_traits::{CodecTraits, CodecTraitsV2, CodecTraitsV3};
 
 #[cfg(feature = "async")]
@@ -980,4 +982,33 @@ impl From<zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError
     fn from(err: zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError) -> Self {
         Self::Other(err.to_string())
     }
+}
+
+/// Copy `src` into `dst`, which may be uninitialised, and return the initialised `dst`.
+///
+/// Polyfill for `<[MaybeUninit<u8>]>::write_copy_of_slice`; remove at MSRV 1.93.
+#[doc(hidden)]
+#[inline]
+pub fn write_copy_of_slice<'a>(
+    dst: &'a mut [std::mem::MaybeUninit<u8>],
+    src: &[u8],
+) -> &'a mut [u8] {
+    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and `src` is only read.
+    let src = unsafe { &*(std::ptr::from_ref::<[u8]>(src) as *const [std::mem::MaybeUninit<u8>]) };
+    dst.copy_from_slice(src);
+    // SAFETY: `dst` was initialised by the copy.
+    unsafe { slice_assume_init_mut(dst) }
+}
+
+/// Reinterpret initialised bytes as `u8`.
+///
+/// Polyfill for `<[MaybeUninit<u8>]>::assume_init_mut`; remove at MSRV 1.93.
+///
+/// # Safety
+/// Every byte of `bytes` must be initialised.
+#[doc(hidden)]
+#[inline]
+pub unsafe fn slice_assume_init_mut(bytes: &mut [std::mem::MaybeUninit<u8>]) -> &mut [u8] {
+    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the caller guarantees the bytes are initialised.
+    unsafe { &mut *(std::ptr::from_mut(bytes) as *mut [u8]) }
 }

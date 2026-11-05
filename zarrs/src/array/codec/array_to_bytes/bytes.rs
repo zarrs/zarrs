@@ -116,12 +116,72 @@ mod tests {
 
     use super::*;
     use crate::array::{
-        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CowBytes, Endianness, FillValue,
+        data_type,
     };
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
         CodecTraits, ComputeResources, UnboundArrayToBytesCodecTraits,
     };
+
+    #[test]
+    fn bytes_data_type_decode_in_place() {
+        let non_native = Some(if Endianness::native() == Endianness::Little {
+            Endianness::Big
+        } else {
+            Endianness::Little
+        });
+        for data_type in [
+            data_type::uint8(),
+            data_type::uint16(),
+            data_type::float32(),
+            data_type::float64(),
+            data_type::complex64(),
+        ] {
+            let codec = data_type.codec_bytes().unwrap();
+            let encoded: Vec<u8> = (0..32).collect();
+            for endianness in [non_native, Some(Endianness::native())] {
+                let decoded = codec
+                    .decode(CowBytes::from(encoded.clone()), endianness)
+                    .unwrap();
+                let mut in_place = encoded.clone();
+                codec
+                    .decode_in_place(&mut in_place, endianness)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(in_place, decoded.into_vec());
+            }
+        }
+
+        // Components are reversed, not elements: a complex64 element has two 4 byte components
+        let mut bytes = [0, 1, 2, 3, 4, 5, 6, 7];
+        data_type::complex64()
+            .codec_bytes()
+            .unwrap()
+            .decode_in_place(&mut bytes, non_native)
+            .unwrap()
+            .unwrap();
+        assert_eq!(bytes, [3, 2, 1, 0, 7, 6, 5, 4]);
+
+        // Endianness is required for multi-byte data types
+        let uint16 = data_type::uint16();
+        assert!(
+            uint16
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .unwrap()
+                .is_err()
+        );
+        assert!(
+            data_type::uint8()
+                .codec_bytes()
+                .unwrap()
+                .decode_in_place(&mut [0; 2], None)
+                .unwrap()
+                .is_ok()
+        );
+    }
 
     #[test]
     fn codec_bytes_configuration_big() {

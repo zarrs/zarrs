@@ -244,14 +244,7 @@ pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
 pub use zarrs_storage as storage;
 
-/// Copy `src` into `dst`, e.g. into spare capacity.
-///
-/// Polyfill for `<[MaybeUninit<u8>]>::write_copy_of_slice`; remove at MSRV 1.93.
-fn write_copy_of_slice(dst: &mut [std::mem::MaybeUninit<u8>], src: &[u8]) {
-    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and `src` is only read.
-    let src = unsafe { &*(std::ptr::from_ref::<[u8]>(src) as *const [std::mem::MaybeUninit<u8>]) };
-    dst.copy_from_slice(src);
-}
+use zarrs_codec::{slice_assume_init_mut, write_copy_of_slice};
 
 /// Log a warning that an extension is experimental and may be incompatible with other Zarr V3 implementations.
 ///

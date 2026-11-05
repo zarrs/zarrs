@@ -178,7 +178,9 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
 /// `decoded` and `encoded` must have `count * elementsize` bytes, and every byte of `encoded` is initialised.
 fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => crate::write_copy_of_slice(encoded, decoded),
+        1 => {
+            crate::write_copy_of_slice(encoded, decoded);
+        }
         2 => shuffle_swar::<2>(count, decoded, encoded),
         4 => shuffle_swar::<4>(count, decoded, encoded),
         8 => shuffle_swar::<8>(count, decoded, encoded),
@@ -196,7 +198,9 @@ fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [Mayb
 /// The inverse of [`shuffle`], which initialises every byte of `decoded`.
 fn unshuffle(elementsize: usize, count: usize, encoded: &[u8], decoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => crate::write_copy_of_slice(decoded, encoded),
+        1 => {
+            crate::write_copy_of_slice(decoded, encoded);
+        }
         2 => unshuffle_rows::<2>(count, encoded, decoded),
         4 => unshuffle_swar::<4>(count, encoded, decoded),
         8 => unshuffle_swar::<8>(count, encoded, decoded),
