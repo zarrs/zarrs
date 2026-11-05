@@ -218,6 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
+- `bz2`: Decode streams directly into preallocated, uninitialised output (requires `bz2`)
 - `zlib`: Decode streams directly into preallocated, uninitialised output (requires `zlib`)
 - `gzip`: Decode streams directly into preallocated output with bounded oversized-stream detection
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
@@ -298,7 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
-- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `flate2` 1.1.9
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `flate2` 1.1.9, `bzip2` 0.6.1
 
 ### Internal
 - Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations

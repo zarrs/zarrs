@@ -1,3 +1,4 @@
+use crate::array::codec::bytes_to_bytes::{DecompressProgress, decompress_stream_into};
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
@@ -6,8 +7,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -111,6 +113,10 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         Ok(CowBytes::from(out))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -122,5 +128,30 @@ impl BytesToBytesCodecTraits for Bz2Codec {
                 const MIN_PAD_SIZE: u64 = 1024;
                 BytesRepresentation::BoundedSize(size + (size / 8) + MIN_PAD_SIZE)
             })
+    }
+}
+
+// SAFETY: `decompress_stream_into` fails unless the decompressor reports that it initialised all of `output`.
+unsafe impl BytesToBytesCodecDecodeInto for Bz2Codec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [std::mem::MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let mut decompressor = bzip2::Decompress::new(false);
+        decompress_stream_into(&encoded_value, output, |input, output| {
+            let (total_in, total_out) = (decompressor.total_in(), decompressor.total_out());
+            let status = decompressor
+                .decompress_uninit(input, output)
+                .map_err(std::io::Error::from)?;
+            Ok(DecompressProgress {
+                consumed: usize::try_from(decompressor.total_in() - total_in).unwrap(),
+                produced: usize::try_from(decompressor.total_out() - total_out).unwrap(),
+                stream_end: status == bzip2::Status::StreamEnd,
+            })
+        })
     }
 }

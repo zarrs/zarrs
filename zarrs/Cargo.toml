@@ -52,7 +52,7 @@ bench = false
 async-trait = { version = "0.1.74", optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
 bytes.workspace = true
-bzip2 = { version = "0.6.0", optional = true }
+bzip2 = { version = "0.6.1", optional = true }
 crc32c = { version = "0.6.5", optional = true }
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 flate2 = { version = "1.1.9", optional = true }
