@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_chunk_grid::ChunkGridCreateError;
+use zarrs_chunk_grid::{ArrayIndices, ChunkGridCreateError};
 use zarrs_data_type::{DataType, FillValue};
 use zarrs_metadata::ChunkShape;
 
@@ -15,6 +15,19 @@ use crate::{
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 /// Subchunking traits for an array-to-array codec bound to a data type and fill value.
+///
+/// This trait maps subchunk grids, element indices, and subsets between the decoded and
+/// encoded representations of an array-to-array codec without encoding or decoding array data:
+/// - **Whole-array grid mappings** ([`encoded_chunk_grid`](Self::encoded_chunk_grid),
+///   [`decoded_subchunk_grid`](Self::decoded_subchunk_grid)) propagate chunk and subchunk grids
+///   across the full array when possible, or fall back to [`ChunkGridDecoded::ChunkLocal`] or
+///   [`ChunkGridDecoded::None`].
+/// - **Chunk-local mappings** operate on a single chunk of `decoded_shape`:
+///   - [`encoded_element_indices`](Self::encoded_element_indices) maps element indices from the
+///     decoded chunk to the encoded chunk.
+///
+/// Implement [`ArrayToArrayCodecSubchunkingIdentityTraits`] instead of this trait when the codec
+/// preserves chunk shape and element ordering.
 pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
     /// Map a chunk grid from the decoded representation to the encoded representation.
     ///
@@ -40,10 +53,44 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError>;
+
+    /// Map element `decoded_element_indices` in a decoded chunk of `decoded_shape` to their indices in the encoded chunk.
+    ///
+    /// Returns [`None`] if the codec does not map individual elements (e.g. `numcodecs.packbits`).
+    /// Implementations can use [`validate_chunk_element_indices`] to bounds-check `decoded_element_indices`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_shape` is invalid or `decoded_element_indices` are out of bounds of `decoded_shape`.
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError>;
+}
+
+/// Check that `element_indices` are in bounds of a chunk of `shape`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `element_indices` have a different dimensionality to `shape` or are out of bounds.
+pub fn validate_chunk_element_indices(
+    shape: &[NonZeroU64],
+    element_indices: &[u64],
+) -> Result<(), CodecError> {
+    if element_indices.len() == shape.len()
+        && std::iter::zip(element_indices, shape).all(|(&index, length)| index < length.get())
+    {
+        Ok(())
+    } else {
+        Err(CodecError::Other(format!(
+            "element indices {element_indices:?} are out of bounds of a chunk with shape {shape:?}"
+        )))
+    }
 }
 
 /// Marker trait for array-to-array codecs with identity subchunking mappings.
 ///
+/// This implements [`ArrayToArrayCodecSubchunkingTraits`] with mappings that leave chunk grids, element indices,
+/// and subsets unchanged.
 /// Implement this trait only when the codec preserves element ordering and chunk shape.
 pub trait ArrayToArrayCodecSubchunkingIdentityTraits {}
 
@@ -64,6 +111,15 @@ where
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(encoded_subchunk_grid.into())
+    }
+
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
+        Ok(Some(decoded_element_indices.into()))
     }
 }
 

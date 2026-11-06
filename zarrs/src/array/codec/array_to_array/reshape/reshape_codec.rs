@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::{ArrayIndices, ChunkShape, DataType, FillValue, ravel_indices, unravel_index};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -163,6 +163,20 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
     }
+
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        zarrs_codec::validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        Ok(Some(reshape_element_indices(
+            decoded_shape,
+            &encoded_shape,
+            decoded_element_indices,
+        )))
+    }
 }
 
 #[cfg_attr(
@@ -242,4 +256,16 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(self.new_partial(input_output_handle, shape)?))
     }
+}
+
+/// Map in-bounds `element_indices` of a chunk of `decoded_shape` to a chunk of `encoded_shape`, preserving C order.
+fn reshape_element_indices(
+    decoded_shape: &[NonZeroU64],
+    encoded_shape: &[NonZeroU64],
+    element_indices: &[u64],
+) -> ArrayIndices {
+    let index = ravel_indices(element_indices, bytemuck::must_cast_slice(decoded_shape))
+        .expect("element indices are in bounds");
+    unravel_index(index, bytemuck::must_cast_slice(encoded_shape))
+        .expect("reshaping preserves the number of elements")
 }

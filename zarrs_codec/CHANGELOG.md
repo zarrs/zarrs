@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecCreateError` for codec creation, reconfiguration, and binding failures, and `CodecError::CodecCreateError`
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
 - Add `ChunkGrid{Encoded,Decoded}[Ref]` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `validate_chunk_element_indices`
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits with `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` for resolving ordered subchunk-grid hierarchies
   - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
   - `ArrayToBytesCodecSubchunkingTraits::{subchunk_codecs,subchunk_codecs_at_level}` return the shape-independent codec for each subchunk level (outermost first)
+  - `ArrayToArrayCodecSubchunkingTraits::encoded_element_indices` maps element indices to an encoded chunk (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible

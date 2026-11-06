@@ -138,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix codec-specific options to propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
   - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Implement `ArrayToArrayCodecSubchunkingTraits` for built-in array-to-array codecs
 - Partial encoding
   - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
     - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
