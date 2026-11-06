@@ -422,6 +422,32 @@ pub unsafe trait ChunkGridTraits:
         array_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError>;
 
+    /// Return the indices of the chunk whose subset is `subset`, if any.
+    ///
+    /// Returns [`None`] if `subset` is empty, extends beyond [`array_shape`](Self::array_shape), or does not
+    /// equal the full [`subset`](Self::subset) of a single chunk in this grid.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleDimensionalityError`] if `subset` does not match the dimensionality of the chunk grid.
+    fn exact_chunk_indices(
+        &self,
+        subset: &ArraySubset,
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        if subset.dimensionality() != self.dimensionality() {
+            return Err(IncompatibleDimensionalityError::new(
+                subset.dimensionality(),
+                self.dimensionality(),
+            ));
+        }
+        if subset.is_empty() || !subset.inbounds_shape(self.array_shape()) {
+            return Ok(None);
+        }
+        let Some(indices) = self.chunk_indices(subset.start())? else {
+            return Ok(None);
+        };
+        Ok((self.subset(&indices)?.as_ref() == Some(subset)).then_some(indices))
+    }
+
     /// Check if array indices are in-bounds.
     ///
     /// Ensures array indices are within the array shape.
