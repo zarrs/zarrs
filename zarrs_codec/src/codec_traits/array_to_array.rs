@@ -26,8 +26,9 @@ use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 ///   - [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) and
 ///     [`decoded_local_subchunk_grids`](Self::decoded_local_subchunk_grids) map subchunk grids of
 ///     the encoded chunk back to the decoded chunk.
-///   - [`encoded_element_indices`](Self::encoded_element_indices) maps element indices from the
-///     decoded chunk to the encoded chunk.
+///   - [`encoded_element_indices`](Self::encoded_element_indices) and
+///     [`encoded_subchunk_indices`](Self::encoded_subchunk_indices) map element indices and
+///     subchunk indices from the decoded chunk to the encoded chunk.
 ///
 /// Implement [`ArrayToArrayCodecSubchunkingIdentityTraits`] instead of this trait when the codec
 /// preserves chunk shape and element ordering.
@@ -102,6 +103,63 @@ pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
         decoded_shape: &[NonZeroU64],
         decoded_element_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, CodecError>;
+
+    /// Map `decoded_subchunk_indices` in a decoded chunk of `decoded_shape` to the corresponding subchunk indices in `encoded_subchunk_grid`.
+    ///
+    /// `decoded_subchunk_indices` index the grid returned by
+    /// [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) for `encoded_subchunk_grid`.
+    /// The default implementation maps the origin of the decoded subchunk via
+    /// [`encoded_element_indices`](Self::encoded_element_indices) and locates the containing subchunk in `encoded_subchunk_grid`.
+    ///
+    /// Returns [`None`] if [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) or
+    /// [`encoded_element_indices`](Self::encoded_element_indices) returns [`None`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `decoded_subchunk_indices` are out of bounds or the subchunk cannot be located in `encoded_subchunk_grid`.
+    fn encoded_subchunk_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+        decoded_subchunk_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        let Some(decoded_subchunk_grid) =
+            self.decoded_local_subchunk_grid(decoded_shape, encoded_subchunk_grid)?
+        else {
+            return Ok(None);
+        };
+        if !decoded_subchunk_grid.chunk_indices_inbounds(decoded_subchunk_indices) {
+            return Err(CodecError::Other(format!(
+                "subchunk indices {decoded_subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
+                decoded_subchunk_grid.grid_shape()
+            )));
+        }
+        let subset = decoded_subchunk_grid
+            .subset(decoded_subchunk_indices)?
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "subchunk indices {decoded_subchunk_indices:?} are out of bounds of a subchunk grid with shape {:?}",
+                    decoded_subchunk_grid.grid_shape()
+                ))
+            })?;
+        let Some(encoded_element_indices) =
+            self.encoded_element_indices(decoded_shape, subset.start())?
+        else {
+            return Ok(None);
+        };
+        if !encoded_subchunk_grid.array_indices_inbounds(&encoded_element_indices) {
+            return Err(CodecError::Other(format!(
+                "encoded element indices {encoded_element_indices:?} are out of bounds of the encoded subchunk grid"
+            )));
+        }
+        encoded_subchunk_grid
+            .chunk_indices(&encoded_element_indices)?
+            .ok_or_else(|| {
+                CodecError::Other(format!(
+                    "encoded element indices {encoded_element_indices:?} are out of bounds of the encoded subchunk grid"
+                ))
+            })
+            .map(Some)
+    }
 }
 
 /// Check that `element_indices` are in bounds of a chunk of `shape`.

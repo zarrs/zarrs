@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayToBytesCodecSubchunkingTraits::{subchunk_codecs,subchunk_codecs_at_level}` return the shape-independent codec for each subchunk level (outermost first)
   - `ArrayToArrayCodecSubchunkingTraits` maps chunk-local subchunk addressing through a codec (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
     - `decoded_local_subchunk_grid[s]` map chunk-local subchunk grids back to a decoded chunk
-    - `encoded_element_indices` maps element indices to an encoded chunk
+    - `encoded_{element,subchunk}_indices` map element and subchunk indices to an encoded chunk
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible
