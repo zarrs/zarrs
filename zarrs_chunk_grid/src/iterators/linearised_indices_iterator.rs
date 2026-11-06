@@ -15,7 +15,7 @@ use crate::{ArraySubsetTraits, IndexerError};
 /// 9  10  11
 /// ```
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce `[7, 8, 10, 11]`.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinearisedIndices {
     indices: StridedIndices,
 }
@@ -227,5 +227,28 @@ mod tests {
             LinearisedIndices::new(&ArraySubset::new_with_ranges(&[1..1, 5..5]), &[5, 5]).unwrap();
         assert_eq!(indices.len(), 0);
         assert!(indices.is_empty());
+    }
+
+    #[test]
+    fn linearised_indices_coalesces_contiguous_dimensions_and_compares_equal() {
+        let subset_3d = ArraySubset::new_with_ranges(&[0..2, 0..3, 1..3]);
+        let subset_2d = ArraySubset::new_with_ranges(&[0..6, 1..3]);
+        assert_eq!(
+            LinearisedIndices::new(&subset_3d, &[2, 3, 4]).unwrap(),
+            LinearisedIndices::new(&subset_2d, &[6, 4]).unwrap()
+        );
+        assert_eq!(
+            ContiguousLinearisedIndices::new(&subset_3d, &[2, 3, 4]).unwrap(),
+            ContiguousLinearisedIndices::new(&subset_2d, &[6, 4]).unwrap()
+        );
+
+        // Comparing subsets with more than `u32::MAX` runs succeeds without iterating or casting
+        // run counts to `usize`.
+        let large_3d = ArraySubset::new_with_ranges(&[0..2, 0..3_000_000_000, 0..1]);
+        let large_2d = ArraySubset::new_with_ranges(&[0..6_000_000_000, 0..1]);
+        assert_eq!(
+            ContiguousLinearisedIndices::new(&large_3d, &[2, 3_000_000_000, 2]).unwrap(),
+            ContiguousLinearisedIndices::new(&large_2d, &[6_000_000_000, 2]).unwrap()
+        );
     }
 }

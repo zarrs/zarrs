@@ -25,7 +25,7 @@ use crate::{ArrayIndices, ArraySubsetTraits, IndexerError};
 /// ```rust,ignore
 /// [(7, 2), (10, 2)]
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContiguousLinearisedIndices {
     /// The linearised indices of the starts of the contiguous runs.
     runs: StridedIndices,

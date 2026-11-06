@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Indexer::covers_array`, which returns true if an indexer references every element of an array of a shape exactly once in C order
 - Implement `Indexer` for lists of `Vec<u64>` (e.g. `vec![vec![0, 1], vec![2, 3]]`) as well as of `ArrayIndices`
 - Implement `Clone` for `ContiguousIndices[Into]Iterator`, `LinearisedIndices[Into]Iterator` and `ContiguousLinearisedIndices[Into]Iterator`
+- Implement `Debug`, `PartialEq`, and `Eq` for `LinearisedIndices` and `ContiguousLinearisedIndices`
 
 ### Changed
 - **Breaking**: `ArrayIndices` is a `TinyVec<[u64; 4]>` rather than a `Vec<u64>`, and `ArrayIndicesTinyVec` is removed
