@@ -5,6 +5,9 @@
     clippy::cast_precision_loss
 )]
 
+use std::sync::Arc;
+use zarrs_codec::ArrayToBytesCodecTraits;
+
 use zarrs::array::{
     ArrayBytes, ArraySubset, CodecSpecificOptions, ComputeResources, CowBytes, Resources,
 };
@@ -325,12 +328,166 @@ fn codec_shuffle(c: &mut Criterion) {
     }
 }
 
+fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::CodecChain) {
+    use unsafe_cell_slice::UnsafeCellSlice;
+    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+
+    let shape = [std::num::NonZeroU64::new(32_768).unwrap()];
+    let values: Vec<f32> = (0..32_768).map(|i| (i % 31) as f32 * 0.25).collect();
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let codec = codec
+        .with_context(
+            data_type::float32(),
+            Some(0f32.into()),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    let encoded = codec
+        .encode(
+            ArrayBytes::new_flen(bytemuck::cast_slice(&values)),
+            &shape,
+            &options,
+            &resources,
+        )
+        .unwrap();
+    let mut group = c.benchmark_group(name);
+    group.throughput(Throughput::Bytes(values.len() as u64 * 4));
+    for (layout, stride) in [("contiguous", 1), ("strided", 2)] {
+        let output_shape = [32_768, stride];
+        let subset = ArraySubset::new_with_ranges(&[0..32_768, 0..1]);
+        let mut output = vec![0f32; 32_768 * stride as usize];
+        group.bench_function(BenchmarkId::new("decode_into", layout), |b| {
+            b.iter(|| {
+                // SAFETY: each iteration owns the only view of this output buffer.
+                let mut view = unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        UnsafeCellSlice::new(bytemuck::cast_slice_mut(&mut output)),
+                        4,
+                        &output_shape,
+                        subset.clone(),
+                    )
+                    .unwrap()
+                };
+                codec
+                    .decode_into(
+                        encoded.clone().into(),
+                        &shape,
+                        ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                        &options,
+                        &resources,
+                    )
+                    .unwrap();
+                std::hint::black_box(&output);
+            });
+        });
+    }
+}
+
+fn bytes_decode_into_bench(c: &mut Criterion, name: &str, codec: Arc<dyn BytesToBytesCodecTraits>) {
+    decode_into_bench(
+        c,
+        name,
+        zarrs::array::codec::CodecChain::new(vec![], Arc::new(BytesCodec::default()), vec![codec]),
+    );
+}
+
+fn codec_decode_into(c: &mut Criterion) {
+    use zarrs::array::codec::CodecChain;
+
+    let opposite_endianness = if cfg!(target_endian = "little") {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    };
+    decode_into_bench(
+        c,
+        "codec_bytes",
+        CodecChain::new(
+            vec![],
+            Arc::new(BytesCodec::new(Some(opposite_endianness))),
+            vec![],
+        ),
+    );
+    decode_into_bench(
+        c,
+        "codec_packbits",
+        CodecChain::new(vec![], Arc::new(PackBitsCodec::default()), vec![]),
+    );
+    bytes_decode_into_bench(c, "codec_shuffle", Arc::new(ShuffleCodec::new(4)));
+    #[cfg(feature = "zstd")]
+    bytes_decode_into_bench(c, "codec_zstd", Arc::new(ZstdCodec::new(1, false)));
+    #[cfg(feature = "gzip")]
+    bytes_decode_into_bench(
+        c,
+        "codec_gzip",
+        Arc::new(zarrs::array::codec::GzipCodec::new(1).unwrap()),
+    );
+    #[cfg(feature = "blosc")]
+    bytes_decode_into_bench(
+        c,
+        "codec_blosc",
+        Arc::new(
+            BloscCodec::new(
+                BloscCompressor::BloscLZ,
+                1.try_into().unwrap(),
+                None,
+                BloscShuffleMode::BitShuffle,
+                Some(4),
+            )
+            .unwrap(),
+        ),
+    );
+    #[cfg(feature = "zlib")]
+    bytes_decode_into_bench(
+        c,
+        "codec_zlib",
+        Arc::new(zarrs::array::codec::ZlibCodec::new(1u8.try_into().unwrap())),
+    );
+    #[cfg(feature = "bz2")]
+    bytes_decode_into_bench(
+        c,
+        "codec_bz2",
+        Arc::new(zarrs::array::codec::Bz2Codec::new(1u8.try_into().unwrap())),
+    );
+    #[cfg(feature = "gdeflate")]
+    bytes_decode_into_bench(
+        c,
+        "codec_gdeflate",
+        Arc::new(zarrs::array::codec::GDeflateCodec::new(1).unwrap()),
+    );
+    #[cfg(feature = "pcodec")]
+    decode_into_bench(
+        c,
+        "codec_pcodec",
+        CodecChain::new(
+            vec![],
+            Arc::new(
+                zarrs::array::codec::PcodecCodec::new_with_configuration(&Default::default())
+                    .unwrap(),
+            ),
+            vec![],
+        ),
+    );
+    #[cfg(feature = "zfp")]
+    decode_into_bench(
+        c,
+        "codec_zfp",
+        CodecChain::new(
+            vec![],
+            Arc::new(zarrs::array::codec::ZfpCodec::new_reversible()),
+            vec![],
+        ),
+    );
+}
+
 criterion_group!(
     benches,
     codec_bytes,
     codec_blosc,
     codec_sharding,
     codec_packbits,
-    codec_shuffle
+    codec_shuffle,
+    codec_decode_into
 );
 criterion_main!(benches);
