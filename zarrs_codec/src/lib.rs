@@ -28,7 +28,7 @@ pub use codec_traits::array_partial_sync::{
 };
 pub use codec_traits::array_to_array::{
     ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecSubchunkingTraits,
-    ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits,
+    ArrayToArrayCodecTraits, UnboundArrayToArrayCodecTraits, validate_chunk_element_indices,
 };
 pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,

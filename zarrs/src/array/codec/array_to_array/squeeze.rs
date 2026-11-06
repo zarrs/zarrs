@@ -102,6 +102,19 @@ fn get_squeezed_indexer(
     Ok(indices)
 }
 
+/// Drop the `items` of the dimensions of `shape` with a length of one, keeping a single `unit` if all are dropped.
+fn squeeze_dims<T>(items: impl IntoIterator<Item = T>, shape: &[NonZeroU64], unit: T) -> Vec<T> {
+    let squeezed: Vec<T> = std::iter::zip(items, shape)
+        .filter(|(_, length)| length.get() > 1)
+        .map(|(item, _)| item)
+        .collect();
+    if squeezed.is_empty() {
+        vec![unit]
+    } else {
+        squeezed
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 mod tests {
