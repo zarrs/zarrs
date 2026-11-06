@@ -9,9 +9,6 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 
 ## [Unreleased]
 
-### Changed
-- Use the codec dependency feature gate so non-async compatibility runs do not enable `async-trait` through `zarrs_codec`.
-
 ### Added
 - Report non-conformant `numcodecs.fletcher32` checksums written by releases, and add `schema::REJECTS_CONFORMANT` for releases that reject the conformant equivalent of the non-conformant data they write (known issues rather than regressions)
 - Compare lossy data read by other subjects approximately (`schema::Data::approx_eq`), as decodings may differ slightly between implementations, and add `schema::DataType::numeric`
@@ -19,6 +16,9 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 - Add `schema::describe` to describe a case from its metadata, shape and chunk shape
 - Add `schema::FLETCHER32_ODD_LENGTH`, the non-conformance in `schema::REJECTS_CONFORMANT`
 - Report `packbits` padding compatibility issues with `zarrs` 0.20-0.23 as known issues, including current not reading their chunks (`schema::UNREAD_BY_REFERENCE`), and expand coverage of padding encodings and `numcodecs.packbits`
+
+### Changed
+- Use the codec dependency feature gate so non-async compatibility runs do not enable `async-trait` through `zarrs_codec`
 
 ## [0.1.0] - Unreleased
 

@@ -8,68 +8,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `ArrayToBytesCodecTraits::is_decode_passthrough`
-- Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
-- Add `CodecCreateError` for codec creation, reconfiguration, and binding failures
-- Add `UnboundArrayTo{Array,Bytes}CodecTraits`
+- Add `UnboundArrayTo{Array,Bytes}CodecTraits`, the codecs held by `Codec::ArrayTo{Array,Bytes}`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
   - The fill value is `None` if it is undefined (e.g. in the `data_codecs` of an `optional` codec with a `null` fill value), and codecs whose encoded representation depends on the fill value must reject it
-- Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(Tstorage: *StorageTraits, StoreKey)`
-- Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`
-- Add `ChunkGrid{Encoded,Decoded}Ref` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
-- Implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
+- Add `CodecCreateError` for codec creation, reconfiguration, and binding failures, and `CodecError::CodecCreateError`
 - Add `CodecError::UndefinedFillValue`, returned by partial decoders and encoders for missing input if the fill value is undefined
+- Add `ChunkGrid{Encoded,Decoded}[Ref]` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
+- Add `ArrayToBytesCodecTraits::is_decode_passthrough`
+- Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
+- Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
+- Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(TStorage: *StorageTraits, StoreKey)`
+- Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
-- The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
+- **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time
+  - Add `ArrayCodecTraits::{as_any,data_type,fill_value}`, and `ArrayCodecTraits` no longer requires `CodecTraits`
+  - `ArrayCodecTraits::fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined; `encoded_fill_value` no longer has a default implementation
+  - Remove the `data_type` and `fill_value` parameters from encoding, decoding, representation, and partial encoder/decoder methods
+  - Replace `ArrayCodecTraits::partial_decode_granularity` and `ArrayToArrayCodecTraits::decoded_shape` with `ArrayToArrayCodecTraits::partial_decode_granularity`, which maps an encoded granularity to the decoded representation
+- **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits with `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` for resolving ordered subchunk-grid hierarchies
+  - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
+- **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
+  - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
+- **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible
 - **Breaking**: Add the required `[Async]BytesPartialEncoderTraits::encode` method, which replaces the entire chunk
-- Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
-- `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size, rather than first collecting the runs
-- Extract subset elements without boxed contiguous-run iterators
-- Make `async-trait` optional and enable it only with the `async` feature.
-- Document that a `CodecOptions` concurrent target of zero is unconstrained
-- Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
-- **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, changing the grid types exposed by codec APIs
-- Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
-- Bump `zarrs_metadata` to 0.7.6
 - **Breaking**: Use `CowBytes` for encoded and raw bytes throughout the crate to avoid copies in some circumstances
-  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage`
-- **Breaking**: Rename `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
-- **Breaking**: Rename `ArrayRawBytesOffsets{OutOfBounds,Create}Error` to `ArrayBytesOffsets{OutOfBounds,Create}Error`
+  - Replaces `ArrayBytesRaw = Cow<'a, [u8]>`, and is re-exported from `zarrs_storage` as `zarrs_codec::CowBytes`
+  - `[Async]BytesPartialDecoderTraits` is implemented for `CowBytes<'static>` rather than `Cow<'static, [u8]>`
 - **Breaking**: `ArrayBytesOffsets` stores native-endian `u32` or `u64` offsets in a `CowBytes<'static>` instead of a `Cow<'a, [usize]>` and no longer has a lifetime parameter
   - Cloning shares the offset allocation rather than copying its elements
   - Add `ArrayBytesOffsets::from_ne_bytes`, which retains shared and suitably aligned bytes without copying
   - Add `ArrayBytesOffsets::{as_ne_bytes,into_u32_ne_bytes,into_u64_ne_bytes}`, which do not copy if the width matches
   - `Deref<Target = [usize]>` is removed, use the new accessors instead (e.g. `element_range`, `element_ranges`, `iter`, `get`, `last`, `as_slice`, `as_u32`, `as_u64`, `into_u32_vec`, `into_u64_vec`)
   - `ArrayBytesOffsets::new[_unchecked]` and the `TryFrom` implementations accept `u32` or `u64` offsets (via the sealed `ArrayBytesOffsetsElement` trait) rather than `usize`
-  - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
   - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
-- **Breaking**: Bump `zarrs_storage` to 0.5.0
-- **Breaking**: Bump `zarrs_data_type` to 0.10.0
-- **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits`
-  - These traits are now associated with codecs that are _bound_ to a data type and fill value and validated at array creation time
-  - **Breaking**: Add `data_type()`, `fill_value()`, `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` methods
-  - **Breaking**: `fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined
-  - **Breaking**: Remove `decoded_shape()` and `partial_decode_granularity()` methods
-  - **Breaking**: Remove `data_type` and `fill_value` parameters from various methods
-- **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits for resolving subchunk grids
-  - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
-- **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
-  - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
-- Bump `itertools` to 0.15.0
+- **Breaking**: Rename `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error` and `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
+  - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
+- **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
+- Make `async-trait` optional and enable it only with the `async` feature
+- Document that a `CodecOptions` concurrent target of zero is unconstrained
+- Improve performance
+  - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
+  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
+  - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
+  - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
+- Bump `zarrs_metadata` to 0.7.6 and `itertools` to 0.15.0
 
 ### Removed
-- **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
-- **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`
-- **Breaking**: Remove `[Async]ArrayPartialEncoderTraits::into_dyn_decoder()`
+- **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`, use `(storage, key)` instead
+- **Breaking**: Remove `[Async]{Array,Bytes}PartialEncoderTraits::into_dyn_decoder()`
 - **Breaking**: Remove `ArrayTo{Array,Bytes}CodecTraits::with_codec_specific_options`, codecs read their options in `UnboundArrayTo{Array,Bytes}CodecTraits::with_context` instead
+- **Breaking**: Remove `CodecTraits::as_any`, superseded by `ArrayCodecTraits::as_any` for bound codecs
+- **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`, unsupported data types are rejected when binding with `CodecCreateError::UnsupportedDataType`
 
 ### Fixed
 - `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
 - `[Async]ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
 - `ArrayBytes::validate` rejects optional masks of the wrong length or with values other than 0/1
+- `ArrayBytes::is_fill_value` compares variable-length elements individually using their offsets, rather than comparing concatenated bytes
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
 - The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter
   - The existing chunk is also read once rather than once per stacked bytes-to-bytes codec

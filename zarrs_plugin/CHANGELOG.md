@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Add `TError` and `TMatch` generics to `[Runtime]Plugin[2]`
+- Add `TError` and `TMatch` generics to `[Runtime]Plugin[2]`, defaulting to `PluginCreateError` and `str`, so plugins can return other error types and match on other than a name
+
+### Fixed
+- `RuntimeRegistry::with_plugins` releases its read lock before invoking the closure, so plugin factories can register or create nested extensions without deadlocking
 
 ## [0.4.1] - 2026-02-02
 

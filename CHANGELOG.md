@@ -7,225 +7,275 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.14...HEAD)
 
-### Added
-- Add allocation regression checks for general array operations against main baselines, without scheduler allowances, and verify async borrowed-slice zero-copy writes
-- Add in-memory sharding encode/decode benchmarks with uncompressed and feature-gated zstd subchunks
-- Add array-operation benchmarks for small chunks, single chunks, partial writes/encoding, nested sharding, whole-shard reads, partial decoders, and empty/filled caches; populate data before timing reads
-- Add sync/async array I/O latency benchmarks with a latency-injecting store, peak request concurrency, both Tokio runtime modes, and borrowed/owned writes
-- Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
-- Add `ArrayError::InvalidStoreKey` and `ArrayError::ChunkKeyEncodingError`
-- Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
-- Add an `IntoArrayBytes` implementation for `&bytes::Bytes`
-  - Storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
-- Add the `cast_value` array-to-array codec
-- Implement `Default` for `MetadataRetrieveVersion`
-- Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
-- Implement `Copy` for `GroupMetadataOptions`
-- Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
-- Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
-  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_partial_chunk_into`, `async_retrieve_chunk_into`, `async_retrieve_partial_chunk_into`
-  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants for interacting with nested subchunk grids
+### Highlights
+
+> This release includes many breaking changes, particularly for extension developers.
+> The most impactful breaking changes are summarised below and detailed in the sections that follow.
+
+- **Breaking**: Array operations are defined by the `ArrayOps`, `Array{Read,Write,Update,Mut}Ops` traits and their async variants, implemented by `Array` and the new `ArrayCached`
+  - Explicit-options variants (`_opt`) are removed; derive an array with different options instead
+
+  ```diff
+  - let chunk: Vec<f32> = array.retrieve_chunk_opt(&[0, 0], &codec_options)?;
+  + let chunk: Vec<f32> = array.with_codec_options(codec_options).retrieve_chunk(&[0, 0])?;
+  ```
+
+  - `retrieve_chunk_subset` and `store_chunk_subset` are renamed and accept any `&dyn Indexer`
+
+  ```diff
+  - let data: Vec<f32> = array.retrieve_chunk_subset(&[0, 0], &[0..2, 0..2])?;
+  + let data: Vec<f32> = array.retrieve_partial_chunk(&[0, 0], &[0..2, 0..2])?;
+  ```
+
+- **Breaking**: Chunk caches are used through `ArrayCached`, which pairs an array with a cache and supports async stores
+
+  ```diff
+  - let cache = ChunkCacheDecodedLruChunkLimit::new(array.clone(), 32);
+  - let chunk: Vec<f32> = cache.retrieve_chunk(&[0, 0], &CodecOptions::default())?;
+  + let array = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(32));
+  + let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0])?;
+  ```
+
+- **Breaking**: Codecs are bound to the data type and fill value of an array at array creation, so invalid codec chains are rejected when an array is built or opened rather than on first use
+  - Codec implementations are split into `UnboundArrayTo{Array,Bytes}CodecTraits` (created from metadata) and `ArrayTo{Array,Bytes}CodecTraits` (bound with `with_context`); see `zarrs_codec` 0.3.0
+- **Breaking**: Encoded and raw bytes are `CowBytes` throughout, which removes copies on many store, codec, and `Tensor` paths, and `Tensor` may borrow its bytes
+- **Breaking**: Arrays have an immutable dimensionality, and chunk grids no longer support out-of-bounds chunks or _unlimited_ (zero-sized) dimensions; resize an array before extending it
+- New extensions:
+  - Codecs: `cast_value`, `numcodecs.packbits` (V2: `packbits`)
+
+### Arrays
+- **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - These are implemented as inherent traits on `Array` and `ArrayCached`
-- Add support for async caching
-  - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
-  - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
-  - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
-  - Add the `AsyncChunkCache` trait and  `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
-- Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
+  - Promote previously private methods to public: `[async_]retrieve_chunk_into` and `[async_]retrieve_partial_chunk_into`
+- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Array` operations; configure a derived array with the corresponding `with_*` method, then call the operation
+  - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` and `ArrayMutOps::set_metadata_erase_version()`
+  - `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
+- **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
+- **Breaking**: `[Async]ArrayWriteOps::erase_chunks` and `[Async]ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
+  - *Behavioural change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
+  - `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
+- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `[Async]ArrayWriteOps::store_encoded_chunk` takes `CowBytes`
+- **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`, and chunk keys from a chunk key encoding are validated rather than trusted
+  - Add `ArrayError::{InvalidStoreKey,ChunkKeyEncodingError}`, and return `ArrayError::InvalidChunkGridIndicesError` if the chunk indices do not match the dimensionality of the array
+  - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
+- **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates return `ArrayCreateError::ChangedDimensionality`
+- **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
+- **Breaking**: `ArrayCreateError::CodecsCreateError` contains a `CodecCreateError` rather than a `PluginCreateError`, and `ArrayCreateError::ChunkGridCreateError` contains a `ChunkGridCreateError`
+  - Remove `ArrayCreateError::InvalidSubchunkShape`, superseded by `ChunkGridCreateError`
+- **Breaking**: `ArrayError::{InvalidArraySubset,InvalidChunkSubset}` box their `ArraySubset`, so array results stay small now that subsets are stored inline
+- **Breaking**: Remove the deprecated `_elements` / `_ndarray` method variants of `Array`, array extension traits, and `ChunkCache`; use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+- Chunk caching
+  - **Breaking**: Add `ArrayCached<TStorage, C>`, which pairs an `Array` with a chunk cache, and refactor `ChunkCache` into a pure key/chunk value container
+    - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecodedLruChunkLimit::new(capacity)`)
+    - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
+    - `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
+    - `ChunkCache` has a `Value` associated type and is no longer dyn compatible, and `ChunkCacheType` is sealed
+    - Add `invalidate` methods
+  - Add support for async caching
+    - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
+    - Add the `AsyncChunkCache` trait and `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
+    - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
+    - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
+  - Retrieve complete cached chunks without extracting a subset
+  - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
+- Subchunks
+  - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`
+    - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `[Async]ShardingPartialDecoder::{retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access
+  - **Breaking**: Remove `ArrayShardedExt`, whose `subchunk_grid` and `subchunk_shape` are now part of `ArrayOps`
+    - `is_sharded` and `is_exclusively_sharded` are removed; query `ArrayOps::subchunk_grid()` instead
+  - **Breaking**: `ArrayOps::subchunk_grid()` returns `ChunkGridDecodedRef<'_>`, which distinguishes an absent subchunk grid from one that is only resolvable per chunk
+    - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
+    - Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
+  - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`; query the `subchunk_grid()` directly
+  - **Breaking**: Remove `effective_subchunk_shape()`, superseded by `ArrayOps::subchunk_shape()`
+    - *Behavioural change*: `ArrayOps::subchunk_shape()` returns the subchunk shape of the subchunk grid (if regular), rather than the `sharding_indexed` codec `chunk_shape`
+  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants, and `ArrayError::MissingSubchunkGrid` for requests on arrays without a subchunk grid
+  - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
+  - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
+- Tensors and bytes
+  - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library, removing copies on some array `retrieve_`/`store_` paths with select stores and codecs
+  - **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes, and `Tensor::into_parts` returns `CowBytes`
+  - **Breaking**: Replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`, which exports a `Tensor<'static>` as a versioned DLPack managed tensor (requires `dlpack`)
+  - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
+  - Add `Tensor::num_elements()` and implement `Clone` and `Debug` for `Tensor`
+  - Implement `IntoArrayBytes` for `&bytes::Bytes`; storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
+  - Fix DLPack export to validate that tensor bytes cover the shape and data type, adding `TensorError::{InsufficientBytes,UnsupportedShape}`
 - Implement `Clone` for `ArrayBuilder`
-- Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
-- Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
-- Re-export `ChunkGridDecoded` and `ChunkGridDecodedRef` from `zarrs::array`
-- Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
-- Support efficient asynchronous partial encoding, and partial encoding with generic indexers, in the `sharding_indexed` codec
-- Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` for deriving arrays with different operation options
-- Add `ArrayMutOps::set_metadata_erase_version()`
-- Add `ArrayOps::codec_specific_options()`
-- Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
-- Add `Tensor::into_dlpack()` for exporting a `Tensor<'static>` as a versioned DLPack managed tensor (requires the `dlpack` feature)
-- Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
-- Implement `Clone` and `Debug` for `Tensor`
-- Support `sharding_indexed` subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
+- Reserve capacity for fallible array, chunk-grid, codec, fill-value, and async result collections
+- Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently, and fix a missing negation in the `partial_encoder` rule
+- Fix `ArrayBuilder` to validate a `FillValue` against the data type before binding the codecs, so an invalid fill value returns `ArrayCreateError::InvalidFillValue` rather than a codec error
+- Fix multi-chunk operations to treat a concurrent target of zero as unconstrained, and avoid stalled async encoded-chunk retrieval and suffix stripping
+- Fix variable-length fill-value detection to respect element boundaries, preventing non-fill chunks from being omitted or erased when `store_empty_chunks` is disabled
+
+### Groups and hierarchy
+- **Breaking**: `Group::open_opt` takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`, and `Hierarchy::open_opt` takes a `HierarchyOpenOptions`
+- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` operations; configure a derived group with the corresponding `with_*` method instead
+  - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
+  - `Group::metadata_opt()` no longer takes an options argument and applies the group's stored metadata options
+- **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
+- Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
+- Implement `Default` for `MetadataRetrieveVersion` and `Copy` for `GroupMetadataOptions`
+- `NodePath` uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
+  - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
+  - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
+- Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
+
+### Codecs
+
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): codecs bind to a data type and fill value at array creation; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+
+#### General
+- **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
+  - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
+  - `CodecChain`, `ShardingCodecBuilder`, and `default_array_to_bytes_codec` hold or return unbound codecs (`UnboundArrayTo{Array,Bytes}CodecTraits`), and codec constructors return `CodecCreateError` rather than `PluginCreateError`
+- **Breaking**: Apply codec-specific options when binding a codec chain rather than by reconfiguring its codecs
+  - `CodecChain::with_context` takes `CodecSpecificOptions`, and an `Option<FillValue>` that is `None` if the fill value is undefined
+  - Remove `CodecChain::with_codec_specific_options`; pass `CodecSpecificOptions` to `CodecChain::with_context` instead
+  - `Array::{with,set}_codec_specific_options` are fallible, replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
+  - Add `ArrayOps::codec_specific_options()`
+  - `ArrayBuilder::from_array` retains the codec-specific options of the array
+  - Fix codec-specific options to propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
+  - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
+  - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Partial encoding
+  - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
+    - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
+    - Following bytes-to-bytes codecs (e.g. `zstd`) no longer decode the existing chunk, so an undecodable chunk can be replaced
+  - Fix `Array::[async_]partial_encoder` leaving trailing bytes of the previous chunk if a bytes-to-bytes codec (e.g. `zstd`) re-encoded the chunk shorter, which could make it undecodable
+  - Fix partial chunk writes with `experimental_partial_encoding` storing a missing chunk if only the fill value is written, unless `store_empty_chunks` is enabled
+    - *Behavioural change*: an empty partial chunk write no longer stores a missing chunk, even if `store_empty_chunks` is enabled
+  - Fix partial codecs to validate indexers against their own decoded shape
+- Fix the partial decode granularity potentially being incorrect with multiple array-to-array codecs
+- Fix the partial decoder cache in a codec chain to receive the encoded shape and data type
+
+#### `sharding_indexed`
+- Support subchunk shapes that do not evenly divide the shard shape ([#233](https://github.com/zarrs/zarrs/issues/233))
   - Subchunks straddling the shard boundary are clipped to the shard shape, as proposed in [zarr-specs #370](https://github.com/zarr-developers/zarr-specs/pull/370)
   - Existing arrays with such subchunk shapes can be opened, but `ArrayBuilder::build` rejects them until they are part of the specification
 - Add `SubchunkWriteOrder::{Lexicographic,Colexicographic,Morton}` for writing subchunks in row-major, column-major, or Morton (Z-order) order
-  - `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
+  - *Deprecated*: `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
+  - **Breaking**: Remove `SubchunkWriteOrder::Random`; use `SubchunkWriteOrder::Unordered` for the same behaviour
+- Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
+  - **Breaking**: `ShardingCodec::{compact,decode_into}` move to `ShardingCodecBound`, and `ShardingCodec::decode_index` is removed
+- Support efficient asynchronous partial encoding, and partial encoding with generic indexers
+- Limit partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
+- Avoid copying each encoded inner chunk
+- Fix decoding optional data types, which could be encoded but not decoded
+- Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers
+- Fix async `partial_decode_into` to use the same subchunk-aware path as sync decoding
+- Fix the partial encoder
+  - Rewrite the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
+  - Replace a rewritten shard rather than erasing it first, so a failed write leaves the shard intact
+  - Reject overflowing shard-index offsets and append spans in sync and async partial encoders before changing storage or the cached index
+  - Reset the cached shard index when it erases its shard, so a subsequent partial encode does not reference subchunks of the erased shard
+  - The sync partial encoder reports `size_held` in bytes and includes its input handle, matching the async partial encoder
+  - Treat a concurrent target of zero as unconstrained
 
-### Changed
-- The `optional` codec binds its `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
-  - *Behavioural Change*: this changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
-  - **Breaking**: codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) are rejected within the `data_codecs` of an `optional` codec with a `null` fill value (unless the inner data type is `optional`), since the fill value of the data codecs is undefined
-    - Such arrays created by `zarrs` 0.23 fail to be opened
-- Reserve capacity for fallible array, chunk-grid, codec, fill-value, and async result collections
-- Build chunk store keys directly with `ChunkKeyEncodingTraits::encode_into`
-- Encode chunk keys in one allocation, rather than allocating per index and growing the key
-- Reuse per-thread `zstd` compression and bulk decompression contexts. Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions`, directly or through `CodecSpecificOptions`
-- **Breaking**: `ArrayIndices` holds up to four indices inline (see `zarrs_chunk_grid`), so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
-  - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension
-  - **Breaking**: `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key
-- **Breaking**: `ArrayError::{InvalidArraySubset,InvalidChunkSubset}` box their `ArraySubset`, so array results stay small now that subsets are stored inline
-- Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature.
-- **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
-- **Breaking**: Bump `zarrs_storage` to 0.5.0, `zarrs_filesystem` to 0.4.0, `zarrs_data_type` to 0.10.0, `zarrs_chunk_key_encoding` to 0.3.0, and `zarrs_chunk_grid` to 0.6.0
-- Bump `zarrs_metadata` to 0.7.6 and `zarrs_metadata_ext` to 0.4.5
-- Retrieve complete cached chunks without extracting a subset
-- **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants
-  - These operations now accept `&dyn Indexer`
-- **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
-  - Chunk keys from a chunk key encoding are now validated rather than being trusted
-- **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`
-- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` and `[Async]ArrayWriteOps::erase_chunk[s]` return an `ArrayError` instead of a `StorageError`
-- **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library
-  - Removes copies on some array `retrieve_`/`store_` paths with select stores and codec paths
-  - Affects `[Async]ArrayWriteOps::store_encoded_chunk`, `Tensor::into_parts`, and `BytesDataTypeTraits::{encode,decode}` for custom fixed-size data types
-- **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes
-- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
-- **Breaking**: Rename the re-exported `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error`
-- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- **Breaking**: `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
-- Retrieve child-node metadata concurrently in asynchronous hierarchy discovery
-- Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
-- **Breaking**: Apply codec-specific options when binding a codec chain rather than by reconfiguring its codecs
-  - `CodecChain::with_context` takes `CodecSpecificOptions`, and an `Option<FillValue>` that is `None` if the fill value is undefined
-  - `Array::{with,set}_codec_specific_options` replace any previously set codec-specific options, and no longer change `ArrayOps::codecs()`
-  - `ArrayBuilder::from_array` retains the codec-specific options of the array
-- **Breaking**: Bump `zarrs_codec` to 0.3.0
-  - Improves the API for computing partial decoding granularity
-  - Subchunk-producing codecs and partial decoders now expose ordered subchunk-grid hierarchies
-    so nested sharding levels can be selected independently
-  - `ArrayBytesOffsets` stores shareable `u32` or `u64` offsets instead of `usize` and no longer has a lifetime parameter
-  - `vlen` decoding can reuse shared data and aligned index bytes with pass-through codec chains; encoding avoids offset-width conversion when the stored width matches `index_data_type`
-- **Breaking**: Make array dimensionality immutable; dimensionality-changing shape updates now return `ArrayCreateError::ChangedDimensionality`
-- **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
-  - Reading/writing completely out-of-bounds chunks is now an error
-  - Querying completely out-of-bounds chunks always returns `None`
-  - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
-- Bump `rayon_iter_concurrent_limit` to 0.3.0
-- Soft deprecate the `sharding` feature flag
-  - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
-- **Behavioural change**: `ArrayOps::subchunk_shape()` now returns the subchunk shape of the subchunk grid (if regular) and supersedes the functionality of `effective_subchunk_shape`()
-  - Previously this returned the `sharding_indexed` codec `chunk_shape`
-- **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
-- **Breaking**: `Hierarchy::open_opt` now takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
-- **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
-  - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
-  - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
-  - `try_get_or_insert_with` is no longer `#[doc(hidden)]`
-  - Add `invalidate` methods
-- Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently
-  - This has always been the case, but was only explicitly stated for concurrent writes
-  - Also fix a missing negation in the `partial_encoder` rule, which stated the opposite of what was meant
-- `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
-  - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
-- Replace `zfp-sys` with the pure-Rust `zfp-rs` for the `zfp` and `zfpy` codecs
-- **Breaking**: Make array codec-specific reconfiguration APIs fallible
-- **Breaking**: change `ArrayCreateError::CodecError` to contain a `CodecCreateError` rather than a `PluginCreateError`
-- **Breaking**: change `ArrayCreateError::ChunkGridCreateError` to contain `ChunkGridCreateError`
-- **Breaking**: Change `ArrayOps::subchunk_grid()` to return `ChunkGridDecodedRef<'_>`, which distinguishes an absent subchunk grid from one that is only resolvable per chunk
-  - Use `ChunkGridDecodedRef::as_chunk_grid()` to get the subchunk grid only if it is resolvable for the whole array
-  - Add `ArrayError::MissingSubchunkGrid` for subchunk retrieval requests on arrays without a subchunk grid
-- Remove warnings from now-stable `reshape` codec
-- **Breaking**: Bump `float8` to 0.7.0
-- **Breaking**: Bump `dlpark` to 0.8.0 and replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`
-- **Breaking**: `erase_chunks` and `retrieve_encoded_chunks`, including their async variants, now accept `&dyn Indexer`
-- Avoid an intermediate allocation in `RegularBoundedChunkGrid::subset`
-- Internal dependency bumps:
-  - Bump `base64` to 0.23.1
-  - Bump `getrandom` to 0.4.3
-  - Bump `itertools` to 0.15.0
-  - Bump `lru` to 0.18.2
-  - Bump `quick_cache` to 0.7.0
-  - Bump `serial_test` to 3.5.0
-- `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
-- The `bytes` codec partial encoder replaces the chunk without checking for or reading the existing chunk if an update covers the entire chunk
-  - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
-  - Following bytes-to-bytes codecs (e.g. `zstd`) no longer decode the existing chunk, so an undecodable chunk can be replaced
-
-### Removed
-- **Breaking**: Remove `SubchunkWriteOrder::Random` variant; use `SubchunkWriteOrder::Unordered` for the same behaviour
-- **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` and `Array` operations
-  - Configure a derived array with the corresponding `with_*` method, then call the operation
-- **Breaking**: Remove `ArrayShardedReadableExt`
-  - Most methods have become part of `ArrayReadOps`'
-  - `[async_]retrieve_encoded_subchunk` is removed; use `ShardingPartialDecoder::retrieve_subchunk_encoded` or `AsyncShardingPartialDecoder::retrieve_subchunk_encoded` for low-level encoded subchunk access
-- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape()`, superseded by altered `subchunk_shape()`
-- **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`, query the `subchunk_grid()` directly
-- **Breaking**: Remove `CodecChain::with_codec_specific_options`, pass `CodecSpecificOptions` to `CodecChain::with_context` instead
-- **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`
-- **Breaking**: Remove the `ArrayCreateError::InvalidSubchunkShape` variant, superseded by expanded `ChunkGridCreateError`
-- Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
-  - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
-
-### Fixed
-- Reset the cached shard index when a sharding partial encoder erases its shard, so a subsequent partial encode does not reference subchunks of the erased shard
-- The sync `sharding_indexed` partial encoder reports `size_held` in bytes and includes its input handle, matching the async partial encoder
-- The `sharding_indexed` partial encoder rewrites the shard compactly when its output does not support partial encoding (e.g. when followed by bytes-to-bytes codecs), rather than accumulating superseded subchunks
+#### `packbits` / `numcodecs.packbits`
 - **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
+- **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
+- Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
-- Accept `optional` data type metadata without an inner data type `configuration`, which is optional in the specification
-- Reject malformed fill values of the `optional` data type, rather than binding `data_codecs` with a fill value of the wrong size
-- `ArrayBuilder` validates a `FillValue` against the data type before binding the codecs, so an invalid fill value returns `ArrayCreateError::InvalidFillValue` rather than a codec error
-- Reject `r*` (raw bits) fill values whose length differs from the data type size
-- Fix `Array::[async_]partial_encoder` leaving trailing bytes of the previous chunk if a bytes-to-bytes codec (e.g. `zstd`) re-encoded the chunk shorter, which could make it undecodable
-- The `sharding_indexed` partial encoder replaces a rewritten shard rather than erasing it first, so a failed write leaves the shard intact
-- Reject overflowing shard-index offsets and append spans in sync and async `sharding_indexed` partial encoders before changing storage or the cached index
-- Map empty partial reads and writes through `reshape` to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
-- Limit `sharding_indexed` partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
-- Treat a concurrent target of zero as unconstrained in multi-chunk and sharding operations, and avoid stalled async encoded-chunk retrieval and suffix stripping
-- The `crc32c`, `adler32`, and `fletcher32` partial decoders return the correct bytes for a `ByteRange::Suffix` request with the checksum at the end
-- The `blosc` codec returns an error instead of panicking or returning short output when decompression yields fewer bytes than expected
-- Remove redundant slice conversions in rectangular chunk grids and sharding codecs to satisfy Clippy
-- Filesystem writes synchronize file contents and metadata before returning success, propagating write-back errors (included in `zarrs_filesystem` 0.3.13)
-- Filesystem partial writes update values in place instead of reading and rewriting the entire value (included in `zarrs_filesystem` 0.3.14)
-- Partial codecs validate indexers against their own decoded shape
-- The `vlen` codec returns an error rather than panicking if the encoded index length exceeds the chunk length
-- The `gdeflate` codec decodes chunks of more than one page and returns an error rather than panicking if a page is corrupt
-- The `gdeflate` codec checks decoded representation bounds and validates unbounded input page by page before allocating the full decoded length
-- The `bytes` codec returns an error rather than panicking if a decoded shape's element count or byte size overflows
-- Partial chunk writes with `experimental_partial_encoding` no longer store a missing chunk if only the fill value is written, unless `store_empty_chunks` is enabled
-  - *Behavioural Change*: an empty partial chunk write no longer stores a missing chunk, even if `store_empty_chunks` is enabled
-- Chunk cache chunk subset retrieval now validates the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
-- `erase_chunks` and `retrieve_encoded_chunks` (and their async variants) now validate `chunks` against the chunk grid
-  - *Behavioural Change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
-- `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
-- `ArrayOps::chunk_key` returns `ArrayError::InvalidChunkGridIndicesError` if the chunk indices do not match the dimensionality of the array
-  - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
-- Partial encoding checks whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
-- `[async_]erase_metadata` erases array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`
-- Reject optional masks of the wrong length or with values other than 0/1 when storing (which could erase chunks or store values as null), and in `optional` codec decoding
-- Make async sharding `partial_decode_into` use the same subchunk-aware path as sync decoding
-- The partial decode granularity potentially being incorrect with multiple array-to-array codecs
-- Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
-- **Breaking**: Make `ArrayMutOps::set_dimension_names()` fallible, validate and persist names, and retain them when converting Zarr V2 arrays to V3
-- `Array::with_codec_specific_options()` now refreshes decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
-- Codec-specific options now propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
-- `ArrayBuilder` applies codec-specific options before validating the codec chain
-- Reuse the input allocation (if posible) when appending/stripping the checksum in the `crc32c`, `adler32`, and `fletcher32` codecs
-- Avoid copying each encoded inner chunk in the `sharding_indexed` codec
-- Avoid redundant copy in `shuffle` codec
-- Validate that tensor bytes cover the shape and data type during DLPack export
-- Pass the encoded shape and data type to the partial decoder cache in a codec chain
-- Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers in the `sharding_indexed` codec
-- Fix incorrect partial decoding in the `blosc` codec for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- Fix decoding optional data types with the `sharding_indexed` codec, which could be encoded but not decoded
-- Fix `numcodecs.fletcher32` checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
-- Fix `numcodecs.fixedscaleoffset` encoding to match `numcodecs`
+
+#### `optional`
+- **Breaking**: Codecs whose encoded representation depends on the fill value (e.g. `sharding_indexed`) are rejected within the `data_codecs` of an `optional` codec with a `null` fill value (unless the inner data type is `optional`), since the fill value of the data codecs is undefined
+  - Such arrays created by `zarrs` 0.23 fail to be opened
+- *Behavioural change*: Bind `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
+  - This changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
+- Fix storing and decoding optional masks of the wrong length or with values other than 0/1, which could erase chunks or store values as null; these are now rejected
+
+#### `vlen`
+- Decoding can reuse shared data and aligned index bytes with pass-through codec chains, and encoding avoids offset-width conversion when the stored width matches `index_data_type`
+- Fix index endianness handling to use the actual index data type rather than `uint64`
+- Return an error rather than panicking if the encoded index length exceeds the chunk length
+
+#### Other codecs
+- `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
+- `cast_value`: Add the `cast_value` array-to-array codec
+- `zstd`: Reuse per-thread compression and bulk decompression contexts
+  - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
+- `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
+- `transpose`: Support optional data types, permuting values and validity masks together
+- `reshape`: Remove warnings now that the codec is stable
+- `reshape`: Fix empty partial reads and writes, which are now mapped to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
+- `shuffle`: Avoid a redundant copy
+- `crc32c`/`adler32`/`fletcher32`: Reuse the input allocation (if possible) when appending/stripping the checksum
+- `crc32c`/`adler32`/`fletcher32`: Fix partial decoders returning incorrect bytes for a `ByteRange::Suffix` request with the checksum at the end
+- `numcodecs.fletcher32`: Fix checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
+- `numcodecs.fixedscaleoffset`: Fix encoding to match `numcodecs`
   - Compute in `f32` for `float32` data and otherwise `f64`, rounding encoded values with ties to even and decoded integers to the nearest integer
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
   - Represent `offset` and `scale` as `f64` rather than `f32`
-- Improve compatibility with other Zarr implementations and past `zarrs` versions:
+  - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
+- `blosc`: Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
+- `blosc`: Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
+- `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
+- `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
+- `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
+
+### Data types
+
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+
+- `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
+- Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
+- Fix malformed fill values of the `optional` data type being accepted, which bound `data_codecs` with a fill value of the wrong size
+- Fix `r*` (raw bits) fill values whose length differs from the data type size being accepted
+
+### Chunk grids
+
+`zarrs_chunk_grid` 0.5.1 → 0.6.0 (**Breaking**): inline `ArrayIndices`/`ArraySubset` (≤4 dimensions); `ChunkGridCreateError`; `Indexer::validate`; zero-sized dimensions are no longer _unlimited_
+
+- **Breaking**: `ArrayIndices` holds up to four indices inline, so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
+  - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension
+- *Behavioural change*: Chunk grids no longer support out-of-bounds operations or unlimited dimensions; resize before extending arrays
+  - Reading/writing completely out-of-bounds chunks is an error
+  - Querying completely out-of-bounds chunks always returns `None`
+  - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
+- Avoid an intermediate allocation in `RegularBoundedChunkGrid::subset`
+
+### Chunk key encodings
+
+`zarrs_chunk_key_encoding` 0.2.0 → 0.3.0 (**Breaking**): `encode` returns `Result<String, ChunkKeyEncodingError>`, validated by the caller; drops the `zarrs_storage` dependency
+
+- Encode chunk store keys directly with `ChunkKeyEncodingTraits::encode_into` in one allocation, rather than allocating per index and growing the key
+
+### Storage
+
+`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
+
+- Fix partial encoding to check whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
+- Fix `[async_]erase_metadata` to erase array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`
+
+### Metadata and interoperability
+
+`zarrs_metadata` 0.7.5 → 0.7.6: always serialise a `configuration` if present; `FromStr`.
+
+`zarrs_metadata_ext` 0.4.4 → 0.4.5: legacy `pcodec`/`zfp`/`zfpy` and `f64` `fixedscaleoffset` configurations.
+
+`zarrs_plugin` 0.4.1 → 0.4.2: defaulted error/match generics on `[Runtime]Plugin[2]`
+
+- Improve compatibility with other Zarr implementations:
   - Store codec and storage transformer metadata as objects with a `configuration` (empty if absent), including short-hand names, as required by `zarr-python` and `tensorstore`
   - Write `bytes` data type fill values as base64-encoded strings rather than arrays of bytes (both conformant), as `zarr-python` only reads the former
-  - **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
-  - Read `numcodecs.fixedscaleoffset` single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-  - Read codec metadata with names and configurations written by past `zarrs` versions:
-    - `numcodecs.bz2`: `bz2` (unregistered, 0.11-0.12) and `https://codec.zarrs.dev/bytes_to_bytes/bz2` (0.13-0.19)
-    - `numcodecs.pcodec`: `pcodec` (unregistered, 0.11-0.12) and legacy configurations (0.11-0.15)
-    - `zarrs.gdeflate`: `gdeflate` (unregistered, 0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
-    - `numcodecs.fletcher32`: `fletcher32` (unregistered, 0.19)
-    - `zarrs.vlen_v2`: `vlen_v2` (unregistered, 0.19)
-- `blosc_decompress_bytes_partial` returns an error rather than panicking if the requested item range exceeds `c_int::MAX`
+- Read codec metadata with names and configurations written by past `zarrs` versions:
+  - `numcodecs.bz2`: `bz2` (unregistered, 0.11-0.12) and `https://codec.zarrs.dev/bytes_to_bytes/bz2` (0.13-0.19)
+  - `numcodecs.pcodec`: `pcodec` (unregistered, 0.11-0.12) and legacy configurations (0.11-0.15)
+  - `zarrs.gdeflate`: `gdeflate` (unregistered, 0.16-0.19) and `https://codec.zarrs.dev/bytes_to_bytes/gdeflate` (documented)
+  - `numcodecs.fletcher32`: `fletcher32` (unregistered, 0.19)
+  - `zarrs.vlen_v2`: `vlen_v2` (unregistered, 0.19)
+
+### Build and dependencies
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: Bump `float8` to 0.7.0 and `dlpark` to 0.8.0
+- Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
+- *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
+- Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0
+
+### Internal
+- Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations
 
 ## [0.23.14](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.14) - 2026-08-15
 

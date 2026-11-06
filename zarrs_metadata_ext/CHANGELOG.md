@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `PcodecCodecConfigurationLegacy` and `PcodecCodecConfiguration::Legacy` for `pcodec` configurations written by `zarrs` 0.11 to 0.15
-- Add `ChunkEdgeLengths::decpde()` and `emcpde()` for expanding and compressing rectilinear chunk edge lengths
+- Add `ChunkEdgeLengths::{decode,encode}` for expanding and compressing run-length encoded rectilinear chunk edge lengths
 - Add `FixedScaleOffsetCodecConfigurationNumcodecsF64` and `FixedScaleOffsetCodecConfiguration::NumcodecsF64`, preferred when deserializing
 
 ### Changed
@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deprecate `FixedScaleOffsetCodecConfigurationNumcodecs` and `FixedScaleOffsetCodecConfiguration::Numcodecs`, which round `offset` and `scale` to `f32`
 
 ### Fixed
+- `OptionalDataTypeConfigurationV1` accepts metadata without an inner data type `configuration`, which is optional in the specification
 - Read metadata written by past `zarrs` versions:
   - `numcodecs.zfpy` with a string `mode` rather than an integer as in `numcodecs` (0.20-0.22)
   - `zfp` with the `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (0.10-0.15), which are non-conformant with the registered `zfp` name (written by 0.10-0.12)

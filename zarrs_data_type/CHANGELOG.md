@@ -8,23 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `BytesDataTypeTraits::is_decode_passthrough()`
-- Add `codec_traits::cast_value` module
+- Add the `codec_traits::cast_value` module for data types supported by the `cast_value` codec
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
+- Add `BytesDataTypeTraits::is_decode_passthrough()`
+- Add `FillValue::equals_all_bytes`, which checks bytes against a borrowed fill value byte pattern
 
 ### Changed
-- Bump `zarrs_metadata` to 0.7.6
-- `FillValue::equals_all` does not allocate for fill values of 2, 4 or 8 bytes
 - **Breaking**: Use `CowBytes` for data type bytes, added as a `cowbytes` dependency and re-exported as `zarrs_data_type::CowBytes`
   - `BytesDataTypeTraits::{encode,decode}` take and return `CowBytes` instead of `Cow<'a, [u8]>`
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
-- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - **Breaking**: `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+- **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - Document that `DataTypeTraits::metadata_fill_value` must reject invalid fill values, including those whose length differs from a fixed data type size
   - `OptionalDataType::metadata_fill_value` relies on this to check inner fill values
+- `FillValue::equals_all` does not allocate for fill values of 2, 4 or 8 bytes
+- Bump `zarrs_metadata` to 0.7.6
 
 ### Fixed
 - `OptionalDataType::metadata_fill_value` rejects fill values other than `[0]` (null) or a valid inner fill value with a `1` suffix
+- `OptionalDataType` accepts metadata without an inner data type `configuration`, which is optional in the specification
 
 ## [0.9.0] - 2026-02-02
 

@@ -8,45 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `ChunkGridCreateError` for chunk grid creation and configuration failures
+- Add `IncompatibleDimensionError`
+- Add `unravel_index`, which returns `None` for a shape with a zero-sized dimension
 - Add `ArraySubsetTraits::is_whole`, which returns true if a subset is all of an array of a shape
 - Add `Indexer::covers_array`, which returns true if an indexer references every element of an array of a shape exactly once in C order
-- Add `IncompatibleDimensionError`
-- Add `unravel_index`
-- Add `ChunkGridCreateError` for chunk grid creation and configuration failures
+- Implement `Indexer` for lists of `Vec<u64>` (e.g. `vec![vec![0, 1], vec![2, 3]]`) as well as of `ArrayIndices`
+- Implement `Clone` for `ContiguousIndices[Into]Iterator`, `LinearisedIndices[Into]Iterator` and `ContiguousLinearisedIndices[Into]Iterator`
 
 ### Changed
-- Reserve capacity for fallible indexer collections and optional chunk-shape conversion
-- `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
-- `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
-- `ContiguousLinearisedIndices` iterates forwards by adding strides, rather than unravelling and ravelling the indices of each contiguous run
-  - **Breaking**: `ContiguousLinearisedIndices::new` takes the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than a `Vec<u64>`
-- `Indices`, `LinearisedIndices` and `ContiguousIndices` also iterate forwards by stepping their indices, unravelling only the first index of an iterator
-  - All of these iterators step through only the dimensions in which they have more than one index
-  - **Breaking**: `LinearisedIndices::{new,new_unchecked}` take the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than an `ArrayShape`
-- `ArraySubsetTraits::{linearised_indices,contiguous_linearised_indices}` no longer copy the subset
-- Implement `Clone` for `ContiguousIndices[Into]Iterator`, `LinearisedIndices[Into]Iterator` and `ContiguousLinearisedIndices[Into]Iterator`
-- `ArraySubset::{new_with_shape,new_with_start_shape}` accept any `impl AsRef<[u64]>` (e.g. a slice) rather than a `Vec<u64>`, so a subset can be created without allocating
-  - **Breaking**: So do `ArraySubset::{new_with_start_end_inc,new_with_start_end_exc}`, rather than `ArrayIndices`
 - **Breaking**: `ArrayIndices` is a `TinyVec<[u64; 4]>` rather than a `Vec<u64>`, and `ArrayIndicesTinyVec` is removed
   - Indices of up to four dimensions are held inline, so `ChunkGridTraits::{chunk_origin,chunk_indices,chunk_element_indices}` and the indices of iterators do not allocate
-  - `Indexer` is implemented for lists of `Vec<u64>` as well as of `ArrayIndices` (e.g. `vec![vec![0, 1], vec![2, 3]]`)
-- `ArraySubset::bound` computes the bounded start and shape in one pass
-- Remove temporary vectors from `ChunkGridTraits::{chunks_subset,chunks_in_array_subset,iter_chunk_indices,par_iter_chunk_indices}`
-- Bump `zarrs_metadata` to 0.7.6
-- Zero sized dimensions are no longer considered _unlimited_
-  - *Behavioural Change*: `array_indices_inbounds` and `chunk_indices_inbounds` now always return `false` for zero-sized arrays
 - **Breaking**: Add the required `Indexer::validate` method for validating an indexer against an array shape
-- **Breaking**: Add `chunk_edge_lengths()` to `ChunkGridTraits`
-- **Breaking**: Change chunk grid plugin creation APIs to return `ChunkGridCreateError`
-- Bump `itertools` to 0.15.0
+- **Breaking**: Add the required `ChunkGridTraits::chunk_edge_lengths` method
+- **Breaking**: Chunk grid plugin creation APIs (`ChunkGridTraits::create`, `ChunkGrid::from_metadata`, `ChunkGrid[Runtime]Plugin`) return `ChunkGridCreateError` rather than `PluginCreateError`
+- **Breaking**: `ArraySubset::{new_with_start_end_inc,new_with_start_end_exc}` accept any `impl AsRef<[u64]>` rather than `ArrayIndices`, as do `ArraySubset::{new_with_shape,new_with_start_shape}` rather than a `Vec<u64>`, so a subset can be created without allocating
+- **Breaking**: `LinearisedIndices::{new,new_unchecked}` and `ContiguousLinearisedIndices::new` take the subset as a `&impl ArraySubsetTraits` rather than an `ArraySubset`, and the array shape as a `&[u64]` rather than a `Vec<u64>`
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- *Behavioural change*: Zero sized dimensions are no longer considered _unlimited_, so `array_indices_inbounds` and `chunk_indices_inbounds` always return `false` for zero-sized arrays
+- Improve indexing performance
+  - `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
+  - `Indices`, `LinearisedIndices`, `ContiguousIndices` and `ContiguousLinearisedIndices` iterate forwards by stepping their indices through only the dimensions with more than one index, unravelling only the first index of an iterator
+  - `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
+  - `ArraySubsetTraits::{linearised_indices,contiguous_linearised_indices}` no longer copy the subset
+  - `ArraySubset::bound` computes the bounded start and shape in one pass
+  - Remove temporary vectors from `ChunkGridTraits::{chunks_subset,chunks_in_array_subset,iter_chunk_indices,par_iter_chunk_indices}`
+  - Reserve capacity for fallible indexer collections and optional chunk-shape conversion
+- Bump `zarrs_metadata` to 0.7.6 and `itertools` to 0.15.0
 
 ### Fixed
-- Remove redundant slice conversions in the `Vec<ArrayIndices>` indexer implementation to satisfy Clippy
 - An empty array subset is now always in-bounds, since it references no elements (unless it has an incompatible dimensionality)
-- `ravel_indices` now returns `None` if `indices` and `shape` have a different length
-- `Indexer::as_array_subset()` now returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
-- `ArraySubset[Traits]::inbounds_shape` now returns `false` for a subset whose end exceeds `u64::MAX`, and `LinearisedIndices::new`, `ContiguousIndices::new` and `ContiguousLinearisedIndices::new` return an error for it, rather than wrapping in release builds
+- `ravel_indices` returns `None` if `indices` and `shape` have a different length
+- `Indexer::as_array_subset()` returns `Some` for `Vec<Range<u64>>` and `&[Range<u64>]`
+- `ArraySubset[Traits]::inbounds_shape` returns `false` for a subset whose end exceeds `u64::MAX`, and `LinearisedIndices::new`, `ContiguousIndices::new` and `ContiguousLinearisedIndices::new` return an error for it, rather than wrapping in release builds
 - `Indices` iterators over a subset with five or more dimensions no longer yield nothing if the number of elements in the subset exceeds `u64::MAX`
 - `LinearisedIndices` and `ContiguousLinearisedIndices` panic if a linearised index exceeds `u64::MAX`, rather than wrapping in release builds, and no longer overflow in debug builds for an array with more than `u64::MAX` elements whose subset's linearised indices fit
 
