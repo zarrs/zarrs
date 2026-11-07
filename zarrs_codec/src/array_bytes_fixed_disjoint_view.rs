@@ -228,10 +228,25 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
     pub fn copy_from_slice(&mut self, subset_bytes: &[u8]) -> Result<(), InvalidBytesLengthError> {
-        self.try_copy_from_slice_with(subset_bytes, |source, destination| {
-            destination.copy_from_slice(source);
+        fn copy_fixed<const N: usize>(
+            source: &[u8],
+            destination: &mut [u8],
+        ) -> Result<(), InvalidBytesLengthError> {
+            destination[..N].copy_from_slice(&source[..N]);
             Ok(())
-        })
+        }
+
+        match self.num_contiguous_elements() * self.data_type_size {
+            1 => self.try_copy_from_slice_with(subset_bytes, copy_fixed::<1>),
+            2 => self.try_copy_from_slice_with(subset_bytes, copy_fixed::<2>),
+            4 => self.try_copy_from_slice_with(subset_bytes, copy_fixed::<4>),
+            8 => self.try_copy_from_slice_with(subset_bytes, copy_fixed::<8>),
+            16 => self.try_copy_from_slice_with(subset_bytes, copy_fixed::<16>),
+            _ => self.try_copy_from_slice_with(subset_bytes, |source, destination| {
+                destination.copy_from_slice(source);
+                Ok(())
+            }),
+        }
     }
 
     /// Copy bytes into the view with a custom copy for each contiguous region.
@@ -512,6 +527,52 @@ mod tests {
                         }
                         assert_eq!(bytes, expected, "{size} {width} {uniform}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn copy_patterns_and_strides() {
+        for size in [0usize, 1, 2, 3, 4, 8, 16, 17] {
+            for width in [0usize, 1, 2, 9] {
+                let shape = [3, u64::try_from(width + 2).unwrap()];
+                for rows in [0..3, 1..2] {
+                    let subset = ArraySubset::new_with_ranges(&[
+                        rows.clone(),
+                        1..u64::try_from(width + 1).unwrap(),
+                    ]);
+                    let count = usize::try_from(rows.end - rows.start).unwrap() * width * size;
+                    let input: Vec<u8> =
+                        (0..count).map(|i| u8::try_from(i % 251).unwrap()).collect();
+                    let mut bytes = vec![0xa5; 3 * (width + 2) * size];
+                    let mut expected = bytes.clone();
+                    for row in rows.clone() {
+                        for col in 1..=width {
+                            let source = (usize::try_from(row - rows.start).unwrap() * width + col
+                                - 1)
+                                * size;
+                            let destination =
+                                (usize::try_from(row).unwrap() * (width + 2) + col) * size;
+                            expected[destination..destination + size]
+                                .copy_from_slice(&input[source..source + size]);
+                        }
+                    }
+                    {
+                        // SAFETY: this is the only view of bytes.
+                        let mut view = unsafe {
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut bytes),
+                                size,
+                                &shape,
+                                subset,
+                            )
+                            .unwrap()
+                        };
+                        assert!(view.copy_from_slice(&vec![0; count + 1]).is_err());
+                        view.copy_from_slice(&input).unwrap();
+                    }
+                    assert_eq!(bytes, expected, "{size} {width} {rows:?}");
                 }
             }
         }

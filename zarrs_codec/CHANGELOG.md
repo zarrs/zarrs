@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make `async-trait` optional and enable it only with the `async` feature
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Improve performance
+  - Copy small contiguous regions directly when writing into output views
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
   - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
