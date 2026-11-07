@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `chunk_concurrent_minimum` is private array state initialized from `Config`; `concurrency_chunks_and_codec` takes the minimum directly instead of `CodecOptions`
 - **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+  - Array getter methods provided by these traits are no longer `const`
   - Promote previously private methods to public: `[async_]retrieve_chunk_into` and `[async_]retrieve_partial_chunk_into`
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Array` operations; configure a derived array with the corresponding `with_*` method, then call the operation
   - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` and `ArrayMutOps::set_metadata_erase_version()`
@@ -117,9 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Group` operations; configure a derived group with the corresponding `with_*` method instead
   - Add `Group::{metadata_options,with_metadata_options,metadata_erase_version,with_metadata_erase_version}()`
   - `Group::metadata_opt()` no longer takes an options argument and applies the group's stored metadata options
+- **Breaking**: `Group::attributes()` is no longer `const`
 - **Breaking**: `node::data_key` takes the chunk key as a `&str` and returns `Result<StoreKey, StoreKeyError>`
 - Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
-- Implement `Default` for `MetadataRetrieveVersion` and `Copy` for `GroupMetadataOptions`
+- Implement `Default` and `Copy` for `MetadataRetrieveVersion`, and `Copy` for `GroupMetadataOptions`
 - `NodePath` uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
   - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
   - Implement `FromStr` for `NodePath`, preserving `TryFrom<&str>` support
