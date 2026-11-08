@@ -28,11 +28,12 @@ mod numcodecs_packbits_partial;
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
     CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, PartialDecoderCapability,
@@ -45,7 +46,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
 
-use numcodecs_packbits_partial::NumcodecsPackBitsPartial;
+use numcodecs_packbits_partial::{NumcodecsPackBitsPartial, NumcodecsPackBitsPartialDecoder};
 
 use crate::array::codec::array_to_bytes::packbits::{
     PackBitsBitOrder, PackBitsCodec, PackBitsCodecBound,
@@ -207,7 +208,14 @@ impl ArrayCodecTraits for NumcodecsPackBitsCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
+impl ArrayToArrayCodecGeometryTraits for NumcodecsPackBitsCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        let size = self.packbits.encoded_size(decoded_shape)?;
+        Ok(vec![
+            NonZeroU64::new(size).expect("packed elements are at least one byte"),
+        ])
+    }
+
     fn encoded_chunk_grid(
         &self,
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -221,6 +229,42 @@ impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
         _encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         Ok(ChunkGridDecoded::None)
+    }
+
+    // Packed elements are not aligned to the encoded bytes, so no element, subset, or grid mappings exist
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        zarrs_codec::validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
+        Ok(None)
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_subchunk_grid.array_shape()
+            != bytemuck::must_cast_slice::<NonZeroU64, u64>(&encoded_shape)
+        {
+            return Err(CodecError::Other(format!(
+                "encoded subchunk grid array shape {:?} does not match encoded chunk shape {encoded_shape:?}",
+                encoded_subchunk_grid.array_shape()
+            )));
+        }
+        Ok(None)
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
+        Ok(None)
     }
 }
 
@@ -240,13 +284,6 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.encoded_fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        let size = self.packbits.encoded_size(decoded_shape)?;
-        Ok(vec![
-            NonZeroU64::new(size).expect("packed elements are at least one byte"),
-        ])
     }
 
     fn encode<'a>(
@@ -275,10 +312,17 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let input_handle = self.packed_handle(input_handle, shape)?;
-        self.packbits
+        let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
+        let inner = self
+            .packbits
             .clone()
-            .partial_decoder(input_handle, shape, options)
+            .partial_decoder(packed_handle, shape, options)?;
+        Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self,
+            inner,
+        )))
     }
 
     fn partial_encoder(
@@ -300,11 +344,18 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let input_handle = self.packed_handle(input_handle, shape)?;
-        self.packbits
+        let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
+        let inner = self
+            .packbits
             .clone()
-            .async_partial_decoder(input_handle, shape, options)
-            .await
+            .async_partial_decoder(packed_handle, shape, options)
+            .await?;
+        Ok(Arc::new(NumcodecsPackBitsPartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self,
+            inner,
+        )))
     }
 
     #[cfg(feature = "async")]

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToArrayCodecTraits,
 };
@@ -220,7 +220,7 @@ impl ArrayCodecTraits for CastValueCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingIdentityTraits for CastValueCodecBound {}
+impl ArrayToArrayCodecGeometryIdentityTraits for CastValueCodecBound {}
 
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),

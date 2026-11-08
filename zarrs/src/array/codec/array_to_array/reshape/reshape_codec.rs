@@ -4,7 +4,11 @@ use std::sync::Arc;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_plugin::ZarrVersion;
 
-use crate::array::{ChunkShape, DataType, FillValue};
+use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
+use crate::array::{
+    ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue, ravel_indices,
+    unravel_index,
+};
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
@@ -148,7 +152,11 @@ impl ArrayCodecTraits for ReshapeCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
+impl zarrs_codec::ArrayToArrayCodecGeometryTraits for ReshapeCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        super::get_encoded_shape(&self.shape, decoded_shape)
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -162,6 +170,62 @@ impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
         encoded_subchunk_grid: ChunkGridEncodedRef<'_>,
     ) -> Result<ChunkGridDecoded, ChunkGridCreateError> {
         decoded_subchunk_grid(&self.shape, decoded_chunk_grid, encoded_subchunk_grid)
+    }
+
+    fn encoded_element_indices(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_element_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, CodecError> {
+        zarrs_codec::validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        Ok(Some(reshape_element_indices(
+            decoded_shape,
+            &encoded_shape,
+            decoded_element_indices,
+        )))
+    }
+
+    fn decoded_local_subchunk_grid(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_subchunk_grid: &ChunkGrid,
+    ) -> Result<Option<ChunkGrid>, CodecError> {
+        reshape_rectilinear_grid(
+            &self.encoded_shape(decoded_shape)?,
+            decoded_shape,
+            encoded_subchunk_grid,
+        )
+        .map_err(|err| CodecError::Other(err.to_string()))
+    }
+
+    fn encoded_subset(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        decoded_subset: &ArraySubset,
+    ) -> Result<Option<ArraySubset>, CodecError> {
+        zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        let last = decoded_subset
+            .end_inc()
+            .expect("a validated subset is nonempty");
+        let start = reshape_element_indices(decoded_shape, &encoded_shape, decoded_subset.start());
+        let last = reshape_element_indices(decoded_shape, &encoded_shape, &last);
+        if std::iter::zip(&start, &last).any(|(start, last)| last < start) {
+            return Ok(None);
+        }
+        let candidate =
+            ArraySubset::from(std::iter::zip(start, last).map(|(start, last)| start..last + 1));
+        if candidate.num_elements() != decoded_subset.num_elements() {
+            return Ok(None);
+        }
+        // The corners alone do not determine the elements, so compare the selected linear indices.
+        // Runs are maximal, so equal selections yield equal runs.
+        let decoded_runs = decoded_subset
+            .contiguous_linearised_indices(bytemuck::must_cast_slice(decoded_shape))?;
+        let encoded_runs =
+            candidate.contiguous_linearised_indices(bytemuck::must_cast_slice(&encoded_shape))?;
+        Ok((decoded_runs == encoded_runs).then_some(candidate))
     }
 }
 
@@ -181,10 +245,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
     fn encode<'a>(
@@ -242,4 +302,16 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(self.new_partial(input_output_handle, shape)?))
     }
+}
+
+/// Map in-bounds `element_indices` of a chunk of `decoded_shape` to a chunk of `encoded_shape`, preserving C order.
+fn reshape_element_indices(
+    decoded_shape: &[NonZeroU64],
+    encoded_shape: &[NonZeroU64],
+    element_indices: &[u64],
+) -> ArrayIndices {
+    let index = ravel_indices(element_indices, bytemuck::must_cast_slice(decoded_shape))
+        .expect("element indices are in bounds");
+    unravel_index(index, bytemuck::must_cast_slice(encoded_shape))
+        .expect("reshaping preserves the number of elements")
 }

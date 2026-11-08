@@ -60,7 +60,6 @@ pub use zarrs_chunk_grid::{
     IncompatibleDimensionError, IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
-use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
@@ -68,7 +67,8 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
     ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, CowBytes,
@@ -235,11 +235,14 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`chunks_subset`](Array::chunks_subset) / [`chunks_subset_bounded`](Array::chunks_subset_bounded)
 ///  - [`chunks_in_array_subset`](Array::chunks_in_array_subset)
 ///
-/// Codec-defined subchunk grids are ordered from outermost to innermost. Query them with
+/// Codec-defined subchunk grids and codecs are ordered from outermost to innermost. Query them with
 /// [`subchunk_grids`](Array::subchunk_grids),
-/// [`subchunk_grid_at_level`](Array::subchunk_grid_at_level), and
-/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level).
-/// The [`subchunk_grid`](Array::subchunk_grid) and [`subchunk_shape`](Array::subchunk_shape) methods select level zero.
+/// [`subchunk_grid_at_level`](Array::subchunk_grid_at_level),
+/// [`subchunk_shape_at_level`](Array::subchunk_shape_at_level),
+/// [`subchunk_codecs`](Array::subchunk_codecs), and
+/// [`subchunk_codec_at_level`](Array::subchunk_codec_at_level).
+/// The [`subchunk_grid`](Array::subchunk_grid), [`subchunk_shape`](Array::subchunk_shape), and
+/// [`subchunk_codec`](Array::subchunk_codec) methods select level zero.
 ///
 /// A level is a [`ChunkGridDecoded`], which distinguishes a grid resolvable for the whole array
 /// ([`Array`](ChunkGridDecoded::Array)) from one that is only resolvable per chunk
@@ -420,6 +423,8 @@ pub struct Array<TStorage: ?Sized> {
     chunk_grid: ChunkGrid,
     /// The subchunk grid hierarchy exposed by the codec chain, outermost first.
     subchunk_grids: Vec<zarrs_codec::ChunkGridDecoded>,
+    /// The subchunk codec hierarchy exposed by the codec chain, outermost first.
+    subchunk_codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>>,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
@@ -450,6 +455,7 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
             subchunk_grids: self.subchunk_grids.clone(),
+            subchunk_codecs: self.subchunk_codecs.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
@@ -474,6 +480,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
             subchunk_grids: self.subchunk_grids.clone(),
+            subchunk_codecs: self.subchunk_codecs.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
@@ -561,6 +568,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             ));
         }
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
+        let subchunk_codecs = codecs_bound.subchunk_codecs();
 
         // Create storage transformers
         let storage_transformers =
@@ -596,6 +604,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             data_type,
             chunk_grid,
             subchunk_grids,
+            subchunk_codecs,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -669,6 +678,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             &codec_specific_options,
         )?;
         let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
+        let subchunk_codecs = codecs_bound.subchunk_codecs();
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -692,6 +702,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             data_type,
             chunk_grid,
             subchunk_grids,
+            subchunk_codecs,
             chunk_key_encoding,
             fill_value,
             codecs,

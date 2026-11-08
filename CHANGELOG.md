@@ -91,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - *Behavioural change*: `ArrayOps::subchunk_shape()` returns the subchunk shape of the subchunk grid (if regular), rather than the `sharding_indexed` codec `chunk_shape`
   - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants, and `ArrayError::MissingSubchunkGrid` for requests on arrays without a subchunk grid
   - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
+  - Add `ArrayOps::{subchunk_codec,subchunk_codecs,subchunk_codec_at_level}` for querying the codec of each subchunk level, and re-export `ArrayToBytesCodecNoSubchunkingTraits` from `zarrs::array`
   - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Tensors and bytes
   - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library, removing copies on some array `retrieve_`/`store_` paths with select stores and codecs
@@ -137,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix codec-specific options to propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
   - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Partial encoding
   - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
     - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders

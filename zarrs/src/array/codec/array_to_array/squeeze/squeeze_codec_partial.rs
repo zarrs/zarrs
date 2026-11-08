@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
-use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -15,8 +14,11 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
+use super::squeeze_codec::SqueezeCodecBound;
+
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {
+    codec: Arc<SqueezeCodecBound>,
     input_output_handle: Arc<T>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
@@ -26,49 +28,17 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     /// Create a new [`SqueezeCodecPartial`].
     #[must_use]
     pub(crate) fn new(
+        codec: Arc<SqueezeCodecBound>,
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
     ) -> Self {
         Self {
+            codec,
             input_output_handle,
             shape: shape.to_vec(),
             data_type: data_type.clone(),
         }
-    }
-
-    fn map_local_subchunk_grid(
-        &self,
-        encoded_subchunk_grid: &ChunkGrid,
-    ) -> Result<ChunkGrid, CodecError> {
-        let expected_dimensionality = self.shape.iter().filter(|dim| dim.get() > 1).count().max(1);
-        if encoded_subchunk_grid.dimensionality() != expected_dimensionality {
-            return Err(CodecError::Other(
-                "local subchunk grid dimensionality is incompatible with squeeze encoded dimensionality"
-                    .to_string(),
-            ));
-        }
-
-        let mut encoded_dim = 0;
-        let mut chunk_shapes = Vec::with_capacity(self.shape.len());
-        for dim in &self.shape {
-            let shape = if dim.get() == 1 {
-                ChunkEdgeLengths::Scalar(NonZeroU64::new(1).unwrap())
-            } else {
-                let edge_lengths = encoded_subchunk_grid
-                    .chunk_edge_lengths(encoded_dim)
-                    .map_err(zarrs_chunk_grid::ChunkGridCreateError::from)
-                    .map_err(|err| CodecError::Other(err.to_string()))?;
-                encoded_dim += 1;
-                ChunkEdgeLengths::encode(&edge_lengths)
-            };
-            chunk_shapes.push(shape);
-        }
-        let array_shape = bytemuck::must_cast_slice(&self.shape).to_vec();
-        Ok(ChunkGrid::new(
-            RectilinearChunkGrid::new(array_shape, &chunk_shapes)
-                .map_err(|err| CodecError::Other(err.to_string()))?,
-        ))
     }
 }
 
@@ -80,14 +50,10 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
+        self.codec.decoded_local_subchunk_grids(
+            &self.shape,
+            self.input_output_handle.local_subchunk_grids(options)?,
+        )
     }
 }
 
@@ -169,15 +135,12 @@ where
         &self,
         options: &CodecOptions,
     ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.input_output_handle
-            .local_subchunk_grids(options)
-            .await?
-            .into_iter()
-            .map(|grid| {
-                grid.map(|grid| self.map_local_subchunk_grid(&grid))
-                    .transpose()
-            })
-            .collect()
+        self.codec.decoded_local_subchunk_grids(
+            &self.shape,
+            self.input_output_handle
+                .local_subchunk_grids(options)
+                .await?,
+        )
     }
 }
 

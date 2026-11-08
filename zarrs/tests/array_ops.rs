@@ -81,6 +81,13 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
         Some(vec![NonZeroU64::new(1).unwrap(); 2])
     );
     assert_eq!(array.subchunk_grids().len(), 1);
+    assert_eq!(array.subchunk_codecs().len(), 1);
+    assert!(array.subchunk_codec().is_some());
+    assert!(Arc::ptr_eq(
+        array.subchunk_codec().unwrap(),
+        array.subchunk_codec_at_level(0).unwrap()
+    ));
+    assert!(array.subchunk_codec_at_level(1).is_none());
     assert_eq!(array.subchunk_shape_at_level(0), array.subchunk_shape());
     let subchunk_grid = array.subchunk_grid().as_chunk_grid().unwrap();
     assert_eq!(subchunk_grid.grid_shape(), &[6, 6]);
@@ -553,6 +560,24 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     array.store_array_subset(&array.subset_all(), &data)?;
 
     assert_eq!(array.subchunk_grids().len(), 2);
+    let subchunk_codecs = array.subchunk_codecs();
+    assert_eq!(subchunk_codecs.len(), 2);
+    assert!(Arc::ptr_eq(
+        array.subchunk_codec().unwrap(),
+        &subchunk_codecs[0]
+    ));
+    assert!(Arc::ptr_eq(
+        array.subchunk_codec_at_level(0).unwrap(),
+        &subchunk_codecs[0]
+    ));
+    assert!(Arc::ptr_eq(
+        array.subchunk_codec_at_level(1).unwrap(),
+        &subchunk_codecs[1]
+    ));
+    assert!(array.subchunk_codec_at_level(2).is_none());
+    assert_eq!(subchunk_codecs[0].subchunk_codecs().len(), 1);
+    assert!(subchunk_codecs[1].subchunk_codecs().is_empty());
+    assert!(subchunk_codecs.get(2).is_none());
     assert_eq!(array.subchunk_shape(), Some(vec![nz(4), nz(4)]));
     assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));
     assert_eq!(array.subchunk_shape_at_level(1), Some(vec![nz(2), nz(2)]));
@@ -617,6 +642,12 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
 
     let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(2));
     assert_eq!(cached.subchunk_grids().len(), 2);
+    assert_eq!(cached.subchunk_codecs().len(), 2);
+    assert!(Arc::ptr_eq(
+        cached.subchunk_codec().unwrap(),
+        cached.subchunk_codec_at_level(0).unwrap()
+    ));
+    assert!(cached.subchunk_codec_at_level(2).is_none());
     assert_eq!(
         cached.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
         [38, 39, 46, 47]
@@ -665,6 +696,9 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
     let plain = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type::uint16(), 0u16)
         .build(Arc::new(MemoryStore::default()), "/plain")?;
     assert_eq!(plain.subchunk_grids().len(), 0);
+    assert!(plain.subchunk_codecs().is_empty());
+    assert!(plain.subchunk_codec().is_none());
+    assert!(plain.subchunk_codec_at_level(0).is_none());
     assert!(matches!(plain.subchunk_grid(), ChunkGridDecodedRef::None));
     assert!(matches!(
         plain.subchunk_grid_at_level(0),

@@ -4,9 +4,10 @@ use super::odometer::{GridDimension, Odometer, unravel};
 
 /// The linearised indices of a regular grid of positions in an array, in C order.
 ///
-/// Only the dimensions with more than one position are stored, so iterating steps through no more dimensions than
-/// necessary.
-#[derive(Clone)]
+/// Only the dimensions with more than one position are stored, and adjacent dimensions whose
+/// strides are contiguous (`outer.stride == inner.count * inner.stride`) are coalesced, so
+/// iterating steps through no more dimensions than necessary and the representation is canonical.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StridedIndices {
     /// The number of positions.
     num_elements: u64,
@@ -17,7 +18,7 @@ pub(crate) struct StridedIndices {
 }
 
 /// A dimension of [`StridedIndices`].
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct StridedDimension {
     /// The number of positions.
     count: u64,
@@ -62,7 +63,17 @@ impl StridedIndices {
                         .expect("linearised indices exceed u64::MAX");
                     first += start * stride;
                     if count > 1 {
-                        dimensions.push(StridedDimension { count, stride });
+                        if let Some(inner) = dimensions
+                            .last_mut()
+                            .filter(|inner| inner.count.checked_mul(inner.stride) == Some(stride))
+                        {
+                            inner.count = inner
+                                .count
+                                .checked_mul(count)
+                                .expect("the number of positions exceeds u64::MAX");
+                        } else {
+                            dimensions.push(StridedDimension { count, stride });
+                        }
                     }
                 }
                 stride = stride.and_then(|stride| stride.checked_mul(array_size));
