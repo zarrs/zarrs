@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
-- **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; move compute-target control out of `CodecOptions` while retaining `chunk_concurrent_minimum`
+- **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; remove compute-target control and `chunk_concurrent_minimum` (including its getter, setter, and `with_` method) from `CodecOptions`
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time
   - Add `ArrayCodecTraits::{as_any,data_type,fill_value}`, and `ArrayCodecTraits` no longer requires `CodecTraits`
   - `ArrayCodecTraits::fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined; `encoded_fill_value` no longer has a default implementation

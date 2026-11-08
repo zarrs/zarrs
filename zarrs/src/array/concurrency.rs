@@ -14,7 +14,7 @@
 // }
 
 pub use zarrs_codec::RecommendedConcurrency;
-use zarrs_codec::{CodecOptions, ComputeResources, Resources};
+use zarrs_codec::{ComputeResources, Resources};
 
 /// Calculate the outer and inner concurrent limits given a concurrency target and their recommended concurrency.
 ///
@@ -91,11 +91,10 @@ pub fn split_resources(
 #[must_use]
 pub fn concurrency_chunks_and_codec(
     num_chunks: usize,
-    codec_options: &CodecOptions,
+    chunk_concurrent_minimum: usize,
     resources: &Resources,
     codec_concurrency: &RecommendedConcurrency,
 ) -> (usize, Resources) {
-    let chunk_concurrent_minimum = codec_options.chunk_concurrent_minimum();
     let min_concurrent_chunks = std::cmp::min(chunk_concurrent_minimum, num_chunks);
     let max_concurrent_chunks = std::cmp::max(chunk_concurrent_minimum, num_chunks);
     split_resources(
@@ -112,19 +111,14 @@ mod tests {
     #[test]
     fn sharing_compute_splits_the_compute_target() {
         let resources = Resources::default().with_compute_target(12);
-        let options = CodecOptions::default().with_chunk_concurrent_minimum(3);
-        let (outer, inner) = concurrency_chunks_and_codec(
-            9,
-            &options,
-            &resources,
-            &RecommendedConcurrency::new(1..4),
-        );
+        let (outer, inner) =
+            concurrency_chunks_and_codec(9, 3, &resources, &RecommendedConcurrency::new(1..4));
         assert_eq!(outer, 3);
         assert_eq!(inner.compute_target(), 4);
         assert_eq!(resources.compute_target(), 12);
         let (outer, inner) = concurrency_chunks_and_codec(
             9,
-            &options,
+            3,
             &resources.with_compute_target(0),
             &RecommendedConcurrency::new(1..4),
         );

@@ -89,8 +89,12 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
             let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-            let (chunk_concurrent_limit, resources) =
-                concurrency_chunks_and_codec(num_chunks, options, resources, &codec_concurrency);
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
+                num_chunks,
+                self.chunk_concurrent_minimum,
+                resources,
+                &codec_concurrency,
+            );
 
             let array_subset_start = array_subset.start();
             let array_subset_shape = array_subset.shape();

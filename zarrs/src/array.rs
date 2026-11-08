@@ -204,14 +204,14 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Similarly, array `store_*` methods are generic over the input type.
 ///
 /// ### Codec Options
-/// The [`CodecOptions`] of an array control checksum validation, partial encoding, and chunk scheduling preferences.
+/// The [`CodecOptions`] of an array control checksum validation, storing empty chunks, and partial encoding.
 /// Set them with [`with_codec_options`](Array::with_codec_options) or [`set_codec_options`](Array::set_codec_options).
 /// All encode/decode operations also take [`Resources`] to set their compute target.
 /// In-memory codec methods receive only [`ComputeResources`].
 /// Codec-specific options (e.g. [`ShardingCodecOptions`](codec::array_to_bytes::sharding::ShardingCodecOptions)) are set via [`CodecSpecificOptions`] and set at the array level with [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
 ///
 /// - **[`CodecOptions`]** — settings applied to every encode/decode operation of the array.
-///   Controls checksum validation, partial encoding, and the preferred minimum chunk concurrency.
+///   Controls checksum validation, storing empty chunks, and partial encoding.
 ///   Use [`with_codec_options`](Array::with_codec_options) for a copy of the array with non-default [`CodecOptions`].
 ///
 /// - **[`CodecSpecificOptions`]** — codec-specific configuration applied when the codec chain is bound to the array.
@@ -447,6 +447,8 @@ pub struct Array<TStorage: ?Sized> {
     metadata: Arc<ArrayMetadata>,
     /// Options
     codec_options: CodecOptions,
+    /// Preferred minimum concurrency for multi-chunk operations.
+    chunk_concurrent_minimum: usize,
     metadata_options: ArrayMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
 }
@@ -469,6 +471,7 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
+            chunk_concurrent_minimum: self.chunk_concurrent_minimum,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -494,6 +497,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
+            chunk_concurrent_minimum: self.chunk_concurrent_minimum,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -593,10 +597,11 @@ impl<TStorage: ?Sized> Array<TStorage> {
             ));
         }
 
-        let (codec_options, metadata_options, metadata_erase_version) = {
+        let (codec_options, chunk_concurrent_minimum, metadata_options, metadata_erase_version) = {
             let config = global_config();
             (
                 config.codec_options(),
+                config.chunk_concurrent_minimum(),
                 config.array_metadata_options(),
                 config.metadata_erase_version(),
             )
@@ -618,6 +623,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             dimension_names: v3.dimension_names.clone(),
             metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
+            chunk_concurrent_minimum,
             metadata_options,
             metadata_erase_version,
         })
@@ -691,10 +697,11 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // V2 has no storage transformers or dimension names
         let storage_transformers = StorageTransformerChain::default();
 
-        let (codec_options, metadata_options, metadata_erase_version) = {
+        let (codec_options, chunk_concurrent_minimum, metadata_options, metadata_erase_version) = {
             let config = global_config();
             (
                 config.codec_options(),
+                config.chunk_concurrent_minimum(),
                 config.array_metadata_options(),
                 config.metadata_erase_version(),
             )
@@ -715,6 +722,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers,
             dimension_names: None,
             codec_options,
+            chunk_concurrent_minimum,
             metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,

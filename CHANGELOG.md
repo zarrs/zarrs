@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 - **Breaking**: Pass `Resources` to each array operation to control compute concurrency, and `ComputeResources` to in-memory codec operations
-  - Compute-target control moves out of `CodecOptions` and `Config`; chunk scheduling preferences remain in `CodecOptions`
+  - Compute-target control moves out of `CodecOptions` and `Config`; arrays capture `Config::chunk_concurrent_minimum` at construction instead of storing it in `CodecOptions`
 - **Breaking**: Codecs are bound to the data type and fill value of an array at array creation, so invalid codec chains are rejected when an array is built or opened rather than on first use
   - Codec implementations are split into `UnboundArrayTo{Array,Bytes}CodecTraits` (created from metadata) and `ArrayTo{Array,Bytes}CodecTraits` (bound with `with_context`); see `zarrs_codec` 0.3.0
 - **Breaking**: Encoded and raw bytes are `CowBytes` throughout, which removes copies on many store, codec, and `Tensor` paths, and `Tensor` may borrow its bytes
@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Arrays
 - **Breaking**: Pass `Resources` per array and chunk-cache operation instead of setting the compute target in `CodecOptions` or `Config`
+  - `chunk_concurrent_minimum` is private array state initialized from `Config`; `concurrency_chunks_and_codec` takes the minimum directly instead of `CodecOptions`
 - **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - These are implemented as inherent traits on `Array` and `ArrayCached`
   - Promote previously private methods to public: `[async_]retrieve_chunk_into` and `[async_]retrieve_partial_chunk_into`

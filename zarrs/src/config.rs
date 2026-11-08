@@ -44,7 +44,8 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 ///
 /// Array operations involving multiple chunks can tune the chunk and codec concurrency to improve performance/reduce memory usage.
 /// This option sets the preferred minimum chunk concurrency.
-/// The concurrency of internal codecs is adjusted to accomodate for the chunk concurrency in accordance with the compute target in the [`Resources`](zarrs_codec::Resources) parameter of an operation.
+/// Arrays capture this default when they are constructed.
+/// The concurrency of internal codecs is adjusted to accommodate the chunk concurrency in accordance with the compute target in the [`Resources`](zarrs_codec::Resources) parameter of an operation.
 ///
 /// ### Experimental Partial Encoding
 /// > default: [`false`]
@@ -146,7 +147,6 @@ impl Config {
         CodecOptions::default()
             .with_validate_checksums(self.validate_checksums)
             .with_store_empty_chunks(self.store_empty_chunks)
-            .with_chunk_concurrent_minimum(self.chunk_concurrent_minimum)
             .with_experimental_partial_encoding(self.experimental_partial_encoding)
     }
 

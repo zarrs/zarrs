@@ -44,6 +44,7 @@ pub(super) async fn retrieve_array_subset_into<A, R>(
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
+    chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<(), ArrayError>
@@ -107,8 +108,12 @@ where
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, resources) =
-                concurrency_chunks_and_codec(num_chunks, options, resources, &codec_concurrency);
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
+                num_chunks,
+                chunk_concurrent_minimum,
+                resources,
+                &codec_concurrency,
+            );
             retrieve_multi_chunk_fixed_into(
                 array,
                 retrieve,

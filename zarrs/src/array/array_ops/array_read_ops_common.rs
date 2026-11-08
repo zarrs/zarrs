@@ -14,10 +14,12 @@ use super::recommended_codec_concurrency;
 
 /// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
 ///
+#[expect(clippy::too_many_arguments)]
 pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
+    chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
     retrieve_chunk_into: RetrieveChunkInto,
@@ -93,8 +95,12 @@ where
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, resources) =
-                concurrency_chunks_and_codec(num_chunks, options, resources, &codec_concurrency);
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
+                num_chunks,
+                chunk_concurrent_minimum,
+                resources,
+                &codec_concurrency,
+            );
             retrieve_multi_chunk_fixed_into(
                 array,
                 array_subset,

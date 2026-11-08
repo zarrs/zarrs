@@ -119,7 +119,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
                 let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
                 let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
                     num_chunks,
-                    options,
+                    self.chunk_concurrent_minimum,
                     resources,
                     &codec_concurrency,
                 );

@@ -67,8 +67,12 @@ where
         num_chunks => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, resources) =
-                concurrency_chunks_and_codec(num_chunks, options, resources, &codec_concurrency);
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
+                num_chunks,
+                array.chunk_concurrent_minimum,
+                resources,
+                &codec_concurrency,
+            );
             if array.data_type().is_fixed() {
                 async_retrieve_multi_chunk_fixed(
                     cache,
@@ -522,6 +526,7 @@ where
             self,
             array_subset,
             output_target,
+            self.array().chunk_concurrent_minimum,
             self.codec_options(),
             resources,
         )
