@@ -11,7 +11,6 @@ use std::ops::{
 };
 
 use thiserror::Error;
-use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::MaybeSend;
 
@@ -251,21 +250,8 @@ pub fn extract_byte_ranges_concat<R: Into<ByteRange>>(
         return Ok(vec![]);
     }
     let mut out = Vec::with_capacity(out_size);
-    let out_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut out);
-    let mut offset: usize = 0;
     for range in ranges {
-        let byte_range_len = range.len();
-        // SAFETY: the slices are non-overlapping
-        unsafe {
-            out_slice
-                .index_mut(offset..offset + byte_range_len)
-                .copy_from_slice(&bytes[range]);
-        }
-        offset += byte_range_len;
-    }
-    // SAFETY: each element is initialised
-    unsafe {
-        out.set_len(out_size);
+        out.extend_from_slice(&bytes[range]);
     }
     Ok(out)
 }

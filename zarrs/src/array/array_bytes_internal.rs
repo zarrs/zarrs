@@ -103,7 +103,7 @@ impl FixedDecodeBuffers {
         let data_view = unsafe {
             // SAFETY: the view is the only view of the data
             ArrayBytesFixedDisjointView::new(
-                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut self.data),
+                UnsafeCellSlice::new(self.data.spare_capacity_mut()),
                 self.data_type_size,
                 &self.shape,
                 subset.clone(),
@@ -114,7 +114,7 @@ impl FixedDecodeBuffers {
             mask_views.push(unsafe {
                 // SAFETY: the view is the only view of the mask
                 ArrayBytesFixedDisjointView::new(
-                    UnsafeCellSlice::new_from_vec_with_spare_capacity(mask),
+                    UnsafeCellSlice::new(mask.spare_capacity_mut()),
                     1,
                     &self.shape,
                     subset.clone(),

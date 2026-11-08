@@ -516,7 +516,7 @@ async fn partial_decode_fixed_array_subset(
 
     let shard_size = array_subset.num_elements_usize() * data_type_size;
     let mut shard = Vec::with_capacity(shard_size);
-    let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
+    let shard_slice = UnsafeCellSlice::new(shard.spare_capacity_mut());
 
     // Decode unfilled chunks
     let results = futures::future::join_all(
