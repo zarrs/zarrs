@@ -51,7 +51,7 @@ use zarrs_metadata::Configuration;
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// Return the linearised (lexicographic) subchunk indices in the requested write order.
-fn subchunk_order_iterator(
+pub(super) fn subchunk_order_iterator(
     subchunks_write_order: SubchunkWriteOrder,
     n_chunks: usize,
     subchunk_grid: &RegularBoundedChunkGrid,

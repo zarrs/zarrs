@@ -89,9 +89,10 @@ mod sharding_partial_encoder_async;
 pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
+use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
@@ -602,27 +603,97 @@ fn subchunk_updates<'a>(
     }
 }
 
-/// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
-/// Return the indices and byte ranges of the stored subchunks of a shard that are not in `updated_subchunks`.
-fn retained_subchunks<T>(
+/// Return the indices and byte ranges of the stored subchunks among `subchunk_indices`, sorted by byte range.
+///
+/// Sorting byte ranges may improve store retrieve efficiency in some cases.
+fn stored_subchunk_byte_ranges(
     shard_index: &[u64],
-    updated_subchunks: &[(u64, T)],
+    subchunk_indices: impl Iterator<Item = u64>,
 ) -> (Vec<u64>, Vec<ByteRange>) {
-    let updated: HashSet<u64> = updated_subchunks.iter().map(|(index, _)| *index).collect();
-    (0..shard_index.len() / 2)
+    subchunk_indices
         .filter_map(|subchunk_index| {
-            let (offset, size) = subchunk_offset_size(shard_index, subchunk_index)?;
-            let subchunk_index = subchunk_index as u64;
-            (!updated.contains(&subchunk_index))
-                .then_some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
+            let (offset, size) =
+                subchunk_offset_size(shard_index, usize::try_from(subchunk_index).unwrap())?;
+            Some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
         })
+        .sorted_by_key(|(_, byte_range)| *byte_range)
         .unzip()
 }
 
-fn missing_retained_subchunks() -> CodecError {
+/// Pair the encoded subchunks read at the byte ranges of `subchunk_indices` with their indices.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the shard is missing or the number of encoded subchunks does not match.
+fn collect_stored_subchunks(
+    subchunk_indices: Vec<u64>,
+    subchunks_encoded: Option<Vec<CowBytes<'_>>>,
+) -> Result<HashMap<u64, Vec<u8>>, CodecError> {
+    let Some(subchunks_encoded) = subchunks_encoded else {
+        return if subchunk_indices.is_empty() {
+            Ok(HashMap::new())
+        } else {
+            Err(missing_stored_subchunks())
+        };
+    };
+    if subchunks_encoded.len() != subchunk_indices.len() {
+        return Err(CodecError::from(format!(
+            "expected {} encoded subchunks, got {}",
+            subchunk_indices.len(),
+            subchunks_encoded.len()
+        )));
+    }
+    Ok(std::iter::zip(
+        subchunk_indices,
+        subchunks_encoded.into_iter().map(CowBytes::into_vec),
+    )
+    .collect())
+}
+
+/// Slice the encoded subchunks at `byte_ranges` out of the entire encoded `shard`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if a byte range is beyond the end of the shard.
+fn slice_stored_subchunks(
+    shard: &[u8],
+    subchunk_indices: Vec<u64>,
+    byte_ranges: &[ByteRange],
+) -> Result<HashMap<u64, Vec<u8>>, CodecError> {
+    std::iter::zip(subchunk_indices, byte_ranges)
+        .map(|(subchunk_index, byte_range)| {
+            let range = byte_range
+                .checked_range_usize(shard.len())
+                .ok_or_else(invalid_shard_index)?;
+            Ok((subchunk_index, shard[range].to_vec()))
+        })
+        .collect()
+}
+
+/// Sort `subchunks` into the `write_order` of a whole shard encode.
+fn sort_by_subchunk_write_order<T>(
+    subchunks: &mut [(u64, T)],
+    write_order: SubchunkWriteOrder,
+    subchunk_grid: &RegularBoundedChunkGrid,
+) {
+    let num_subchunks =
+        usize::try_from(subchunk_grid.grid_shape().iter().product::<u64>()).unwrap();
+    let mut position = vec![0; num_subchunks];
+    for (i, subchunk_index) in
+        sharding_codec::subchunk_order_iterator(write_order, num_subchunks, subchunk_grid)
+            .into_iter()
+            .enumerate()
+    {
+        position[subchunk_index] = i;
+    }
+    subchunks.sort_unstable_by_key(|(subchunk_index, _)| {
+        position[usize::try_from(*subchunk_index).unwrap()]
+    });
+}
+
+fn missing_stored_subchunks() -> CodecError {
     CodecError::from("the shard is missing but its index references stored subchunks")
 }
 
+/// An encoded subchunk in a corrupt shard index exceeds the maximum shard size.
 fn invalid_shard_index() -> CodecError {
     CodecError::from("the shard index has an encoded subchunk beyond the maximum shard size")
 }
