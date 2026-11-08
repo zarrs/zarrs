@@ -152,7 +152,11 @@ impl ArrayCodecTraits for ReshapeCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for ReshapeCodecBound {
+impl zarrs_codec::ArrayToArrayCodecGeometryTraits for ReshapeCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        super::get_encoded_shape(&self.shape, decoded_shape)
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -241,10 +245,6 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
     fn encode<'a>(

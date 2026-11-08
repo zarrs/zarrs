@@ -14,25 +14,35 @@ use crate::{
 #[cfg(feature = "async")]
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
-/// Subchunking traits for an array-to-array codec bound to a data type and fill value.
+/// Geometry traits for an array-to-array codec bound to a data type and fill value.
 ///
-/// This trait maps subchunk grids, element indices, and subsets between the decoded and
+/// This trait maps shapes, element indices, subsets, and chunk grids between the decoded and
 /// encoded representations of an array-to-array codec without encoding or decoding array data:
+/// - **Shape mapping**: [`encoded_shape`](Self::encoded_shape) maps a decoded chunk shape to its encoded shape.
+/// - **Coordinate mappings** operate on a single chunk of `decoded_shape`:
+///   [`encoded_element_indices`](Self::encoded_element_indices) and
+///   [`encoded_subset`](Self::encoded_subset) map element indices and
+///   exact rectangular subsets from the decoded chunk to the encoded chunk.
 /// - **Whole-array grid mappings** ([`encoded_chunk_grid`](Self::encoded_chunk_grid),
 ///   [`decoded_subchunk_grid`](Self::decoded_subchunk_grid)) propagate chunk and subchunk grids
 ///   across the full array when possible, or fall back to [`ChunkGridDecoded::ChunkLocal`] or
 ///   [`ChunkGridDecoded::None`].
-/// - **Chunk-local mappings** operate on a single chunk of `decoded_shape`:
-///   - [`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid) and
-///     [`decoded_local_subchunk_grids`](Self::decoded_local_subchunk_grids) map subchunk grids of
-///     the encoded chunk back to the decoded chunk.
-///   - [`encoded_element_indices`](Self::encoded_element_indices) and
-///     [`encoded_subset`](Self::encoded_subset) map element indices and
-///     exact rectangular subsets from the decoded chunk to the encoded chunk.
+/// - **Chunk-local grid mappings**
+///   ([`decoded_local_subchunk_grid`](Self::decoded_local_subchunk_grid),
+///   [`decoded_local_subchunk_grids`](Self::decoded_local_subchunk_grids)) map subchunk grids of
+///   a single encoded chunk back to the decoded chunk.
 ///
-/// Implement [`ArrayToArrayCodecSubchunkingIdentityTraits`] instead of this trait when the codec
+/// Propagating subchunk grids and addressing subchunks through a codec chain are consumers of these mappings.
+///
+/// Implement [`ArrayToArrayCodecGeometryIdentityTraits`] instead of this trait when the codec
 /// preserves chunk shape and element ordering.
-pub trait ArrayToArrayCodecSubchunkingTraits: ArrayCodecTraits {
+pub trait ArrayToArrayCodecGeometryTraits: ArrayCodecTraits {
+    /// Returns the shape of the encoded chunk for a given decoded chunk shape.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the `decoded_shape` is not supported by this codec.
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError>;
+
     /// Map a chunk grid from the decoded representation to the encoded representation.
     ///
     /// [`ChunkGridEncoded::ChunkLocal`] indicates that the codec can
@@ -151,17 +161,21 @@ pub fn validate_chunk_subset(shape: &[NonZeroU64], subset: &ArraySubset) -> Resu
     }
 }
 
-/// Marker trait for array-to-array codecs with identity subchunking mappings.
+/// Marker trait for array-to-array codecs with identity geometry mappings.
 ///
-/// This implements [`ArrayToArrayCodecSubchunkingTraits`] with mappings that leave chunk grids, element indices,
-/// and subsets unchanged.
+/// This implements [`ArrayToArrayCodecGeometryTraits`] with mappings that leave chunk shapes, chunk grids,
+/// element indices, and subsets unchanged.
 /// Implement this trait only when the codec preserves element ordering and chunk shape.
-pub trait ArrayToArrayCodecSubchunkingIdentityTraits {}
+pub trait ArrayToArrayCodecGeometryIdentityTraits {}
 
-impl<T> ArrayToArrayCodecSubchunkingTraits for T
+impl<T> ArrayToArrayCodecGeometryTraits for T
 where
-    T: ArrayCodecTraits + ArrayToArrayCodecSubchunkingIdentityTraits + ?Sized,
+    T: ArrayCodecTraits + ArrayToArrayCodecGeometryIdentityTraits + ?Sized,
 {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(decoded_shape.to_vec())
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -247,7 +261,7 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fmt::Debug {
+pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
 
@@ -256,14 +270,6 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecSubchunkingTraits + core::fm
 
     /// Return the encoded fill value, or [`None`] if it is undefined.
     fn encoded_fill_value(&self) -> Option<&FillValue>;
-
-    /// Returns the shape of the encoded chunk for a given decoded chunk shape.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the `decoded_shape` is not supported by this codec.
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        Ok(decoded_shape.to_vec())
-    }
 
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///

@@ -147,7 +147,15 @@ impl ArrayCodecTraits for SqueezeCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for SqueezeCodecBound {
+impl zarrs_codec::ArrayToArrayCodecGeometryTraits for SqueezeCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(super::squeeze_dims(
+            decoded_shape.iter().copied(),
+            decoded_shape,
+            NonZeroU64::MIN,
+        ))
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -286,14 +294,6 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        Ok(super::squeeze_dims(
-            decoded_shape.iter().copied(),
-            decoded_shape,
-            NonZeroU64::MIN,
-        ))
     }
 
     fn encode<'a>(

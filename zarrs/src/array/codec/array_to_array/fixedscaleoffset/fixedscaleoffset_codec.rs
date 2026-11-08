@@ -10,10 +10,10 @@ use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
-    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToArrayCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -412,7 +412,7 @@ impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingIdentityTraits for FixedScaleOffsetCodecBound {}
+impl ArrayToArrayCodecGeometryIdentityTraits for FixedScaleOffsetCodecBound {}
 
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),

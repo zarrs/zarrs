@@ -33,7 +33,7 @@ use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
     CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, PartialDecoderCapability,
@@ -208,7 +208,14 @@ impl ArrayCodecTraits for NumcodecsPackBitsCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingTraits for NumcodecsPackBitsCodecBound {
+impl ArrayToArrayCodecGeometryTraits for NumcodecsPackBitsCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        let size = self.packbits.encoded_size(decoded_shape)?;
+        Ok(vec![
+            NonZeroU64::new(size).expect("packed elements are at least one byte"),
+        ])
+    }
+
     fn encoded_chunk_grid(
         &self,
         _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -277,13 +284,6 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.encoded_fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        let size = self.packbits.encoded_size(decoded_shape)?;
-        Ok(vec![
-            NonZeroU64::new(size).expect("packed elements are at least one byte"),
-        ])
     }
 
     fn encode<'a>(

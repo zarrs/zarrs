@@ -27,13 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayCodecTraits::fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined; `encoded_fill_value` no longer has a default implementation
   - Remove the `data_type` and `fill_value` parameters from encoding, decoding, representation, and partial encoder/decoder methods
   - Replace `ArrayCodecTraits::partial_decode_granularity` and `ArrayToArrayCodecTraits::decoded_shape` with `ArrayToArrayCodecTraits::partial_decode_granularity`, which maps an encoded granularity to the decoded representation
-- **Breaking**: Add `ArrayTo{Array,Bytes}CodecSubchunkingTraits` supertraits with `encoded_chunk_grid()` and `decoded_subchunk_grid[s]()` for resolving ordered subchunk-grid hierarchies
-  - `ArrayToArrayCodecSubchunkingIdentityTraits` and `ArrayToBytesCodecNoSubchunkingTraits` marker traits are available for common codecs
-  - `ArrayToBytesCodecSubchunkingTraits::subchunk_codecs` returns the shape-independent codec for each subchunk level (outermost first)
-  - `ArrayToArrayCodecSubchunkingTraits` maps chunk-local subchunk addressing through a codec (implemented by `ArrayToArrayCodecSubchunkingIdentityTraits` for identity codecs)
-    - `decoded_local_subchunk_grid[s]` map chunk-local subchunk grids back to a decoded chunk
-    - `encoded_element_indices` maps element indices to an encoded chunk
-    - `encoded_subset` maps a decoded subset to an exact rectangular subset of an encoded chunk
+- **Breaking**: Add the `ArrayToBytesCodecSubchunkingTraits` supertrait with `decoded_subchunk_grids()` for resolving ordered subchunk-grid hierarchies
+  - The `ArrayToBytesCodecNoSubchunkingTraits` marker trait implements it for codecs without subchunks
+  - `subchunk_codecs` returns the shape-independent codec for each subchunk level (outermost first)
+- **Breaking**: Add the `ArrayToArrayCodecGeometryTraits` supertrait, which maps shapes, element indices, subsets, and chunk grids between the decoded and encoded representations of a codec
+  - The `ArrayToArrayCodecGeometryIdentityTraits` marker trait implements it for codecs that preserve chunk shape and element ordering
+  - `encoded_shape` moves here from `ArrayToArrayCodecTraits` and no longer has a default implementation
+  - `encoded_chunk_grid` and `decoded_subchunk_grid` map whole-array chunk and subchunk grids
+  - `decoded_local_subchunk_grid[s]` map chunk-local subchunk grids back to a decoded chunk
+  - `encoded_element_indices` maps element indices to an encoded chunk
+  - `encoded_subset` maps a decoded subset to an exact rectangular subset of an encoded chunk
 - **Breaking**: Add the `[Async]ArrayPartialDecoderSubchunkingTraits` supertraits of `[Async]ArrayPartialDecoderTraits`, which hold the subchunking surface of a partial decoder
   - The `ArrayPartialDecoderNoSubchunkingTraits` marker trait default implements both for partial decoders without subchunks
 - **Breaking**: Codec creation (`Codec::from_metadata`, `CodecTraitsV{2,3}::create`, `Codec[Runtime]PluginV{2,3}`) returns `CodecCreateError` rather than `PluginCreateError`, and `BytesToBytesCodecTraits::with_codec_specific_options` is fallible

@@ -5,7 +5,7 @@ use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecSubchunkingTraits, CodecError, CodecOptions,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{

@@ -23,10 +23,9 @@ use zarrs::array::{
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToArrayCodecSubchunkingIdentityTraits,
-    ArrayToArrayCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecError, CodecSpecificOptions, PartialDecoderCapability,
-    PartialEncoderCapability,
+    ArrayCodecTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecGeometryTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecError,
+    CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
 };
 use zarrs_plugin::ZarrVersion;
 
@@ -112,7 +111,7 @@ impl ArrayCodecTraits for IdentityCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingIdentityTraits for IdentityCodecBound {}
+impl ArrayToArrayCodecGeometryIdentityTraits for IdentityCodecBound {}
 
 impl ArrayToArrayCodecTraits for IdentityCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
@@ -151,7 +150,7 @@ impl ArrayToArrayCodecTraits for IdentityCodecBound {
 /// It wraps [`TransposeCodec`] while resolving its partial decoder to
 /// [`CodecPartialDefault`](zarrs_codec::CodecPartialDefault), verifying that
 /// [`CodecPartialDefault`](zarrs_codec::CodecPartialDefault) maps chunk-local subchunk grids
-/// through [`ArrayToArrayCodecSubchunkingTraits::decoded_local_subchunk_grids`].
+/// through [`ArrayToArrayCodecGeometryTraits::decoded_local_subchunk_grids`].
 #[cfg(feature = "transpose")]
 #[derive(Debug)]
 pub(crate) struct DefaultPartialTransposeCodec {
@@ -237,7 +236,14 @@ impl ArrayCodecTraits for DefaultPartialTransposeCodecBound {
 }
 
 #[cfg(feature = "transpose")]
-impl ArrayToArrayCodecSubchunkingTraits for DefaultPartialTransposeCodecBound {
+impl ArrayToArrayCodecGeometryTraits for DefaultPartialTransposeCodecBound {
+    fn encoded_shape(
+        &self,
+        decoded_shape: &[NonZeroU64],
+    ) -> Result<zarrs::array::ChunkShape, CodecError> {
+        self.inner.encoded_shape(decoded_shape)
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -293,13 +299,6 @@ impl ArrayToArrayCodecTraits for DefaultPartialTransposeCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.inner.encoded_fill_value()
-    }
-
-    fn encoded_shape(
-        &self,
-        decoded_shape: &[NonZeroU64],
-    ) -> Result<zarrs::array::ChunkShape, CodecError> {
-        self.inner.encoded_shape(decoded_shape)
     }
 
     fn encode<'a>(

@@ -149,7 +149,16 @@ impl ArrayCodecTraits for TransposeCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for TransposeCodecBound {
+impl zarrs_codec::ArrayToArrayCodecGeometryTraits for TransposeCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        if self.order.0.len() != decoded_shape.len() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
+        }
+        Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -257,15 +266,6 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        if self.order.0.len() != decoded_shape.len() {
-            return Err(CodecError::Other(
-                "Length of transpose codec `order` does not match array dimensionality".to_string(),
-            ));
-        }
-        Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
     fn encode<'a>(

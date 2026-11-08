@@ -8,7 +8,7 @@ use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingTraits, CodecError, CodecOptions,
+    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{

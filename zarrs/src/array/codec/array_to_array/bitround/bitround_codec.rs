@@ -6,12 +6,12 @@ use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
     bitround_codec_partial, round_bytes,
 };
-use crate::array::{ChunkShape, DataType, FillValue};
+use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecSubchunkingIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     UnboundArrayToArrayCodecTraits,
 };
@@ -153,7 +153,7 @@ impl ArrayCodecTraits for BitroundCodecBound {
     }
 }
 
-impl ArrayToArrayCodecSubchunkingIdentityTraits for BitroundCodecBound {}
+impl ArrayToArrayCodecGeometryIdentityTraits for BitroundCodecBound {}
 
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
@@ -171,10 +171,6 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.encoded_fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        Ok(decoded_shape.to_vec())
     }
 
     fn encode<'a>(

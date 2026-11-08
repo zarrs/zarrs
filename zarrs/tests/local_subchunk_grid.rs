@@ -456,7 +456,13 @@ impl ArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToArrayCodecSubchunkingTraits for LocalOnlyReshapeGridCodecBound {
+impl zarrs_codec::ArrayToArrayCodecGeometryTraits for LocalOnlyReshapeGridCodecBound {
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(vec![
+            NonZeroU64::new(decoded_shape.num_elements_u64()).unwrap(),
+        ])
+    }
+
     fn encoded_chunk_grid(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -522,12 +528,6 @@ impl ArrayToArrayCodecTraits for LocalOnlyReshapeGridCodecBound {
 
     fn encoded_fill_value(&self) -> Option<&FillValue> {
         self.fill_value.as_ref()
-    }
-
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        Ok(vec![
-            NonZeroU64::new(decoded_shape.num_elements_u64()).unwrap(),
-        ])
     }
 
     fn encode<'a>(

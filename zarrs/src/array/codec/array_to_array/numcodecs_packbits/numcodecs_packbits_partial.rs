@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes,
     InvalidBytesLengthError,
 };
