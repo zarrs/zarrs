@@ -12,7 +12,7 @@ use std::time::Duration;
 use common::{LatencyStore, compressible_u16};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::codec::ZstdCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::storage::store::MemoryStore;
 
 /// Request latencies: zero measures pure overhead on an in-memory store.
@@ -77,7 +77,11 @@ fn sync_array(
     let inner = Arc::new(MemoryStore::new());
     let array = builder(sharded).build(inner.clone(), "/").unwrap();
     array
-        .store_array_subset(&array.subset_all(), compressible_u16(num_elements()))
+        .store_array_subset(
+            &array.subset_all(),
+            compressible_u16(num_elements()),
+            &Resources::default(),
+        )
         .unwrap();
     let store = Arc::new(LatencyStore::new(inner, latency));
     let array = builder(sharded).build(store.clone(), "/").unwrap();
@@ -95,7 +99,9 @@ fn bench_sync_read(c: &mut Criterion) {
             store.reset();
             group.bench_function(&id, |b| {
                 b.iter(|| {
-                    let _: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                    let _: ArrayBytes = array
+                        .retrieve_array_subset(&subset, &Resources::default())
+                        .unwrap();
                 });
             });
             eprintln!(
@@ -120,7 +126,7 @@ fn bench_sync_write(c: &mut Criterion) {
         group.bench_function(&id, |b| {
             b.iter(|| {
                 array
-                    .store_array_subset(&array.subset_all(), &data)
+                    .store_array_subset(&array.subset_all(), &data, &Resources::default())
                     .unwrap();
             });
         });
@@ -135,7 +141,7 @@ fn bench_sync_write(c: &mut Criterion) {
 #[cfg(feature = "async")]
 mod asynchronous {
     use super::{
-        Arc, Array, ArrayBytes, Criterion, Duration, LatencyStore, Throughput, builder,
+        Arc, Array, ArrayBytes, Criterion, Duration, LatencyStore, Resources, Throughput, builder,
         compressible_u16, label, latencies_sharded, num_elements, read_subsets,
     };
     use zarrs::storage::store::AsyncMemoryStore;
@@ -169,7 +175,11 @@ mod asynchronous {
         let inner = Arc::new(AsyncMemoryStore::new());
         let array = builder(sharded).build(inner.clone(), "/").unwrap();
         array
-            .async_store_array_subset(&array.subset_all(), compressible_u16(num_elements()))
+            .async_store_array_subset(
+                &array.subset_all(),
+                compressible_u16(num_elements()),
+                &Resources::default(),
+            )
             .await
             .unwrap();
         let store = Arc::new(LatencyStore::new(inner, latency));
@@ -193,8 +203,10 @@ mod asynchronous {
                     store.reset();
                     group.bench_function(&id, |b| {
                         b.to_async(&runtime).iter(|| async {
-                            let _: ArrayBytes =
-                                array.async_retrieve_array_subset(&subset).await.unwrap();
+                            let _: ArrayBytes = array
+                                .async_retrieve_array_subset(&subset, &Resources::default())
+                                .await
+                                .unwrap();
                         });
                     });
                     eprintln!(
@@ -228,7 +240,11 @@ mod asynchronous {
                 group.bench_function(&id, |b| {
                     b.to_async(&runtime).iter(|| async {
                         array
-                            .async_store_array_subset(&array.subset_all(), &data)
+                            .async_store_array_subset(
+                                &array.subset_all(),
+                                &data,
+                                &Resources::default(),
+                            )
                             .await
                             .unwrap();
                     });
@@ -244,7 +260,11 @@ mod asynchronous {
                         || data.clone(),
                         |data| async {
                             array
-                                .async_store_array_subset(&array.subset_all(), data)
+                                .async_store_array_subset(
+                                    &array.subset_all(),
+                                    data,
+                                    &Resources::default(),
+                                )
                                 .await
                                 .unwrap();
                         },

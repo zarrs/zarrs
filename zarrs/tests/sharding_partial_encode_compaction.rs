@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use zarrs::array::codec::Crc32cCodec;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, CodecOptions, data_type};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, CodecOptions, Resources, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
 use zarrs::storage::store::MemoryStore;
 
@@ -27,22 +27,23 @@ fn builder(location: ShardingIndexLocation) -> ArrayBuilder {
 fn sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
     for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         let array = builder(location).build(Arc::new(MemoryStore::default()), "/")?;
-        array.store_chunk(&[0], (1..=8u8).collect::<Vec<_>>())?;
+        array.store_chunk(&[0], (1..=8u8).collect::<Vec<_>>(), &Resources::default())?;
         let original_size = array.retrieve_encoded_chunk(&[0])?.unwrap().len();
-        let encoder = array.partial_encoder(&[0])?;
+        let encoder = array.partial_encoder(&[0], &Resources::default())?;
         assert!(!encoder.supports_partial_encode());
         for value in 42..46u8 {
             encoder.partial_encode(
                 &ArraySubset::new_with_ranges(&[2..4]),
                 &ArrayBytes::new_flen(vec![value, value + 1]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )?;
             assert_eq!(
                 array.retrieve_encoded_chunk(&[0])?.unwrap().len(),
                 original_size
             );
             assert_eq!(
-                array.retrieve_chunk::<Vec<u8>>(&[0])?,
+                array.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())?,
                 [1, 2, value, value + 1, 5, 6, 7, 8]
             );
         }
@@ -57,14 +58,16 @@ async fn async_sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
         let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
         let array = builder(location).build(store, "/")?;
         array
-            .async_store_chunk(&[0], (1..=8u8).collect::<Vec<_>>())
+            .async_store_chunk(&[0], (1..=8u8).collect::<Vec<_>>(), &Resources::default())
             .await?;
         let original_size = array
             .async_retrieve_encoded_chunk(&[0])
             .await?
             .unwrap()
             .len();
-        let encoder = array.async_partial_encoder(&[0]).await?;
+        let encoder = array
+            .async_partial_encoder(&[0], &Resources::default())
+            .await?;
         assert!(!encoder.supports_partial_encode());
         for value in 42..46u8 {
             encoder
@@ -72,6 +75,7 @@ async fn async_sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
                     &ArraySubset::new_with_ranges(&[2..4]),
                     &ArrayBytes::new_flen(vec![value, value + 1]),
                     &CodecOptions::default(),
+                    &Resources::default(),
                 )
                 .await?;
             assert_eq!(
@@ -83,7 +87,9 @@ async fn async_sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
                 original_size
             );
             assert_eq!(
-                array.async_retrieve_chunk::<Vec<u8>>(&[0]).await?,
+                array
+                    .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+                    .await?,
                 [1, 2, value, value + 1, 5, 6, 7, 8]
             );
         }

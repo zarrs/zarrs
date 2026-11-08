@@ -4,11 +4,13 @@
 //! The fill value is set to `Some(None)`.
 
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, FillValue, data_type};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let resources = Resources::default();
     // Create an in-memory store
     // let store = Arc::new(zarrs::filesystem::FilesystemStore::new(
     //     "zarrs/tests/data/v3/array_optional_nested.zarr",
@@ -55,11 +57,12 @@ N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
     .into_dyn();
 
     // Write the data
-    array.store_array_subset(&array.subset_all(), data.clone())?;
+    array.store_array_subset(&array.subset_all(), data.clone(), &resources)?;
     println!("Data written to array.");
 
     // Read back the data
-    let data_read: ArrayD<Option<Option<u8>>> = array.retrieve_array_subset(&array.subset_all())?;
+    let data_read: ArrayD<Option<Option<u8>>> =
+        array.retrieve_array_subset(&array.subset_all(), &resources)?;
 
     // Verify data integrity
     assert_eq!(data, data_read);

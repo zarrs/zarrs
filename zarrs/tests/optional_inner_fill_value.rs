@@ -13,7 +13,10 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::ShardingCodec;
-use zarrs::array::{Array, ArrayCreateError, ArrayMetadata, ArraySubset, FillValue, data_type};
+use zarrs::array::{
+    Array, ArrayCreateError, ArrayMetadata, ArraySubset, ComputeResources, FillValue, Resources,
+    data_type,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{CodecOptions, CodecSpecificOptions, UnboundArrayToBytesCodecTraits};
 use zarrs_metadata::v3::MetadataV3;
@@ -155,6 +158,7 @@ fn decode_shard_with_fill(
             shard.to_vec().into(),
             &[NonZeroU64::new(7).unwrap()],
             &CodecOptions::default(),
+            &ComputeResources::default(),
         )?
         .into_fixed()?
         .to_vec())
@@ -167,17 +171,24 @@ fn decode_shard_with_fill(
 fn optional_sharded_data_codecs_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     for fill_value in [format!("[{FILL}]"), "[0]".to_string()] {
         let array = sharded_data_array(&fill_value)?;
-        array.store_chunk(&[0], elements())?;
-        assert_eq!(array.retrieve_chunk::<Vec<Option<u8>>>(&[0])?, elements());
+        array.store_chunk(&[0], elements(), &Resources::default())?;
+        assert_eq!(
+            array.retrieve_chunk::<Vec<Option<u8>>>(&[0], &Resources::default())?,
+            elements()
+        );
     }
 
     // Partial write: the unwritten elements are the fill value Some(42), and are valid elements
     // passed to the data codec chain.
     let array = sharded_data_array(&format!("[{FILL}]"))?;
     let written = [Some(0u8), None, Some(0)];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[2..5]), written.to_vec())?;
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[2..5]),
+        written.to_vec(),
+        &Resources::default(),
+    )?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<Option<u8>>>(&[0])?,
+        array.retrieve_chunk::<Vec<Option<u8>>>(&[0], &Resources::default())?,
         filled_with(2, &written)
     );
     // Valid elements (7): [42, 42 | 0, 0 | 42, 42 | 42]
@@ -192,7 +203,7 @@ fn optional_sharded_data_codecs_round_trip() -> Result<(), Box<dyn std::error::E
 #[test]
 fn optional_sharded_data_codecs_omitted_subchunks() -> Result<(), Box<dyn std::error::Error>> {
     let array = sharded_data_array(&format!("[{FILL}]"))?;
-    array.store_chunk(&[0], elements())?;
+    array.store_chunk(&[0], elements(), &Resources::default())?;
 
     let encoded = array.retrieve_encoded_chunk(&[0])?.unwrap();
     let (_mask, shard) = split_optional(&encoded);
@@ -255,9 +266,9 @@ fn optional_nested_sharded_data_codecs_omitted_subchunks() -> Result<(), Box<dyn
 
     // `[[42]]` -> `[42]` -> `42`
     let array = try_array(OPTIONAL_OPTIONAL_U8, &format!("[[{FILL}]]"), &codecs)?;
-    array.store_chunk(&[0], elements.clone())?;
+    array.store_chunk(&[0], elements.clone(), &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0])?,
+        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0], &Resources::default())?,
         elements
     );
     let encoded = array.retrieve_encoded_chunk(&[0])?.unwrap();
@@ -279,19 +290,33 @@ fn optional_sharded_outer_unwritten_subchunks() -> Result<(), Box<dyn std::error
     let codecs = format!("[{}]", sharding_codec(&optional_codec(BYTES)));
     let array = try_array(OPTIONAL_U8, &format!("[{FILL}]"), &codecs)?;
     let written = [Some(0u8), None];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[2..4]), written.to_vec())?;
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[2..4]),
+        written.to_vec(),
+        &Resources::default(),
+    )?;
     let mut expected = filled_with(2, &written);
-    assert_eq!(array.retrieve_chunk::<Vec<Option<u8>>>(&[0])?, expected);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<Option<u8>>>(&[0], &Resources::default())?,
+        expected
+    );
     let shard = array.retrieve_encoded_chunk(&[0])?.unwrap();
     assert_eq!(omitted_subchunks(&shard, 4), vec![true, false, true, true]);
 
     // All-zero valid elements are not the fill value, so they are stored
     let written = [Some(0u8), Some(0)];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[6..8]), written.to_vec())?;
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[6..8]),
+        written.to_vec(),
+        &Resources::default(),
+    )?;
     let shard = array.retrieve_encoded_chunk(&[0])?.unwrap();
     assert_eq!(omitted_subchunks(&shard, 4), vec![true, false, true, false]);
     expected[6..8].copy_from_slice(&written);
-    assert_eq!(array.retrieve_chunk::<Vec<Option<u8>>>(&[0])?, expected);
+    assert_eq!(
+        array.retrieve_chunk::<Vec<Option<u8>>>(&[0], &Resources::default())?,
+        expected
+    );
     Ok(())
 }
 
@@ -322,8 +347,11 @@ fn optional_null_fill_value_nested_defined_fill_values() -> Result<(), Box<dyn s
         .enumerate()
         .map(|(i, s)| (i % 3 != 1).then(|| (*s).to_string()))
         .collect();
-    array.store_chunk(&[0], elements.clone())?;
-    assert_eq!(array.retrieve_chunk::<Vec<Option<String>>>(&[0])?, elements);
+    array.store_chunk(&[0], elements.clone(), &Resources::default())?;
+    assert_eq!(
+        array.retrieve_chunk::<Vec<Option<String>>>(&[0], &Resources::default())?,
+        elements
+    );
 
     // `optional` mask codecs are bound with a fill value of `false`
     let inner_optional = format!(
@@ -351,9 +379,9 @@ fn optional_null_fill_value_nested_defined_fill_values() -> Result<(), Box<dyn s
         None,
         Some(Some(3)),
     ];
-    array.store_chunk(&[0], elements.clone())?;
+    array.store_chunk(&[0], elements.clone(), &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0])?,
+        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0], &Resources::default())?,
         elements
     );
 
@@ -366,9 +394,9 @@ fn optional_null_fill_value_nested_defined_fill_values() -> Result<(), Box<dyn s
             optional_codec(&sharding_codec(&optional_codec(BYTES)))
         ),
     )?;
-    array.store_chunk(&[0], elements.clone())?;
+    array.store_chunk(&[0], elements.clone(), &Resources::default())?;
     assert_eq!(
-        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0])?,
+        array.retrieve_chunk::<Vec<Option<Option<u8>>>>(&[0], &Resources::default())?,
         elements
     );
     // Valid outer elements (6): [null, null | 1, 2 | null, 3]

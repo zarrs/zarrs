@@ -14,8 +14,8 @@ use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -233,6 +233,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let (num_elements, _) = decoded_len(&self.data_type, shape)?;
         bytes.validate(num_elements, &self.data_type)?;
@@ -246,6 +247,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes: CowBytes<'a>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let (num_elements, _) = decoded_len(&self.data_type, shape)?;
         let bytes = self.data_type.codec_bytes()?.decode(bytes, self.endian)?;
@@ -261,6 +263,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
@@ -276,6 +279,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
@@ -292,6 +296,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
@@ -308,6 +313,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
@@ -349,12 +355,22 @@ mod tests {
             assert!(codec.encoded_representation(&shape).is_err());
             assert!(
                 codec
-                    .encode(ArrayBytes::new_flen(vec![0; 2]), &shape, &options)
+                    .encode(
+                        ArrayBytes::new_flen(vec![0; 2]),
+                        &shape,
+                        &options,
+                        &ComputeResources::default()
+                    )
                     .is_err()
             );
             assert!(
                 codec
-                    .decode(CowBytes::from(&[0; 2][..]), &shape, &options)
+                    .decode(
+                        CowBytes::from(&[0; 2][..]),
+                        &shape,
+                        &options,
+                        &ComputeResources::default()
+                    )
                     .is_err()
             );
         }

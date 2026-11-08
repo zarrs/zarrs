@@ -39,24 +39,13 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// If `true`, the aforementioned test is skipped and empty chunks will be stored.
 /// Note that empty chunks must still be stored explicitly (e.g. with [`Array::store_chunk`](crate::array::Array::store_chunk)).
 ///
-/// ### Codec Concurrent Target
-/// > default: [`std::thread::available_parallelism`]`()`
-///
-/// [`CodecOptions::concurrent_target()`] defaults to [`Config::codec_concurrent_target()`].
-///
-/// The default number of concurrent operations to target for codec encoding and decoding.
-/// Limiting concurrent operations is needed to reduce memory usage and improve performance.
-/// Concurrency is unconstrained if the concurrent target if set to zero.
-///
-/// Note that the default codec concurrent target can be overridden for any encode/decode operation.
-/// This is performed automatically for many array operations (see the [chunk concurrent minimum](#chunk-concurrent-minimum) option).
-///
 /// ### Chunk Concurrent Minimum
 /// > default: `4`
 ///
 /// Array operations involving multiple chunks can tune the chunk and codec concurrency to improve performance/reduce memory usage.
 /// This option sets the preferred minimum chunk concurrency.
-/// The concurrency of internal codecs is adjusted to accomodate for the chunk concurrency in accordance with the concurrent target set in the [`CodecOptions`] parameter of an encode or decode method.
+/// Arrays capture this default when they are constructed.
+/// The concurrency of internal codecs is adjusted to accommodate the chunk concurrency in accordance with the compute target in the [`Resources`](zarrs_codec::Resources) parameter of an operation.
 ///
 /// ### Experimental Partial Encoding
 /// > default: [`false`]
@@ -123,7 +112,6 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 pub struct Config {
     validate_checksums: bool,
     store_empty_chunks: bool,
-    codec_concurrent_target: usize,
     chunk_concurrent_minimum: usize,
     codec_store_metadata_if_encode_only: bool,
     metadata_convert_version: MetadataConvertVersion,
@@ -140,7 +128,6 @@ impl Default for Config {
         Self {
             validate_checksums: true,
             store_empty_chunks: false,
-            codec_concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             codec_store_metadata_if_encode_only: true,
             metadata_convert_version: MetadataConvertVersion::default(),
@@ -160,8 +147,6 @@ impl Config {
         CodecOptions::default()
             .with_validate_checksums(self.validate_checksums)
             .with_store_empty_chunks(self.store_empty_chunks)
-            .with_concurrent_target(self.codec_concurrent_target)
-            .with_chunk_concurrent_minimum(self.chunk_concurrent_minimum)
             .with_experimental_partial_encoding(self.experimental_partial_encoding)
     }
 
@@ -209,18 +194,6 @@ impl Config {
     /// Set the [store empty chunks](#store-empty-chunks) configuration.
     pub fn set_store_empty_chunks(&mut self, store_empty_chunks: bool) -> &mut Self {
         self.store_empty_chunks = store_empty_chunks;
-        self
-    }
-
-    /// Get the [codec concurrent target](#codec-concurrent-target) configuration.
-    #[must_use]
-    pub fn codec_concurrent_target(&self) -> usize {
-        self.codec_concurrent_target
-    }
-
-    /// Set the [codec concurrent target](#codec-concurrent-target) configuration.
-    pub fn set_codec_concurrent_target(&mut self, concurrent_target: usize) -> &mut Self {
-        self.codec_concurrent_target = concurrent_target;
         self
     }
 

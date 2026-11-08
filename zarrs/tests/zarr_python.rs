@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use zarrs::array::Resources;
 
 use serde::Deserialize;
 use zarrs::array::{Array, ArrayBytes, ArraySubset};
@@ -22,8 +23,10 @@ fn zarr_python_compat_fletcher32_v2() -> Result<(), Box<dyn Error>> {
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
-    let elements =
-        array.retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape()))?;
+    let elements = array.retrieve_array_subset::<Vec<u16>>(
+        &ArraySubset::new_with_shape(array.shape()),
+        &Resources::default(),
+    )?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
 
     Ok(())
@@ -43,8 +46,10 @@ fn zarr_python_compat_adler32_v2() -> Result<(), Box<dyn Error>> {
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
-    let elements =
-        array.retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape()))?;
+    let elements = array.retrieve_array_subset::<Vec<u16>>(
+        &ArraySubset::new_with_shape(array.shape()),
+        &Resources::default(),
+    )?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
 
     Ok(())
@@ -77,15 +82,18 @@ fn check_zarr_python_packbits(path: &str, chunks: &[&str]) -> Result<(), Box<dyn
     let expected = |i: u64, j: u64| (i * 9 + j) * 7 % 11 < 4;
 
     // Decoding
-    let elements_all = array.retrieve_array_subset::<Vec<bool>>(&array.subset_all())?;
+    let elements_all =
+        array.retrieve_array_subset::<Vec<bool>>(&array.subset_all(), &Resources::default())?;
     let answer: Vec<bool> = (0..10)
         .flat_map(|i| (0..9).map(move |j| expected(i, j)))
         .collect();
     assert_eq!(elements_all, answer);
 
     // Partial decoding
-    let elements =
-        array.retrieve_array_subset::<Vec<bool>>(&ArraySubset::new_with_ranges(&[3..8, 2..7]))?;
+    let elements = array.retrieve_array_subset::<Vec<bool>>(
+        &ArraySubset::new_with_ranges(&[3..8, 2..7]),
+        &Resources::default(),
+    )?;
     let answer: Vec<bool> = (3..8)
         .flat_map(|i| (2..7).map(move |j| expected(i, j)))
         .collect();
@@ -94,7 +102,7 @@ fn check_zarr_python_packbits(path: &str, chunks: &[&str]) -> Result<(), Box<dyn
     // Encoding matches numcodecs
     let store_out = Arc::new(MemoryStore::new());
     let array_out = Array::new_with_metadata(store_out.clone(), "/", array.metadata_opt())?;
-    array_out.store_array_subset(&array.subset_all(), elements_all)?;
+    array_out.store_array_subset(&array.subset_all(), elements_all, &Resources::default())?;
     for &chunk in chunks {
         let key = StoreKey::new(chunk)?;
         assert_eq!(store_out.get(&key)?, store.get(&key)?, "chunk {chunk}");
@@ -160,29 +168,46 @@ fn zarr_python_packbits_v3_partial_encode() -> Result<(), Box<dyn Error>> {
             "/",
             serde_json::from_value(metadata.clone())?,
         )?;
-        assert_eq!(array.retrieve_chunk::<Vec<bool>>(&[0, 0])?, vec![fill; 20]);
+        assert_eq!(
+            array.retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())?,
+            vec![fill; 20]
+        );
         // The encoded fill value of a missing chunk is partially decoded to the fill value
         assert_eq!(
-            array
-                .retrieve_array_subset::<Vec<bool>>(&ArraySubset::new_with_ranges(&[1..4, 1..3]))?,
+            array.retrieve_array_subset::<Vec<bool>>(
+                &ArraySubset::new_with_ranges(&[1..4, 1..3]),
+                &Resources::default()
+            )?,
             vec![fill; 6]
         );
-        let encoder = array.partial_encoder(&[0, 0])?;
+        let encoder = array.partial_encoder(&[0, 0], &Resources::default())?;
         let subset = ArraySubset::new_with_ranges(&[1..3, 1..4]);
         let bytes = ArrayBytes::new_flen(vec![u8::from(!fill); 6]);
-        encoder.partial_encode(&subset, &bytes, &CodecOptions::default())?;
+        encoder.partial_encode(
+            &subset,
+            &bytes,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
         let mut expected = vec![fill; 20];
         expected[5..8].fill(!fill);
         expected[9..12].fill(!fill);
-        assert_eq!(array.retrieve_chunk::<Vec<bool>>(&[0, 0])?, expected);
+        assert_eq!(
+            array.retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())?,
+            expected
+        );
 
         encoder.partial_encode(
             &ArraySubset::new_with_ranges(&[0..1, 0..1]),
             &ArrayBytes::new_flen(vec![u8::from(!fill)]),
             &CodecOptions::default(),
+            &Resources::default(),
         )?;
         expected[0] = !fill;
-        assert_eq!(array.retrieve_chunk::<Vec<bool>>(&[0, 0])?, expected);
+        assert_eq!(
+            array.retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())?,
+            expected
+        );
     }
     Ok(())
 }
@@ -221,13 +246,13 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
     )
     .await?;
     let elements = array
-        .async_retrieve_array_subset::<Vec<bool>>(&array.subset_all())
+        .async_retrieve_array_subset::<Vec<bool>>(&array.subset_all(), &Resources::default())
         .await?;
     let expected: Vec<bool> = (0..90).map(|i| i * 7 % 11 < 4).collect();
     assert_eq!(elements, expected);
     let subset = ArraySubset::new_with_ranges(&[3..8, 2..7]);
     let partial = array
-        .async_retrieve_array_subset::<Vec<bool>>(&subset)
+        .async_retrieve_array_subset::<Vec<bool>>(&subset, &Resources::default())
         .await?;
     let expected: Vec<bool> = (3..8)
         .flat_map(|i| (2..7).map(move |j| (i * 9 + j) * 7 % 11 < 4))
@@ -244,7 +269,7 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
         array.metadata_opt(),
     )?;
     array_out
-        .async_store_array_subset(&array.subset_all(), elements)
+        .async_store_array_subset(&array.subset_all(), elements, &Resources::default())
         .await?;
     for chunk in ["c/0/0", "c/0/1", "c/0/2", "c/1/0", "c/1/1", "c/1/2"] {
         let key = StoreKey::new(chunk)?;
@@ -263,20 +288,31 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
             serde_json::from_value(metadata)?,
         )?;
         assert_eq!(
-            array.async_retrieve_chunk::<Vec<bool>>(&[0, 0]).await?,
+            array
+                .async_retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())
+                .await?,
             vec![fill; 20]
         );
-        let encoder = array.async_partial_encoder(&[0, 0]).await?;
+        let encoder = array
+            .async_partial_encoder(&[0, 0], &Resources::default())
+            .await?;
         let subset = ArraySubset::new_with_ranges(&[1..3, 1..4]);
         let bytes = ArrayBytes::new_flen(vec![u8::from(!fill); 6]);
         encoder
-            .partial_encode(&subset, &bytes, &CodecOptions::default())
+            .partial_encode(
+                &subset,
+                &bytes,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
             .await?;
         let mut expected = vec![fill; 20];
         expected[5..8].fill(!fill);
         expected[9..12].fill(!fill);
         assert_eq!(
-            array.async_retrieve_chunk::<Vec<bool>>(&[0, 0]).await?,
+            array
+                .async_retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())
+                .await?,
             expected
         );
         encoder
@@ -284,11 +320,14 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
                 &ArraySubset::new_with_ranges(&[0..1, 0..1]),
                 &ArrayBytes::new_flen(vec![u8::from(!fill)]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await?;
         expected[0] = !fill;
         assert_eq!(
-            array.async_retrieve_chunk::<Vec<bool>>(&[0, 0]).await?,
+            array
+                .async_retrieve_chunk::<Vec<bool>>(&[0, 0], &Resources::default())
+                .await?,
             expected
         );
     }
@@ -302,7 +341,8 @@ fn zarr_python_v2_compat_str_fv_0() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<String>>(&subset_all, &Resources::default())?;
 
     assert_eq!(elements, &["a", "bb", "", "", ""]);
 
@@ -316,7 +356,8 @@ fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
+    let elements =
+        array.retrieve_array_subset::<Vec<String>>(&subset_all, &Resources::default())?;
 
     assert_eq!(elements, &["a", "bb", "", "", ""]);
 
@@ -330,7 +371,7 @@ fn zarr_python_v2_compat_bool_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset::<Vec<bool>>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<bool>>(&subset_all, &Resources::default())?;
     assert_eq!(elements, &[true, false, false, false, false]);
 
     Ok(())
@@ -343,7 +384,7 @@ fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset::<Vec<i32>>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<i32>>(&subset_all, &Resources::default())?;
     assert_eq!(elements, &[42, 123, 0, 0, 0]);
 
     Ok(())
@@ -357,7 +398,7 @@ fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset::<Vec<f32>>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<f32>>(&subset_all, &Resources::default())?;
     assert_eq!(elements, &[3.14, 2.71, 0.0, 0.0, 0.0]);
 
     Ok(())
@@ -432,7 +473,7 @@ fn zarr_python_v3_cast_value_matrix_read() -> Result<(), Box<dyn Error>> {
             .map_err(|err| format!("failed to open {}: {err}", case.path))?;
         let subset_all = array.subset_all();
         let bytes = array
-            .retrieve_array_subset::<ArrayBytes<'static>>(&subset_all)
+            .retrieve_array_subset::<ArrayBytes<'static>>(&subset_all, &Resources::default())
             .map_err(|err| format!("failed to decode {}: {err}", case.path))?;
         let bytes = bytes.into_fixed()?.into_vec();
         if zarr_python_uses_nearest_even_for_directed_uint64_to_float(case) {

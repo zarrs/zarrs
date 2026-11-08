@@ -5,7 +5,7 @@ use std::cell::LazyCell;
 use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, data_type};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::storage::store::MemoryStore;
 
 const SHAPE: [u64; 4] = [64, 4, 128, 128];
@@ -27,7 +27,7 @@ fn sharded_partial_read(c: &mut Criterion) {
             .map(|i| (i % 1024 + 1) as f64)
             .collect();
         array
-            .store_array_subset(&array.subset_all(), data.as_slice())
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         array
     });
@@ -42,7 +42,9 @@ fn sharded_partial_read(c: &mut Criterion) {
         group.bench_function(name, |b| {
             let array = &*array;
             b.iter(|| {
-                let bytes: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                let bytes: ArrayBytes = array
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
                 std::hint::black_box(bytes);
             });
         });

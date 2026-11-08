@@ -8,11 +8,13 @@ use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::ShardingCodecBuilder;
-use zarrs::array::{ArrayBuilder, ArraySubset, DataType, ElementOwned, FillValue, data_type};
+use zarrs::array::{
+    ArrayBuilder, ArraySubset, ComputeResources, DataType, ElementOwned, FillValue, data_type,
+};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
+    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
 };
 
 const SHAPE: [u64; 2] = [8, 6];
@@ -106,11 +108,15 @@ fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
     );
     builder.subchunk_shape(SUBCHUNK_SHAPE.to_vec());
     let array = builder.build(store, "/")?;
-    array.store_array_subset(&array.subset_all(), T::to_array_bytes(data_type, elements)?)?;
+    array.store_array_subset(
+        &array.subset_all(),
+        T::to_array_bytes(data_type, elements)?,
+        &Resources::default(),
+    )?;
 
     // Retrieve the entire array (spanning multiple shards)
     assert_eq!(
-        array.retrieve_array_subset::<Vec<T>>(&array.subset_all())?,
+        array.retrieve_array_subset::<Vec<T>>(&array.subset_all(), &Resources::default())?,
         elements
     );
 
@@ -118,7 +124,7 @@ fn sharding_optional_round_trip<T: ElementOwned + Clone + PartialEq + Debug>(
     let subset = ArraySubset::new_with_ranges(&[3..7, 1..4]);
     let indices: Vec<[u64; 2]> = (3..7).flat_map(|i| (1..4).map(move |j| [i, j])).collect();
     assert_eq!(
-        array.retrieve_array_subset::<Vec<T>>(&subset)?,
+        array.retrieve_array_subset::<Vec<T>>(&subset, &Resources::default())?,
         select(elements, &indices)
     );
     Ok(())
@@ -149,11 +155,17 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
             T::to_array_bytes(&data_type, shard_elements)?,
             &shard_shape,
             &options,
+            &ComputeResources::default(),
         )?
         .into_vec();
 
     // Decode
-    let decoded = codec.decode(encoded.clone().into(), &shard_shape, &options)?;
+    let decoded = codec.decode(
+        encoded.clone().into(),
+        &shard_shape,
+        &options,
+        &ComputeResources::default(),
+    )?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, shard_elements);
 
     // Partial decode with a generic indexer
@@ -162,11 +174,13 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         shard_elements,
         &indexer.iter().map(|i| [i[0], i[1]]).collect::<Vec<_>>(),
     );
-    let partial_decoder =
-        codec
-            .clone()
-            .partial_decoder(Arc::new(encoded.clone()), &shard_shape, &options)?;
-    let decoded = partial_decoder.partial_decode(&indexer, &options)?;
+    let partial_decoder = codec.clone().partial_decoder(
+        Arc::new(encoded.clone()),
+        &shard_shape,
+        &options,
+        &Resources::default(),
+    )?;
+    let decoded = partial_decoder.partial_decode(&indexer, &options, &Resources::default())?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected);
 
     // Partial decode with an array subset spanning multiple (partial) subchunks
@@ -178,11 +192,11 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
             .collect::<Vec<_>>(),
     );
     let fixed = optional_innermost(&data_type).0.is_fixed();
-    let decoded = partial_decoder.partial_decode(&subset, &options)?;
+    let decoded = partial_decoder.partial_decode(&subset, &options, &Resources::default())?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     if fixed {
         let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-            .partial_decode_into(&subset, target, &options));
+            .partial_decode_into(&subset, target, &options, &Resources::default()));
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     }
 
@@ -190,15 +204,24 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     {
         let partial_decoder = codec
             .clone()
-            .async_partial_decoder(Arc::new(encoded), &shard_shape, &options)
+            .async_partial_decoder(
+                Arc::new(encoded),
+                &shard_shape,
+                &options,
+                &Resources::default(),
+            )
             .await?;
-        let decoded = partial_decoder.partial_decode(&indexer, &options).await?;
+        let decoded = partial_decoder
+            .partial_decode(&indexer, &options, &Resources::default())
+            .await?;
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected);
-        let decoded = partial_decoder.partial_decode(&subset, &options).await?;
+        let decoded = partial_decoder
+            .partial_decode(&subset, &options, &Resources::default())
+            .await?;
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         if fixed {
             let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-                .partial_decode_into(&subset, target, &options)
+                .partial_decode_into(&subset, target, &options, &Resources::default())
                 .await);
             assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         }

@@ -7,7 +7,7 @@ use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, CowBytes, DataType, FillValue};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits,
-    CodecError, CodecOptions,
+    CodecError, CodecOptions, Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -81,9 +81,10 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
-        let bytes = self.input_handle.decode(options)?;
+        let bytes = self.input_handle.decode(options, resources)?;
         decode_vlen_bytes(
             bytes,
             indexer,
@@ -148,9 +149,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
-        let bytes = self.input_handle.decode(options).await?;
+        let bytes = self.input_handle.decode(options, resources).await?;
         decode_vlen_bytes(
             bytes,
             indexer,

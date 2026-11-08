@@ -97,6 +97,7 @@ pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
 
 #[cfg(test)]
 mod tests {
+
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -105,7 +106,8 @@ mod tests {
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
     use zarrs_codec::{
-        CodecOptions, CodecSpecificOptions, CodecTraits, UnboundArrayToArrayCodecTraits,
+        CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+        UnboundArrayToArrayCodecTraits,
     };
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
@@ -143,10 +145,20 @@ mod tests {
                 .unwrap();
 
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &shape, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_elements =
             crate::array::transmute_from_bytes_vec::<f64>(decoded.into_fixed().unwrap().into_vec());
@@ -178,10 +190,20 @@ mod tests {
                 )
                 .unwrap();
         let encoded = codec
-            .encode(ArrayBytes::from(elements), &shape, &CodecOptions::default())
+            .encode(
+                ArrayBytes::from(elements),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded.clone(), &shape, &CodecOptions::default())
+            .decode(
+                encoded.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         (
             encoded.into_fixed().unwrap().into_vec(),

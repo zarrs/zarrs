@@ -5,8 +5,8 @@ use std::sync::Arc;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
     UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -245,6 +245,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.data_type.codec_castvalue()?;
         let target = self.encoded_data_type.codec_castvalue()?;
@@ -268,6 +269,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let source = self.encoded_data_type.codec_castvalue()?;
         let target = self.data_type.codec_castvalue()?;
@@ -291,6 +293,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_handle.data_type())?;
         Ok(Arc::new(self.partial(input_handle)?))
@@ -301,6 +304,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_output_handle.data_type())?;
         Ok(Arc::new(self.partial(input_output_handle)?))
@@ -312,6 +316,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_handle.data_type())?;
         Ok(Arc::new(self.partial(input_handle)?))
@@ -323,6 +328,7 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
+        _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_output_handle.data_type())?;
         Ok(Arc::new(self.partial(input_output_handle)?))

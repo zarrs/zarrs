@@ -7,7 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use zarrs::array::{
-    ArrayBytes, ArraySubset, CodecChain, CodecChainBound, DataType, FillValue, data_type,
+    ArrayBytes, ArraySubset, CodecChain, CodecChainBound, ComputeResources, DataType, FillValue,
+    Resources, data_type,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::byte_range::ByteRangeIterator;
@@ -88,7 +89,12 @@ fn partial_encode_compressed_chunk_shrinks() {
         let key = StoreKey::new("c").unwrap();
         let elements = incompressible();
         let encoded = codec
-            .encode(ArrayBytes::from(elements.clone()), &shape(), &options)
+            .encode(
+                ArrayBytes::from(elements.clone()),
+                &shape(),
+                &options,
+                &ComputeResources::default(),
+            )
             .unwrap();
         let len_before = encoded.len();
         store.set(&key, encoded).unwrap();
@@ -98,9 +104,14 @@ fn partial_encode_compressed_chunk_shrinks() {
         let reads_before = store.reads();
         codec
             .clone()
-            .partial_encoder(handle.clone(), &shape(), &options)
+            .partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
             .unwrap()
-            .partial_encode(&subset, &ArrayBytes::from(update.clone()), &options)
+            .partial_encode(
+                &subset,
+                &ArrayBytes::from(update.clone()),
+                &options,
+                &Resources::default(),
+            )
             .unwrap();
         reads.push(store.reads() - reads_before);
 
@@ -108,9 +119,13 @@ fn partial_encode_compressed_chunk_shrinks() {
         assert!(len_after < len_before / 2, "{codecs:?}: {len_after}");
         let decoded = codec
             .clone()
-            .partial_decoder(handle, &shape(), &options)
+            .partial_decoder(handle, &shape(), &options, &Resources::default())
             .unwrap()
-            .partial_decode(&ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]), &options)
+            .partial_decode(
+                &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
+                &options,
+                &Resources::default(),
+            )
             .unwrap()
             .into_owned();
         assert_eq!(
@@ -141,19 +156,25 @@ fn partial_encode_whole_chunk_replaces_undecodable_chunk() {
         let elements = incompressible();
         codec
             .clone()
-            .partial_encoder(handle.clone(), &shape(), &options)
+            .partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
             .unwrap()
             .partial_encode(
                 &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
                 &ArrayBytes::from(elements.clone()),
                 &options,
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(store.reads(), 0, "{codecs:?}");
         assert_eq!(store.writes(), 1, "{codecs:?}");
 
         let decoded = codec
-            .decode(store.get(&key).unwrap().unwrap().into(), &shape(), &options)
+            .decode(
+                store.get(&key).unwrap().unwrap().into(),
+                &shape(),
+                &options,
+                &ComputeResources::default(),
+            )
             .unwrap()
             .into_owned();
         assert_eq!(decoded, ArrayBytes::from(elements), "{codecs:?}");
@@ -332,7 +353,12 @@ fn failed_partial_encode_keeps_existing_chunk() {
         let key = StoreKey::new("c").unwrap();
         let existing_encoded = case
             .codec
-            .encode(case.existing.clone(), &case.shape, &options)
+            .encode(
+                case.existing.clone(),
+                &case.shape,
+                &options,
+                &ComputeResources::default(),
+            )
             .unwrap();
         store.set(&key, existing_encoded).unwrap();
         let handle = Arc::new((store.clone(), key));
@@ -340,27 +366,28 @@ fn failed_partial_encode_keeps_existing_chunk() {
         let decode = || {
             case.codec
                 .clone()
-                .partial_decoder(handle.clone(), &case.shape, &options)
+                .partial_decoder(handle.clone(), &case.shape, &options, &Resources::default())
                 .unwrap()
-                .partial_decode(&case.whole(), &options)
+                .partial_decode(&case.whole(), &options, &Resources::default())
                 .unwrap()
                 .into_owned()
         };
         let encoder = case
             .codec
             .clone()
-            .partial_encoder(handle.clone(), &case.shape, &options)
+            .partial_encoder(handle.clone(), &case.shape, &options, &Resources::default())
             .unwrap();
 
         store.fail_writes(true);
-        let result = encoder.partial_encode(&case.subset, &case.update, &options);
+        let result =
+            encoder.partial_encode(&case.subset, &case.update, &options, &Resources::default());
         assert!(result.is_err(), "{name}");
         store.fail_writes(false);
         assert_eq!(decode(), case.existing, "{name}");
 
         // The encoder remains usable, e.g. a cached shard index still matches the stored shard
         encoder
-            .partial_encode(&case.subset, &case.update, &options)
+            .partial_encode(&case.subset, &case.update, &options, &Resources::default())
             .unwrap();
         assert_eq!(decode(), case.updated, "{name}");
     }
@@ -401,7 +428,12 @@ mod r#async {
             let key = StoreKey::new("c").unwrap();
             let elements = incompressible();
             let encoded = codec
-                .encode(ArrayBytes::from(elements.clone()), &shape(), &options)
+                .encode(
+                    ArrayBytes::from(elements.clone()),
+                    &shape(),
+                    &options,
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             let len_before = encoded.len();
             store.set(&key, encoded).await.unwrap();
@@ -411,10 +443,15 @@ mod r#async {
             let reads_before = store.reads();
             codec
                 .clone()
-                .async_partial_encoder(handle.clone(), &shape(), &options)
+                .async_partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
                 .await
                 .unwrap()
-                .partial_encode(&subset, &ArrayBytes::from(update.clone()), &options)
+                .partial_encode(
+                    &subset,
+                    &ArrayBytes::from(update.clone()),
+                    &options,
+                    &Resources::default(),
+                )
                 .await
                 .unwrap();
             reads.push(store.reads() - reads_before);
@@ -423,10 +460,14 @@ mod r#async {
             assert!(len_after < len_before / 2, "{codecs:?}: {len_after}");
             let decoded = codec
                 .clone()
-                .async_partial_decoder(handle, &shape(), &options)
+                .async_partial_decoder(handle, &shape(), &options, &Resources::default())
                 .await
                 .unwrap()
-                .partial_decode(&ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]), &options)
+                .partial_decode(
+                    &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
+                    &options,
+                    &Resources::default(),
+                )
                 .await
                 .unwrap()
                 .into_owned();
@@ -460,13 +501,14 @@ mod r#async {
             let elements = incompressible();
             codec
                 .clone()
-                .async_partial_encoder(handle.clone(), &shape(), &options)
+                .async_partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
                 .await
                 .unwrap()
                 .partial_encode(
                     &ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS]),
                     &ArrayBytes::from(elements.clone()),
                     &options,
+                    &Resources::default(),
                 )
                 .await
                 .unwrap();
@@ -475,7 +517,12 @@ mod r#async {
 
             let encoded = store.get(&key).await.unwrap().unwrap();
             let decoded = codec
-                .decode(encoded.into(), &shape(), &options)
+                .decode(
+                    encoded.into(),
+                    &shape(),
+                    &options,
+                    &ComputeResources::default(),
+                )
                 .unwrap()
                 .into_owned();
             assert_eq!(decoded, ArrayBytes::from(elements), "{codecs:?}");
@@ -495,7 +542,12 @@ mod r#async {
             let key = StoreKey::new("c").unwrap();
             let existing_encoded = case
                 .codec
-                .encode(case.existing.clone(), &case.shape, &options)
+                .encode(
+                    case.existing.clone(),
+                    &case.shape,
+                    &options,
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             store.set(&key, existing_encoded).await.unwrap();
             let handle = Arc::new((store.clone(), key));
@@ -503,10 +555,15 @@ mod r#async {
             let decode = async || {
                 case.codec
                     .clone()
-                    .async_partial_decoder(handle.clone(), &case.shape, &options)
+                    .async_partial_decoder(
+                        handle.clone(),
+                        &case.shape,
+                        &options,
+                        &Resources::default(),
+                    )
                     .await
                     .unwrap()
-                    .partial_decode(&case.whole(), &options)
+                    .partial_decode(&case.whole(), &options, &Resources::default())
                     .await
                     .unwrap()
                     .into_owned()
@@ -514,13 +571,13 @@ mod r#async {
             let encoder = case
                 .codec
                 .clone()
-                .async_partial_encoder(handle.clone(), &case.shape, &options)
+                .async_partial_encoder(handle.clone(), &case.shape, &options, &Resources::default())
                 .await
                 .unwrap();
 
             failing.fail_writes(true);
             let result = encoder
-                .partial_encode(&case.subset, &case.update, &options)
+                .partial_encode(&case.subset, &case.update, &options, &Resources::default())
                 .await;
             assert!(result.is_err(), "{name}");
             failing.fail_writes(false);
@@ -528,7 +585,7 @@ mod r#async {
 
             // The encoder remains usable, e.g. a cached shard index still matches the stored shard
             encoder
-                .partial_encode(&case.subset, &case.update, &options)
+                .partial_encode(&case.subset, &case.update, &options, &Resources::default())
                 .await
                 .unwrap();
             assert_eq!(decode().await, case.updated, "{name}");

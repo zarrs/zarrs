@@ -7,7 +7,7 @@ use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel}
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -90,6 +90,7 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         &self,
         decoded_value: CowBytes<'a>,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut encoder = bzip2::read::BzEncoder::new(Cursor::new(decoded_value), self.compression);
         let mut out: Vec<u8> = Vec::new();
@@ -102,6 +103,7 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         encoded_value: CowBytes<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
+        _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let mut decoder = bzip2::read::BzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();

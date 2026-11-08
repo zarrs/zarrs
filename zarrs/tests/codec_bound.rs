@@ -5,7 +5,7 @@ use std::sync::Arc;
 use zarrs::array::codec::BytesCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayCodecTraits, ArrayCreateError, ArrayToBytesCodecTraits,
-    CodecOptions, FillValue, data_type,
+    CodecOptions, ComputeResources, FillValue, data_type,
 };
 use zarrs::storage::store::MemoryStore;
 
@@ -20,9 +20,19 @@ fn codec_chain_bound_context_and_runtime() -> Result<(), Box<dyn std::error::Err
 
     let shape = array.chunk_shape(&[0])?;
     let decoded = ArrayBytes::from(vec![1, 2, 3, 4]);
-    let encoded = codecs.encode(decoded.clone(), &shape, &CodecOptions::default())?;
+    let encoded = codecs.encode(
+        decoded.clone(),
+        &shape,
+        &CodecOptions::default(),
+        &ComputeResources::default(),
+    )?;
     assert_eq!(
-        codecs.decode(encoded, &shape, &CodecOptions::default())?,
+        codecs.decode(
+            encoded,
+            &shape,
+            &CodecOptions::default(),
+            &ComputeResources::default()
+        )?,
         decoded
     );
     codecs.encoded_representation(&shape)?;

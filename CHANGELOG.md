@@ -17,14 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```diff
   - let chunk: Vec<f32> = array.retrieve_chunk_opt(&[0, 0], &codec_options)?;
-  + let chunk: Vec<f32> = array.with_codec_options(codec_options).retrieve_chunk(&[0, 0])?;
+  + let chunk: Vec<f32> = array.with_codec_options(codec_options).retrieve_chunk(&[0, 0], &Resources::default())?;
   ```
 
   - `retrieve_chunk_subset` and `store_chunk_subset` are renamed and accept any `&dyn Indexer`
 
   ```diff
   - let data: Vec<f32> = array.retrieve_chunk_subset(&[0, 0], &[0..2, 0..2])?;
-  + let data: Vec<f32> = array.retrieve_partial_chunk(&[0, 0], &[0..2, 0..2])?;
+  + let data: Vec<f32> = array.retrieve_partial_chunk(&[0, 0], &[0..2, 0..2], &Resources::default())?;
   ```
 
 - **Breaking**: Chunk caches are used through `ArrayCached`, which pairs an array with a cache and supports async stores
@@ -33,9 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - let cache = ChunkCacheDecodedLruChunkLimit::new(array.clone(), 32);
   - let chunk: Vec<f32> = cache.retrieve_chunk(&[0, 0], &CodecOptions::default())?;
   + let array = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(32));
-  + let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0])?;
+  + let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
   ```
 
+- **Breaking**: Pass `Resources` to each array operation to control compute concurrency, and `ComputeResources` to in-memory codec operations
+  - Compute-target control moves out of `CodecOptions` and `Config`; arrays capture `Config::chunk_concurrent_minimum` at construction instead of storing it in `CodecOptions`
 - **Breaking**: Codecs are bound to the data type and fill value of an array at array creation, so invalid codec chains are rejected when an array is built or opened rather than on first use
   - Codec implementations are split into `UnboundArrayTo{Array,Bytes}CodecTraits` (created from metadata) and `ArrayTo{Array,Bytes}CodecTraits` (bound with `with_context`); see `zarrs_codec` 0.3.0
 - **Breaking**: Encoded and raw bytes are `CowBytes` throughout, which removes copies on many store, codec, and `Tensor` paths, and `Tensor` may borrow its bytes
@@ -44,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Codecs: `cast_value`, `numcodecs.packbits` (V2: `packbits`)
 
 ### Arrays
+- **Breaking**: Pass `Resources` per array and chunk-cache operation instead of setting the compute target in `CodecOptions` or `Config`
+  - `chunk_concurrent_minimum` is private array state initialized from `Config`; `concurrency_chunks_and_codec` takes the minimum directly instead of `CodecOptions`
 - **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - These are implemented as inherent traits on `Array` and `ArrayCached`
   - Promote previously private methods to public: `[async_]retrieve_chunk_into` and `[async_]retrieve_partial_chunk_into`
@@ -123,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): codecs bind to a data type and fill value at array creation; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources; codecs bind to a data type and fill value at array creation; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
 
 #### General
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries

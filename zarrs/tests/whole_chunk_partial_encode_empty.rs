@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use zarrs::array::{
     ArrayBytes, ArrayBytesOffsets, ArraySubset, CodecChain, CodecChainBound, DataType, FillValue,
-    data_type,
+    Resources, data_type,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
@@ -105,9 +105,9 @@ fn whole_chunk_partial_encode_empty() {
             let encode = |bytes: &ArrayBytes| {
                 case.codec
                     .clone()
-                    .partial_encoder(handle.clone(), &shape(), &options)
+                    .partial_encoder(handle.clone(), &shape(), &options, &Resources::default())
                     .unwrap()
-                    .partial_encode(&whole, bytes, &options)
+                    .partial_encode(&whole, bytes, &options, &Resources::default())
                     .unwrap();
             };
             encode(&case.data);
@@ -158,10 +158,15 @@ mod r#async {
                 let encode = async |bytes: &ArrayBytes<'_>| {
                     case.codec
                         .clone()
-                        .async_partial_encoder(handle.clone(), &shape(), &options)
+                        .async_partial_encoder(
+                            handle.clone(),
+                            &shape(),
+                            &options,
+                            &Resources::default(),
+                        )
                         .await
                         .unwrap()
-                        .partial_encode(&whole, bytes, &options)
+                        .partial_encode(&whole, bytes, &options, &Resources::default())
                         .await
                         .unwrap();
                 };

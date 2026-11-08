@@ -5,7 +5,9 @@
     clippy::cast_precision_loss
 )]
 
-use zarrs::array::{ArrayBytes, ArraySubset, CodecSpecificOptions, CowBytes};
+use zarrs::array::{
+    ArrayBytes, ArraySubset, CodecSpecificOptions, ComputeResources, CowBytes, Resources,
+};
 
 use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
@@ -49,7 +51,12 @@ fn codec_bytes(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode_decode", num_elements), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &shape, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -76,13 +83,21 @@ fn codec_blosc(c: &mut Criterion) {
 
         let data_decoded: Vec<u8> = (0..size3).map(|i| i as u8).collect();
         let data_encoded = codec
-            .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&data_decoded),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         group.throughput(Throughput::Bytes(size3));
         group.bench_function(BenchmarkId::new("encode", size3), |b| {
             b.iter(|| {
                 codec
-                    .encode(CowBytes::Borrowed(&data_decoded), &CodecOptions::default())
+                    .encode(
+                        CowBytes::Borrowed(&data_decoded),
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -93,6 +108,7 @@ fn codec_blosc(c: &mut Criterion) {
                         CowBytes::Borrowed(&data_encoded),
                         &rep,
                         &CodecOptions::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap()
             });
@@ -129,7 +145,12 @@ fn codec_sharding(c: &mut Criterion) {
             )
             .unwrap();
         let encoded = codec
-            .encode(bytes.clone(), &shape, &CodecOptions::default())
+            .encode(
+                bytes.clone(),
+                &shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap()
             .into_static();
         let label = format!("{subchunk}{}", if zstd { "_zstd" } else { "" });
@@ -137,14 +158,24 @@ fn codec_sharding(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode", &label), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &shape, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
                     .unwrap()
             });
         });
         group.bench_function(BenchmarkId::new("decode", &label), |b| {
             b.iter(|| {
                 codec
-                    .decode(encoded.clone(), &shape, &CodecOptions::default())
+                    .decode(
+                        encoded.clone(),
+                        &shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )
                     .unwrap()
             });
         });
@@ -194,6 +225,7 @@ fn codec_packbits(c: &mut Criterion) {
                 ArrayBytes::new_flen(CowBytes::Borrowed(&bytes)),
                 &shape,
                 &CodecOptions::default(),
+                &ComputeResources::default(),
             )
             .unwrap()
             .into_static();
@@ -205,6 +237,7 @@ fn codec_packbits(c: &mut Criterion) {
                         ArrayBytes::new_flen(CowBytes::Borrowed(&bytes)),
                         &shape,
                         &CodecOptions::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap()
             });
@@ -216,6 +249,7 @@ fn codec_packbits(c: &mut Criterion) {
                         CowBytes::Borrowed(&encoded),
                         &shape,
                         &CodecOptions::default(),
+                        &ComputeResources::default(),
                     )
                     .unwrap()
             });
@@ -226,6 +260,7 @@ fn codec_packbits(c: &mut Criterion) {
                 std::sync::Arc::new(encoded),
                 &shape_2d,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         group.throughput(Throughput::Bytes(
@@ -234,7 +269,7 @@ fn codec_packbits(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("partial_decode", label), |b| {
             b.iter(|| {
                 partial_decoder
-                    .partial_decode(&subset, &CodecOptions::default())
+                    .partial_decode(&subset, &CodecOptions::default(), &Resources::default())
                     .unwrap()
             });
         });

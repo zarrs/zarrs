@@ -7,7 +7,7 @@ use zarrs::array::codec::{
     CastValueCodec, NumcodecsPackBitsCodec, ReshapeCodec, ReshapeDim, ReshapeShape, SqueezeCodec,
     TransposeCodec, TransposeOrder,
 };
-use zarrs::array::{ArrayBytes, ArraySubset, data_type};
+use zarrs::array::{ArrayBytes, ArraySubset, ComputeResources, data_type};
 use zarrs_codec::{
     ArrayToArrayCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
 };
@@ -68,6 +68,7 @@ fn check_all(codec: Arc<dyn ArrayToArrayCodecTraits>, s: &[u64]) {
             ArrayBytes::new_flen(bytemuck::cast_slice(&values).to_vec()),
             &shape(s),
             &CodecOptions::default(),
+            &ComputeResources::default(),
         )
         .unwrap()
         .into_fixed()

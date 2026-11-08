@@ -382,7 +382,7 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, CowBytes, data_type};
     use zarrs_codec::{
         BytesPartialDecoderTraits, Codec, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-        UnboundArrayToBytesCodecTraits,
+        ComputeResources, Resources, UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
@@ -728,8 +728,12 @@ mod tests {
                 let bytes = rng.bytes(num_elements * data_type_size);
 
                 // Encoding
-                let encoded =
-                    codec.encode(ArrayBytes::new_flen(bytes.clone()), &chunk_shape, &options)?;
+                let encoded = codec.encode(
+                    ArrayBytes::new_flen(bytes.clone()),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default(),
+                )?;
                 let packed = reference_pack(layout, &bytes);
                 let (_, elements) = split_padding(padding_encoding, &encoded);
                 assert_eq!(elements, packed, "{data_type:?} {layout:?}");
@@ -738,12 +742,21 @@ mod tests {
                 let num_components = num_elements * components.num_components as usize;
                 let expected =
                     ArrayBytes::new_flen(reference_unpack(layout, &packed, 0, num_components));
-                let decoded = codec.decode(encoded.clone(), &chunk_shape, &options)?;
+                let decoded = codec.decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default(),
+                )?;
                 assert_eq!(decoded, expected, "{data_type:?} {layout:?}");
 
                 // Partial decoding
-                let partial_decoder =
-                    codec.partial_decoder(Arc::new(encoded), &chunk_shape, &options)?;
+                let partial_decoder = codec.partial_decoder(
+                    Arc::new(encoded),
+                    &chunk_shape,
+                    &options,
+                    &Resources::default(),
+                )?;
                 for _ in 0..4 {
                     let start = shape.map(|s| rng.range(0..s));
                     let end = [
@@ -753,7 +766,7 @@ mod tests {
                     let subset =
                         ArraySubset::new_with_ranges(&[start[0]..end[0], start[1]..end[1]]);
                     assert_eq!(
-                        partial_decoder.partial_decode(&subset, &options)?,
+                        partial_decoder.partial_decode(&subset, &options, &Resources::default())?,
                         expected.extract_array_subset(&subset, &shape, &data_type)?,
                         "{data_type:?} {layout:?} {subset:?}"
                     );
@@ -820,12 +833,22 @@ mod tests {
             // ...
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= 40.div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(bytes, decoded);
 
@@ -833,11 +856,20 @@ mod tests {
             let decoded_region = ArraySubset::new_with_ranges(&[1..4, 1..4]);
             let input_handle = Arc::new(encoded);
             let partial_decoder = codec
-                .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
+                .partial_decoder(
+                    input_handle.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // packbits partial decoder does not hold bytes
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(
+                    &decoded_region,
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
                 .unwrap();
             let decoded_partial_chunk =
                 bool::from_array_bytes(&data_type, decoded_partial_chunk).unwrap();
@@ -870,9 +902,15 @@ mod tests {
                 ArrayBytes::new_flen(bytes.clone()),
                 &shape,
                 &CodecOptions::default(),
+                &ComputeResources::default(),
             )?;
             assert_eq!(
-                codec.decode(encoded.clone(), &shape, &CodecOptions::default())?,
+                codec.decode(
+                    encoded.clone(),
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )?,
                 ArrayBytes::new_flen(bytes)
             );
             Ok(encoded.to_vec())
@@ -942,12 +980,22 @@ mod tests {
             assert!(codec.encoded_representation(&shape).is_err());
             assert!(
                 codec
-                    .encode(ArrayBytes::new_flen(vec![0u8]), &shape, &options)
+                    .encode(
+                        ArrayBytes::new_flen(vec![0u8]),
+                        &shape,
+                        &options,
+                        &ComputeResources::default()
+                    )
                     .is_err()
             );
             assert!(
                 codec
-                    .decode(CowBytes::from(vec![0u8]), &shape, &options)
+                    .decode(
+                        CowBytes::from(vec![0u8]),
+                        &shape,
+                        &options,
+                        &ComputeResources::default()
+                    )
                     .is_err()
             );
         }
@@ -975,7 +1023,12 @@ mod tests {
             let bytes = f32::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             // A padding encoding byte holds the number of padding bits, which is zero
             let (padding, elements) = split_padding(encoding, &encoded);
             assert!(padding.is_none_or(|padding| padding == 0));
@@ -987,7 +1040,12 @@ mod tests {
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(bytes, decoded);
 
@@ -1002,16 +1060,22 @@ mod tests {
                     CowBytes::from(elements.to_vec()),
                     &chunk_shape,
                     &CodecOptions::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded);
 
             // Partial decoding must skip the padding byte, including across separate rows.
-            let partial_decoder =
-                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let partial_decoder = codec.partial_decoder(
+                Arc::new(encoded),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             let decoded_partial_chunk = partial_decoder.partial_decode(
                 &ArraySubset::new_with_ranges(&[2..5, 1..4]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )?;
             assert_eq!(
                 vec![11.0, 12.0, 13.0, 16.0, 17.0, 18.0, 21.0, 22.0, 23.0],
@@ -1037,10 +1101,11 @@ mod tests {
             &self,
             decoded_regions: zarrs_storage::byte_range::ByteRangeIterator,
             options: &CodecOptions,
+            resources: &Resources,
         ) -> Result<Option<Vec<CowBytes<'_>>>, zarrs_codec::CodecError> {
             Ok(self
                 .0
-                .partial_decode_many(decoded_regions, options)?
+                .partial_decode_many(decoded_regions, options, resources)?
                 .map(|bytes| {
                     bytes
                         .into_iter()
@@ -1112,24 +1177,54 @@ mod tests {
             };
             let (codec, converted) = (Arc::new(codec), Arc::new(converted));
 
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &options)?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &options,
+                &ComputeResources::default(),
+            )?;
             assert_eq!(
-                converted.encode(bytes.clone(), &chunk_shape, &options)?,
+                converted.encode(
+                    bytes.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default()
+                )?,
                 encoded
             );
             assert_eq!(
-                converted.decode(encoded.clone(), &chunk_shape, &options)?,
-                codec.decode(encoded.clone(), &chunk_shape, &options)?
+                converted.decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default()
+                )?,
+                codec.decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default()
+                )?
             );
             assert_eq!(
                 converted
                     .clone()
-                    .partial_decoder(Arc::new(encoded.clone()), &chunk_shape, &options)?
-                    .partial_decode(&subset, &options)?,
+                    .partial_decoder(
+                        Arc::new(encoded.clone()),
+                        &chunk_shape,
+                        &options,
+                        &Resources::default()
+                    )?
+                    .partial_decode(&subset, &options, &Resources::default())?,
                 codec
                     .clone()
-                    .partial_decoder(Arc::new(encoded.clone()), &chunk_shape, &options)?
-                    .partial_decode(&subset, &options)?
+                    .partial_decoder(
+                        Arc::new(encoded.clone()),
+                        &chunk_shape,
+                        &options,
+                        &Resources::default()
+                    )?
+                    .partial_decode(&subset, &options, &Resources::default())?
             );
         }
         Ok(())
@@ -1165,16 +1260,27 @@ mod tests {
                         ArrayBytes::new_flen(elements.clone()),
                         &chunk_shape,
                         &options,
+                        &ComputeResources::default(),
                     )?
                     .into_static();
                 let partial_decode = |encoded: &CowBytes<'static>| {
                     codec
                         .clone()
-                        .partial_decoder(Arc::new(encoded.clone()), &chunk_shape, &options)?
-                        .partial_decode(&subset, &options)
+                        .partial_decoder(
+                            Arc::new(encoded.clone()),
+                            &chunk_shape,
+                            &options,
+                            &Resources::default(),
+                        )?
+                        .partial_decode(&subset, &options, &Resources::default())
                         .map(ArrayBytes::into_owned)
                 };
-                codec.decode(encoded.clone(), &chunk_shape, &options)?;
+                codec.decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &options,
+                    &ComputeResources::default(),
+                )?;
                 let expected = partial_decode(&encoded)?;
 
                 // Invalid encoded bytes, and whether partial decoding can read them as the valid bytes
@@ -1202,7 +1308,12 @@ mod tests {
                     let invalid = CowBytes::from(invalid);
                     assert!(
                         codec
-                            .decode(invalid.clone(), &chunk_shape, &options)
+                            .decode(
+                                invalid.clone(),
+                                &chunk_shape,
+                                &options,
+                                &ComputeResources::default()
+                            )
                             .is_err(),
                         "{data_type} {encoding:?} {invalid:?}"
                     );
@@ -1217,8 +1328,13 @@ mod tests {
                     Arc::new(TruncatingPartialDecoder(encoded.clone())),
                     &chunk_shape,
                     &options,
+                    &Resources::default(),
                 )?;
-                assert!(partial_decoder.partial_decode(&subset, &options).is_err());
+                assert!(
+                    partial_decoder
+                        .partial_decode(&subset, &options, &Resources::default())
+                        .is_err()
+                );
             }
         }
         Ok(())
@@ -1246,16 +1362,31 @@ mod tests {
                 f32::to_array_bytes(&data_type, &elements)?.into_owned(),
                 &chunk_shape,
                 &options,
+                &ComputeResources::default(),
             )?;
-            let decoded = codec.decode(encoded.clone(), &chunk_shape, &options)?;
+            let decoded = codec.decode(
+                encoded.clone(),
+                &chunk_shape,
+                &options,
+                &ComputeResources::default(),
+            )?;
             let decoded = f32::from_array_bytes(&data_type, decoded)?;
             assert_eq!(decoded, elements);
 
             let partial_decoder = codec
-                .async_partial_decoder(Arc::new(encoded), &chunk_shape, &options)
+                .async_partial_decoder(
+                    Arc::new(encoded),
+                    &chunk_shape,
+                    &options,
+                    &Resources::default(),
+                )
                 .await?;
             let decoded_partial = partial_decoder
-                .partial_decode(&ArraySubset::new_with_ranges(&[1..3]), &options)
+                .partial_decode(
+                    &ArraySubset::new_with_ranges(&[1..3]),
+                    &options,
+                    &Resources::default(),
+                )
                 .await?;
             assert_eq!(
                 f32::from_array_bytes(&data_type, decoded_partial)?,
@@ -1291,15 +1422,24 @@ mod tests {
                     let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
 
                     // Encoding
-                    let encoded =
-                        codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+                    let encoded = codec.encode(
+                        bytes.clone(),
+                        &chunk_shape,
+                        &CodecOptions::default(),
+                        &ComputeResources::default(),
+                    )?;
                     assert!(
                         (encoded.len() as u64) <= (40 * (last_bit - first_bit + 1)).div_ceil(8) + 1
                     );
 
                     // Decoding
                     let decoded = codec
-                        .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                        .decode(
+                            encoded.clone(),
+                            &chunk_shape,
+                            &CodecOptions::default(),
+                            &ComputeResources::default(),
+                        )
                         .unwrap();
                     assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
 
@@ -1308,10 +1448,12 @@ mod tests {
                         Arc::new(encoded),
                         &chunk_shape,
                         &CodecOptions::default(),
+                        &Resources::default(),
                     )?;
                     let decoded_partial_chunk = partial_decoder.partial_decode(
                         &ArraySubset::new_with_ranges(&[2..5, 1..4]),
                         &CodecOptions::default(),
+                        &Resources::default(),
                     )?;
                     let answer: Vec<i16> = (2..5)
                         .flat_map(|i| (1..4).map(move |j| i * 5 + j))
@@ -1342,18 +1484,33 @@ mod tests {
         )?;
         let elements: Vec<i8> = (-8..8).map(|i| i << 2).collect();
         let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
-        let encoded = codec.encode(bytes, &chunk_shape, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            bytes,
+            &chunk_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )?;
 
         // Decoding
-        let decoded = codec.decode(encoded.clone(), &chunk_shape, &CodecOptions::default())?;
+        let decoded = codec.decode(
+            encoded.clone(),
+            &chunk_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )?;
         assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
 
         // Partial decoding
-        let partial_decoder =
-            codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+        let partial_decoder = codec.partial_decoder(
+            Arc::new(encoded),
+            &chunk_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )?;
         let decoded_partial_chunk = partial_decoder.partial_decode(
             &ArraySubset::new_with_ranges(&[3..13]),
             &CodecOptions::default(),
+            &Resources::default(),
         )?;
         assert_eq!(
             &elements[3..13],
@@ -1381,18 +1538,33 @@ mod tests {
             let max = 1i16 << last_bit;
             let elements: Vec<i16> = (0..32).map(|i| -max + i % (2 * max)).collect();
             let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
-            let encoded = codec.encode(bytes, &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes,
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
 
             // Decoding
-            let decoded = codec.decode(encoded.clone(), &chunk_shape, &CodecOptions::default())?;
+            let decoded = codec.decode(
+                encoded.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert_eq!(elements, i16::from_array_bytes(&data_type, decoded)?);
 
             // Partial decoding
-            let partial_decoder =
-                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let partial_decoder = codec.partial_decoder(
+                Arc::new(encoded),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             let decoded_partial_chunk = partial_decoder.partial_decode(
                 &ArraySubset::new_with_ranges(&[4..8, 0..4]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )?;
             assert_eq!(
                 &elements[16..],
@@ -1423,12 +1595,22 @@ mod tests {
             let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(elements, u8::from_array_bytes(&data_type, decoded)?);
         }
@@ -1456,12 +1638,22 @@ mod tests {
             let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(elements, u8::from_array_bytes(&data_type, decoded)?);
         }
@@ -1489,21 +1681,36 @@ mod tests {
             let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
 
             // Partial decoding
-            let partial_decoder =
-                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let partial_decoder = codec.partial_decoder(
+                Arc::new(encoded),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             let decoded_partial_chunk = partial_decoder.partial_decode(
                 &ArraySubset::new_with_ranges(&[0..2, 0..1]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )?;
             assert_eq!(
                 &elements[..2],
@@ -1534,21 +1741,36 @@ mod tests {
             let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(elements, i8::from_array_bytes(&data_type, decoded)?);
 
             // Partial decoding
-            let partial_decoder =
-                codec.partial_decoder(Arc::new(encoded), &chunk_shape, &CodecOptions::default())?;
+            let partial_decoder = codec.partial_decoder(
+                Arc::new(encoded),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &Resources::default(),
+            )?;
             let decoded_partial_chunk = partial_decoder.partial_decode(
                 &ArraySubset::new_with_ranges(&[0..2, 0..1]),
                 &CodecOptions::default(),
+                &Resources::default(),
             )?;
             assert_eq!(
                 &elements[..2],
@@ -1578,12 +1800,22 @@ mod tests {
             let bytes = ArrayBytes::new_flen((0..16).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(bytes, decoded);
         }
@@ -1610,12 +1842,22 @@ mod tests {
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(bytes, decoded);
         }
@@ -1642,12 +1884,22 @@ mod tests {
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
-            let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
+            let encoded = codec.encode(
+                bytes.clone(),
+                &chunk_shape,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
-                .decode(encoded.clone(), &chunk_shape, &CodecOptions::default())
+                .decode(
+                    encoded.clone(),
+                    &chunk_shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             assert_eq!(bytes, decoded);
         }

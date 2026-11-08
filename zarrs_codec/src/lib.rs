@@ -9,7 +9,9 @@
 
 mod codec_specific_options;
 mod options;
+mod resources;
 pub use codec_specific_options::CodecSpecificOptions;
+pub use resources::{ComputeResources, Resources};
 
 mod codec_partial_default;
 use codec_partial_default::BytesToBytesCodecPartialDefault;

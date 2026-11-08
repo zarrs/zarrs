@@ -359,11 +359,14 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
+    use crate::array::Resources;
     use std::sync::Arc;
 
     use super::*;
     use crate::array::{BytesRepresentation, CowBytes};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, ComputeResources,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
@@ -421,13 +424,18 @@ mod tests {
         ] {
             let bytes: Vec<u8> = (0..len).map(|i| u8::try_from(i % 251).unwrap()).collect();
             let encoded = codec
-                .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+                .encode(
+                    CowBytes::Borrowed(&bytes),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
                 .unwrap();
             let decoded = codec
                 .decode(
                     encoded,
                     &BytesRepresentation::FixedSize(len as u64),
                     &CodecOptions::default(),
+                    &ComputeResources::default(),
                 )
                 .unwrap();
             assert_eq!(bytes, decoded.to_vec());
@@ -449,6 +457,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::UnboundedSize,
                 &CodecOptions::default(),
+                &ComputeResources::default(),
             )
         };
         // The length of the page sizes overflows when added to the length of the static header
@@ -474,7 +483,8 @@ mod tests {
                 codec.decode(
                     CowBytes::from(encoded.clone()),
                     &representation,
-                    &CodecOptions::default()
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
                 ),
                 Err(CodecError::UnexpectedChunkDecodedSize(_))
             ));
@@ -490,6 +500,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
+                    &ComputeResources::default(),
                 )
                 .is_err()
         );
@@ -517,6 +528,7 @@ mod tests {
                     CowBytes::from(encoded),
                     &BytesRepresentation::UnboundedSize,
                     &CodecOptions::default(),
+                    &ComputeResources::default(),
                 )
                 .is_err()
         );
@@ -532,7 +544,11 @@ mod tests {
             .map(|i| u8::try_from(i % 251).unwrap())
             .collect();
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap()
             .to_vec();
         let decode = |encoded: Vec<u8>| {
@@ -540,6 +556,7 @@ mod tests {
                 CowBytes::from(encoded),
                 &BytesRepresentation::FixedSize(bytes.len() as u64),
                 &CodecOptions::default(),
+                &ComputeResources::default(),
             )
         };
         assert!(decode(encoded.clone()).is_ok());
@@ -566,10 +583,19 @@ mod tests {
         let codec = GDeflateCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
-            .encode(CowBytes::Borrowed(&bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::Borrowed(&bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &bytes_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &bytes_representation,
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded.to_vec());
     }
@@ -585,7 +611,11 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -598,6 +628,7 @@ mod tests {
                 input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // gdeflate partial decoder does not hold bytes
@@ -605,6 +636,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .unwrap()
             .unwrap()
@@ -632,7 +664,11 @@ mod tests {
         let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration).unwrap());
 
         let encoded = codec
-            .encode(CowBytes::from(bytes), &CodecOptions::default())
+            .encode(
+                CowBytes::from(bytes),
+                &CodecOptions::default(),
+                &ComputeResources::default(),
+            )
             .unwrap();
         let decoded_regions = [
             ByteRange::FromStart(4, Some(4)),
@@ -645,6 +681,7 @@ mod tests {
                 input_handle,
                 &bytes_representation,
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap();
@@ -652,6 +689,7 @@ mod tests {
             .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
+                &Resources::default(),
             )
             .await
             .unwrap()

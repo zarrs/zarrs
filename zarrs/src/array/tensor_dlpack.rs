@@ -177,14 +177,14 @@ impl Tensor<'static> {
     ///
     /// # Examples
     /// ```rust
-    /// # use zarrs::array::{ArrayBuilder, ArraySubset, Tensor, data_type};
+    /// # use zarrs::array::{ArrayBuilder, ArraySubset, Resources, Tensor, data_type};
     /// # use zarrs_storage::store::MemoryStore;
     /// # let store = MemoryStore::new();
     /// # let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::float32(), -1.0f32)
     /// #     .build(store.into(), "/")?;
-    /// # array.store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])?;
+    /// # array.store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0], &Resources::default())?;
     /// let subset = ArraySubset::new_with_shape(vec![1, 2]);
-    /// let tensor: Tensor<'static> = array.retrieve_chunks(&subset)?;
+    /// let tensor: Tensor<'static> = array.retrieve_chunks(&subset, &Resources::default())?;
     /// let dlpack = tensor.into_dlpack()?;
     ///
     /// assert_eq!(dlpack.shape()?, &[2, 4]);

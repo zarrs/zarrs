@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use zarrs_codec::Resources;
 
 #[cfg(feature = "async")]
 use async_generic::async_generic;
@@ -29,12 +30,14 @@ use zarrs_storage::byte_range::ByteRange;
     bit_ranges: &'a [Range<u64>],
     packed_start: u64,
     options: &CodecOptions,
+    resources: &Resources,
 )))]
 fn retrieve_packed<'a>(
     input_handle: &'a Arc<dyn BytesPartialDecoderTraits>,
     bit_ranges: &'a [Range<u64>],
     packed_start: u64,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
     let byte_range = |bit_range: &Range<u64>| bit_range.start / 8..bit_range.end.div_ceil(8);
     let byte_ranges = bit_ranges.iter().map(move |bit_range| {
@@ -45,13 +48,14 @@ fn retrieve_packed<'a>(
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
         input_handle
-            .partial_decode_many(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options, resources)
             .await
     } else {
-        input_handle.partial_decode_many(Box::new(byte_ranges), options)
+        input_handle.partial_decode_many(Box::new(byte_ranges), options, resources)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode_many(Box::new(byte_ranges), options)?;
+    let encoded_bytes =
+        input_handle.partial_decode_many(Box::new(byte_ranges), options, resources)?;
 
     let Some(encoded_bytes) = encoded_bytes else {
         return Ok(None);
@@ -80,6 +84,7 @@ fn retrieve_packed<'a>(
     codec: &PackBitsCodecBound,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
+    resources: &Resources,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
@@ -87,6 +92,7 @@ fn partial_decode<'a>(
     codec: &PackBitsCodecBound,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
+    resources: &Resources,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let PackBitsCodecBound {
         layout,
@@ -115,12 +121,13 @@ fn partial_decode<'a>(
     // Retrieve those bytes
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
-        retrieve_packed_async(input_handle, &bit_ranges, packed_start, options).await
+        retrieve_packed_async(input_handle, &bit_ranges, packed_start, options, resources).await
     } else {
-        retrieve_packed(input_handle, &bit_ranges, packed_start, options)
+        retrieve_packed(input_handle, &bit_ranges, packed_start, options, resources)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = retrieve_packed(input_handle, &bit_ranges, packed_start, options)?;
+    let encoded_bytes =
+        retrieve_packed(input_handle, &bit_ranges, packed_start, options, resources)?;
 
     let Some(encoded_bytes) = encoded_bytes else {
         let fill_value = fill_value.as_ref().ok_or(CodecError::UndefinedFillValue)?;
@@ -197,6 +204,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
         &self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
             &self.input_handle,
@@ -204,6 +212,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
             &self.codec,
             indexer,
             options,
+            resources,
         )
     }
 
@@ -259,6 +268,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
         &'a self,
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         partial_decode_async(
             &self.input_handle,
@@ -266,6 +276,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
             &self.codec,
             indexer,
             options,
+            resources,
         )
         .await
     }

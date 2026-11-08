@@ -1,5 +1,6 @@
 use inherent::inherent;
 use std::sync::Arc;
+use zarrs_codec::Resources;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
@@ -24,12 +25,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.store_partial_chunk_with_options(
             chunk_indices,
             indexer,
             indexer_data,
             self.codec_options(),
+            resources,
         )
     }
 
@@ -39,6 +42,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
         // Validation
@@ -64,7 +68,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_partial_chunk
-                self.store_chunk_with_options(chunk_indices, subset_data, options)?;
+                self.store_chunk_with_options(chunk_indices, subset_data, options, resources)?;
             } else {
                 // Store the chunk subset
                 self.store_partial_chunk_with_options(
@@ -72,6 +76,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
                     options,
+                    resources,
                 )?;
             }
         } else {
@@ -80,10 +85,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
             let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
-            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
                 num_chunks,
-                options,
+                self.chunk_concurrent_minimum,
+                resources,
                 &codec_concurrency,
             );
 
@@ -101,7 +106,8 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                     &chunk_indices,
                     &chunk_subset_in_chunk,
                     chunk_subset_bytes,
-                    &options,
+                    options,
+                    &resources,
                 )
             };
 
@@ -115,7 +121,11 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn compact_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+    pub fn compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        resources: &Resources,
+    ) -> Result<bool, ArrayError> {
         let options = self.codec_options();
         let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
         if let Some(chunk_bytes) = chunk_bytes {
@@ -123,6 +133,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 chunk_bytes.into(),
                 &self.chunk_shape(chunk_indices)?,
                 options,
+                resources.compute(),
             )? {
                 // SAFETY: The compacted bytes are already encoded
                 unsafe {
@@ -146,8 +157,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     pub fn partial_encoder(
         &self,
         chunk_indices: &[u64],
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        self.partial_encoder_with_options(chunk_indices, self.codec_options())
+        self.partial_encoder_with_options(chunk_indices, self.codec_options(), resources)
     }
 }
 
@@ -158,6 +170,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         indexer: &dyn Indexer,
         indexer_data: T,
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
             .chunk_grid()
@@ -175,7 +188,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
         if indexer.covers_array(&chunk_shape) {
-            return self.store_chunk_with_options(chunk_indices, indexer_data, options);
+            return self.store_chunk_with_options(chunk_indices, indexer_data, options, resources);
         }
 
         let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
@@ -208,15 +221,16 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 return Ok(());
             }
 
-            let partial_encoder = self.partial_encoder_with_options(chunk_indices, options)?;
+            let partial_encoder =
+                self.partial_encoder_with_options(chunk_indices, options, resources)?;
             debug_assert!(
                 partial_encoder.supports_partial_encode(),
                 "partial encoder is misrepresenting its capabilities"
             );
-            Ok(partial_encoder.partial_encode(indexer, &indexer_bytes, options)?)
+            Ok(partial_encoder.partial_encode(indexer, &indexer_bytes, options, resources)?)
         } else {
             let chunk_bytes_old: ArrayBytes<'static> =
-                self.retrieve_chunk_with_options(chunk_indices, options)?;
+                self.retrieve_chunk_with_options(chunk_indices, options, resources)?;
             chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
 
             let chunk_bytes_new = update_array_bytes(
@@ -227,7 +241,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 self.data_type().size(),
             )?;
 
-            self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options)
+            self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
         }
     }
 
@@ -235,6 +249,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
+        resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         // Input/output
         let chunk_key = self.chunk_key(chunk_indices)?;
@@ -244,6 +259,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             input_handle,
             &self.chunk_shape(chunk_indices)?,
             options,
+            resources,
         )?)
     }
 }

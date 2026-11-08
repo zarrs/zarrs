@@ -3,7 +3,7 @@ use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetT
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
     copy_fill_value_into,
 };
 use zarrs_storage::{MaybeSend, MaybeSync};
@@ -14,23 +14,31 @@ use super::recommended_codec_concurrency;
 
 /// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
 ///
+#[expect(clippy::too_many_arguments)]
 pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
     output_target: ArrayBytesDecodeIntoTarget<'_>,
+    chunk_concurrent_minimum: usize,
     options: &CodecOptions,
+    resources: &Resources,
     retrieve_chunk_into: RetrieveChunkInto,
     retrieve_partial_chunk_into: RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
-    RetrieveChunkInto:
-        for<'a> Fn(&[u64], ArrayBytesDecodeIntoTarget<'a>, &CodecOptions) -> Result<(), ArrayError>,
+    RetrieveChunkInto: for<'a> Fn(
+        &[u64],
+        ArrayBytesDecodeIntoTarget<'a>,
+        &CodecOptions,
+        &Resources,
+    ) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
             &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
+            &Resources,
         ) -> Result<(), ArrayError>
         + MaybeSend
         + MaybeSync,
@@ -73,23 +81,24 @@ where
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
             if chunk_subset == array_subset {
-                retrieve_chunk_into(chunk_indices, output_target, options)
+                retrieve_chunk_into(chunk_indices, output_target, options, resources)
             } else {
                 retrieve_partial_chunk_into(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     output_target,
                     options,
+                    resources,
                 )
             }
         }
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
-            let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                options.concurrent_target(),
+            let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
                 num_chunks,
-                options,
+                chunk_concurrent_minimum,
+                resources,
                 &codec_concurrency,
             );
             retrieve_multi_chunk_fixed_into(
@@ -98,13 +107,15 @@ where
                 &chunks,
                 chunk_concurrent_limit,
                 &output_target,
-                &options,
+                options,
+                &resources,
                 &retrieve_partial_chunk_into,
             )
         }
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
@@ -112,6 +123,7 @@ fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     chunk_concurrent_limit: usize,
     output_target: &ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
+    resources: &Resources,
     retrieve_partial_chunk_into: &RetrieveChunkSubsetInto,
 ) -> Result<(), ArrayError>
 where
@@ -121,6 +133,7 @@ where
             &dyn Indexer,
             ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
+            &Resources,
         ) -> Result<(), ArrayError>
         + MaybeSend
         + MaybeSync,
@@ -161,6 +174,7 @@ where
             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
             target,
             options,
+            resources,
         )?;
         Ok::<_, ArrayError>(())
     };
