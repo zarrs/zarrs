@@ -125,18 +125,12 @@ impl FixedDecodeBuffers {
         for mask in &mut self.masks {
             unsafe { mask.set_len(num_elements) };
         }
-        wrap_optional_masks(ArrayBytes::new_flen(self.data), self.masks)
+        // Masks are ordered outermost first, so wrap from the innermost outwards
+        self.masks.into_iter().rev().fold(
+            ArrayBytes::new_flen(self.data),
+            ArrayBytes::with_optional_mask,
+        )
     }
-}
-
-/// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
-///
-/// The `masks` should be ordered from outermost to innermost mask.
-pub(crate) fn wrap_optional_masks(bytes: ArrayBytes<'_>, masks: Vec<Vec<u8>>) -> ArrayBytes<'_> {
-    masks
-        .into_iter()
-        .rev()
-        .fold(bytes, ArrayBytes::with_optional_mask)
 }
 
 /// Split keyed optional array bytes into keyed inner data and keyed validity masks.
