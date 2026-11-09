@@ -868,22 +868,16 @@ pub fn update_array_bytes<'a>(
     }
 }
 
-/// Decode the fill value into a subset of a preallocated output.
+/// Decode the fill value into a preallocated output target.
 ///
 /// This method is intended for internal use by Array.
 /// Supports fixed length data types, including nested optional types with fixed length data.
 ///
 /// # Errors
-/// Returns [`CodecError::ExpectedFixedLengthBytes`] for variable-sized data.
-///
-/// # Panics
-/// Panics if the number of elements in a target exceeds [`usize::MAX`].
-///
-/// # Safety
-/// The caller must ensure that:
-///  - `data_type` and `fill_value` are compatible,
-///  - `output` holds enough space for the preallocated bytes of an array with `output_shape` and `data_type`, and
-///  - `output_subset` is within the bounds of `output_shape`.
+/// Returns a [`CodecError`] if
+///  - `data_type` is variable-sized,
+///  - the structure of `output_target` does not match `data_type` (one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level), or
+///  - `fill_value` is incompatible with `data_type`.
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
@@ -899,14 +893,6 @@ fn copy_fill_value_bytes_into(
 ) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
         (Some(opt), ArrayBytesDecodeIntoTarget::Optional(optional_target)) => {
-            let num_elements = optional_target.data.num_elements();
-            if optional_target.mask.num_elements() != num_elements {
-                return Err(InvalidBytesLengthError::new(
-                    usize::try_from(num_elements).unwrap(),
-                    usize::try_from(optional_target.mask.num_elements()).unwrap(),
-                )
-                .into());
-            }
             let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
             copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, &mut optional_target.data)?;
             optional_target.mask.fill(&[mask_value])?;
