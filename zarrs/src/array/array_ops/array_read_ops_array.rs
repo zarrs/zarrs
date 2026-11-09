@@ -5,6 +5,7 @@ use zarrs_codec::{CowBytes, Resources};
 use super::super::ArrayIndices;
 use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
     Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, DataType,
     FromArrayBytes, Indexer, ReadableStorageTraits, recommended_codec_concurrency,
@@ -512,30 +513,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
             .expect("data_type must have fixed size");
-        {
-            let target = buffers.target()?;
-            let retrieve_chunk = |chunk_indices: ArrayIndices| {
-                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                let chunk_subset_in_array =
-                    chunk_subset_overlap.relative_to(&array_subset.start())?;
-                // SAFETY: chunks represent disjoint array subsets
-                let chunk_target = unsafe { target.subdivide(chunk_subset_in_array) }?;
+        retrieve_multi_chunk_fixed_into(
+            self,
+            array_subset,
+            chunks,
+            chunk_concurrent_limit,
+            &buffers.target()?,
+            options,
+            resources,
+            &|chunk_indices, indexer, target, options, resources| {
                 self.retrieve_partial_chunk_into_with_options(
-                    &chunk_indices,
-                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    chunk_target,
+                    chunk_indices,
+                    indexer,
+                    target,
                     options,
                     resources,
-                )?;
-                Ok::<_, ArrayError>(())
-            };
-
-            let indices = chunks.indices();
-            indices
-                .concurrent_limit(chunk_concurrent_limit)
-                .try_for_each(retrieve_chunk)?;
-        }
+                )
+            },
+        )?;
         // SAFETY: the chunks cover the array subset, so every element has been written
         Ok(unsafe { buffers.into_array_bytes() })
     }

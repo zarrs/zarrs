@@ -7,7 +7,7 @@ use futures::{StreamExt, TryStreamExt};
 use super::super::ArrayIndices;
 use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
-use super::async_array_read_ops_common::AsyncRetrieveInto;
+use super::async_array_read_ops_common::{AsyncRetrieveInto, retrieve_multi_chunk_fixed_into};
 use super::{
     Array, ArrayError, ArraySubsetTraits, AsyncArrayReadOps, AsyncReadableStorageTraits, ChunkGrid,
     CodecOptions, DataType, FromArrayBytes, Indexer, recommended_codec_concurrency,
@@ -563,36 +563,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
             .expect("data_type must have fixed size");
-        {
-            let target = buffers.target()?;
-            let target = &target;
-            let array_subset_start = array_subset.start();
-            let retrieve_chunk = |chunk_indices: ArrayIndices| {
-                let array_subset_start = &array_subset_start;
-                async move {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    let chunk_subset_in_array =
-                        chunk_subset_overlap.relative_to(array_subset_start)?;
-                    // SAFETY: chunks represent disjoint array subsets
-                    let chunk_target = unsafe { target.subdivide(chunk_subset_in_array) }?;
-                    self.async_retrieve_partial_chunk_into_with_options(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        chunk_target,
-                        options,
-                        resources,
-                    )
-                    .await?;
-                    Ok::<_, ArrayError>(())
-                }
-            };
-
-            futures::stream::iter(&chunks.indices())
-                .map(Ok)
-                .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
-                .await?;
-        }
+        retrieve_multi_chunk_fixed_into(
+            self,
+            self,
+            array_subset,
+            chunks,
+            chunk_concurrent_limit,
+            &buffers.target()?,
+            options,
+            resources,
+        )
+        .await?;
         // SAFETY: the chunks cover the array subset, so every element has been written
         Ok(unsafe { buffers.into_array_bytes() })
     }
