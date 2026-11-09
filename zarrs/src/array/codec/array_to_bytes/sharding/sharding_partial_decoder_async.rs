@@ -381,6 +381,7 @@ async fn partial_decode_fixed_array_subset_into(
         )?;
     let resources = &resources;
     let array_subset_start = array_subset.start();
+    let output_start = output_target.subset().start();
     let chunks = subchunk_grid
         .chunks_in_array_subset(array_subset)?
         .expect("subchunks always within shard");
@@ -396,7 +397,7 @@ async fn partial_decode_fixed_array_subset_into(
             .expect("subchunk always within shard");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
-        let chunk_output_overlap_subset = chunk_relative.offset(output_target.subset().start())?;
+        let chunk_output_overlap_subset = chunk_relative.offset(output_start)?;
         subchunks.push((
             offset_size,
             chunk_subset,

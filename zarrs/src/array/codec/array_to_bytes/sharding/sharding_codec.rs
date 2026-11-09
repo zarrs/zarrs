@@ -687,19 +687,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         );
 
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let output_start = output_target.subset().start();
         let decode_chunk = |chunk_index: usize| {
             let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
-            let output_subset_chunk = ArraySubset::new_with_start_shape(
-                std::iter::zip(
-                    output_target.subset().start().iter(),
-                    chunk_subset.start().iter(),
-                )
-                .map(|(o, s)| o + s)
-                .collect::<Vec<_>>(),
-                chunk_subset.shape(),
-            )
-            .unwrap();
+            let output_subset_chunk = chunk_subset.offset(output_start)?;
             // SAFETY: subchunks represent disjoint array subsets
             let output_target_subchunk = unsafe { output_target.subdivide(output_subset_chunk) }?;
 

@@ -1,5 +1,5 @@
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
+use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubsetTraits, Indexer};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -137,21 +137,15 @@ where
         + MaybeSend
         + MaybeSync,
 {
-    let parent_start = output_target.subset().start().to_vec();
+    let array_subset_start = array_subset.start();
+    let output_start = output_target.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset.start())?;
-
-        let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
-            .start()
-            .iter()
-            .zip(&parent_start)
-            .map(|(&c, &p)| c + p)
-            .collect();
-        let chunk_subset_in_view =
-            ArraySubset::new_with_start_shape(chunk_start_in_view, chunk_subset_in_array.shape())?;
+        let chunk_subset_in_view = chunk_subset_overlap
+            .relative_to(&array_subset_start)?
+            .offset(output_start)?;
 
         // SAFETY: chunks represent disjoint array subsets.
         let target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
