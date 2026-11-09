@@ -594,7 +594,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     let chunk_subset_in_array =
                         chunk_subset_overlap.relative_to(array_subset_start)?;
 
-                    let mut data_view = unsafe {
+                    let data_view = unsafe {
                         // SAFETY: chunks represent disjoint array subsets
                         ArrayBytesFixedDisjointView::new(
                             data_output_slice,
@@ -617,8 +617,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         }?);
                     }
 
-                    let target =
-                        build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+                    let target = build_nested_optional_target(data_view, mask_views);
 
                     self.async_retrieve_partial_chunk_into_with_options(
                         &chunk_indices,

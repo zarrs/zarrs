@@ -486,11 +486,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         }
         if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {
             {
-                let (mut data_view, mut mask_views) = buffers.views()?;
+                let (data_view, mask_views) = buffers.views()?;
                 self.decode_into(
                     encoded_shard,
                     shape,
-                    build_nested_optional_target(&mut data_view, &mut mask_views),
+                    build_nested_optional_target(data_view, mask_views),
                     options,
                     resources,
                 )?;
@@ -711,7 +711,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 chunk_subset.shape(),
             )
             .unwrap();
-            let mut output_view_subchunk = unsafe {
+            let output_view_subchunk = unsafe {
                 // SAFETY: subchunks represent disjoint array subsets
                 output_view.subdivide(output_subset_chunk.clone())?
             };
@@ -723,7 +723,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 }?);
             }
             let output_target_subchunk =
-                build_nested_optional_target(&mut output_view_subchunk, &mut mask_views_subchunk);
+                build_nested_optional_target(output_view_subchunk, mask_views_subchunk);
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];

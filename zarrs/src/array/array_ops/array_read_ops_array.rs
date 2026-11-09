@@ -538,7 +538,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     chunk_subset_overlap.relative_to(&array_subset.start())?;
 
                 let array_subset_shape = array_subset.shape();
-                let mut data_view = unsafe {
+                let data_view = unsafe {
                     // SAFETY: chunks represent disjoint array subsets
                     ArrayBytesFixedDisjointView::new(
                         data_output_slice,
@@ -561,8 +561,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     }?);
                 }
 
-                let target =
-                    build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+                let target = build_nested_optional_target(data_view, mask_views);
 
                 self.retrieve_partial_chunk_into_with_options(
                     &chunk_indices,

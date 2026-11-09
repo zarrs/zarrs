@@ -453,7 +453,7 @@ fn sharding_indexer_batches() {
                 decoder
                     .partial_decode_into(
                         &indices,
-                        ArrayBytesDecodeIntoTarget::Fixed(&mut fixed_view(
+                        ArrayBytesDecodeIntoTarget::Fixed(fixed_view(
                             &mut output,
                             &output_shape,
                             subset,
@@ -533,7 +533,7 @@ async fn async_sharding_indexer_batches() {
                 decoder
                     .partial_decode_into(
                         &indices,
-                        ArrayBytesDecodeIntoTarget::Fixed(&mut fixed_view(
+                        ArrayBytesDecodeIntoTarget::Fixed(fixed_view(
                             &mut output,
                             &output_shape,
                             subset,

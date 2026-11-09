@@ -139,19 +139,15 @@ impl FixedDecodeBuffers {
 }
 
 /// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
-/// The `mask_views` slice should be ordered from outermost to innermost mask.
+/// The `mask_views` should be ordered from outermost to innermost mask.
 pub(crate) fn build_nested_optional_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+    data_view: ArrayBytesFixedDisjointView<'a>,
+    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
 ) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((first_mask, rest_masks)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(build_nested_optional_target(data_view, rest_masks)),
-            first_mask,
-        )
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
+    mask_views.into_iter().rev().fold(
+        ArrayBytesDecodeIntoTarget::Fixed(data_view),
+        |inner, mask_view| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask_view),
+    )
 }
 
 /// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
@@ -427,7 +423,7 @@ mod tests {
                     {
                         let shape = [3, 5];
                         // SAFETY: each view is the only view of its backing buffer.
-                        let mut data_view = unsafe {
+                        let data_view = unsafe {
                             ArrayBytesFixedDisjointView::new(
                                 UnsafeCellSlice::new(&mut buffers.data),
                                 buffers.data_type_size,
@@ -436,7 +432,7 @@ mod tests {
                             )
                             .unwrap()
                         };
-                        let mut mask_views: Vec<_> = buffers
+                        let mask_views: Vec<_> = buffers
                             .masks
                             .iter_mut()
                             .map(|mask| unsafe {
@@ -449,7 +445,7 @@ mod tests {
                                 .unwrap()
                             })
                             .collect();
-                        let target = build_nested_optional_target(&mut data_view, &mut mask_views);
+                        let target = build_nested_optional_target(data_view, mask_views);
                         if direct {
                             copy_fill_value_into(&data_type, &fill_value, target).unwrap();
                         } else {
@@ -562,16 +558,14 @@ mod tests {
             (data_type::string(), FillValue::from("")),
         ] {
             let mut buffers = FixedDecodeBuffers::new(&data_type::uint16(), &[3]).unwrap();
-            let (mut data_view, _) = buffers.views().unwrap();
-            assert!(
-                copy_fill_value_into(&data_type, &fill_value, (&mut data_view).into()).is_err()
-            );
+            let (data_view, _) = buffers.views().unwrap();
+            assert!(copy_fill_value_into(&data_type, &fill_value, data_view.into()).is_err());
         }
 
         let mut buffers =
             FixedDecodeBuffers::new(&data_type::uint16().to_optional(), &[3]).unwrap();
-        let (mut data_view, mut mask_views) = buffers.views().unwrap();
-        let target = build_nested_optional_target(&mut data_view, &mut mask_views);
+        let (data_view, mask_views) = buffers.views().unwrap();
+        let target = build_nested_optional_target(data_view, mask_views);
         assert!(
             copy_fill_value_into(&data_type::uint16(), &FillValue::from(1u16), target).is_err()
         );

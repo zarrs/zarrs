@@ -171,7 +171,7 @@ pub(crate) async fn partial_decode(
     // Optional data with fixed length inner data: decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
         {
-            let (mut data_view, mut mask_views) = buffers.views()?;
+            let (data_view, mask_views) = buffers.views()?;
             partial_decode_fixed_array_subset_into(
                 input_handle,
                 subchunk_grid,
@@ -181,7 +181,7 @@ pub(crate) async fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(&mut data_view, &mut mask_views),
+                build_nested_optional_target(data_view, mask_views),
             )
             .await?;
         }
@@ -456,13 +456,12 @@ async fn partial_decode_fixed_array_subset_into(
 
     for (decoded, output_subset) in decoded_subchunks {
         // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
-        let mut subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
+        let subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
         let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
         for mask_view in &mask_views {
             subchunk_mask_views.push(unsafe { mask_view.subdivide(output_subset.clone()) }?);
         }
-        let subchunk_target =
-            build_nested_optional_target(&mut subchunk_view, &mut subchunk_mask_views);
+        let subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
         if let Some(decoded) = decoded {
             decode_into_array_bytes_target(&decoded, subchunk_target)?;
         } else {
@@ -793,7 +792,7 @@ async fn partial_decode_indexer(
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_fixed_indexer_into<'a>(
+async fn partial_decode_fixed_indexer_into(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -802,7 +801,7 @@ async fn partial_decode_fixed_indexer_into<'a>(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    mut output_view: ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
     let fill_value = inner_codecs
         .fill_value()

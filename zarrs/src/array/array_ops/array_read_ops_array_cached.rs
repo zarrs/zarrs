@@ -188,7 +188,7 @@ where
                 options,
                 resources,
             )?;
-            let mut data_view = unsafe {
+            let data_view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     data_slice,
                     data_type_size,
@@ -207,7 +207,7 @@ where
                     )
                 }?);
             }
-            let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+            let target = build_nested_optional_target(data_view, mask_views);
             decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
         };
         chunks

@@ -207,7 +207,7 @@ where
                     resources,
                 )
                 .await?;
-                let mut data_view = unsafe {
+                let data_view = unsafe {
                     ArrayBytesFixedDisjointView::new(
                         data_slice,
                         data_type_size,
@@ -226,8 +226,7 @@ where
                         )
                     }?);
                 }
-                let target =
-                    build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+                let target = build_nested_optional_target(data_view, mask_views);
                 decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
             }
         };
@@ -761,7 +760,7 @@ mod tests {
         let mut buf = vec![0u8; subset.num_elements_usize()];
         {
             let slice = UnsafeCellSlice::new(&mut buf);
-            let mut view = unsafe {
+            let view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     slice,
                     1,
@@ -773,7 +772,7 @@ mod tests {
             cached
                 .async_retrieve_array_subset_into(
                     &subset,
-                    ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                    ArrayBytesDecodeIntoTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await
