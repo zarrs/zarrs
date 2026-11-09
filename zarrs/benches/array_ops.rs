@@ -5,8 +5,9 @@
 //! - `partial_encode`: writing small regions of a sharded array with partial encoding.
 //! - `partial_write`: partial writes to uncompressed arrays in memory and on the filesystem.
 //! - `nested_sharding`: reading a shard of shards.
-//! - `sharded_read`: whole reads of 1, 4 and 16 shards of 32 x 32 subchunks.
+//! - `sharded_read`: whole reads of 1, 4 and 16 shards of 32 x 32 subchunks, of `uint16` and `optional uint16` data.
 //! - `partial_decoder`: creating a partial decoder of a chunk, and decoding regions with it.
+//! - `partial_decoder_indexer`: decoding generic (coordinate) indexers of a sharded chunk with a partial decoder, directly into a preallocated output.
 //! - `chunk_cache`: reading a region through each type of chunk cache, empty and filled.
 //! - `subchunk_cache`: reading regions of a sharded array through a decoded subchunk cache, empty and filled.
 //! - `async_chunk_cache`: reading a region through each type of async chunk cache, empty and filled (`async` feature).
@@ -23,7 +24,9 @@ use common::compressible_u16;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{Crc32cCodec, ShardingCodecBuilder, ZstdCodec};
-use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
+use zarrs::array::{
+    ArrayBuilder, ArrayBytes, ArraySubset, DataType, FillValue, Resources, data_type,
+};
 use zarrs::storage::SyncReadableWritableListableStorageTraits;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions};
@@ -287,34 +290,59 @@ fn sharded_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("sharded_read");
     let shape = [512u64, 512];
     let data = compressible_u16(shape.iter().product::<u64>() as usize);
+    let optional_data = optional_u16(&data, 0);
     group.throughput(Throughput::Bytes(data.len() as u64 * 2));
     for shard in [512u64, 256, 128] {
-        let array = ArrayBuilder::new(
-            shape.to_vec(),
-            vec![shard, shard],
-            data_type::uint16(),
-            0u16,
-        )
-        .subchunk_shape(vec![32, 32])
-        .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
-        .build(Arc::new(MemoryStore::new()), "/")
-        .unwrap();
-        array
-            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
-            .unwrap();
         let num_shards = (shape[0] / shard) * (shape[1] / shard);
-        group.bench_function(
-            BenchmarkId::new("all", format!("{num_shards}_shards")),
-            |b| {
-                b.iter(|| {
-                    let _: ArrayBytes = array
-                        .retrieve_array_subset(&array.subset_all(), &Resources::default())
-                        .unwrap();
-                });
-            },
-        );
+        for (label, optional) in [("all", false), ("optional_all", true)] {
+            let (data_type, fill_value) = if optional {
+                (
+                    data_type::uint16().to_optional(),
+                    FillValue::new_optional_null(),
+                )
+            } else {
+                (data_type::uint16(), FillValue::from(0u16))
+            };
+            let array =
+                ArrayBuilder::new(shape.to_vec(), vec![shard, shard], data_type, fill_value)
+                    .subchunk_shape(vec![32, 32])
+                    .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
+                    .build(Arc::new(MemoryStore::new()), "/")
+                    .unwrap();
+            if optional {
+                array
+                    .store_array_subset(
+                        &array.subset_all(),
+                        optional_data.as_slice(),
+                        &Resources::default(),
+                    )
+                    .unwrap();
+            } else {
+                array
+                    .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
+                    .unwrap();
+            }
+            group.bench_function(
+                BenchmarkId::new(label, format!("{num_shards}_shards")),
+                |b| {
+                    b.iter(|| {
+                        let _: ArrayBytes = array
+                            .retrieve_array_subset(&array.subset_all(), &Resources::default())
+                            .unwrap();
+                    });
+                },
+            );
+        }
     }
     group.finish();
+}
+
+/// Every third element of `data` is null, as are the first `num_null` elements.
+fn optional_u16(data: &[u16], num_null: usize) -> Vec<Option<u16>> {
+    data.iter()
+        .enumerate()
+        .map(|(i, &value)| (i >= num_null && i % 3 != 0).then_some(value))
+        .collect()
 }
 
 /// A partial decoder of one 512 x 512 `u16` chunk, created once and reused for each region.
@@ -362,6 +390,147 @@ fn partial_decoder(c: &mut Criterion) {
                         .partial_decode(&subset, &CodecOptions::default(), &Resources::default())
                         .unwrap()
                         .into_owned()
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// Generic (coordinate) indexers into one 512 x 512 sharded chunk of 32 x 32 subchunks, decoded with a reused partial decoder.
+///
+/// - `points_4096`: 4096 pseudorandom elements, spread over every subchunk.
+/// - `one_subchunk`: every element of one subchunk, in column-major order.
+/// - `region_200x200`: every element of a region straddling 7 x 7 subchunks, in column-major order.
+///
+/// In `half_missing` chunks, the top half is null, so its subchunks are not stored.
+fn partial_decoder_indexer(c: &mut Criterion) {
+    let mut group = c.benchmark_group("partial_decoder_indexer");
+    let shape = [512u64, 512];
+    let num_elements = shape.iter().product::<u64>() as usize;
+    let data = compressible_u16(num_elements);
+
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut random = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state % 512
+    };
+    let points: Vec<Vec<u64>> = (0..4096).map(|_| vec![random(), random()]).collect();
+    let column_major = |rows: std::ops::Range<u64>, cols: std::ops::Range<u64>| -> Vec<Vec<u64>> {
+        cols.flat_map(|j| rows.clone().map(move |i| vec![i, j]))
+            .collect()
+    };
+    let indexers = [
+        ("points_4096", points),
+        ("one_subchunk", column_major(160..192, 160..192)),
+        ("region_200x200", column_major(100..300, 100..300)),
+    ];
+
+    let cases: [(&str, DataType, FillValue, usize, bool); 5] = [
+        (
+            "uint16",
+            data_type::uint16(),
+            FillValue::from(0u16),
+            0,
+            false,
+        ),
+        (
+            "optional_uint16",
+            data_type::uint16().to_optional(),
+            FillValue::new_optional_null(),
+            0,
+            false,
+        ),
+        (
+            "optional_uint16_zstd",
+            data_type::uint16().to_optional(),
+            FillValue::new_optional_null(),
+            0,
+            true,
+        ),
+        (
+            "optional_uint16_half_missing",
+            data_type::uint16().to_optional(),
+            FillValue::new_optional_null(),
+            num_elements / 2,
+            false,
+        ),
+        (
+            "optional_uint16_half_missing_zstd",
+            data_type::uint16().to_optional(),
+            FillValue::new_optional_null(),
+            num_elements / 2,
+            true,
+        ),
+    ];
+    for (label, data_type, fill_value, num_null, zstd) in cases {
+        let optional = data_type.is_optional();
+        let mut builder = ArrayBuilder::new(shape.to_vec(), shape.to_vec(), data_type, fill_value);
+        builder.subchunk_shape(vec![32, 32]);
+        if zstd {
+            builder.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))]);
+        }
+        let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
+        if optional {
+            array
+                .store_chunk(
+                    &[0, 0],
+                    optional_u16(&data, num_null).as_slice(),
+                    &Resources::default(),
+                )
+                .unwrap();
+        } else {
+            array
+                .store_chunk(&[0, 0], data.as_slice(), &Resources::default())
+                .unwrap();
+        }
+        let decoder = array
+            .partial_decoder(&[0, 0], &Resources::default())
+            .unwrap();
+
+        for (indexer_label, indexer) in &indexers {
+            let len = indexer.len();
+            let output_shape = [len as u64];
+            let output_subset = ArraySubset::new_with_shape(output_shape);
+            let mut output = vec![0u8; len * 2];
+            let mut mask = vec![0u8; len];
+            group.throughput(Throughput::Elements(len as u64));
+            group.bench_function(BenchmarkId::new(*indexer_label, label), |b| {
+                b.iter(|| {
+                    // SAFETY: each view covers its entire output and is its only view.
+                    let view = unsafe {
+                        ArrayBytesFixedDisjointView::new(
+                            UnsafeCellSlice::new(&mut output),
+                            2,
+                            &output_shape,
+                            output_subset.clone(),
+                        )
+                    }
+                    .unwrap();
+                    let mut target = ArrayBytesTarget::from(view);
+                    if optional {
+                        // SAFETY: as above.
+                        let mask_view = unsafe {
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut mask),
+                                1,
+                                &output_shape,
+                                output_subset.clone(),
+                            )
+                        }
+                        .unwrap();
+                        target = target.with_optional_mask(mask_view).unwrap();
+                    }
+                    decoder
+                        .partial_decode_into(
+                            indexer,
+                            &mut target,
+                            &CodecOptions::default(),
+                            &Resources::default(),
+                        )
+                        .unwrap();
                 });
             });
         }
@@ -744,6 +913,7 @@ criterion_group!(
     nested_sharding,
     sharded_read,
     partial_decoder,
+    partial_decoder_indexer,
     chunk_cache,
     subchunk_cache,
     async_chunk_cache,
