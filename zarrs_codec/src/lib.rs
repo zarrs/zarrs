@@ -72,7 +72,8 @@ pub use array_bytes::{
     ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice,
     ArrayBytesOptional, ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError,
     ExpectedOptionalBytesError, ExpectedVariableLengthBytesError, copy_fill_value_into,
-    decode_into_array_bytes_target, update_array_bytes,
+    copy_fill_value_into_elements, decode_into_array_bytes_target,
+    decode_into_array_bytes_target_elements, update_array_bytes,
 };
 
 mod byte_interval_partial_decoder;

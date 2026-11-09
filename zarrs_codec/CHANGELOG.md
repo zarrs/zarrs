@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytes::extract_runs` for extracting fixed, variable-length, and optional elements along contiguous linearised index runs, and `ArrayBytes::extract_runs_into` for copying fixed and optional elements along runs directly into an `ArrayBytesTarget`
   - Direct copying enforces the same selection-count limit as extraction, irrespective of the target layout
 - Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesTarget::with_optional_masks`
+- Add `copy_fill_value_into_elements` and `decode_into_array_bytes_target_elements` for scattering elements into a decode target
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Add `ArrayBytesMask`, an optional validity mask whose bytes are 0 (null) or 1 (present) by construction
   - `ArrayBytesMask::new` checks raw bytes once, returning the new `ArrayBytesMaskCreateError` (`CodecError::ArrayBytesMaskCreate`), and `From<Vec<bool>>`/`From<&[bool]>` convert without copying or checking

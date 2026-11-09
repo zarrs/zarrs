@@ -448,7 +448,10 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
 mod tests {
     use super::*;
     use crate::array::{FillValue, data_type};
-    use zarrs_codec::copy_fill_value_into;
+    use zarrs_codec::{
+        copy_fill_value_into, copy_fill_value_into_elements, decode_into_array_bytes_target,
+        decode_into_array_bytes_target_elements,
+    };
 
     #[test]
     fn reorder_between_element_orders() {
@@ -633,7 +636,10 @@ mod tests {
                 ArraySubset::new_with_start_shape(vec![99, 99], vec![0, 0]).unwrap(),
             ] {
                 let mut outputs = Vec::new();
-                for direct in [false, true] {
+                // Fill the whole target, or its elements in two out-of-order batches
+                for (direct, elements) in
+                    [(false, false), (true, false), (false, true), (true, true)]
+                {
                     let mut buffers = FixedDecodeBuffers::new(&data_type, &[3, 5]).unwrap();
                     buffers.data.resize(15 * buffers.data_type_size, 0xa5);
                     for mask in &mut buffers.masks {
@@ -667,26 +673,45 @@ mod tests {
                         let mut target = ArrayBytesTarget::from(data_view)
                             .with_optional_masks(mask_views)
                             .unwrap();
-                        if direct {
+                        let fill = |num_elements: usize| {
+                            ArrayBytes::new_fill_value(&data_type, num_elements as u64, &fill_value)
+                                .unwrap()
+                        };
+                        let num_elements = subset.num_elements_usize();
+                        if elements {
+                            let positions: Vec<usize> = (0..num_elements).rev().collect();
+                            let (first, second) = positions.split_at(num_elements / 2);
+                            for positions in [first, second] {
+                                if direct {
+                                    copy_fill_value_into_elements(
+                                        &data_type,
+                                        &fill_value,
+                                        positions,
+                                        &mut target,
+                                    )
+                                    .unwrap();
+                                } else {
+                                    decode_into_array_bytes_target_elements(
+                                        &fill(positions.len()),
+                                        positions,
+                                        &mut target,
+                                    )
+                                    .unwrap();
+                                }
+                            }
+                        } else if direct {
                             copy_fill_value_into(&data_type, &fill_value, &mut target).unwrap();
                         } else {
-                            let bytes = ArrayBytes::new_fill_value(
-                                &data_type,
-                                subset.num_elements(),
-                                &fill_value,
-                            )
-                            .unwrap();
-                            zarrs_codec::decode_into_array_bytes_target(&bytes, &mut target)
+                            decode_into_array_bytes_target(&fill(num_elements), &mut target)
                                 .unwrap();
                         }
                     }
                     // Compare raw data too, including placeholder bytes beneath null masks.
                     outputs.push((buffers.data, buffers.masks));
                 }
-                assert_eq!(
-                    outputs[0], outputs[1],
-                    "{data_type:?} {fill_value} {subset:?}"
-                );
+                for output in &outputs[1..] {
+                    assert_eq!(&outputs[0], output, "{data_type:?} {fill_value} {subset:?}");
+                }
             }
         }
     }

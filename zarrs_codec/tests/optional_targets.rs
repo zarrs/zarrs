@@ -5,6 +5,7 @@ use zarrs_chunk_grid::ArraySubset;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesMask, ArrayBytesTarget,
     IncompatibleOptionalMaskError, decode_into_array_bytes_target,
+    decode_into_array_bytes_target_elements,
 };
 
 const SHAPE: [u64; 2] = [3, 4];
@@ -149,6 +150,75 @@ fn subdivided_targets_preserve_structure() {
                 sub_masks,
             );
         }
+        assert_eq!(data, expected_data);
+        assert_eq!(masks, expected_masks);
+    }
+}
+
+#[test]
+fn optional_targets_scatter_elements() {
+    let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+    let source_data = [10, 11, 12, 13, 14, 15, 16, 17];
+    let source_masks = [[1, 0, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]];
+    // Select elements of the source (and its masks) in the order of `positions`
+    let select = |positions: &[usize]| {
+        let data: Vec<u8> = positions
+            .iter()
+            .flat_map(|&p| source_data[p * 2..p * 2 + 2].to_vec())
+            .collect();
+        let masks: Vec<Vec<u8>> = source_masks
+            .iter()
+            .map(|mask| positions.iter().map(|&p| mask[p]).collect())
+            .collect();
+        (data, masks)
+    };
+    let source_bytes = |data: &[u8], masks: &[Vec<u8>]| -> ArrayBytes<'static> {
+        masks
+            .iter()
+            .rev()
+            .fold(ArrayBytes::new_flen(data.to_vec()), |bytes, mask| {
+                bytes.with_optional_mask(ArrayBytesMask::new(mask.clone()).unwrap())
+            })
+    };
+
+    for depth_ in [0, 1, 3] {
+        let mut data = [0xa5; 24];
+        let mut masks = vec![[0xa5; 12]; depth_];
+        {
+            let mut target = target(&mut data, &mut masks, &subset);
+            for positions in [&[3, 0][..], &[2, 1]] {
+                let (sub_data, sub_masks) = select(positions);
+                let source = source_bytes(&sub_data, &sub_masks[..depth_]);
+                decode_into_array_bytes_target_elements(&source, positions, &mut target).unwrap();
+            }
+
+            // Errors
+            let (sub_data, sub_masks) = select(&[0]);
+            let source = source_bytes(&sub_data, &sub_masks[..depth_]);
+            // position out-of-bounds
+            assert!(decode_into_array_bytes_target_elements(&source, &[4], &mut target).is_err());
+            // number of positions does not match the number of elements
+            assert!(
+                decode_into_array_bytes_target_elements(&source, &[0, 1], &mut target).is_err()
+            );
+            // structure mismatch
+            let source = ArrayBytes::new_flen(&sub_data[..]).with_optional_mask(&[true][..]);
+            if depth_ != 1 {
+                assert!(
+                    decode_into_array_bytes_target_elements(&source, &[0], &mut target).is_err()
+                );
+            }
+        }
+
+        let mut expected_data = [0xa5; 24];
+        let mut expected_masks = vec![[0xa5; 12]; depth_];
+        expect_block(
+            &mut expected_data,
+            &mut expected_masks,
+            (1..3, 1..3),
+            &source_data,
+            &source_masks,
+        );
         assert_eq!(data, expected_data);
         assert_eq!(masks, expected_masks);
     }

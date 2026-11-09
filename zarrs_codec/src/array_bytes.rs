@@ -1095,6 +1095,51 @@ pub fn update_array_bytes<'a>(
     }
 }
 
+/// The elements of an [`ArrayBytesTarget`] to write.
+#[derive(Clone, Copy)]
+enum TargetElements<'p> {
+    /// Every element of the target.
+    All,
+    /// The elements at these positions, which index the elements of the target in C order.
+    Positions(&'p [usize]),
+}
+
+impl TargetElements<'_> {
+    fn fill(
+        self,
+        view: &mut ArrayBytesFixedDisjointView<'_>,
+        value: &[u8],
+    ) -> Result<(), CodecError> {
+        match self {
+            Self::All => Ok(view.fill(value)?),
+            Self::Positions(positions) => view.fill_elements(positions, value),
+        }
+    }
+
+    fn fill_zero(self, view: &mut ArrayBytesFixedDisjointView<'_>) -> Result<(), CodecError> {
+        match self {
+            Self::All => {
+                view.fill_byte(0);
+                Ok(())
+            }
+            Self::Positions(positions) => {
+                view.fill_elements(positions, &vec![0; view.data_type_size()])
+            }
+        }
+    }
+
+    fn copy(
+        self,
+        view: &mut ArrayBytesFixedDisjointView<'_>,
+        bytes: &[u8],
+    ) -> Result<(), CodecError> {
+        match self {
+            Self::All => Ok(view.copy_from_slice(bytes)?),
+            Self::Positions(positions) => view.copy_elements_from_slice(positions, bytes),
+        }
+    }
+}
+
 /// Decode the fill value into a preallocated output target.
 ///
 /// This method is intended for internal use by Array.
@@ -1110,18 +1155,43 @@ pub fn copy_fill_value_into(
     fill_value: &FillValue,
     output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
-    copy_fill_value_bytes_into(data_type, fill_value.as_ne_bytes(), output_target)
+    copy_fill_value_bytes_into(
+        data_type,
+        fill_value.as_ne_bytes(),
+        output_target,
+        TargetElements::All,
+    )
+}
+
+/// Decode the fill value into the elements of a preallocated output target at `positions`.
+///
+/// Positions index the elements of the target in C order.
+///
+/// # Errors
+/// Returns a [`CodecError`] if [`copy_fill_value_into`] would, or a position is out-of-bounds of the target.
+pub fn copy_fill_value_into_elements(
+    data_type: &DataType,
+    fill_value: &FillValue,
+    positions: &[usize],
+    output_target: &mut ArrayBytesTarget<'_>,
+) -> Result<(), CodecError> {
+    copy_fill_value_bytes_into(
+        data_type,
+        fill_value.as_ne_bytes(),
+        output_target,
+        TargetElements::Positions(positions),
+    )
 }
 
 fn copy_null_fill_value_into(
     data_type: &DataType,
     output_target: &mut ArrayBytesTarget<'_>,
+    elements: TargetElements,
 ) -> Result<(), CodecError> {
     match (data_type, output_target) {
         (DataType::Optional(optional), ArrayBytesTarget::Optional(optional_target)) => {
-            copy_null_fill_value_into(optional.data_type(), &mut optional_target.data)?;
-            optional_target.mask.fill_byte(0);
-            Ok(())
+            copy_null_fill_value_into(optional.data_type(), &mut optional_target.data, elements)?;
+            elements.fill_zero(&mut optional_target.mask)
         }
         (DataType::Fixed(fixed), ArrayBytesTarget::Fixed(view)) => {
             if view.data_type_size() != fixed.size() {
@@ -1129,8 +1199,7 @@ fn copy_null_fill_value_into(
                     InvalidBytesLengthError::new(fixed.size(), view.data_type_size()).into(),
                 );
             }
-            view.fill_byte(0);
-            Ok(())
+            elements.fill_zero(view)
         }
         (DataType::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
@@ -1146,21 +1215,27 @@ fn copy_fill_value_bytes_into(
     data_type: &DataType,
     fill_value_bytes: &[u8],
     output_target: &mut ArrayBytesTarget<'_>,
+    elements: TargetElements,
 ) -> Result<(), CodecError> {
     match (data_type, output_target) {
         (DataType::Optional(optional), ArrayBytesTarget::Optional(optional_target)) => {
             match parse_optional_fill_value(fill_value_bytes)? {
                 None => {
-                    copy_null_fill_value_into(optional.data_type(), &mut optional_target.data)?;
-                    optional_target.mask.fill(&[0])?;
+                    copy_null_fill_value_into(
+                        optional.data_type(),
+                        &mut optional_target.data,
+                        elements,
+                    )?;
+                    elements.fill(&mut optional_target.mask, &[0])?;
                 }
                 Some(inner_bytes) => {
                     copy_fill_value_bytes_into(
                         optional.data_type(),
                         inner_bytes,
                         &mut optional_target.data,
+                        elements,
                     )?;
-                    optional_target.mask.fill(&[1])?;
+                    elements.fill(&mut optional_target.mask, &[1])?;
                 }
             }
             Ok(())
@@ -1169,8 +1244,7 @@ fn copy_fill_value_bytes_into(
             if fill_value_bytes.len() != fixed.size() {
                 return Err(DataTypeFillValueError.into());
             }
-            view.fill(fill_value_bytes)?;
-            Ok(())
+            elements.fill(view, fill_value_bytes)
         }
         (DataType::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
@@ -1193,25 +1267,40 @@ pub fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
     target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
+    decode_into_target_elements(bytes, target, TargetElements::All)
+}
+
+/// Decode `bytes` into the elements of `target` at `positions`.
+///
+/// Element `i` of `bytes` is written to element `positions[i]` of the target, where positions index the elements of the target in C order.
+///
+/// # Errors
+/// Returns a [`CodecError`] if the bytes are incompatible with the target, the number of elements in `bytes` does not match the number of `positions`, or a position is out-of-bounds of the target.
+pub fn decode_into_array_bytes_target_elements(
+    bytes: &ArrayBytes,
+    positions: &[usize],
+    target: &mut ArrayBytesTarget<'_>,
+) -> Result<(), CodecError> {
+    decode_into_target_elements(bytes, target, TargetElements::Positions(positions))
+}
+
+fn decode_into_target_elements(
+    bytes: &ArrayBytes,
+    target: &mut ArrayBytesTarget<'_>,
+    elements: TargetElements,
+) -> Result<(), CodecError> {
     match (bytes, target) {
-        // Fixed source → Fixed target
         (ArrayBytes::Fixed(data_bytes), ArrayBytesTarget::Fixed(data)) => {
-            data.copy_from_slice(data_bytes)?;
-            Ok(())
+            elements.copy(data, data_bytes)
         }
-
-        // Optional source → Optional target (recursive)
         (ArrayBytes::Optional(optional_bytes), ArrayBytesTarget::Optional(optional_target)) => {
-            // Recursively decode the inner data
-            decode_into_array_bytes_target(optional_bytes.data(), &mut optional_target.data)?;
-            // Decode the mask
-            optional_target
-                .mask
-                .copy_from_slice(optional_bytes.mask())?;
-            Ok(())
+            decode_into_target_elements(
+                optional_bytes.data(),
+                &mut optional_target.data,
+                elements,
+            )?;
+            elements.copy(&mut optional_target.mask, optional_bytes.mask())
         }
-
-        // Type mismatches
         (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
         (ArrayBytes::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
