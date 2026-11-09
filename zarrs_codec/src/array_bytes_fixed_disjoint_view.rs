@@ -273,6 +273,13 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if bytes.len() != positions.len() * size {
             return Err(InvalidBytesLengthError::new(bytes.len(), positions.len() * size).into());
         }
+        if size == 0 {
+            // Nothing to copy, but positions are still validated (`chunks_exact` rejects a size of 0)
+            for &position in positions {
+                self.element_offset(position)?;
+            }
+            return Ok(());
+        }
         for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
             let offset = self.element_offset(position)?;
             // SAFETY: `offset` is an element of the view, which is disjoint from other views.
@@ -548,5 +555,21 @@ mod tests {
             assert!(view.fill_elements(&[0], &[1, 2]).is_err()); // invalid fill value
         }
         assert_eq!(&bytes, &[0, 11, 255, 0, 255, 14, 0, 0, 0]);
+
+        // Zero-sized elements
+        let mut bytes: Vec<u8> = vec![];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut bytes),
+                0,
+                &shape,
+                ArraySubset::new_with_ranges(&[0..2, 1..3]),
+            )
+        }
+        .unwrap();
+        view.copy_elements_from_slice(&[3, 0], &[]).unwrap();
+        view.fill_elements(&[2, 1], &[]).unwrap();
+        assert!(view.copy_elements_from_slice(&[4], &[]).is_err()); // OOB
+        assert!(view.fill_elements(&[4], &[]).is_err()); // OOB
     }
 }
