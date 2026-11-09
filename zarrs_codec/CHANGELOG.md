@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `validate_chunk_{element_indices,subset}`
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
-- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,subset,subdivide}` to build and subdivide targets without depending on their structure
+- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,subset,subdivide}` to build and subdivide targets without depending on their structure
   - `with_optional_mask` returns the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`) unless the mask has one byte per element and matches the array shape and subset of the data
 - Add `ArrayBytesFixedDisjointView::data_type_size`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`

@@ -113,20 +113,6 @@ fn optional_fill_value(c: &mut Criterion) {
     }
 }
 
-fn nested_target<'a>(
-    data_view: ArrayBytesFixedDisjointView<'a>,
-    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    mask_views
-        .into_iter()
-        .rev()
-        .try_fold(
-            ArrayBytesDecodeIntoTarget::from(data_view),
-            ArrayBytesDecodeIntoTarget::with_optional_mask,
-        )
-        .unwrap()
-}
-
 fn fill_output(c: &mut Criterion) {
     let shape = [64, 1024];
     for depth in [0usize, 1, 3] {
@@ -181,7 +167,9 @@ fn fill_output(c: &mut Criterion) {
                                     .unwrap()
                                 })
                                 .collect();
-                            let target = nested_target(data_view, mask_views);
+                            let target = ArrayBytesDecodeIntoTarget::from(data_view)
+                                .with_optional_masks(mask_views)
+                                .unwrap();
                             copy_fill_value_into(
                                 black_box(&data_type),
                                 black_box(&fill_value),

@@ -20,25 +20,23 @@ fn target<'a>(
         ArrayBytesFixedDisjointView::new(UnsafeCellSlice::new(data), 2, &SHAPE, subset.clone())
     }
     .unwrap();
-    masks
+    let mask_views: Vec<_> = masks
         .iter_mut()
-        .rev()
-        .try_fold(
-            ArrayBytesDecodeIntoTarget::from(data_view),
-            |target, mask| {
-                // SAFETY: each view is the only view of its backing buffer.
-                let mask_view = unsafe {
-                    ArrayBytesFixedDisjointView::new(
-                        UnsafeCellSlice::new(mask),
-                        1,
-                        &SHAPE,
-                        subset.clone(),
-                    )
-                }
-                .unwrap();
-                target.with_optional_mask(mask_view)
-            },
-        )
+        .map(|mask| {
+            // SAFETY: each view is the only view of its backing buffer.
+            unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(mask),
+                    1,
+                    &SHAPE,
+                    subset.clone(),
+                )
+            }
+            .unwrap()
+        })
+        .collect();
+    ArrayBytesDecodeIntoTarget::from(data_view)
+        .with_optional_masks(mask_views)
         .unwrap()
 }
 

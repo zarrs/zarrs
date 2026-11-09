@@ -156,6 +156,21 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
         })
     }
 
+    /// Wrap the target in one [`Optional`](Self::Optional) layer per mask, with `masks` ordered from outermost to innermost.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleOptionalMaskError`] if any mask is incompatible, see [`with_optional_mask`](Self::with_optional_mask).
+    pub fn with_optional_masks<I>(self, masks: I) -> Result<Self, IncompatibleOptionalMaskError>
+    where
+        I: IntoIterator<Item = ArrayBytesFixedDisjointView<'a>>,
+        I::IntoIter: DoubleEndedIterator,
+    {
+        masks
+            .into_iter()
+            .rev()
+            .try_fold(self, Self::with_optional_mask)
+    }
+
     /// Return the innermost data view.
     fn data_view(&self) -> &ArrayBytesFixedDisjointView<'a> {
         match self {

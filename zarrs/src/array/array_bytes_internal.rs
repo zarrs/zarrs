@@ -99,21 +99,20 @@ impl FixedDecodeBuffers {
                 subset.clone(),
             )?
         };
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(data_view);
-        // Wrap from the innermost mask outwards, matching `wrap_optional_masks`
-        for mask in self.masks.iter_mut().rev() {
-            let mask_view = unsafe {
+        let mask_views = self
+            .masks
+            .iter_mut()
+            .map(|mask| unsafe {
                 // SAFETY: the view is the only view of the mask
                 ArrayBytesFixedDisjointView::new(
                     UnsafeCellSlice::new(mask.spare_capacity_mut()),
                     1,
                     &self.shape,
                     subset.clone(),
-                )?
-            };
-            target = target.with_optional_mask(mask_view)?;
-        }
-        Ok(target)
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ArrayBytesDecodeIntoTarget::Fixed(data_view).with_optional_masks(mask_views)?)
     }
 
     /// Convert the buffers into array bytes.
@@ -405,13 +404,8 @@ mod tests {
                                 .unwrap()
                             })
                             .collect();
-                        let target = mask_views
-                            .into_iter()
-                            .rev()
-                            .try_fold(
-                                ArrayBytesDecodeIntoTarget::from(data_view),
-                                ArrayBytesDecodeIntoTarget::with_optional_mask,
-                            )
+                        let target = ArrayBytesDecodeIntoTarget::from(data_view)
+                            .with_optional_masks(mask_views)
                             .unwrap();
                         if direct {
                             copy_fill_value_into(&data_type, &fill_value, target).unwrap();
