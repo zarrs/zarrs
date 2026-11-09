@@ -11,7 +11,7 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_r
 
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
-    FillValue, Indexer, IndexerError, InvalidBytesLengthError,
+    FillValue, Indexer, IndexerError, InvalidBytesLengthError, InvalidNumberOfElementsError,
 };
 
 mod array_bytes_offsets;
@@ -852,22 +852,16 @@ pub fn update_array_bytes<'a>(
     }
 }
 
-/// Decode the fill value into a subset of a preallocated output.
+/// Decode the fill value into a preallocated output target.
 ///
 /// This method is intended for internal use by Array.
 /// Supports fixed length data types, including nested optional types with fixed length data.
 ///
 /// # Errors
-/// Returns [`CodecError::ExpectedFixedLengthBytes`] for variable-sized data.
-///
-/// # Panics
-/// Panics if the number of elements in a target exceeds [`usize::MAX`].
-///
-/// # Safety
-/// The caller must ensure that:
-///  - `data_type` and `fill_value` are compatible,
-///  - `output` holds enough space for the preallocated bytes of an array with `output_shape` and `data_type`, and
-///  - `output_subset` is within the bounds of `output_shape`.
+/// Returns a [`CodecError`] if
+///  - `data_type` is variable-sized,
+///  - the structure of `output_target` does not match `data_type` (one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level), or
+///  - `fill_value` is incompatible with `data_type`.
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
@@ -891,9 +885,9 @@ fn copy_fill_value_bytes_into(
         ) => {
             let num_elements = data_target.num_elements();
             if mask_target.num_elements() != num_elements {
-                return Err(InvalidBytesLengthError::new(
-                    usize::try_from(num_elements).unwrap(),
-                    usize::try_from(mask_target.num_elements()).unwrap(),
+                return Err(InvalidNumberOfElementsError::new(
+                    mask_target.num_elements(),
+                    num_elements,
                 )
                 .into());
             }
