@@ -11,10 +11,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
-    optional_innermost,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks, optional_innermost};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubsetTraits, ChunkGrid,
@@ -150,7 +147,6 @@ pub(crate) fn partial_decode(
     // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
         {
-            let (data_view, mask_views) = buffers.views()?;
             partial_decode_fixed_array_subset_into(
                 input_handle,
                 subchunk_grid,
@@ -160,7 +156,7 @@ pub(crate) fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(data_view, mask_views),
+                buffers.target()?,
             )?;
         }
         // SAFETY: every element of the output (and masks) is written by `partial_decode_fixed_array_subset_into`
@@ -342,8 +338,6 @@ fn partial_decode_fixed_array_subset_into(
     let Some(shard_index) = shard_index else {
         return copy_fill_value_into(data_type, fill_value, output_target);
     };
-    // Optional data is decoded into views of its inner data and each validity mask
-    let (output_view, mask_views) = extract_target_views(&output_target);
     let (subchunk_concurrent_limit, resources) =
         super::get_concurrent_target_and_partial_resources(
             inner_codecs,
@@ -366,19 +360,9 @@ fn partial_decode_fixed_array_subset_into(
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
         // Calculate the chunk's position in the output view coordinate space
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
-        let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
-        let subchunk_view = unsafe {
-            // SAFETY: chunks represent disjoint array subsets
-            output_view.subdivide(chunk_output_overlap_subset.clone())?
-        };
-        let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
-        for mask_view in &mask_views {
-            subchunk_mask_views.push(unsafe {
-                // SAFETY: chunks represent disjoint array subsets
-                mask_view.subdivide(chunk_output_overlap_subset.clone())
-            }?);
-        }
-        let subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
+        let chunk_output_overlap_subset = chunk_relative.offset(output_target.subset().start())?;
+        // SAFETY: chunks represent disjoint array subsets
+        let subchunk_target = unsafe { output_target.subdivide(chunk_output_overlap_subset) }?;
         if let Some((offset, size)) = offset_size {
             // Partially decode the subchunk
             let inner_partial_decoder = get_subchunk_partial_decoder(

@@ -7,7 +7,6 @@ use zarrs_codec::{
 };
 use zarrs_storage::MaybeSync;
 
-use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
 
@@ -144,14 +143,12 @@ where
     A: ArrayOps + MaybeSync,
     R: AsyncRetrieveInto + ?Sized,
 {
-    let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
-    let parent_start = data_view_ref.subset().start().to_vec();
+    let parent_start = output_target.subset().start().to_vec();
     let array_subset_start = array_subset.start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let array_subset_start = &array_subset_start;
         let parent_start = &parent_start;
-        let mask_view_refs = &mask_view_refs;
         async move {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
@@ -168,20 +165,8 @@ where
                 chunk_subset_in_array.shape(),
             )?;
 
-            let data_sub = unsafe {
-                // SAFETY: chunks represent disjoint array subsets
-                data_view_ref.subdivide(chunk_subset_in_view.clone())?
-            };
-
-            let mut mask_subs = Vec::with_capacity(mask_view_refs.len());
-            for mask_view in mask_view_refs {
-                mask_subs.push(unsafe {
-                    // SAFETY: chunks represent disjoint array subsets
-                    mask_view.subdivide(chunk_subset_in_view.clone())
-                }?);
-            }
-
-            let target = build_nested_optional_target(data_sub, mask_subs);
+            // SAFETY: chunks represent disjoint array subsets
+            let target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
 
             retrieve
                 .retrieve_partial_chunk_into(

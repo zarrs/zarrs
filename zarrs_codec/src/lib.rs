@@ -104,22 +104,125 @@ pub enum ArrayBytesDecodeIntoTarget<'a> {
 
     /// Target for optional data (nested data target + mask view).
     ///
-    /// The mask is always fixed-length (one byte per element).
-    Optional(
-        Box<ArrayBytesDecodeIntoTarget<'a>>,
-        ArrayBytesFixedDisjointView<'a>,
-    ),
+    /// Created with [`with_optional_mask`](ArrayBytesDecodeIntoTarget::with_optional_mask), which validates the mask against the data.
+    #[non_exhaustive]
+    Optional {
+        /// The target for the inner data.
+        data: Box<ArrayBytesDecodeIntoTarget<'a>>,
+        /// The validity mask view, with one byte per element.
+        mask: ArrayBytesFixedDisjointView<'a>,
+    },
 }
 
-impl ArrayBytesDecodeIntoTarget<'_> {
+impl<'a> ArrayBytesDecodeIntoTarget<'a> {
+    /// Wrap the target in an [`Optional`](Self::Optional) layer with `mask` as its validity mask.
+    ///
+    /// The target becomes the inner data and `mask` the outermost mask, like [`ArrayBytes::with_optional_mask`].
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleOptionalMaskError`] unless `mask` has one byte per element and views an array with the same shape and [`subset`](Self::subset) as the target.
+    /// Empty subsets match irrespective of their start.
+    pub fn with_optional_mask(
+        self,
+        mask: ArrayBytesFixedDisjointView<'a>,
+    ) -> Result<Self, IncompatibleOptionalMaskError> {
+        let data = self.data_view();
+        if mask.data_type_size() != 1 {
+            return Err(IncompatibleOptionalMaskError::ElementSize(
+                mask.data_type_size(),
+            ));
+        }
+        if mask.shape() != data.shape() {
+            return Err(IncompatibleOptionalMaskError::ArrayShape {
+                mask: mask.shape().to_vec(),
+                data: data.shape().to_vec(),
+            });
+        }
+        let (mask_subset, data_subset) = (mask.subset(), data.subset());
+        let subsets_match = if data_subset.is_empty() {
+            mask_subset.shape() == data_subset.shape()
+        } else {
+            mask_subset == data_subset
+        };
+        if !subsets_match {
+            return Err(IncompatibleOptionalMaskError::Subset {
+                mask: Box::new(mask_subset.clone()),
+                data: Box::new(data_subset.clone()),
+            });
+        }
+        Ok(Self::Optional {
+            data: Box::new(self),
+            mask,
+        })
+    }
+
+    /// Return the innermost data view.
+    fn data_view(&self) -> &ArrayBytesFixedDisjointView<'a> {
+        match self {
+            Self::Fixed(data) => data,
+            Self::Optional { data, .. } => data.data_view(),
+        }
+    }
+
+    /// Return the subset of the array covered by the target.
+    #[must_use]
+    pub fn subset(&self) -> &ArraySubset {
+        self.data_view().subset()
+    }
+
+    /// Create a target with the same structure as this target that covers `subset` of the same array.
+    ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the [`subset`](Self::subset) of the target.
+    ///
+    /// # Safety
+    /// The `subset` must not overlap with the `subset` of any other created targets or views that reference the same array bytes.
+    pub unsafe fn subdivide(&self, subset: ArraySubset) -> Result<Self, CodecError> {
+        match self {
+            Self::Fixed(data) => Ok(Self::Fixed(unsafe { data.subdivide(subset) }?)),
+            Self::Optional { data, mask } => {
+                let mask = unsafe { mask.subdivide(subset.clone()) }?;
+                Ok(Self::Optional {
+                    data: Box::new(unsafe { data.subdivide(subset) }?),
+                    mask,
+                })
+            }
+        }
+    }
+
     /// Return the number of elements in the target.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        match self {
-            Self::Fixed(data) => data.num_elements(),
-            Self::Optional(data, _) => data.num_elements(),
-        }
+        self.data_view().num_elements()
     }
+}
+
+/// A validity mask view is incompatible with the data of an [`ArrayBytesDecodeIntoTarget`].
+#[derive(Clone, Debug, Display, Error)]
+pub enum IncompatibleOptionalMaskError {
+    /// The mask does not have one byte per element.
+    #[display("the optional mask has {_0} bytes per element, expected 1")]
+    ElementSize(usize),
+    /// The mask and data view arrays with different shapes.
+    #[display(
+        "the optional mask array shape {mask:?} does not match the data array shape {data:?}"
+    )]
+    ArrayShape {
+        /// The shape of the mask array.
+        mask: ArrayShape,
+        /// The shape of the data array.
+        data: ArrayShape,
+    },
+    /// The mask and data cover different subsets.
+    #[display("the optional mask subset {mask} does not match the data subset {data}")]
+    Subset {
+        /// The subset of the mask.
+        mask: Box<ArraySubset>,
+        /// The subset of the data.
+        data: Box<ArraySubset>,
+    },
 }
 
 impl<'a> From<ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
@@ -677,6 +780,9 @@ pub enum CodecError {
     /// Subset out of bounds.
     #[error(transparent)]
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
+    /// An optional mask is incompatible with the data of a decode target.
+    #[error(transparent)]
+    IncompatibleOptionalMask(#[from] IncompatibleOptionalMaskError),
     /// Invalid byte offsets for variable length data.
     #[error(transparent)]
     ArrayBytesOffsetsCreate(#[from] ArrayBytesOffsetsCreateError),

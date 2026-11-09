@@ -84,21 +84,11 @@ impl FixedDecodeBuffers {
         })
     }
 
-    /// Return views of the data and each validity mask covering the entire array.
-    ///
-    /// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
+    /// Return a decode target covering the entire array.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the views cannot be created.
-    pub(crate) fn views(
-        &mut self,
-    ) -> Result<
-        (
-            ArrayBytesFixedDisjointView<'_>,
-            Vec<ArrayBytesFixedDisjointView<'_>>,
-        ),
-        CodecError,
-    > {
+    pub(crate) fn target(&mut self) -> Result<ArrayBytesDecodeIntoTarget<'_>, CodecError> {
         let subset = ArraySubset::new_with_shape(self.shape.clone());
         let data_view = unsafe {
             // SAFETY: the view is the only view of the data
@@ -109,9 +99,10 @@ impl FixedDecodeBuffers {
                 subset.clone(),
             )?
         };
-        let mut mask_views = Vec::with_capacity(self.masks.len());
-        for mask in &mut self.masks {
-            mask_views.push(unsafe {
+        let mut target = ArrayBytesDecodeIntoTarget::Fixed(data_view);
+        // Wrap from the innermost mask outwards, matching `wrap_optional_masks`
+        for mask in self.masks.iter_mut().rev() {
+            let mask_view = unsafe {
                 // SAFETY: the view is the only view of the mask
                 ArrayBytesFixedDisjointView::new(
                     UnsafeCellSlice::new(mask.spare_capacity_mut()),
@@ -119,15 +110,16 @@ impl FixedDecodeBuffers {
                     &self.shape,
                     subset.clone(),
                 )?
-            });
+            };
+            target = target.with_optional_mask(mask_view)?;
         }
-        Ok((data_view, mask_views))
+        Ok(target)
     }
 
     /// Convert the buffers into array bytes.
     ///
     /// # Safety
-    /// Every element of the views returned by [`views`](Self::views) must have been written.
+    /// Every element of the target returned by [`target`](Self::target) must have been written.
     pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
         let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
         unsafe { self.data.set_len(num_elements * self.data_type_size) };
@@ -138,46 +130,14 @@ impl FixedDecodeBuffers {
     }
 }
 
-/// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
-/// The `mask_views` should be ordered from outermost to innermost mask.
-pub(crate) fn build_nested_optional_target<'a>(
-    data_view: ArrayBytesFixedDisjointView<'a>,
-    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    mask_views.into_iter().rev().fold(
-        ArrayBytesDecodeIntoTarget::Fixed(data_view),
-        |inner, mask_view| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask_view),
-    )
-}
-
 /// Wrap `bytes` in one [`ArrayBytes::Optional`] layer per mask.
 ///
-/// The `masks` slice should be ordered from outermost to innermost mask, matching the convention of
-/// [`build_nested_optional_target`].
+/// The `masks` should be ordered from outermost to innermost mask.
 pub(crate) fn wrap_optional_masks(bytes: ArrayBytes<'_>, masks: Vec<Vec<u8>>) -> ArrayBytes<'_> {
     masks
         .into_iter()
         .rev()
         .fold(bytes, ArrayBytes::with_optional_mask)
-}
-
-/// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
-///
-/// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
-pub(crate) fn extract_target_views<'a, 'b>(
-    target: &'b ArrayBytesDecodeIntoTarget<'a>,
-) -> (
-    &'b ArrayBytesFixedDisjointView<'a>,
-    Vec<&'b ArrayBytesFixedDisjointView<'a>>,
-) {
-    match target {
-        ArrayBytesDecodeIntoTarget::Fixed(view) => (view, vec![]),
-        ArrayBytesDecodeIntoTarget::Optional(inner, mask_view) => {
-            let (data_view, mut mask_views) = extract_target_views(inner);
-            mask_views.insert(0, mask_view);
-            (data_view, mask_views)
-        }
-    }
 }
 
 /// Split keyed optional array bytes into keyed inner data and keyed validity masks.
@@ -445,7 +405,14 @@ mod tests {
                                 .unwrap()
                             })
                             .collect();
-                        let target = build_nested_optional_target(data_view, mask_views);
+                        let target = mask_views
+                            .into_iter()
+                            .rev()
+                            .try_fold(
+                                ArrayBytesDecodeIntoTarget::from(data_view),
+                                ArrayBytesDecodeIntoTarget::with_optional_mask,
+                            )
+                            .unwrap();
                         if direct {
                             copy_fill_value_into(&data_type, &fill_value, target).unwrap();
                         } else {
@@ -558,14 +525,13 @@ mod tests {
             (data_type::string(), FillValue::from("")),
         ] {
             let mut buffers = FixedDecodeBuffers::new(&data_type::uint16(), &[3]).unwrap();
-            let (data_view, _) = buffers.views().unwrap();
-            assert!(copy_fill_value_into(&data_type, &fill_value, data_view.into()).is_err());
+            let target = buffers.target().unwrap();
+            assert!(copy_fill_value_into(&data_type, &fill_value, target).is_err());
         }
 
         let mut buffers =
             FixedDecodeBuffers::new(&data_type::uint16().to_optional(), &[3]).unwrap();
-        let (data_view, mask_views) = buffers.views().unwrap();
-        let target = build_nested_optional_target(data_view, mask_views);
+        let target = buffers.target().unwrap();
         assert!(
             copy_fill_value_into(&data_type::uint16(), &FillValue::from(1u16), target).is_err()
         );

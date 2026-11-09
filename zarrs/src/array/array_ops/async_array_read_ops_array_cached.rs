@@ -1,6 +1,5 @@
 use inherent::inherent;
 use std::sync::Arc;
-use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::Resources;
 
 use futures::{StreamExt, TryStreamExt};
@@ -11,15 +10,13 @@ use super::{
     AsyncReadableStorageTraits, ChunkGrid, CodecOptions, FromArrayBytes, Indexer,
     recommended_codec_concurrency,
 };
-use crate::array::array_bytes_internal::{
-    build_nested_optional_target, merge_cached_chunks, optional_nesting_depth, wrap_optional_masks,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_cached_chunks};
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
     fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices};
+use crate::array::{ArrayBytes, ArrayIndices};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
@@ -167,32 +164,14 @@ where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncChunkCache + ?Sized,
 {
-    let data_type_size = array.data_type().fixed_size().expect("fixed data type");
-    let num_elements = array_subset.num_elements_usize();
-    let size_output = num_elements * data_type_size;
-    let nesting_depth = optional_nesting_depth(array.data_type());
-    if size_output == 0 {
-        return Ok(
-            wrap_optional_masks(ArrayBytes::new_flen(vec![]), vec![vec![]; nesting_depth]).into(),
-        );
-    }
-    let mut data_output = Vec::with_capacity(size_output);
-    let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
-        .map(|_| Vec::with_capacity(num_elements))
-        .collect();
-
-    {
-        let data_slice = UnsafeCellSlice::new(data_output.spare_capacity_mut());
-        let mask_slices: Vec<_> = mask_outputs
-            .iter_mut()
-            .map(|mask| UnsafeCellSlice::new(mask.spare_capacity_mut()))
-            .collect();
-        let mask_slices = mask_slices.as_slice();
+    let mut buffers =
+        FixedDecodeBuffers::new(array.data_type(), &array_subset.shape()).expect("fixed data type");
+    if array_subset.num_elements() != 0 {
+        let target = buffers.target()?;
+        let target = &target;
         let array_subset_start = array_subset.start();
-        let array_subset_shape = array_subset.shape();
         let retrieve_chunk = |chunk_indices: ArrayIndices| {
             let array_subset_start = &array_subset_start;
-            let array_subset_shape = &array_subset_shape;
             async move {
                 let chunk_subset = array.chunk_subset(&chunk_indices)?;
                 let overlap = chunk_subset.overlap(array_subset)?;
@@ -207,27 +186,9 @@ where
                     resources,
                 )
                 .await?;
-                let data_view = unsafe {
-                    ArrayBytesFixedDisjointView::new(
-                        data_slice,
-                        data_type_size,
-                        array_subset_shape,
-                        output_subset.clone(),
-                    )?
-                };
-                let mut mask_views = Vec::with_capacity(mask_slices.len());
-                for mask_slice in mask_slices {
-                    mask_views.push(unsafe {
-                        ArrayBytesFixedDisjointView::new(
-                            *mask_slice,
-                            1,
-                            array_subset_shape,
-                            output_subset.clone(),
-                        )
-                    }?);
-                }
-                let target = build_nested_optional_target(data_view, mask_views);
-                decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
+                // SAFETY: chunks represent disjoint array subsets
+                let chunk_target = unsafe { target.subdivide(output_subset) }?;
+                decode_into_array_bytes_target(&bytes, chunk_target).map_err(ArrayError::CodecError)
             }
         };
         futures::stream::iter(&chunks.indices())
@@ -235,12 +196,8 @@ where
             .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
             .await?;
     }
-
-    unsafe { data_output.set_len(size_output) };
-    for mask in &mut mask_outputs {
-        unsafe { mask.set_len(num_elements) };
-    }
-    Ok(wrap_optional_masks(ArrayBytes::new_flen(data_output), mask_outputs).into())
+    // SAFETY: the chunks cover the array subset, so every element has been written
+    Ok(unsafe { buffers.into_array_bytes() }.into())
 }
 
 impl<TStorage, C> ArrayCached<TStorage, C>
@@ -572,7 +529,10 @@ mod tests {
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
     };
-    use crate::array::{ArrayBuilder, ArraySubset, FillValue, data_type};
+    use crate::array::{
+        ArrayBuilder, ArrayBytesFixedDisjointView, ArraySubset, FillValue, data_type,
+    };
+    use unsafe_cell_slice::UnsafeCellSlice;
     use zarrs_storage::store::AsyncMemoryStore;
 
     async fn test_cache_async<C>(cache: C)

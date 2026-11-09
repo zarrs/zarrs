@@ -117,10 +117,14 @@ fn nested_target<'a>(
     data_view: ArrayBytesFixedDisjointView<'a>,
     mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
 ) -> ArrayBytesDecodeIntoTarget<'a> {
-    mask_views.into_iter().rev().fold(
-        ArrayBytesDecodeIntoTarget::Fixed(data_view),
-        |inner, mask| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask),
-    )
+    mask_views
+        .into_iter()
+        .rev()
+        .try_fold(
+            ArrayBytesDecodeIntoTarget::from(data_view),
+            ArrayBytesDecodeIntoTarget::with_optional_mask,
+        )
+        .unwrap()
 }
 
 fn fill_output(c: &mut Criterion) {

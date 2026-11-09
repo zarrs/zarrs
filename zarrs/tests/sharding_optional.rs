@@ -45,10 +45,14 @@ fn nested_target<'a>(
     data_view: ArrayBytesFixedDisjointView<'a>,
     mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
 ) -> ArrayBytesDecodeIntoTarget<'a> {
-    mask_views.into_iter().rev().fold(
-        ArrayBytesDecodeIntoTarget::Fixed(data_view),
-        |inner, mask_view| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask_view),
-    )
+    mask_views
+        .into_iter()
+        .rev()
+        .try_fold(
+            ArrayBytesDecodeIntoTarget::from(data_view),
+            ArrayBytesDecodeIntoTarget::with_optional_mask,
+        )
+        .unwrap()
 }
 
 /// Decode `$subset` of fixed length (optional) `$data_type` data with `$decode_into` into a new target.

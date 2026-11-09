@@ -14,10 +14,7 @@ use super::{
     ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
-    optional_innermost,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks, optional_innermost};
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubset, ArraySubsetTraits,
@@ -171,7 +168,6 @@ pub(crate) async fn partial_decode(
     // Optional data with fixed length inner data: decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
         {
-            let (data_view, mask_views) = buffers.views()?;
             partial_decode_fixed_array_subset_into(
                 input_handle,
                 subchunk_grid,
@@ -181,7 +177,7 @@ pub(crate) async fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(data_view, mask_views),
+                buffers.target()?,
             )
             .await?;
         }
@@ -350,7 +346,7 @@ async fn get_subchunk_partial_decoder(
         })
 }
 
-#[expect(clippy::too_many_arguments, clippy::too_many_lines)]
+#[expect(clippy::too_many_arguments)]
 async fn partial_decode_fixed_array_subset_into(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     subchunk_grid: &RegularBoundedChunkGrid,
@@ -376,8 +372,6 @@ async fn partial_decode_fixed_array_subset_into(
     let Some(shard_index) = shard_index else {
         return copy_fill_value_into(data_type, fill_value, output_target);
     };
-    // Optional data is decoded into views of its inner data and each validity mask
-    let (output_view, mask_views) = extract_target_views(&output_target);
     let (subchunk_concurrent_limit, resources) =
         super::get_concurrent_target_and_partial_resources(
             inner_codecs,
@@ -402,7 +396,7 @@ async fn partial_decode_fixed_array_subset_into(
             .expect("subchunk always within shard");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
-        let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
+        let chunk_output_overlap_subset = chunk_relative.offset(output_target.subset().start())?;
         subchunks.push((
             offset_size,
             chunk_subset,
@@ -455,13 +449,8 @@ async fn partial_decode_fixed_array_subset_into(
     };
 
     for (decoded, output_subset) in decoded_subchunks {
-        // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
-        let subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
-        let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
-        for mask_view in &mask_views {
-            subchunk_mask_views.push(unsafe { mask_view.subdivide(output_subset.clone()) }?);
-        }
-        let subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
+        // SAFETY: subchunks are disjoint array subsets and each target is dropped before the next.
+        let subchunk_target = unsafe { output_target.subdivide(output_subset) }?;
         if let Some(decoded) = decoded {
             decode_into_array_bytes_target(&decoded, subchunk_target)?;
         } else {

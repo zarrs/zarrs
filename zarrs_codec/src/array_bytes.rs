@@ -882,7 +882,13 @@ fn copy_fill_value_bytes_into(
     output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
-        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mut mask_target)) => {
+        (
+            Some(opt),
+            ArrayBytesDecodeIntoTarget::Optional {
+                data: data_target,
+                mask: mut mask_target,
+            },
+        ) => {
             let num_elements = data_target.num_elements();
             if mask_target.num_elements() != num_elements {
                 return Err(InvalidBytesLengthError::new(
@@ -899,7 +905,7 @@ fn copy_fill_value_bytes_into(
         (Some(_), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
             Err(ExpectedFixedLengthBytesError.into())
         }
-        (None, ArrayBytesDecodeIntoTarget::Optional(..)) => {
+        (None, ArrayBytesDecodeIntoTarget::Optional { .. }) => {
             if data_type.is_fixed() {
                 Err(ExpectedOptionalBytesError.into())
             } else {
@@ -940,7 +946,10 @@ pub fn decode_into_array_bytes_target(
         // Optional source → Optional target (recursive)
         (
             ArrayBytes::Optional(optional_bytes),
-            ArrayBytesDecodeIntoTarget::Optional(data_target, mut mask_target),
+            ArrayBytesDecodeIntoTarget::Optional {
+                data: data_target,
+                mask: mut mask_target,
+            },
         ) => {
             // Recursively decode the inner data
             decode_into_array_bytes_target(optional_bytes.data(), *data_target)?;
@@ -951,7 +960,7 @@ pub fn decode_into_array_bytes_target(
 
         // Type mismatches
         (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
-        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(..)) => {
+        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional { .. }) => {
             Err(ExpectedOptionalBytesError.into())
         }
         (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {

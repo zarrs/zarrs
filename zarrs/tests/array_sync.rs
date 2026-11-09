@@ -598,10 +598,7 @@ fn retrieve_optional_into_vecs(
             ArrayBytesFixedDisjointView::new(mask_slice, 1, &shape, full_subset)?
         };
 
-        let target = ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(ArrayBytesDecodeIntoTarget::Fixed(data_view)),
-            mask_view,
-        );
+        let target = ArrayBytesDecodeIntoTarget::from(data_view).with_optional_mask(mask_view)?;
         array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
     }
 

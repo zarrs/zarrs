@@ -228,7 +228,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
     /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
     /// Chunk elements are written to the subset of the output in C order.
     ///
-    /// For optional data types, provide an [`ArrayBytesDecodeIntoTarget::Optional`] target with one layer per optional nesting level.
+    /// For optional data types, wrap the data target in one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level (see [`ArrayBytesDecodeIntoTarget::with_optional_mask`]).
     /// For non-optional data types, convert a fixed view into a target using `.into()`.
     ///
     /// # Errors
