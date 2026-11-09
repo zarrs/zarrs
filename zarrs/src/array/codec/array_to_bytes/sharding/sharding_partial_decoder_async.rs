@@ -167,20 +167,18 @@ pub(crate) async fn partial_decode(
     }
     // Optional data with fixed length inner data: decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
-        {
-            partial_decode_fixed_array_subset_into(
-                input_handle,
-                subchunk_grid,
-                subchunk_shape,
-                inner_codecs,
-                shard_index,
-                subset,
-                options,
-                resources,
-                buffers.target()?,
-            )
-            .await?;
-        }
+        partial_decode_fixed_array_subset_into(
+            input_handle,
+            subchunk_grid,
+            subchunk_shape,
+            inner_codecs,
+            shard_index,
+            subset,
+            options,
+            resources,
+            buffers.target()?,
+        )
+        .await?;
         // SAFETY: every element of the output (and masks) is written by `partial_decode_fixed_array_subset_into`
         Ok(unsafe { buffers.into_array_bytes() })
     } else {

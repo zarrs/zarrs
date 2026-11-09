@@ -483,9 +483,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             return Ok(ArrayBytes::new_flen(vec![]));
         }
         if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {
-            {
-                self.decode_into(encoded_shard, shape, buffers.target()?, options, resources)?;
-            }
+            self.decode_into(encoded_shard, shape, buffers.target()?, options, resources)?;
             // SAFETY: every element of the output (and masks) is written by `decode_into`
             return Ok(unsafe { buffers.into_array_bytes() });
         }
