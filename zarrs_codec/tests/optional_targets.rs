@@ -245,22 +245,20 @@ fn with_optional_mask_validates_the_mask() {
         IncompatibleOptionalMaskError::Subset { .. }
     ));
 
-    // Empty subsets match irrespective of their start
-    let empty_data = ArraySubset::new_with_start_shape(vec![0, 0], vec![0, 4]).unwrap();
-    let empty_mask = ArraySubset::new_with_start_shape(vec![3, 0], vec![0, 4]).unwrap();
-    let target = data_target(empty_data)
-        .with_optional_mask(mask_view(1, &SHAPE, empty_mask))
+    // Empty subsets must match exactly, including their start
+    let empty =
+        |start: Vec<u64>, shape: Vec<u64>| ArraySubset::new_with_start_shape(start, shape).unwrap();
+    let target = data_target(empty(vec![0, 0], vec![0, 4]))
+        .with_optional_mask(mask_view(1, &SHAPE, empty(vec![0, 0], vec![0, 4])))
         .unwrap();
     assert_eq!(target.num_elements(), 0);
-    assert!(matches!(
-        err(
-            data_target(ArraySubset::new_with_start_shape(vec![0, 0], vec![0, 4]).unwrap()),
-            mask_view(
-                1,
-                &SHAPE,
-                ArraySubset::new_with_start_shape(vec![0, 0], vec![0, 3]).unwrap()
-            )
-        ),
-        IncompatibleOptionalMaskError::Subset { .. }
-    ));
+    for mask_subset in [empty(vec![3, 0], vec![0, 4]), empty(vec![0, 0], vec![0, 3])] {
+        assert!(matches!(
+            err(
+                data_target(empty(vec![0, 0], vec![0, 4])),
+                mask_view(1, &SHAPE, mask_subset)
+            ),
+            IncompatibleOptionalMaskError::Subset { .. }
+        ));
+    }
 }

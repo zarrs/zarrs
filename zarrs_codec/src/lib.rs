@@ -121,7 +121,6 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
     ///
     /// # Errors
     /// Returns [`IncompatibleOptionalMaskError`] unless `mask` has one byte per element and views an array with the same shape and [`subset`](Self::subset) as the target.
-    /// Empty subsets match irrespective of their start.
     pub fn with_optional_mask(
         self,
         mask: ArrayBytesFixedDisjointView<'a>,
@@ -138,16 +137,10 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
                 data: data.shape().to_vec(),
             });
         }
-        let (mask_subset, data_subset) = (mask.subset(), data.subset());
-        let subsets_match = if data_subset.is_empty() {
-            mask_subset.shape() == data_subset.shape()
-        } else {
-            mask_subset == data_subset
-        };
-        if !subsets_match {
+        if mask.subset() != data.subset() {
             return Err(IncompatibleOptionalMaskError::Subset {
-                mask: Box::new(mask_subset.clone()),
-                data: Box::new(data_subset.clone()),
+                mask: Box::new(mask.subset().clone()),
+                data: Box::new(data.subset().clone()),
             });
         }
         Ok(Self::Optional {
