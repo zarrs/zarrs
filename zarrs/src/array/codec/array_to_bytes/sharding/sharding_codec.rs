@@ -1036,16 +1036,16 @@ impl ShardingCodecBound {
                                 ));
                             }
 
+                            // SAFETY: each chunk index is visited once, so its index entries are written by one task.
+                            let shard_index_unsafe = unsafe {
+                                shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2)
+                            };
+                            shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
+                            shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
+                            // SAFETY: `fetch_add` reserves a unique byte range for each chunk.
                             unsafe {
-                                let shard_index_unsafe = shard_index_slice
-                                    .index_mut(chunk_index * 2..chunk_index * 2 + 2);
-                                shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
-                                shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
-
-                                shard_slice
-                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
-                                    .copy_from_slice(crate::as_uninit(&chunk_encoded));
-                            }
+                                shard_slice.write_copy_of_slice_at(chunk_offset, &chunk_encoded)
+                            };
                         }
                         Ok(())
                     })?;
@@ -1091,14 +1091,10 @@ impl ShardingCodecBound {
                 }
                 encoded_chunk_ids_and_chunks
                     .concurrent_limit(shard_concurrent_limit)
-                    .for_each(|(chunk_index, chunk): (usize, Bytes)| unsafe {
-                        let shard_index_loc = &shard_index[chunk_index * 2..chunk_index * 2 + 2];
-                        let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
-                        let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
-
-                        shard_slice
-                            .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
-                            .copy_from_slice(crate::as_uninit(&chunk));
+                    .for_each(|(chunk_index, chunk): (usize, Bytes)| {
+                        let chunk_offset = usize::try_from(shard_index[chunk_index * 2]).unwrap();
+                        // SAFETY: the shard index assigns each chunk a unique byte range.
+                        unsafe { shard_slice.write_copy_of_slice_at(chunk_offset, &chunk) };
                     });
                 Ok(total_offset)
             }
@@ -1131,12 +1127,16 @@ impl ShardingCodecBound {
             let shard_slice = shard.spare_capacity_mut();
             match self.index_location {
                 ShardingIndexLocation::Start => {
-                    shard_slice[..encoded_array_index.len()]
-                        .copy_from_slice(crate::as_uninit(&encoded_array_index));
+                    crate::write_copy_of_slice(
+                        &mut shard_slice[..encoded_array_index.len()],
+                        &encoded_array_index,
+                    );
                 }
                 ShardingIndexLocation::End => {
-                    shard_slice[shard_length - encoded_array_index.len()..shard_length]
-                        .copy_from_slice(crate::as_uninit(&encoded_array_index));
+                    crate::write_copy_of_slice(
+                        &mut shard_slice[shard_length - encoded_array_index.len()..shard_length],
+                        &encoded_array_index,
+                    );
                 }
             }
         }
@@ -1233,16 +1233,16 @@ impl ShardingCodecBound {
                                 chunk_encoded.len(),
                                 std::sync::atomic::Ordering::Relaxed,
                             );
+                            // SAFETY: each chunk index is visited once, so its index entries are written by one task.
+                            let shard_index_unsafe = unsafe {
+                                shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2)
+                            };
+                            shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
+                            shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
+                            // SAFETY: `fetch_add` reserves a unique byte range for each chunk.
                             unsafe {
-                                let shard_index_unsafe = shard_index_slice
-                                    .index_mut(chunk_index * 2..chunk_index * 2 + 2);
-                                shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
-                                shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
-
-                                shard_slice
-                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
-                                    .copy_from_slice(crate::as_uninit(&chunk_encoded));
-                            }
+                                shard_slice.write_copy_of_slice_at(chunk_offset, &chunk_encoded)
+                            };
                         });
                 }
                 SubchunkWriteOrder::C
@@ -1261,15 +1261,11 @@ impl ShardingCodecBound {
                     }
                     encoded_chunks
                         .concurrent_limit(resources.compute_target())
-                        .for_each(|(chunk_index, chunk): (usize, Bytes)| unsafe {
-                            let shard_index_loc =
-                                &shard_index[chunk_index * 2..chunk_index * 2 + 2];
-                            let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
-                            let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
-
-                            shard_slice
-                                .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
-                                .copy_from_slice(crate::as_uninit(&chunk));
+                        .for_each(|(chunk_index, chunk): (usize, Bytes)| {
+                            let chunk_offset =
+                                usize::try_from(shard_index[chunk_index * 2]).unwrap();
+                            // SAFETY: the shard index assigns each chunk a unique byte range.
+                            unsafe { shard_slice.write_copy_of_slice_at(chunk_offset, &chunk) };
                         });
                 }
             }
@@ -1286,12 +1282,16 @@ impl ShardingCodecBound {
             let shard_slice = shard.spare_capacity_mut();
             match self.index_location {
                 ShardingIndexLocation::Start => {
-                    shard_slice[..encoded_array_index.len()]
-                        .copy_from_slice(crate::as_uninit(&encoded_array_index));
+                    crate::write_copy_of_slice(
+                        &mut shard_slice[..encoded_array_index.len()],
+                        &encoded_array_index,
+                    );
                 }
                 ShardingIndexLocation::End => {
-                    shard_slice[shard_length - encoded_array_index.len()..]
-                        .copy_from_slice(crate::as_uninit(&encoded_array_index));
+                    crate::write_copy_of_slice(
+                        &mut shard_slice[shard_length - encoded_array_index.len()..],
+                        &encoded_array_index,
+                    );
                 }
             }
         }

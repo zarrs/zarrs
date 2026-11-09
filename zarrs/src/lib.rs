@@ -244,12 +244,13 @@ pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
 pub use zarrs_storage as storage;
 
-/// View initialised bytes as possibly uninitialised bytes, e.g. to copy them into spare capacity.
+/// Copy `src` into `dst`, e.g. into spare capacity.
 ///
-/// `<[MaybeUninit<u8>]>::write_copy_of_slice` would replace this, but it requires Rust 1.93.
-fn as_uninit(bytes: &[u8]) -> &[std::mem::MaybeUninit<u8>] {
-    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the shared reference prevents writing uninitialised bytes into `bytes`.
-    unsafe { &*(std::ptr::from_ref::<[u8]>(bytes) as *const [std::mem::MaybeUninit<u8>]) }
+/// Polyfill for `<[MaybeUninit<u8>]>::write_copy_of_slice`; remove at MSRV 1.93.
+fn write_copy_of_slice(dst: &mut [std::mem::MaybeUninit<u8>], src: &[u8]) {
+    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and `src` is only read.
+    let src = unsafe { &*(std::ptr::from_ref::<[u8]>(src) as *const [std::mem::MaybeUninit<u8>]) };
+    dst.copy_from_slice(src);
 }
 
 /// Log a warning that an extension is experimental and may be incompatible with other Zarr V3 implementations.

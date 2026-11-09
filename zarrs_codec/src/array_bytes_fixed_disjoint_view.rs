@@ -180,13 +180,16 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         let mut regions = self.contiguous_linearised_indices().iter();
         let (first_index, _) = regions.next().expect("a nonempty view has a region");
         let first_offset = usize::try_from(first_index * self.data_type_size as u64).unwrap();
+        if !uniform {
+            // Seed one element, then double the initialised prefix in place below.
+            // SAFETY: this region belongs to the disjoint view and `first` is not yet borrowed.
+            unsafe { self.bytes.write_copy_of_slice_at(first_offset, fill_value) };
+        }
         // SAFETY: this region belongs to the disjoint view and is only accessed here.
         let first = unsafe { self.bytes.index_mut(first_offset..first_offset + length) };
         if uniform {
             first.fill(MaybeUninit::new(fill_value[0]));
         } else {
-            // Seed one element, then double the initialised prefix in place.
-            first[..fill_value.len()].copy_from_slice(as_uninit(fill_value));
             let mut written = fill_value.len();
             while written < length {
                 let count = written.min(length - written);
@@ -237,12 +240,13 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                 debug_assert!((output_offset + length) <= self.bytes.len());
                 debug_assert!((subset_offset + length) <= subset_bytes.len());
                 let subset_offset_end = subset_offset + length;
+                // SAFETY: the contiguous regions of the view are disjoint from each other and,
+                // per the contract of `new`/`subdivide`, from those of other views.
                 unsafe {
-                    self.bytes
-                        .index_mut(output_offset..output_offset + length)
-                        .copy_from_slice(as_uninit(
-                            &subset_bytes[subset_offset..subset_offset_end],
-                        ));
+                    self.bytes.write_copy_of_slice_at(
+                        output_offset,
+                        &subset_bytes[subset_offset..subset_offset_end],
+                    );
                 }
                 subset_offset_end
             },
@@ -271,11 +275,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         }
         for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
             let offset = self.element_offset(position)?;
-            unsafe {
-                self.bytes
-                    .index_mut(offset..offset + size)
-                    .copy_from_slice(as_uninit(element));
-            }
+            // SAFETY: `offset` is an element of the view, which is disjoint from other views.
+            unsafe { self.bytes.write_copy_of_slice_at(offset, element) };
         }
         Ok(())
     }
@@ -299,11 +300,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         }
         for &position in positions {
             let offset = self.element_offset(position)?;
-            unsafe {
-                self.bytes
-                    .index_mut(offset..offset + size)
-                    .copy_from_slice(as_uninit(fill_value));
-            }
+            // SAFETY: `offset` is an element of the view, which is disjoint from other views.
+            unsafe { self.bytes.write_copy_of_slice_at(offset, fill_value) };
         }
         Ok(())
     }
@@ -343,14 +341,6 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         };
         Ok(usize::try_from(index).unwrap() * self.data_type_size)
     }
-}
-
-/// View initialised bytes as possibly uninitialised bytes.
-///
-/// `<[MaybeUninit<u8>]>::write_copy_of_slice` would replace this, but it requires Rust 1.93.
-fn as_uninit(bytes: &[u8]) -> &[MaybeUninit<u8>] {
-    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the shared reference prevents writing uninitialised bytes into `bytes`.
-    unsafe { &*(std::ptr::from_ref::<[u8]>(bytes) as *const [MaybeUninit<u8>]) }
 }
 
 #[cfg(test)]
