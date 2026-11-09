@@ -342,11 +342,11 @@ async fn async_retrieve_into_vec(
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());
-        let mut view = unsafe {
+        let view = unsafe {
             // SAFETY: single view, no overlap
             ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
         };
-        let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
+        let target = ArrayBytesDecodeIntoTarget::Fixed(view);
         array
             .async_retrieve_array_subset_into(&subset, target, &Resources::default())
             .await?;
@@ -391,10 +391,10 @@ async fn array_async_read_into(array: &Array<AsyncStore>) -> Result<(), Box<dyn 
     let mut buf = vec![0u8; 4];
     let slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut buf);
     let full = ArraySubset::new_with_shape(shape_1d.clone());
-    let mut view = unsafe {
+    let view = unsafe {
         ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
     };
-    let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
+    let target = ArrayBytesDecodeIntoTarget::Fixed(view);
     assert!(array.async_retrieve_array_subset_into(&subset_1d, target, &Resources::default()).await.is_err());
 
     Ok(())

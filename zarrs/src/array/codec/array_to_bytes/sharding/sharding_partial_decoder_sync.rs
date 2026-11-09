@@ -150,7 +150,7 @@ pub(crate) fn partial_decode(
     // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
         {
-            let (mut data_view, mut mask_views) = buffers.views()?;
+            let (data_view, mask_views) = buffers.views()?;
             partial_decode_fixed_array_subset_into(
                 input_handle,
                 subchunk_grid,
@@ -160,7 +160,7 @@ pub(crate) fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(&mut data_view, &mut mask_views),
+                build_nested_optional_target(data_view, mask_views),
             )?;
         }
         // SAFETY: every element of the output (and masks) is written by `partial_decode_fixed_array_subset_into`
@@ -367,7 +367,7 @@ fn partial_decode_fixed_array_subset_into(
         // Calculate the chunk's position in the output view coordinate space
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
         let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
-        let mut subchunk_view = unsafe {
+        let subchunk_view = unsafe {
             // SAFETY: chunks represent disjoint array subsets
             output_view.subdivide(chunk_output_overlap_subset.clone())?
         };
@@ -378,8 +378,7 @@ fn partial_decode_fixed_array_subset_into(
                 mask_view.subdivide(chunk_output_overlap_subset.clone())
             }?);
         }
-        let subchunk_target =
-            build_nested_optional_target(&mut subchunk_view, &mut subchunk_mask_views);
+        let subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
         if let Some((offset, size)) = offset_size {
             // Partially decode the subchunk
             let inner_partial_decoder = get_subchunk_partial_decoder(
@@ -561,7 +560,7 @@ fn partial_decode_indexer(
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_indexer_into<'a>(
+fn partial_decode_fixed_indexer_into(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -570,7 +569,7 @@ fn partial_decode_fixed_indexer_into<'a>(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    mut output_view: ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
     let fill_value = inner_codecs
         .fill_value()

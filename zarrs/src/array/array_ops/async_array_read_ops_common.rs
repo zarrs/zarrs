@@ -168,7 +168,7 @@ where
                 chunk_subset_in_array.shape(),
             )?;
 
-            let mut data_sub = unsafe {
+            let data_sub = unsafe {
                 // SAFETY: chunks represent disjoint array subsets
                 data_view_ref.subdivide(chunk_subset_in_view.clone())?
             };
@@ -181,7 +181,7 @@ where
                 }?);
             }
 
-            let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
+            let target = build_nested_optional_target(data_sub, mask_subs);
 
             retrieve
                 .retrieve_partial_chunk_into(

@@ -100,14 +100,14 @@ use zarrs_plugin::{
 // #[non_exhaustive]
 pub enum ArrayBytesDecodeIntoTarget<'a> {
     /// Target for non-optional (fixed-length) data.
-    Fixed(&'a mut ArrayBytesFixedDisjointView<'a>),
+    Fixed(ArrayBytesFixedDisjointView<'a>),
 
     /// Target for optional data (nested data target + mask view).
     ///
     /// The mask is always fixed-length (one byte per element).
     Optional(
         Box<ArrayBytesDecodeIntoTarget<'a>>,
-        &'a mut ArrayBytesFixedDisjointView<'a>,
+        ArrayBytesFixedDisjointView<'a>,
     ),
 }
 
@@ -122,8 +122,8 @@ impl ArrayBytesDecodeIntoTarget<'_> {
     }
 }
 
-impl<'a> From<&'a mut ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
-    fn from(view: &'a mut ArrayBytesFixedDisjointView<'a>) -> Self {
+impl<'a> From<ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
+    fn from(view: ArrayBytesFixedDisjointView<'a>) -> Self {
         Self::Fixed(view)
     }
 }

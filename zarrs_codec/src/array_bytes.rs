@@ -882,7 +882,7 @@ fn copy_fill_value_bytes_into(
     output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
-        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target)) => {
+        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mut mask_target)) => {
             let num_elements = data_target.num_elements();
             if mask_target.num_elements() != num_elements {
                 return Err(InvalidBytesLengthError::new(
@@ -906,7 +906,7 @@ fn copy_fill_value_bytes_into(
                 Err(ExpectedFixedLengthBytesError.into())
             }
         }
-        (None, ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+        (None, ArrayBytesDecodeIntoTarget::Fixed(mut view)) => {
             let DataTypeSize::Fixed(size) = data_type.size() else {
                 return Err(ExpectedFixedLengthBytesError.into());
             };
@@ -932,7 +932,7 @@ pub fn decode_into_array_bytes_target(
 ) -> Result<(), CodecError> {
     match (bytes, target) {
         // Fixed source → Fixed target
-        (ArrayBytes::Fixed(data_bytes), ArrayBytesDecodeIntoTarget::Fixed(data)) => {
+        (ArrayBytes::Fixed(data_bytes), ArrayBytesDecodeIntoTarget::Fixed(mut data)) => {
             data.copy_from_slice(data_bytes)?;
             Ok(())
         }
@@ -940,7 +940,7 @@ pub fn decode_into_array_bytes_target(
         // Optional source → Optional target (recursive)
         (
             ArrayBytes::Optional(optional_bytes),
-            ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
+            ArrayBytesDecodeIntoTarget::Optional(data_target, mut mask_target),
         ) => {
             // Recursively decode the inner data
             decode_into_array_bytes_target(optional_bytes.data(), *data_target)?;
