@@ -151,7 +151,7 @@ where
 {
     let mut buffers =
         FixedDecodeBuffers::new(array.data_type(), &array_subset.shape()).expect("fixed data type");
-    if array_subset.num_elements() != 0 {
+    {
         let target = buffers.target()?;
         let array_subset_start = array_subset.start();
         let retrieve_chunk = |chunk_indices: ArrayIndices| {
