@@ -11,7 +11,7 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_r
 
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
-    FillValue, Indexer, IndexerError, InvalidBytesLengthError, InvalidNumberOfElementsError,
+    FillValue, Indexer, IndexerError, InvalidBytesLengthError,
 };
 
 mod array_bytes_offsets;
@@ -883,14 +883,6 @@ fn copy_fill_value_bytes_into(
                 mask: mut mask_target,
             },
         ) => {
-            let num_elements = data_target.num_elements();
-            if mask_target.num_elements() != num_elements {
-                return Err(InvalidNumberOfElementsError::new(
-                    mask_target.num_elements(),
-                    num_elements,
-                )
-                .into());
-            }
             let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
             copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, *data_target)?;
             mask_target.fill(&[mask_value])?;
