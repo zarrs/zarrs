@@ -25,8 +25,8 @@ use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncBytesPartialDecoderTraits, ByteIntervalPartialDecoder, CodecError, CodecOptions,
-    ExpectedOptionalBytesError, InvalidNumberOfElementsError, copy_fill_value_into,
-    decode_into_array_bytes_target,
+    InvalidNumberOfElementsError, copy_fill_value_into, copy_fill_value_into_elements,
+    decode_into_array_bytes_target, decode_into_array_bytes_target_elements,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset};
@@ -244,10 +244,10 @@ impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDeco
         if fixed {
             indexer.validate(self.subchunk_grid.array_shape())?;
         }
-        match (fixed, indexer.as_array_subset(), output_target) {
+        match (fixed, indexer.as_array_subset()) {
             // Fixed length data (including optional data with fixed length inner data)
             // Subchunks are placed by their position in the subset, which needs a target with the subset shape
-            (true, Some(subset), output_target) => {
+            (true, Some(subset)) => {
                 let subset_shape = subset.shape();
                 if output_target.shape() == subset_shape.as_ref() {
                     partial_decode_fixed_array_subset_into(
@@ -280,7 +280,7 @@ impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDeco
                     decode_into_array_bytes_target(&decoded_value, output_target)
                 }
             }
-            (true, None, output_target) if !data_type.is_optional() => {
+            (true, None) => {
                 partial_decode_fixed_indexer_into(
                     &self.input_handle,
                     &self.subchunk_grid,
@@ -294,7 +294,7 @@ impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDeco
                 )
                 .await
             }
-            (_, _, output_target) => {
+            _ => {
                 let decoded_value = self.partial_decode(indexer, options, resources).await?;
                 decode_into_array_bytes_target(&decoded_value, output_target)
             }
@@ -840,9 +840,6 @@ async fn partial_decode_fixed_indexer_into<T: AsyncBytesPartialDecoderTraits + ?
         };
     }
 
-    let ArrayBytesTarget::Fixed(output_view) = output_target else {
-        return Err(ExpectedOptionalBytesError.into());
-    };
     futures::stream::iter(groups)
         .map(|(subchunk_index, group)| async move {
             let bytes = if let Some(decoder) =
@@ -852,8 +849,7 @@ async fn partial_decode_fixed_indexer_into<T: AsyncBytesPartialDecoderTraits + ?
                     decoder
                         .partial_decode(&group, options, resources)
                         .await?
-                        .into_owned()
-                        .into_fixed()?,
+                        .into_owned(),
                 )
             } else {
                 None
@@ -863,9 +859,9 @@ async fn partial_decode_fixed_indexer_into<T: AsyncBytesPartialDecoderTraits + ?
         .buffer_unordered(subchunk_concurrent_limit)
         .try_for_each(|(positions, bytes)| {
             let result = if let Some(bytes) = bytes {
-                output_view.copy_elements_from_slice(&positions, &bytes)
+                decode_into_array_bytes_target_elements(&bytes, &positions, output_target)
             } else {
-                output_view.fill_elements(&positions, fill_value.as_ne_bytes())
+                copy_fill_value_into_elements(data_type, fill_value, &positions, output_target)
             };
             futures::future::ready(result)
         })

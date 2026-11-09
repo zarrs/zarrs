@@ -40,16 +40,16 @@ fn optional_innermost(data_type: &DataType) -> (&DataType, usize) {
     (data_type, depth)
 }
 
-/// Decode `$subset` of fixed length (optional) `$data_type` data with `$decode_into` into a new target.
+/// Decode fixed length (optional) `$data_type` data of `$shape` with `$decode_into` into a new target.
 macro_rules! decode_into_new {
-    ($data_type:expr, $subset:expr, |$target:ident| $decode_into:expr) => {{
+    ($data_type:expr, $shape:expr, |$target:ident| $decode_into:expr) => {{
         let (inner_data_type, depth) = optional_innermost($data_type);
         let data_type_size = inner_data_type
             .as_fixed()
             .expect("expected fixed data type")
             .size();
-        let shape = $subset.shape().to_vec();
-        let num_elements = usize::try_from($subset.num_elements())?;
+        let shape: Vec<u64> = $shape;
+        let num_elements = usize::try_from(shape.iter().product::<u64>())?;
         let mut data = vec![0u8; num_elements * data_type_size];
         let mut masks = vec![vec![0u8; num_elements]; depth];
         {
@@ -160,11 +160,20 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, shard_elements);
 
     // Partial decode with a generic indexer
+    let select_indexer = |indexer: &[Vec<u64>]| {
+        select(
+            shard_elements,
+            &indexer.iter().map(|i| [i[0], i[1]]).collect::<Vec<_>>(),
+        )
+    };
     let indexer = vec![vec![0, 0], vec![3, 5], vec![2, 3], vec![0, 1], vec![3, 0]];
-    let expected = select(
-        shard_elements,
-        &indexer.iter().map(|i| [i[0], i[1]]).collect::<Vec<_>>(),
-    );
+    let expected = select_indexer(&indexer);
+    // Generic indexers spanning multiple subchunks or one subchunk (missing in some tests)
+    let indexers = [
+        indexer.clone(),
+        vec![vec![2, 2], vec![3, 3], vec![2, 3]],
+        vec![vec![1, 1], vec![0, 0]],
+    ];
     let partial_decoder = codec.clone().partial_decoder(
         Arc::new(encoded.clone()),
         &shard_shape,
@@ -186,9 +195,29 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     let decoded = partial_decoder.partial_decode(&subset, &options, &Resources::default())?;
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     if fixed {
-        let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-            .partial_decode_into(&subset, &mut target, &options, &Resources::default()));
+        let decoded = decode_into_new!(&data_type, subset.shape().to_vec(), |target| {
+            partial_decoder.partial_decode_into(
+                &subset,
+                &mut target,
+                &options,
+                &Resources::default(),
+            )
+        });
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
+        for indexer in &indexers {
+            let decoded = decode_into_new!(&data_type, vec![indexer.len() as u64], |target| {
+                partial_decoder.partial_decode_into(
+                    indexer,
+                    &mut target,
+                    &options,
+                    &Resources::default(),
+                )
+            });
+            assert_eq!(
+                T::from_array_bytes(&data_type, decoded)?,
+                select_indexer(indexer)
+            );
+        }
     }
 
     #[cfg(feature = "async")]
@@ -211,10 +240,23 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
             .await?;
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         if fixed {
-            let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-                .partial_decode_into(&subset, &mut target, &options, &Resources::default())
-                .await);
+            let decoded = decode_into_new!(&data_type, subset.shape().to_vec(), |target| {
+                partial_decoder
+                    .partial_decode_into(&subset, &mut target, &options, &Resources::default())
+                    .await
+            });
             assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
+            for indexer in &indexers {
+                let decoded = decode_into_new!(&data_type, vec![indexer.len() as u64], |target| {
+                    partial_decoder
+                        .partial_decode_into(indexer, &mut target, &options, &Resources::default())
+                        .await
+                });
+                assert_eq!(
+                    T::from_array_bytes(&data_type, decoded)?,
+                    select_indexer(indexer)
+                );
+            }
         }
     }
     Ok(())

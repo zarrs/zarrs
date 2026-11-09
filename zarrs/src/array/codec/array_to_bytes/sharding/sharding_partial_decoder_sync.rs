@@ -19,9 +19,10 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    CodecError, CodecOptions, ExpectedOptionalBytesError, InvalidNumberOfElementsError,
+    CodecError, CodecOptions, InvalidNumberOfElementsError,
     SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
-    SyncBytesPartialDecoderTraits, copy_fill_value_into, decode_into_array_bytes_target,
+    SyncBytesPartialDecoderTraits, copy_fill_value_into, copy_fill_value_into_elements,
+    decode_into_array_bytes_target, decode_into_array_bytes_target_elements,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -243,10 +244,10 @@ impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecode
         if fixed {
             indexer.validate(self.subchunk_grid.array_shape())?;
         }
-        match (fixed, indexer.as_array_subset(), output_target) {
+        match (fixed, indexer.as_array_subset()) {
             // Fixed length data (including optional data with fixed length inner data)
             // Subchunks are placed by their position in the subset, which needs a target with the subset shape
-            (true, Some(subset), output_target) => {
+            (true, Some(subset)) => {
                 let subset_shape = subset.shape();
                 if output_target.shape() == subset_shape.as_ref() {
                     partial_decode_fixed_array_subset_into(
@@ -277,20 +278,18 @@ impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecode
                     decode_into_array_bytes_target(&decoded_value, output_target)
                 }
             }
-            (true, None, output_target) if !data_type.is_optional() => {
-                partial_decode_fixed_indexer_into(
-                    &self.input_handle,
-                    &self.subchunk_grid,
-                    &self.subchunk_shape,
-                    &self.inner_codecs,
-                    self.shard_index.as_deref(),
-                    indexer,
-                    options,
-                    resources,
-                    output_target,
-                )
-            }
-            (_, _, output_target) => {
+            (true, None) => partial_decode_fixed_indexer_into(
+                &self.input_handle,
+                &self.subchunk_grid,
+                &self.subchunk_shape,
+                &self.inner_codecs,
+                self.shard_index.as_deref(),
+                indexer,
+                options,
+                resources,
+                output_target,
+            ),
+            _ => {
                 let decoded_value = self.partial_decode(indexer, options, resources)?;
                 decode_into_array_bytes_target(&decoded_value, output_target)
             }
@@ -617,9 +616,6 @@ fn partial_decode_fixed_indexer_into<T: SyncBytesPartialDecoderTraits + ?Sized +
         };
     }
 
-    let ArrayBytesTarget::Fixed(output_view) = output_target else {
-        return Err(ExpectedOptionalBytesError.into());
-    };
     let decoded = groups
         .into_iter()
         .collect::<Vec<_>>()
@@ -630,8 +626,7 @@ fn partial_decode_fixed_indexer_into<T: SyncBytesPartialDecoderTraits + ?Sized +
                     Ok::<_, CodecError>(
                         decoder
                             .partial_decode(&group, options, &resources)?
-                            .into_owned()
-                            .into_fixed()?,
+                            .into_owned(),
                     )
                 })
                 .transpose()?;
@@ -640,9 +635,9 @@ fn partial_decode_fixed_indexer_into<T: SyncBytesPartialDecoderTraits + ?Sized +
         .collect::<Result<Vec<_>, _>>()?;
     for (positions, bytes) in decoded {
         if let Some(bytes) = bytes {
-            output_view.copy_elements_from_slice(&positions, &bytes)?;
+            decode_into_array_bytes_target_elements(&bytes, &positions, output_target)?;
         } else {
-            output_view.fill_elements(&positions, fill_value.as_ne_bytes())?;
+            copy_fill_value_into_elements(data_type, fill_value, &positions, output_target)?;
         }
     }
     Ok(())

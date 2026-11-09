@@ -218,6 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers
 - Limit partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
 - Avoid copying each encoded inner chunk
+- Partially decode optional data with fixed length inner data directly into the output for generic indexers, as for non-optional data
 - Fix decoding optional data types, which could be encoded but not decoded
 - Fix a panic or incorrect data when partially decoding empty subchunks with generic indexers
 - Fix async `partial_decode_into` to use the same subchunk-aware path as sync decoding
