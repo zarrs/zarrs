@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
 - Reserve capacity for byte-range extraction, concatenation, and sync/async adapter result collections
 - Bump `itertools` to 0.15.0
+- Remove the `unsafe_cell_slice` dependency
 
 ### Fixed
 - `extract_byte_ranges` and `extract_byte_ranges_concat` return an `InvalidByteRangeError` rather than panicking for a byte range whose end overflows

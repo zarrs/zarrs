@@ -576,11 +576,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .collect();
 
         {
-            let data_output_slice =
-                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+            let data_output_slice = UnsafeCellSlice::new(data_output.spare_capacity_mut());
             let mask_output_slices: Vec<_> = mask_outputs
                 .iter_mut()
-                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+                .map(|mask| UnsafeCellSlice::new(mask.spare_capacity_mut()))
                 .collect();
             let mask_output_slices = mask_output_slices.as_slice();
             let array_subset_start = array_subset.start();

@@ -1,4 +1,5 @@
 use derive_more::derive::Display;
+use std::mem::MaybeUninit;
 use std::sync::OnceLock;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
@@ -10,8 +11,10 @@ use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///
 /// The `subset` represented by this view must not overlap with the `subset` of any other created views that reference the same array bytes.
+///
+/// The bytes may be uninitialised, such as the spare capacity of a [`Vec`], so the view only writes them and never exposes them for reading.
 pub struct ArrayBytesFixedDisjointView<'a> {
-    bytes: UnsafeCellSlice<'a, u8>,
+    bytes: UnsafeCellSlice<'a, MaybeUninit<u8>>,
     data_type_size: usize,
     shape: &'a [u64],
     subset: ArraySubset,
@@ -44,6 +47,9 @@ impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
 impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// Create a new non-overlapping view of the bytes in an array.
     ///
+    /// `bytes` may be initialised (`UnsafeCellSlice<u8>`) or uninitialised (`UnsafeCellSlice<MaybeUninit<u8>>`, e.g. from [`Vec::spare_capacity_mut`]).
+    /// The view never writes uninitialised bytes, so initialised `bytes` remain initialised.
+    ///
     /// An empty `subset` references no elements, so it is accepted irrespective of its start and
     /// yields a view that reads and writes nothing.
     ///
@@ -58,11 +64,12 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if the product of the elements in `shape` multiplied by `data_type_size` exceeds [`usize::MAX`].
     pub unsafe fn new(
-        bytes: UnsafeCellSlice<'a, u8>,
+        bytes: impl Into<UnsafeCellSlice<'a, MaybeUninit<u8>>>,
         data_type_size: usize,
         shape: &'a [u64],
         subset: ArraySubset,
     ) -> Result<Self, ArrayBytesFixedDisjointViewCreateError> {
+        let bytes = bytes.into();
         if !subset.inbounds_shape(shape) {
             let bounding_subset = ArraySubset::new_with_shape(shape);
             return Err(SubsetOutOfBoundsError::new(subset, bounding_subset).into());
@@ -173,13 +180,16 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         let mut regions = self.contiguous_linearised_indices().iter();
         let (first_index, _) = regions.next().expect("a nonempty view has a region");
         let first_offset = usize::try_from(first_index * self.data_type_size as u64).unwrap();
+        if !uniform {
+            // Seed one element, then double the initialised prefix in place below.
+            // SAFETY: this region belongs to the disjoint view and `first` is not yet borrowed.
+            unsafe { self.bytes.write_copy_of_slice_at(first_offset, fill_value) };
+        }
         // SAFETY: this region belongs to the disjoint view and is only accessed here.
         let first = unsafe { self.bytes.index_mut(first_offset..first_offset + length) };
         if uniform {
-            first.fill(fill_value[0]);
+            first.fill(MaybeUninit::new(fill_value[0]));
         } else {
-            // Seed one element, then double the initialised prefix in place.
-            first[..fill_value.len()].copy_from_slice(fill_value);
             let mut written = fill_value.len();
             while written < length {
                 let count = written.min(length - written);
@@ -195,7 +205,7 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             // SAFETY: the regions of an array subset are disjoint, including from `first`.
             let target = unsafe { self.bytes.index_mut(offset..offset + length) };
             if uniform {
-                target.fill(fill_value[0]);
+                target.fill(MaybeUninit::new(fill_value[0]));
             } else {
                 target.copy_from_slice(first);
             }
@@ -230,10 +240,13 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                 debug_assert!((output_offset + length) <= self.bytes.len());
                 debug_assert!((subset_offset + length) <= subset_bytes.len());
                 let subset_offset_end = subset_offset + length;
+                // SAFETY: the contiguous regions of the view are disjoint from each other and,
+                // per the contract of `new`/`subdivide`, from those of other views.
                 unsafe {
-                    self.bytes
-                        .index_mut(output_offset..output_offset + length)
-                        .copy_from_slice(&subset_bytes[subset_offset..subset_offset_end]);
+                    self.bytes.write_copy_of_slice_at(
+                        output_offset,
+                        &subset_bytes[subset_offset..subset_offset_end],
+                    );
                 }
                 subset_offset_end
             },
@@ -262,11 +275,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         }
         for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
             let offset = self.element_offset(position)?;
-            unsafe {
-                self.bytes
-                    .index_mut(offset..offset + size)
-                    .copy_from_slice(element);
-            }
+            // SAFETY: `offset` is an element of the view, which is disjoint from other views.
+            unsafe { self.bytes.write_copy_of_slice_at(offset, element) };
         }
         Ok(())
     }
@@ -290,11 +300,8 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         }
         for &position in positions {
             let offset = self.element_offset(position)?;
-            unsafe {
-                self.bytes
-                    .index_mut(offset..offset + size)
-                    .copy_from_slice(fill_value);
-            }
+            // SAFETY: `offset` is an element of the view, which is disjoint from other views.
+            unsafe { self.bytes.write_copy_of_slice_at(offset, fill_value) };
         }
         Ok(())
     }

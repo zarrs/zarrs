@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
 - **Breaking**: Rename `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error` and `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
   - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
+- **Breaking**: `ArrayBytesFixedDisjointView::new` takes `impl Into<UnsafeCellSlice<MaybeUninit<u8>>>` so views can cover uninitialised memory (e.g. `Vec::spare_capacity_mut()`), and `UnsafeCellSlice<u8>` arguments still work
+  - Views never write uninitialised bytes
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
@@ -65,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
-- Bump `zarrs_metadata` to 0.7.6 and `itertools` to 0.15.0
+- Bump `zarrs_metadata` to 0.7.6, `itertools` to 0.15.0, and `unsafe_cell_slice` to 0.2.4
 
 ### Removed
 - **Breaking**: Remove `[Async]StoragePartial{Encoder,Decoder}`, use `(storage, key)` instead

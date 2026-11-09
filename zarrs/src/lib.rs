@@ -244,19 +244,13 @@ pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
 pub use zarrs_storage as storage;
 
-/// Get a mutable slice of the spare capacity in a vector.
+/// Copy `src` into `dst`, e.g. into spare capacity.
 ///
-/// # Safety
-/// The caller must not read from the returned slice before it has been initialised.
-unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
-    let spare_capacity = vec.spare_capacity_mut();
-    // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
-    unsafe {
-        std::slice::from_raw_parts_mut(
-            spare_capacity.as_mut_ptr().cast::<T>(),
-            spare_capacity.len(),
-        )
-    }
+/// Polyfill for `<[MaybeUninit<u8>]>::write_copy_of_slice`; remove at MSRV 1.93.
+fn write_copy_of_slice(dst: &mut [std::mem::MaybeUninit<u8>], src: &[u8]) {
+    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and `src` is only read.
+    let src = unsafe { &*(std::ptr::from_ref::<[u8]>(src) as *const [std::mem::MaybeUninit<u8>]) };
+    dst.copy_from_slice(src);
 }
 
 /// Log a warning that an extension is experimental and may be incompatible with other Zarr V3 implementations.

@@ -182,10 +182,10 @@ where
         .collect();
 
     {
-        let data_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+        let data_slice = UnsafeCellSlice::new(data_output.spare_capacity_mut());
         let mask_slices: Vec<_> = mask_outputs
             .iter_mut()
-            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+            .map(|mask| UnsafeCellSlice::new(mask.spare_capacity_mut()))
             .collect();
         let mask_slices = mask_slices.as_slice();
         let array_subset_start = array_subset.start();

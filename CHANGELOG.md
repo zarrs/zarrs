@@ -278,7 +278,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
-- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4
 
 ### Internal
 - Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations
