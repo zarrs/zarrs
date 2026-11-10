@@ -122,7 +122,15 @@ where
                 buffers_target.as_ref().unwrap_or(output_target),
                 options,
                 &resources,
-                &retrieve_partial_chunk_into,
+                &|chunk_indices, chunk_subset, overlap, target, options, resources| {
+                    retrieve_partial_chunk_into(
+                        chunk_indices,
+                        &overlap.relative_to(chunk_subset.start())?,
+                        target,
+                        options,
+                        resources,
+                    )
+                },
             )?;
             drop(buffers_target);
             if let Some(buffers) = buffers {
@@ -135,8 +143,11 @@ where
     }
 }
 
+/// Retrieve `array_subset`, which spans `chunks`, into `output_target`.
+///
+/// `retrieve_chunk_overlap_into` retrieves the overlap of a chunk with `array_subset` into a subdivision of `output_target`, given the chunk indices, the chunk subset, and the overlap (in array coordinates).
 #[expect(clippy::too_many_arguments)]
-pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
+pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkOverlapInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
@@ -144,13 +155,14 @@ pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     output_target: &ArrayBytesDecodeIntoTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
-    retrieve_partial_chunk_into: &RetrieveChunkSubsetInto,
+    retrieve_chunk_overlap_into: &RetrieveChunkOverlapInto,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
-    RetrieveChunkSubsetInto: for<'a> Fn(
+    RetrieveChunkOverlapInto: for<'a> Fn(
             &[u64],
-            &dyn Indexer,
+            &ArraySubset,
+            &ArraySubset,
             &mut ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
             &Resources,
@@ -169,9 +181,10 @@ where
 
         // SAFETY: chunks represent disjoint array subsets.
         let mut target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
-        retrieve_partial_chunk_into(
+        retrieve_chunk_overlap_into(
             &chunk_indices,
-            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+            &chunk_subset,
+            &chunk_subset_overlap,
             &mut target,
             options,
             resources,
