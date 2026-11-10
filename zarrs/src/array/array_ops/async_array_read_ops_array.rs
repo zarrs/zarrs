@@ -41,7 +41,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_into_with_options(
@@ -81,7 +81,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
@@ -281,7 +281,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
     pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
@@ -338,7 +338,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -415,7 +415,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -617,12 +617,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                         }?);
                     }
 
-                    let target = build_nested_optional_target(data_view, mask_views);
+                    let mut target = build_nested_optional_target(data_view, mask_views);
 
                     self.async_retrieve_partial_chunk_into_with_options(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        target,
+                        &mut target,
                         options,
                         resources,
                     )
@@ -658,7 +658,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
     async fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -675,7 +675,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncRetrieveInto
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {

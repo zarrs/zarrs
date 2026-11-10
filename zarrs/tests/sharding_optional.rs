@@ -81,7 +81,7 @@ macro_rules! decode_into_new {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let $target = nested_target(data_view, mask_views);
+            let mut $target = nested_target(data_view, mask_views);
             $decode_into?;
         }
         masks
@@ -192,7 +192,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     if fixed {
         let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-            .partial_decode_into(&subset, target, &options, &Resources::default()));
+            .partial_decode_into(&subset, &mut target, &options, &Resources::default()));
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     }
 
@@ -217,7 +217,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         if fixed {
             let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-                .partial_decode_into(&subset, target, &options, &Resources::default())
+                .partial_decode_into(&subset, &mut target, &options, &Resources::default())
                 .await);
             assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         }

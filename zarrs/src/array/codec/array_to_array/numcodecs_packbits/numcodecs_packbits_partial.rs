@@ -315,7 +315,7 @@ impl<T: ArrayPartialDecoderTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Size
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -380,7 +380,7 @@ impl<T: AsyncArrayPartialDecoderTraits + ?Sized, D: AsyncArrayPartialDecoderTrai
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

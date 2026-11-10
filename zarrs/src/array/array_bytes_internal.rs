@@ -445,9 +445,9 @@ mod tests {
                                 .unwrap()
                             })
                             .collect();
-                        let target = build_nested_optional_target(data_view, mask_views);
+                        let mut target = build_nested_optional_target(data_view, mask_views);
                         if direct {
-                            copy_fill_value_into(&data_type, &fill_value, target).unwrap();
+                            copy_fill_value_into(&data_type, &fill_value, &mut target).unwrap();
                         } else {
                             let bytes = ArrayBytes::new_fill_value(
                                 &data_type,
@@ -455,7 +455,8 @@ mod tests {
                                 &fill_value,
                             )
                             .unwrap();
-                            zarrs_codec::decode_into_array_bytes_target(&bytes, target).unwrap();
+                            zarrs_codec::decode_into_array_bytes_target(&bytes, &mut target)
+                                .unwrap();
                         }
                     }
                     // Compare raw data too, including placeholder bytes beneath null masks.
@@ -559,15 +560,16 @@ mod tests {
         ] {
             let mut buffers = FixedDecodeBuffers::new(&data_type::uint16(), &[3]).unwrap();
             let (data_view, _) = buffers.views().unwrap();
-            assert!(copy_fill_value_into(&data_type, &fill_value, data_view.into()).is_err());
+            assert!(copy_fill_value_into(&data_type, &fill_value, &mut data_view.into()).is_err());
         }
 
         let mut buffers =
             FixedDecodeBuffers::new(&data_type::uint16().to_optional(), &[3]).unwrap();
         let (data_view, mask_views) = buffers.views().unwrap();
-        let target = build_nested_optional_target(data_view, mask_views);
+        let mut target = build_nested_optional_target(data_view, mask_views);
         assert!(
-            copy_fill_value_into(&data_type::uint16(), &FillValue::from(1u16), target).is_err()
+            copy_fill_value_into(&data_type::uint16(), &FillValue::from(1u16), &mut target)
+                .is_err()
         );
     }
 

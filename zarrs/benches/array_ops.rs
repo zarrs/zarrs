@@ -123,7 +123,7 @@ fn single_chunk(c: &mut Criterion) {
                 array
                     .retrieve_array_subset_into(
                         &array.subset_all(),
-                        ArrayBytesDecodeIntoTarget::Fixed(view),
+                        &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                         &Resources::default(),
                     )
                     .unwrap();

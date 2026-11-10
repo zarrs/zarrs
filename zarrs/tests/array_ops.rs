@@ -160,16 +160,16 @@ fn retrieve_into<A: ArrayReadOps>(
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        let target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
         if let Some(chunk_indices) = chunk_indices {
             array.retrieve_partial_chunk_into(
                 chunk_indices,
                 subset,
-                target,
+                &mut target,
                 &Resources::default(),
             )?;
         } else {
-            array.retrieve_array_subset_into(subset, target, &Resources::default())?;
+            array.retrieve_array_subset_into(subset, &mut target, &Resources::default())?;
         }
     }
     Ok(output)
@@ -191,7 +191,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
         };
         array.retrieve_chunk_into(
             chunk_indices,
-            ArrayBytesDecodeIntoTarget::Fixed(view),
+            &mut ArrayBytesDecodeIntoTarget::Fixed(view),
             &Resources::default(),
         )?;
     }
@@ -1494,7 +1494,7 @@ mod async_cached {
             array
                 .async_retrieve_array_subset_into(
                     subset,
-                    ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await?;

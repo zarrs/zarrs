@@ -237,7 +237,7 @@ pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fm
         &self,
         bytes: CowBytes<'_>,
         shape: &[NonZeroU64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {

@@ -17,14 +17,14 @@ use crate::array::array_bytes_internal::{
 };
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySubsetTraits, ChunkGrid,
-    ChunkShape, CodecChainBound, CowBytes, DataType, Indexer, ravel_indices,
+    ArrayBytes, ArrayIndices, ArraySubsetTraits, ChunkGrid, ChunkShape, CodecChainBound, CowBytes,
+    DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into, decode_into_array_bytes_target,
+    BytesPartialDecoderTraits, CodecError, CodecOptions, ExpectedOptionalBytesError,
+    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -160,7 +160,7 @@ pub(crate) fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(data_view, mask_views),
+                &mut build_nested_optional_target(data_view, mask_views),
             )?;
         }
         // SAFETY: every element of the output (and masks) is written by `partial_decode_fixed_array_subset_into`
@@ -227,7 +227,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -256,9 +256,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                 resources,
                 output_target,
             ),
-            (true, None, ArrayBytesDecodeIntoTarget::Fixed(output_view))
-                if !data_type.is_optional() =>
-            {
+            (true, None, output_target) if !data_type.is_optional() => {
                 partial_decode_fixed_indexer_into(
                     &self.input_handle,
                     &self.subchunk_grid,
@@ -268,7 +266,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                     indexer,
                     options,
                     resources,
-                    output_view,
+                    output_target,
                 )
             }
             (_, _, output_target) => {
@@ -326,7 +324,7 @@ fn partial_decode_fixed_array_subset_into(
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -378,7 +376,7 @@ fn partial_decode_fixed_array_subset_into(
                 mask_view.subdivide(chunk_output_overlap_subset.clone())
             }?);
         }
-        let subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
+        let mut subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
         if let Some((offset, size)) = offset_size {
             // Partially decode the subchunk
             let inner_partial_decoder = get_subchunk_partial_decoder(
@@ -394,12 +392,12 @@ fn partial_decode_fixed_array_subset_into(
                 &chunk_subset_overlap
                     .relative_to(chunk_subset.start())
                     .unwrap(),
-                subchunk_target,
+                &mut subchunk_target,
                 options,
                 &resources,
             )
         } else {
-            copy_fill_value_into(data_type, fill_value, subchunk_target)
+            copy_fill_value_into(data_type, fill_value, &mut subchunk_target)
         }
     };
 
@@ -556,7 +554,7 @@ fn partial_decode_indexer(
     super::merge_indexer_subchunks(decoded, usize::try_from(indexer.len()).unwrap(), data_type)
 }
 
-/// Decode the elements of `indexer` into `output_view` by scattering each subchunk group directly.
+/// Decode the elements of `indexer` into `output_target` by scattering each subchunk group directly.
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
@@ -569,15 +567,14 @@ fn partial_decode_fixed_indexer_into(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    mut output_view: ArrayBytesFixedDisjointView<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
+    let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
         .fill_value()
         .ok_or(CodecError::UndefinedFillValue)?;
     let Some(shard_index) = shard_index else {
-        return output_view
-            .fill(fill_value.as_ne_bytes())
-            .map_err(CodecError::from);
+        return copy_fill_value_into(data_type, fill_value, output_target);
     };
     let groups = super::group_indices_by_subchunk(subchunk_grid, subchunk_shape, indexer);
     let (subchunk_concurrent_limit, resources) =
@@ -608,19 +605,15 @@ fn partial_decode_fixed_indexer_into(
         // Positions within a group are ascending and cover every element, so decode in place
         let (subchunk_index, group) = groups.into_iter().next().expect("one group");
         return if let Some(decoder) = subchunk_decoder(subchunk_index, &group.subchunk_shape)? {
-            decoder.partial_decode_into(
-                &group,
-                ArrayBytesDecodeIntoTarget::Fixed(output_view),
-                options,
-                &resources,
-            )
+            decoder.partial_decode_into(&group, output_target, options, &resources)
         } else {
-            output_view
-                .fill(fill_value.as_ne_bytes())
-                .map_err(CodecError::from)
+            copy_fill_value_into(data_type, fill_value, output_target)
         };
     }
 
+    let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target else {
+        return Err(ExpectedOptionalBytesError.into());
+    };
     let decoded = groups
         .into_iter()
         .collect::<Vec<_>>()

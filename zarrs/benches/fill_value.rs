@@ -177,11 +177,11 @@ fn fill_output(c: &mut Criterion) {
                                     .unwrap()
                                 })
                                 .collect();
-                            let target = nested_target(data_view, mask_views);
+                            let mut target = nested_target(data_view, mask_views);
                             copy_fill_value_into(
                                 black_box(&data_type),
                                 black_box(&fill_value),
-                                target,
+                                &mut target,
                             )
                             .unwrap();
                         }

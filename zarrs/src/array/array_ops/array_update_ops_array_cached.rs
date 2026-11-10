@@ -61,7 +61,7 @@ where
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

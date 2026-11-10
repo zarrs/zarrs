@@ -209,7 +209,7 @@ impl zarrs_codec::AsyncArrayPartialDecoderTraits for SyncPartialDecoderAsAsync {
     async fn partial_decode_into(
         &self,
         indexer: &dyn crate::array::Indexer,
-        output_target: zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

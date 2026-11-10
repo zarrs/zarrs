@@ -1155,7 +1155,7 @@ mod tests {
                     .decode_into(
                         encoded,
                         &shard_shape_nz,
-                        zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
+                        &mut zarrs_codec::ArrayBytesDecodeIntoTarget::Fixed(
                             super::indexer_tests::fixed_view(
                                 &mut output,
                                 &output_shape,
