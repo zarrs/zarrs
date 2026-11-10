@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `OptionalDataTypeConfigurationV1` accepts metadata without an inner data type `configuration`, which is optional in the specification
+- `ZlibCodecConfigurationV1` accepts a missing `level` (defaulting to 1, as in `numcodecs`) and `ZlibCompressionLevel` accepts the zlib default level of -1 ([#503](https://github.com/zarrs/zarrs/issues/503))
 - Read metadata written by past `zarrs` versions:
   - `numcodecs.zfpy` with a string `mode` rather than an integer as in `numcodecs` (0.20-0.22)
   - `zfp` with the `fixedrate`, `fixedprecision`, and `fixedaccuracy` modes (0.10-0.15), which are non-conformant with the registered `zfp` name (written by 0.10-0.12)
