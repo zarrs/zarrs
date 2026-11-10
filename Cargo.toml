@@ -17,6 +17,19 @@ members = [
     "zarrs_regression_testing",
 ]
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+
+[profile.debugging.package."*"]
+debug = true
+
 [workspace.lints.rust]
 unused_variables = "warn"
 dead_code = "warn"
