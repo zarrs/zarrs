@@ -123,6 +123,66 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore)]
+    fn codec_zlib_optional_and_default_level() {
+        use zarrs_codec::CodecMetadataOptions;
+        use zarrs_plugin::ZarrVersion;
+
+        let bytes: Vec<u8> = (0..64).collect();
+        let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
+        let check = |codec: Codec, version: ZarrVersion, expected_level: &str| {
+            let Codec::BytesToBytes(codec) = codec else {
+                panic!("expected a bytes to bytes codec")
+            };
+            let configuration = codec
+                .configuration(version, &CodecMetadataOptions::default())
+                .unwrap();
+            assert_eq!(
+                serde_json::to_string(&configuration).unwrap(),
+                format!(r#"{{"level":{expected_level}}}"#)
+            );
+            let encoded = codec
+                .encode(
+                    CowBytes::Borrowed(&bytes),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .unwrap();
+            let decoded = codec
+                .decode(
+                    encoded,
+                    &bytes_representation,
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .unwrap();
+            assert_eq!(bytes, decoded.to_vec());
+        };
+
+        for (json, expected_level) in [
+            (r#"{"name":"numcodecs.zlib","configuration":{}}"#, "1"),
+            (r#"{"name":"numcodecs.zlib"}"#, "1"),
+            (r#""numcodecs.zlib""#, "1"),
+            (
+                r#"{"name":"numcodecs.zlib","configuration":{"level":-1}}"#,
+                "-1",
+            ),
+        ] {
+            let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+            let codec = <ZlibCodec as CodecTraitsV3>::create(&metadata).unwrap();
+            check(codec, ZarrVersion::V3, expected_level);
+        }
+        for (json, expected_level) in [
+            (r#"{"id":"zlib"}"#, "1"),
+            (r#"{"id":"zlib","level":-1}"#, "-1"),
+        ] {
+            let metadata: MetadataV2 = serde_json::from_str(json).unwrap();
+            let codec = <ZlibCodec as CodecTraitsV2>::create(&metadata).unwrap();
+            check(codec, ZarrVersion::V2, expected_level);
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
     fn codec_zlib_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
         let data_type = data_type::uint16();

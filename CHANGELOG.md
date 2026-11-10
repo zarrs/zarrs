@@ -220,6 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
 - `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
+- `numcodecs.zlib`: Read configurations without a `level` (as written by `zarr-python` by default) or with the zlib default level of -1 ([#503](https://github.com/zarrs/zarrs/issues/503))
 
 ### Data types
 
