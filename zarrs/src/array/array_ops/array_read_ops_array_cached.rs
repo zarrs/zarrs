@@ -5,17 +5,18 @@ use zarrs_codec::Resources;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
+use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
     Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkCache, ChunkGrid,
     CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
+use crate::array::ArrayBytes;
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_cached_chunks};
 use crate::array::chunk_cache::{
     SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, ArrayIndices};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
@@ -156,32 +157,27 @@ where
     }
     let mut buffers =
         FixedDecodeBuffers::new(data_type, &array_subset.shape()).expect("fixed data type");
-    {
-        let target = buffers.target()?;
-        let array_subset_start = array_subset.start();
-        let retrieve_chunk = |chunk_indices: ArrayIndices| {
-            let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            let overlap = chunk_subset.overlap(array_subset)?;
-            let output_subset = overlap.relative_to(&array_subset_start)?;
+    retrieve_multi_chunk_fixed_into(
+        array,
+        array_subset,
+        chunks,
+        chunk_concurrent_limit,
+        &buffers.target()?,
+        options,
+        resources,
+        &|chunk_indices, chunk_subset, overlap, target, options, resources| {
             let bytes = retrieve_chunk_overlap_bytes(
                 cache,
                 array,
-                &chunk_indices,
-                &chunk_subset,
-                &overlap,
+                chunk_indices,
+                chunk_subset,
+                overlap,
                 options,
                 resources,
             )?;
-            // SAFETY: chunks represent disjoint array subsets
-            let mut chunk_target = unsafe { target.subdivide(output_subset) }?;
-            decode_into_array_bytes_target(&bytes, &mut chunk_target)
-                .map_err(ArrayError::CodecError)
-        };
-        chunks
-            .indices()
-            .concurrent_limit(chunk_concurrent_limit)
-            .try_for_each(retrieve_chunk)?;
-    }
+            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
+        },
+    )?;
     // SAFETY: the chunks cover the array subset, so every element has been written
     Ok(unsafe { buffers.into_array_bytes() }.into())
 }
@@ -483,7 +479,7 @@ mod tests {
         ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
         ChunkCacheTypeDecoded,
     };
-    use crate::array::{ArrayBuilder, ArrayError, ArraySubset, FillValue, data_type};
+    use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
     fn test_cache<C>(cache: C)
