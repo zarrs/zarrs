@@ -3,10 +3,11 @@ use futures::{StreamExt, TryStreamExt};
 use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubsetTraits, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
-    copy_fill_value_into,
+    copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::MaybeSync;
 
+use super::super::array_bytes_internal::FixedDecodeBuffers;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::array_read_ops_common::subset_in_output;
 use super::recommended_codec_concurrency;
@@ -114,17 +115,34 @@ where
                 resources,
                 &codec_concurrency,
             );
+            // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
+            let mut buffers = (output_target.subset().shape() != array_subset.shape().as_ref())
+                .then(|| {
+                    FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
+                        .expect("fixed data type")
+                });
+            let buffers_target = buffers
+                .as_mut()
+                .map(FixedDecodeBuffers::target)
+                .transpose()?;
             retrieve_multi_chunk_fixed_into(
                 array,
                 retrieve,
                 array_subset,
                 &chunks,
                 chunk_concurrent_limit,
-                output_target,
+                buffers_target.as_ref().unwrap_or(output_target),
                 options,
                 &resources,
             )
-            .await
+            .await?;
+            drop(buffers_target);
+            if let Some(buffers) = buffers {
+                // SAFETY: the chunks cover the array subset, so every element has been written
+                let bytes = unsafe { buffers.into_array_bytes() };
+                decode_into_array_bytes_target(&bytes, output_target)?;
+            }
+            Ok(())
         }
     }
 }
