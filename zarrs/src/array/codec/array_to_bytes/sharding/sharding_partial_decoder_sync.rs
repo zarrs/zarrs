@@ -341,7 +341,7 @@ fn partial_decode_fixed_array_subset_into(
         return copy_fill_value_into(data_type, fill_value, output_target);
     };
     // Optional data is decoded into views of its inner data and each validity mask
-    let (output_view, mask_views) = extract_target_views(&output_target);
+    let (output_view, mask_views) = extract_target_views(output_target);
     let (subchunk_concurrent_limit, resources) =
         super::get_concurrent_target_and_partial_resources(
             inner_codecs,

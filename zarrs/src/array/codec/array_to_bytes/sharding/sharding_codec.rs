@@ -674,7 +674,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let fill_value = &self.fill_value;
 
         // Optional data is decoded into views of its inner data and each validity mask
-        let (output_view, mask_views) = extract_target_views(&output_target);
+        let (output_view, mask_views) = extract_target_views(output_target);
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let num_chunks = chunks_per_shard
             .iter()
