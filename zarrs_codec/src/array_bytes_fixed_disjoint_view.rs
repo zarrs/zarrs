@@ -1,6 +1,5 @@
 use derive_more::derive::Display;
 use std::mem::MaybeUninit;
-use std::sync::OnceLock;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::iterators::ContiguousLinearisedIndices;
@@ -19,8 +18,6 @@ pub struct ArrayBytesFixedDisjointView<'a> {
     shape: &'a [u64],
     subset: ArraySubset,
     bytes_in_subset_len: usize,
-    /// The contiguous regions of the view, computed on first use.
-    contiguous_linearised_indices: OnceLock<ContiguousLinearisedIndices>,
 }
 
 /// Errors that can occur when creating a [`ArrayBytesFixedDisjointView`].
@@ -87,17 +84,14 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             shape,
             subset,
             bytes_in_subset_len,
-            contiguous_linearised_indices: OnceLock::new(),
         })
     }
 
     /// The contiguous regions of the view.
-    fn contiguous_linearised_indices(&self) -> &ContiguousLinearisedIndices {
-        self.contiguous_linearised_indices.get_or_init(|| {
-            self.subset
-                .contiguous_linearised_indices(self.shape)
-                .expect("the subset is within the shape")
-        })
+    fn contiguous_linearised_indices(&self) -> ContiguousLinearisedIndices {
+        self.subset
+            .contiguous_linearised_indices(self.shape)
+            .expect("the subset is within the shape")
     }
 
     /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
@@ -177,13 +171,14 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             ));
         }
 
-        let length = self.contiguous_bytes_len();
+        let indices = self.contiguous_linearised_indices();
+        let length = indices.contiguous_elements_usize() * self.data_type_size;
         if length == 0 {
             return Ok(());
         }
 
         let uniform = fill_value.iter().all(|&byte| byte == fill_value[0]);
-        let mut regions = self.contiguous_linearised_indices().iter();
+        let mut regions = indices.iter();
         let (first_index, _) = regions.next().expect("a nonempty view has a region");
         let first_offset = usize::try_from(first_index * self.data_type_size as u64).unwrap();
         if !uniform {
@@ -279,15 +274,16 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if bytes.len() != positions.len() * size {
             return Err(InvalidBytesLengthError::new(bytes.len(), positions.len() * size).into());
         }
+        let element_offset = self.element_offset_fn();
         if size == 0 {
             // Nothing to copy, but positions are still validated (`chunks_exact` rejects a size of 0)
             for &position in positions {
-                self.element_offset(position)?;
+                element_offset(position)?;
             }
             return Ok(());
         }
         for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
-            let offset = self.element_offset(position)?;
+            let offset = element_offset(position)?;
             // SAFETY: `offset` is an element of the view, which is disjoint from other views.
             unsafe { self.bytes.write_copy_of_slice_at(offset, element) };
         }
@@ -311,48 +307,52 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if fill_value.len() != size {
             return Err(InvalidBytesLengthError::new(fill_value.len(), size).into());
         }
+        let element_offset = self.element_offset_fn();
         for &position in positions {
-            let offset = self.element_offset(position)?;
+            let offset = element_offset(position)?;
             // SAFETY: `offset` is an element of the view, which is disjoint from other views.
             unsafe { self.bytes.write_copy_of_slice_at(offset, fill_value) };
         }
         Ok(())
     }
 
-    /// Return the byte offset in the underlying bytes of the element at `position` in the view.
-    fn element_offset(&self, position: usize) -> Result<usize, IndexerError> {
-        let position = position as u64;
-        if position >= self.num_elements() {
-            return Err(IndexerError::new_oob(
-                vec![position],
-                vec![self.num_elements()],
-            ));
-        }
-        let index = if self.contiguous_linearised_indices().len() == 1 {
-            // The view is a single contiguous block
-            let (start, _) = self
-                .contiguous_linearised_indices()
-                .iter()
-                .next()
-                .expect("one block");
-            start + position
+    /// Return a function mapping the `position` of an element in the view (in C order) to its byte offset in the underlying bytes.
+    ///
+    /// The contiguous regions of the view are computed once, rather than for each element.
+    fn element_offset_fn(&self) -> impl Fn(usize) -> Result<usize, IndexerError> {
+        let num_elements = self.num_elements();
+        let indices = self.contiguous_linearised_indices();
+        // The start of the view if it is a single contiguous block
+        let contiguous_start = if indices.len() == 1 {
+            indices.iter().next().map(|(start, _)| start)
         } else {
-            let mut remainder = position;
-            let mut stride = 1;
-            let mut index = 0;
-            for ((&start, &len), &dim) in std::iter::zip(
-                std::iter::zip(self.subset.start(), self.subset.shape()),
-                self.shape,
-            )
-            .rev()
-            {
-                index += (start + remainder % len) * stride;
-                remainder /= len;
-                stride *= dim;
-            }
-            index
+            None
         };
-        Ok(usize::try_from(index).unwrap() * self.data_type_size)
+        move |position| {
+            let position = position as u64;
+            if position >= num_elements {
+                return Err(IndexerError::new_oob(vec![position], vec![num_elements]));
+            }
+            let index = if let Some(start) = contiguous_start {
+                start + position
+            } else {
+                let mut remainder = position;
+                let mut stride = 1;
+                let mut index = 0;
+                for ((&start, &len), &dim) in std::iter::zip(
+                    std::iter::zip(self.subset.start(), self.subset.shape()),
+                    self.shape,
+                )
+                .rev()
+                {
+                    index += (start + remainder % len) * stride;
+                    remainder /= len;
+                    stride *= dim;
+                }
+                index
+            };
+            Ok(usize::try_from(index).unwrap() * self.data_type_size)
+        }
     }
 }
 

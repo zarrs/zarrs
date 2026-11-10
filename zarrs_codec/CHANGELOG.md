@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Improve performance
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
-  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
+  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` when used, without allocating, rather than when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 - Bump `zarrs_metadata` to 0.7.6, `itertools` to 0.15.0, and `unsafe_cell_slice` to 0.2.4
