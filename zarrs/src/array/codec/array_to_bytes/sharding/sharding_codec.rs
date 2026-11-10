@@ -38,7 +38,7 @@ use zarrs_codec::{
     BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -665,6 +665,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
+        let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
+        if output_target.subset().shape() != shard_shape_u64 {
+            // Subchunks are placed by their position in the shard, which needs a target with the shard shape
+            let decoded = self.decode(encoded_shard, shape, options, resources)?;
+            return decode_into_array_bytes_target(&decoded, output_target);
+        }
         let data_type = self.data_type();
         let fill_value = &self.fill_value;
 
