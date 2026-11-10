@@ -6,13 +6,18 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
 use zarrs::array::codec::ShardingCodecBuilder;
-use zarrs::array::{ArraySubset, ComputeResources, DataType, FillValue, data_type};
+use zarrs::array::{
+    ArrayBuilder, ArrayCached, ArraySubset, ComputeResources, DataType, FillValue, data_type,
+};
+use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
     CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
 };
 
+const ARRAY_SHAPE: [u64; 2] = [8, 8];
 const SHARD_SHAPE: [u64; 2] = [4, 8];
 const SUBCHUNK_SHAPE: [u64; 2] = [2, 2];
 const SENTINEL: u8 = 0xa5;
@@ -238,6 +243,137 @@ async fn sharding_decode_into_target_shape() -> Result<(), Box<dyn std::error::E
                 );
             }
         }
+    }
+    Ok(())
+}
+
+/// Check the `_into` retrieval methods of `$array` (named by `$methods`, followed by `.await` if async) against retrieval into new array bytes.
+macro_rules! check_retrieve_into {
+    ($data_type:expr, $array:expr, [$chunk:ident, $chunk_into:ident, $partial:ident, $partial_into:ident, $subset:ident, $subset_into:ident] $($await:tt)*) => {{
+        let data_type: &DataType = $data_type;
+        let resources = Resources::default();
+
+        // A chunk
+        let expected = $array.$chunk::<ArrayBytes>(&[1, 0], &resources)$($await)*?;
+        for layout in layouts(32) {
+            let mut buffers = LayoutBuffers::new(data_type, &layout);
+            $array.$chunk_into(&[1, 0], &mut buffers.target(), &resources)$($await)*?;
+            assert_eq!(buffers.into_array_bytes(), expected, "{} {}", stringify!($chunk_into), layout.1);
+        }
+
+        // A partial chunk spanning partial subchunks
+        let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 0..8]);
+        let expected = $array.$partial::<ArrayBytes>(&[1, 0], &chunk_subset, &resources)$($await)*?;
+        for layout in layouts(16) {
+            let mut buffers = LayoutBuffers::new(data_type, &layout);
+            $array.$partial_into(&[1, 0], &chunk_subset, &mut buffers.target(), &resources)$($await)*?;
+            assert_eq!(buffers.into_array_bytes(), expected, "{} {}", stringify!($partial_into), layout.1);
+        }
+
+        // An array subset spanning multiple chunks
+        let array_subset = ArraySubset::new_with_ranges(&[3..5, 0..8]);
+        let expected = $array.$subset::<ArrayBytes>(&array_subset, &resources)$($await)*?;
+        for layout in layouts(16) {
+            let mut buffers = LayoutBuffers::new(data_type, &layout);
+            $array.$subset_into(&array_subset, &mut buffers.target(), &resources)$($await)*?;
+            assert_eq!(buffers.into_array_bytes(), expected, "{} {}", stringify!($subset_into), layout.1);
+        }
+    }};
+}
+
+fn array_builder(data_type: &DataType) -> ArrayBuilder {
+    let mut builder = ArrayBuilder::new(
+        ARRAY_SHAPE.to_vec(),
+        SHARD_SHAPE.to_vec(),
+        data_type.clone(),
+        fill_value(data_type),
+    );
+    builder.subchunk_shape(SUBCHUNK_SHAPE.to_vec());
+    builder
+}
+
+#[test]
+fn array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> {
+    for data_type in data_types() {
+        let array =
+            Arc::new(array_builder(&data_type).build(Arc::new(MemoryStore::default()), "/")?);
+        array.store_array_subset(
+            &array.subset_all(),
+            elements(&data_type, 64),
+            &Resources::default(),
+        )?;
+        check_retrieve_into!(
+            &data_type,
+            array,
+            [
+                retrieve_chunk,
+                retrieve_chunk_into,
+                retrieve_partial_chunk,
+                retrieve_partial_chunk_into,
+                retrieve_array_subset,
+                retrieve_array_subset_into
+            ]
+        );
+        let cached = ArrayCached::new(array.clone(), ChunkCacheEncodedLruChunkLimit::new(4));
+        check_retrieve_into!(
+            &data_type,
+            cached,
+            [
+                retrieve_chunk,
+                retrieve_chunk_into,
+                retrieve_partial_chunk,
+                retrieve_partial_chunk_into,
+                retrieve_array_subset,
+                retrieve_array_subset_into
+            ]
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::chunk_cache::AsyncChunkCacheEncodedLruChunkLimit;
+    use zarrs_storage::store::AsyncMemoryStore;
+
+    for data_type in data_types() {
+        let array =
+            Arc::new(array_builder(&data_type).build(Arc::new(AsyncMemoryStore::new()), "/")?);
+        array
+            .async_store_array_subset(
+                &array.subset_all(),
+                elements(&data_type, 64),
+                &Resources::default(),
+            )
+            .await?;
+        check_retrieve_into!(
+            &data_type,
+            array,
+            [
+                async_retrieve_chunk,
+                async_retrieve_chunk_into,
+                async_retrieve_partial_chunk,
+                async_retrieve_partial_chunk_into,
+                async_retrieve_array_subset,
+                async_retrieve_array_subset_into
+            ]
+            .await
+        );
+        let cached = ArrayCached::new(array.clone(), AsyncChunkCacheEncodedLruChunkLimit::new(4));
+        check_retrieve_into!(
+            &data_type,
+            cached,
+            [
+                async_retrieve_chunk,
+                async_retrieve_chunk_into,
+                async_retrieve_partial_chunk,
+                async_retrieve_partial_chunk_into,
+                async_retrieve_array_subset,
+                async_retrieve_array_subset_into
+            ]
+            .await
+        );
     }
     Ok(())
 }
