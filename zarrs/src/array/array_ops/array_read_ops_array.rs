@@ -521,10 +521,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             &buffers.target()?,
             options,
             resources,
-            &|chunk_indices, indexer, target, options, resources| {
+            &|chunk_indices, chunk_subset, overlap, target, options, resources| {
                 self.retrieve_partial_chunk_into_with_options(
                     chunk_indices,
-                    indexer,
+                    &overlap.relative_to(chunk_subset.start())?,
                     target,
                     options,
                     resources,

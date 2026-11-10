@@ -4,7 +4,7 @@ use zarrs_codec::Resources;
 
 use futures::{StreamExt, TryStreamExt};
 
-use super::async_array_read_ops_common::AsyncRetrieveInto;
+use super::async_array_read_ops_common::{AsyncRetrieveInto, retrieve_multi_chunk_fixed_into};
 use super::{
     Array, ArrayCached, ArrayError, ArraySubsetTraits, AsyncArrayReadOps,
     AsyncReadableStorageTraits, ChunkGrid, CodecOptions, FromArrayBytes, Indexer,
@@ -171,36 +171,27 @@ where
     }
     let mut buffers =
         FixedDecodeBuffers::new(data_type, &array_subset.shape()).expect("fixed data type");
-    {
-        let target = &buffers.target()?;
-        let array_subset_start = array_subset.start();
-        let retrieve_chunk = |chunk_indices: ArrayIndices| {
-            let array_subset_start = &array_subset_start;
-            async move {
-                let chunk_subset = array.chunk_subset(&chunk_indices)?;
-                let overlap = chunk_subset.overlap(array_subset)?;
-                let output_subset = overlap.relative_to(array_subset_start)?;
-                let bytes = async_retrieve_chunk_overlap_bytes(
-                    cache,
-                    array,
-                    &chunk_indices,
-                    &chunk_subset,
-                    &overlap,
-                    options,
-                    resources,
-                )
-                .await?;
-                // SAFETY: chunks represent disjoint array subsets
-                let mut chunk_target = unsafe { target.subdivide(output_subset) }?;
-                decode_into_array_bytes_target(&bytes, &mut chunk_target)
-                    .map_err(ArrayError::CodecError)
-            }
-        };
-        futures::stream::iter(&chunks.indices())
-            .map(Ok)
-            .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
+    retrieve_multi_chunk_fixed_into(
+        array,
+        array_subset,
+        chunks,
+        chunk_concurrent_limit,
+        &buffers.target()?,
+        |chunk_indices, chunk_subset, overlap, mut target| async move {
+            let bytes = async_retrieve_chunk_overlap_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset,
+                &overlap,
+                options,
+                resources,
+            )
             .await?;
-    }
+            decode_into_array_bytes_target(&bytes, &mut target).map_err(ArrayError::CodecError)
+        },
+    )
+    .await?;
     // SAFETY: the chunks cover the array subset, so every element has been written
     Ok(unsafe { buffers.into_array_bytes() }.into())
 }

@@ -241,6 +241,18 @@ fn array(
 const BASELINE: &[(&str, usize, usize, usize)] = &[
     ("async_retrieve_chunk_zstd", 11, 131_348, 131_258),
     (
+        "async_retrieve_array_subset_many_chunks_zstd",
+        934,
+        457_808,
+        95138,
+    ),
+    (
+        "async_retrieve_array_subset_many_chunks_zstd_cached",
+        123,
+        174_912,
+        80192,
+    ),
+    (
         "async_store_array_subset_many_chunks_zstd",
         566,
         327_506,
@@ -252,6 +264,12 @@ const BASELINE: &[(&str, usize, usize, usize)] = &[
         438,
         271_346,
         139_994,
+    ),
+    (
+        "retrieve_array_subset_many_chunks_zstd_cached",
+        76,
+        117_440,
+        77960,
     ),
     ("retrieve_chunk_uncompressed", 8, 172, 162),
     ("retrieve_chunk_zstd", 8, 131_236, 131_226),
@@ -566,6 +584,91 @@ fn async_store_array_subset_many_chunks_zstd() {
         .unwrap();
     });
     check("async_store_array_subset_many_chunks_zstd", stats);
+}
+
+/// The partially overlapped subset of the 16 chunks of `array(&[64, 64], ..)`.
+fn many_chunks_subset() -> ArraySubset {
+    ArraySubset::new_with_ranges(&[32..224, 32..224])
+}
+
+#[test]
+fn retrieve_array_subset_many_chunks_zstd_cached() {
+    use zarrs::array::ArrayCached;
+    use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+    let cached = ArrayCached::new(
+        Arc::new(array(&[64, 64], true, None)),
+        ChunkCacheDecodedLruChunkLimit::new(16),
+    );
+    let subset = many_chunks_subset();
+    let retrieve = || {
+        cached
+            .retrieve_array_subset::<ArrayBytes>(
+                &subset,
+                &Resources::default().with_compute_target(1),
+            )
+            .unwrap()
+    };
+    // Measure a warm cache
+    retrieve();
+    let name = "retrieve_array_subset_many_chunks_zstd_cached";
+    let (_, stats) = measure(name, retrieve);
+    check(name, stats);
+}
+
+#[cfg(feature = "async")]
+fn async_array_many_chunks() -> Array<zarrs::storage::store::AsyncMemoryStore> {
+    use zarrs::storage::store::AsyncMemoryStore;
+    let array = ArrayBuilder::new(SHAPE.to_vec(), vec![64, 64], data_type::uint16(), 0u16)
+        .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
+        .build(Arc::new(AsyncMemoryStore::new()), "/")
+        .unwrap();
+    futures::executor::block_on(array.async_store_array_subset(
+        &array.subset_all(),
+        data(),
+        &Resources::default().with_compute_target(1),
+    ))
+    .unwrap();
+    array
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn async_retrieve_array_subset_many_chunks_zstd() {
+    let array = async_array_many_chunks();
+    let subset = many_chunks_subset();
+    let name = "async_retrieve_array_subset_many_chunks_zstd";
+    let (_, stats) = measure(name, || {
+        futures::executor::block_on(array.async_retrieve_array_subset::<ArrayBytes>(
+            &subset,
+            &Resources::default().with_compute_target(1),
+        ))
+        .unwrap()
+    });
+    check(name, stats);
+}
+
+#[cfg(feature = "async")]
+#[test]
+fn async_retrieve_array_subset_many_chunks_zstd_cached() {
+    use zarrs::array::ArrayCached;
+    use zarrs::array::chunk_cache::AsyncChunkCacheDecodedLruChunkLimit;
+    let cached = ArrayCached::new(
+        Arc::new(async_array_many_chunks()),
+        AsyncChunkCacheDecodedLruChunkLimit::new(16),
+    );
+    let subset = many_chunks_subset();
+    let retrieve = || {
+        futures::executor::block_on(cached.async_retrieve_array_subset::<ArrayBytes>(
+            &subset,
+            &Resources::default().with_compute_target(1),
+        ))
+        .unwrap()
+    };
+    // Measure a warm cache
+    retrieve();
+    let name = "async_retrieve_array_subset_many_chunks_zstd_cached";
+    let (_, stats) = measure(name, retrieve);
+    check(name, stats);
 }
 
 #[test]

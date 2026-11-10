@@ -565,13 +565,20 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .expect("data_type must have fixed size");
         retrieve_multi_chunk_fixed_into(
             self,
-            self,
             array_subset,
             chunks,
             chunk_concurrent_limit,
             &buffers.target()?,
-            options,
-            resources,
+            |chunk_indices, chunk_subset, overlap, mut target| async move {
+                self.async_retrieve_partial_chunk_into_with_options(
+                    &chunk_indices,
+                    &overlap.relative_to(chunk_subset.start())?,
+                    &mut target,
+                    options,
+                    resources,
+                )
+                .await
+            },
         )
         .await?;
         // SAFETY: the chunks cover the array subset, so every element has been written

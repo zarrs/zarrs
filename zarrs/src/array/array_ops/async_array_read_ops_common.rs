@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubsetTraits, Indexer};
+use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
     copy_fill_value_into, decode_into_array_bytes_target,
@@ -51,7 +51,7 @@ pub(super) async fn retrieve_array_subset_into<A, R>(
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
-    R: AsyncRetrieveInto + ?Sized,
+    R: AsyncRetrieveInto + MaybeSync + ?Sized,
 {
     if array_subset.dimensionality() != array.dimensionality() {
         return Err(ArrayError::InvalidArraySubset(
@@ -125,15 +125,24 @@ where
                 .as_mut()
                 .map(FixedDecodeBuffers::target)
                 .transpose()?;
+            let resources = &resources;
             retrieve_multi_chunk_fixed_into(
                 array,
-                retrieve,
                 array_subset,
                 &chunks,
                 chunk_concurrent_limit,
                 buffers_target.as_ref().unwrap_or(output_target),
-                options,
-                &resources,
+                |chunk_indices, chunk_subset, overlap, mut target| async move {
+                    retrieve
+                        .retrieve_partial_chunk_into(
+                            &chunk_indices,
+                            &overlap.relative_to(chunk_subset.start())?,
+                            &mut target,
+                            options,
+                            resources,
+                        )
+                        .await
+                },
             )
             .await?;
             drop(buffers_target);
@@ -147,26 +156,30 @@ where
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-pub(super) async fn retrieve_multi_chunk_fixed_into<A, R>(
+/// Retrieve `array_subset`, which spans `chunks`, into `output_target`.
+///
+/// This is the asynchronous counterpart of
+/// [`retrieve_multi_chunk_fixed_into`](super::array_read_ops_common::retrieve_multi_chunk_fixed_into).
+/// The arguments of `retrieve_chunk_overlap_into` are owned so that its future needs no boxing.
+pub(super) async fn retrieve_multi_chunk_fixed_into<'a, A, F, Fut>(
     array: &A,
-    retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
-    output_target: &ArrayBytesDecodeIntoTarget<'_>,
-    options: &CodecOptions,
-    resources: &Resources,
+    output_target: &ArrayBytesDecodeIntoTarget<'a>,
+    retrieve_chunk_overlap_into: F,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
-    R: AsyncRetrieveInto + ?Sized,
+    F: Fn(ArrayIndices, ArraySubset, ArraySubset, ArrayBytesDecodeIntoTarget<'a>) -> Fut,
+    Fut: Future<Output = Result<(), ArrayError>>,
 {
     let array_subset_start = array_subset.start();
     let output_start = output_target.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let array_subset_start = &array_subset_start;
+        let retrieve_chunk_overlap_into = &retrieve_chunk_overlap_into;
         async move {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
@@ -174,18 +187,10 @@ where
                 subset_in_output(&chunk_subset_overlap, array_subset_start, output_start)?;
 
             // SAFETY: chunks represent disjoint array subsets
-            let mut target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
+            let target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
 
-            retrieve
-                .retrieve_partial_chunk_into(
-                    &chunk_indices,
-                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    &mut target,
-                    options,
-                    resources,
-                )
-                .await?;
-            Ok::<_, ArrayError>(())
+            retrieve_chunk_overlap_into(chunk_indices, chunk_subset, chunk_subset_overlap, target)
+                .await
         }
     };
 
