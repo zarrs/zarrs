@@ -119,6 +119,12 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         unsafe { Self::new(self.bytes, self.data_type_size, self.shape, subset) }
     }
 
+    /// Return the size in bytes of each element.
+    #[must_use]
+    pub fn data_type_size(&self) -> usize {
+        self.data_type_size
+    }
+
     /// Return the shape of the bytes this view is created from.
     #[must_use]
     pub fn shape(&self) -> &[u64] {

@@ -40,17 +40,6 @@ fn optional_innermost(data_type: &DataType) -> (&DataType, usize) {
     (data_type, depth)
 }
 
-/// Build a decode target from views of the data and validity masks (outer to inner).
-fn nested_target<'a>(
-    data_view: ArrayBytesFixedDisjointView<'a>,
-    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
-) -> ArrayBytesDecodeIntoTarget<'a> {
-    mask_views.into_iter().rev().fold(
-        ArrayBytesDecodeIntoTarget::Fixed(data_view),
-        |inner, mask_view| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask_view),
-    )
-}
-
 /// Decode `$subset` of fixed length (optional) `$data_type` data with `$decode_into` into a new target.
 macro_rules! decode_into_new {
     ($data_type:expr, $subset:expr, |$target:ident| $decode_into:expr) => {{
@@ -81,13 +70,12 @@ macro_rules! decode_into_new {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let mut $target = nested_target(data_view, mask_views);
+            let mut $target = ArrayBytesDecodeIntoTarget::from(data_view)
+                .with_optional_masks(mask_views)
+                .unwrap();
             $decode_into?;
         }
-        masks
-            .into_iter()
-            .rev()
-            .fold(ArrayBytes::new_flen(data), ArrayBytes::with_optional_mask)
+        ArrayBytes::new_flen(data).with_optional_masks(masks)
     }};
 }
 
