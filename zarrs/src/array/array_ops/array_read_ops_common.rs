@@ -215,11 +215,15 @@ pub(super) fn subset_in_output(
             );
         }
     }
-    let start: Vec<u64> = std::iter::zip(
-        subset.start(),
-        std::iter::zip(array_subset_start, output_start),
-    )
-    .map(|(&start, (&array_start, &output_start))| start - array_start + output_start)
-    .collect();
-    Ok(ArraySubset::new_with_start_shape(start, subset.shape())?)
+    // Built from ranges to allocate only the start and shape
+    Ok(ArraySubset::from(
+        std::iter::zip(
+            std::iter::zip(subset.start(), subset.shape()),
+            std::iter::zip(array_subset_start, output_start),
+        )
+        .map(|((&start, &size), (&array_start, &output_start))| {
+            let start = start - array_start + output_start;
+            start..start + size
+        }),
+    ))
 }
