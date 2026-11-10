@@ -119,7 +119,7 @@ where
 }
 
 #[expect(clippy::too_many_arguments)]
-fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
+pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,

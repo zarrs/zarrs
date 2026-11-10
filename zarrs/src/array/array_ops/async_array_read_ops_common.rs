@@ -131,7 +131,7 @@ where
 }
 
 #[expect(clippy::too_many_arguments)]
-async fn retrieve_multi_chunk_fixed_into<A, R>(
+pub(super) async fn retrieve_multi_chunk_fixed_into<A, R>(
     array: &A,
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
