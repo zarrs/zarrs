@@ -14,6 +14,7 @@ use zarrs_metadata::Configuration;
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]
 pub struct ZlibCodec {
+    level: ZlibCompressionLevel,
     compression: flate2::Compression,
 }
 
@@ -22,7 +23,7 @@ impl ZlibCodec {
     #[must_use]
     pub fn new(level: ZlibCompressionLevel) -> Self {
         let compression = flate2::Compression::new(level.as_u32());
-        Self { compression }
+        Self { level, compression }
     }
 
     /// Create a new `zlib` codec from configuration.
@@ -47,10 +48,8 @@ impl CodecTraits for ZlibCodec {
         _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
-        let configuration = ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 {
-            level: ZlibCompressionLevel::try_from(self.compression.level())
-                .expect("checked on init"),
-        });
+        let configuration =
+            ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 { level: self.level });
         Some(configuration.into())
     }
 
