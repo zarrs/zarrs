@@ -16,6 +16,7 @@ use criterion::{
 #[cfg(feature = "zstd")]
 use zarrs::array::codec::ZstdCodec;
 use zarrs::array::codec::bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode};
+use zarrs::array::codec::bytes_to_bytes::shuffle::ShuffleCodec;
 use zarrs::array::codec::{BloscCodec, BytesCodec, PackBitsCodec, ShardingCodecBuilder};
 use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
@@ -276,11 +277,60 @@ fn codec_packbits(c: &mut Criterion) {
     }
 }
 
+fn codec_shuffle(c: &mut Criterion) {
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    let mut group = c.benchmark_group("codec_shuffle");
+    group.plot_config(plot_config);
+
+    for elementsize in [2usize, 3, 4, 8, 16] {
+        let codec = ShuffleCodec::new(elementsize);
+        for len in [1usize << 16, 1 << 20, 1 << 24] {
+            let len = len / elementsize * elementsize;
+            let data: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let encoded = codec
+                .encode(
+                    CowBytes::Borrowed(&data),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .unwrap()
+                .to_vec();
+            let rep = BytesRepresentation::FixedSize(len as u64);
+            group.throughput(Throughput::Bytes(len as u64));
+            let id = format!("{elementsize}/{len}");
+            group.bench_function(BenchmarkId::new("encode", &id), |b| {
+                b.iter(|| {
+                    codec
+                        .encode(
+                            CowBytes::Borrowed(&data),
+                            &CodecOptions::default(),
+                            &ComputeResources::default(),
+                        )
+                        .unwrap()
+                });
+            });
+            group.bench_function(BenchmarkId::new("decode", &id), |b| {
+                b.iter(|| {
+                    codec
+                        .decode(
+                            CowBytes::Borrowed(&encoded),
+                            &rep,
+                            &CodecOptions::default(),
+                            &ComputeResources::default(),
+                        )
+                        .unwrap()
+                });
+            });
+        }
+    }
+}
+
 criterion_group!(
     benches,
     codec_bytes,
     codec_blosc,
     codec_sharding,
-    codec_packbits
+    codec_packbits,
+    codec_shuffle
 );
 criterion_main!(benches);
