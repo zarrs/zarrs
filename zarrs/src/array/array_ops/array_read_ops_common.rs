@@ -18,7 +18,7 @@ use super::recommended_codec_concurrency;
 pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
     chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
@@ -29,14 +29,14 @@ where
     A: ArrayOps + MaybeSync,
     RetrieveChunkInto: for<'a> Fn(
         &[u64],
-        ArrayBytesDecodeIntoTarget<'a>,
+        &mut ArrayBytesDecodeIntoTarget<'a>,
         &CodecOptions,
         &Resources,
     ) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
             &dyn Indexer,
-            ArrayBytesDecodeIntoTarget<'a>,
+            &mut ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
             &Resources,
         ) -> Result<(), ArrayError>
@@ -106,7 +106,7 @@ where
                 array_subset,
                 &chunks,
                 chunk_concurrent_limit,
-                &output_target,
+                output_target,
                 options,
                 &resources,
                 &retrieve_partial_chunk_into,
@@ -131,7 +131,7 @@ where
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
             &dyn Indexer,
-            ArrayBytesDecodeIntoTarget<'a>,
+            &mut ArrayBytesDecodeIntoTarget<'a>,
             &CodecOptions,
             &Resources,
         ) -> Result<(), ArrayError>
@@ -155,7 +155,7 @@ where
         let chunk_subset_in_view =
             ArraySubset::new_with_start_shape(chunk_start_in_view, chunk_subset_in_array.shape())?;
 
-        let mut data_sub = unsafe {
+        let data_sub = unsafe {
             // SAFETY: chunks represent disjoint array subsets.
             data_view_ref.subdivide(chunk_subset_in_view.clone())?
         };
@@ -168,11 +168,11 @@ where
             }?);
         }
 
-        let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
+        let mut target = build_nested_optional_target(data_sub, mask_subs);
         retrieve_partial_chunk_into(
             &chunk_indices,
             &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-            target,
+            &mut target,
             options,
             resources,
         )?;

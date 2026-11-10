@@ -24,7 +24,7 @@ pub(super) trait AsyncRetrieveInto {
     async fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
@@ -33,7 +33,7 @@ pub(super) trait AsyncRetrieveInto {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
@@ -43,7 +43,7 @@ pub(super) async fn retrieve_array_subset_into<A, R>(
     array: &A,
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
     chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
@@ -120,7 +120,7 @@ where
                 array_subset,
                 &chunks,
                 chunk_concurrent_limit,
-                &output_target,
+                output_target,
                 options,
                 &resources,
             )
@@ -168,7 +168,7 @@ where
                 chunk_subset_in_array.shape(),
             )?;
 
-            let mut data_sub = unsafe {
+            let data_sub = unsafe {
                 // SAFETY: chunks represent disjoint array subsets
                 data_view_ref.subdivide(chunk_subset_in_view.clone())?
             };
@@ -181,13 +181,13 @@ where
                 }?);
             }
 
-            let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
+            let mut target = build_nested_optional_target(data_sub, mask_subs);
 
             retrieve
                 .retrieve_partial_chunk_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    target,
+                    &mut target,
                     options,
                     resources,
                 )

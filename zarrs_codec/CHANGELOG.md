@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
 - **Breaking**: `ArrayBytesFixedDisjointView::new` takes `impl Into<UnsafeCellSlice<MaybeUninit<u8>>>` so views can cover uninitialised memory (e.g. `Vec::spare_capacity_mut()`), and `UnsafeCellSlice<u8>` arguments still work
   - Views never write uninitialised bytes
+- **Breaking**: `ArrayBytesDecodeIntoTarget` variants own their `ArrayBytesFixedDisjointView`s rather than borrowing them, and `From<ArrayBytesFixedDisjointView>` replaces `From<&mut ArrayBytesFixedDisjointView>`
+  - `ArrayToBytesCodecTraits::decode_into`, `[Async]ArrayPartialDecoderTraits::partial_decode_into`, `copy_fill_value_into`, and `decode_into_array_bytes_target` take `&mut ArrayBytesDecodeIntoTarget`, so targets are not moved through each layer of decoding
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk

@@ -156,20 +156,20 @@ fn retrieve_into<A: ArrayReadOps>(
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());
-        let mut view = unsafe {
+        let view = unsafe {
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
+        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
         if let Some(chunk_indices) = chunk_indices {
             array.retrieve_partial_chunk_into(
                 chunk_indices,
                 subset,
-                target,
+                &mut target,
                 &Resources::default(),
             )?;
         } else {
-            array.retrieve_array_subset_into(subset, target, &Resources::default())?;
+            array.retrieve_array_subset_into(subset, &mut target, &Resources::default())?;
         }
     }
     Ok(output)
@@ -185,13 +185,13 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());
-        let mut view = unsafe {
+        let view = unsafe {
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
         array.retrieve_chunk_into(
             chunk_indices,
-            ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+            &mut ArrayBytesDecodeIntoTarget::Fixed(view),
             &Resources::default(),
         )?;
     }
@@ -1487,14 +1487,14 @@ mod async_cached {
         {
             let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
             let full_subset = ArraySubset::new_with_shape(shape.clone());
-            let mut view = unsafe {
+            let view = unsafe {
                 // SAFETY: this is the only view over output and covers it exactly.
                 ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
             };
             array
                 .async_retrieve_array_subset_into(
                     subset,
-                    ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await?;

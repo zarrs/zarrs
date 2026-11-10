@@ -114,14 +114,13 @@ fn optional_fill_value(c: &mut Criterion) {
 }
 
 fn nested_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+    data_view: ArrayBytesFixedDisjointView<'a>,
+    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
 ) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((mask, rest)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(Box::new(nested_target(data_view, rest)), mask)
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
+    mask_views.into_iter().rev().fold(
+        ArrayBytesDecodeIntoTarget::Fixed(data_view),
+        |inner, mask| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask),
+    )
 }
 
 fn fill_output(c: &mut Criterion) {
@@ -157,7 +156,7 @@ fn fill_output(c: &mut Criterion) {
                     b.iter(|| {
                         {
                             // SAFETY: each view is the only view of its backing buffer.
-                            let mut data_view = unsafe {
+                            let data_view = unsafe {
                                 ArrayBytesFixedDisjointView::new(
                                     UnsafeCellSlice::new(&mut storage),
                                     4,
@@ -166,7 +165,7 @@ fn fill_output(c: &mut Criterion) {
                                 )
                                 .unwrap()
                             };
-                            let mut mask_views: Vec<_> = masks
+                            let mask_views: Vec<_> = masks
                                 .iter_mut()
                                 .map(|mask| unsafe {
                                     ArrayBytesFixedDisjointView::new(
@@ -178,11 +177,11 @@ fn fill_output(c: &mut Criterion) {
                                     .unwrap()
                                 })
                                 .collect();
-                            let target = nested_target(&mut data_view, &mut mask_views);
+                            let mut target = nested_target(data_view, mask_views);
                             copy_fill_value_into(
                                 black_box(&data_type),
                                 black_box(&fill_value),
-                                target,
+                                &mut target,
                             )
                             .unwrap();
                         }

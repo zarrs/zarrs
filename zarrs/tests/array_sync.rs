@@ -481,12 +481,12 @@ fn retrieve_into_vec(
     {
         let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());
-        let mut view = unsafe {
+        let view = unsafe {
             // SAFETY: single view, no overlap
             ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
         };
-        let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
-        array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
+        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        array.retrieve_array_subset_into(&subset, &mut target, &Resources::default())?;
     }
 
     Ok(output)
@@ -528,11 +528,11 @@ fn array_sync_read_into(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::e
     let mut buf = vec![0u8; 4];
     let slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut buf);
     let full = ArraySubset::new_with_shape(shape_1d.clone());
-    let mut view = unsafe {
+    let view = unsafe {
         ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
     };
-    let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
-    assert!(array.retrieve_array_subset_into(&subset_1d, target, &Resources::default()).is_err());
+    let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+    assert!(array.retrieve_array_subset_into(&subset_1d, &mut target, &Resources::default()).is_err());
 
     Ok(())
 }
@@ -584,7 +584,7 @@ fn retrieve_optional_into_vecs(
         let mask_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut mask_output);
         let full_subset = ArraySubset::new_with_shape(shape.clone());
 
-        let mut data_view = unsafe {
+        let data_view = unsafe {
             // SAFETY: single view per buffer, no overlap
             ArrayBytesFixedDisjointView::new(
                 data_slice,
@@ -593,16 +593,16 @@ fn retrieve_optional_into_vecs(
                 full_subset.clone(),
             )?
         };
-        let mut mask_view = unsafe {
+        let mask_view = unsafe {
             // SAFETY: single view per buffer, no overlap
             ArrayBytesFixedDisjointView::new(mask_slice, 1, &shape, full_subset)?
         };
 
-        let target = ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
-            &mut mask_view,
+        let mut target = ArrayBytesDecodeIntoTarget::Optional(
+            Box::new(ArrayBytesDecodeIntoTarget::Fixed(data_view)),
+            mask_view,
         );
-        array.retrieve_array_subset_into(&subset, target, &Resources::default())?;
+        array.retrieve_array_subset_into(&subset, &mut target, &Resources::default())?;
     }
 
     Ok((data_output, mask_output))

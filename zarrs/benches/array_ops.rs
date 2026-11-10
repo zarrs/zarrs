@@ -111,7 +111,7 @@ fn single_chunk(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("retrieve_chunk_into", label), |b| {
             b.iter(|| {
                 // SAFETY: the view covers the entire output and is its only view.
-                let mut view = unsafe {
+                let view = unsafe {
                     ArrayBytesFixedDisjointView::new(
                         UnsafeCellSlice::new(&mut output),
                         2,
@@ -123,7 +123,7 @@ fn single_chunk(c: &mut Criterion) {
                 array
                     .retrieve_array_subset_into(
                         &array.subset_all(),
-                        ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                        &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                         &Resources::default(),
                     )
                     .unwrap();

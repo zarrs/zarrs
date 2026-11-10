@@ -207,7 +207,7 @@ where
                     resources,
                 )
                 .await?;
-                let mut data_view = unsafe {
+                let data_view = unsafe {
                     ArrayBytesFixedDisjointView::new(
                         data_slice,
                         data_type_size,
@@ -226,9 +226,8 @@ where
                         )
                     }?);
                 }
-                let target =
-                    build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
-                decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
+                let mut target = build_nested_optional_target(data_view, mask_views);
+                decode_into_array_bytes_target(&bytes, &mut target).map_err(ArrayError::CodecError)
             }
         };
         futures::stream::iter(&chunks.indices())
@@ -252,7 +251,7 @@ where
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -271,7 +270,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -298,7 +297,7 @@ where
     async fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -315,7 +314,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -363,7 +362,7 @@ where
     pub async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_into_with_options(
@@ -406,7 +405,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
@@ -518,7 +517,7 @@ where
     pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
@@ -761,7 +760,7 @@ mod tests {
         let mut buf = vec![0u8; subset.num_elements_usize()];
         {
             let slice = UnsafeCellSlice::new(&mut buf);
-            let mut view = unsafe {
+            let view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     slice,
                     1,
@@ -773,7 +772,7 @@ mod tests {
             cached
                 .async_retrieve_array_subset_into(
                     &subset,
-                    ArrayBytesDecodeIntoTarget::Fixed(&mut view),
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await

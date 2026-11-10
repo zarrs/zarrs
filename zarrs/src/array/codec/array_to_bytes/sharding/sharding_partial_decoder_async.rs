@@ -27,7 +27,8 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
-    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
+    ExpectedOptionalBytesError, InvalidNumberOfElementsError, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -171,7 +172,7 @@ pub(crate) async fn partial_decode(
     // Optional data with fixed length inner data: decode each subchunk directly into the output
     if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, &subset.shape()) {
         {
-            let (mut data_view, mut mask_views) = buffers.views()?;
+            let (data_view, mask_views) = buffers.views()?;
             partial_decode_fixed_array_subset_into(
                 input_handle,
                 subchunk_grid,
@@ -181,7 +182,7 @@ pub(crate) async fn partial_decode(
                 subset,
                 options,
                 resources,
-                build_nested_optional_target(&mut data_view, &mut mask_views),
+                &mut build_nested_optional_target(data_view, mask_views),
             )
             .await?;
         }
@@ -256,7 +257,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -288,9 +289,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                 )
                 .await
             }
-            (true, None, ArrayBytesDecodeIntoTarget::Fixed(output_view))
-                if !data_type.is_optional() =>
-            {
+            (true, None, output_target) if !data_type.is_optional() => {
                 partial_decode_fixed_indexer_into(
                     &self.input_handle,
                     &self.subchunk_grid,
@@ -300,7 +299,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                     indexer,
                     options,
                     resources,
-                    output_view,
+                    output_target,
                 )
                 .await
             }
@@ -360,7 +359,7 @@ async fn partial_decode_fixed_array_subset_into(
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -377,7 +376,7 @@ async fn partial_decode_fixed_array_subset_into(
         return copy_fill_value_into(data_type, fill_value, output_target);
     };
     // Optional data is decoded into views of its inner data and each validity mask
-    let (output_view, mask_views) = extract_target_views(&output_target);
+    let (output_view, mask_views) = extract_target_views(output_target);
     let (subchunk_concurrent_limit, resources) =
         super::get_concurrent_target_and_partial_resources(
             inner_codecs,
@@ -456,17 +455,16 @@ async fn partial_decode_fixed_array_subset_into(
 
     for (decoded, output_subset) in decoded_subchunks {
         // SAFETY: subchunks are disjoint array subsets and each view is dropped before the next.
-        let mut subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
+        let subchunk_view = unsafe { output_view.subdivide(output_subset.clone())? };
         let mut subchunk_mask_views = Vec::with_capacity(mask_views.len());
         for mask_view in &mask_views {
             subchunk_mask_views.push(unsafe { mask_view.subdivide(output_subset.clone()) }?);
         }
-        let subchunk_target =
-            build_nested_optional_target(&mut subchunk_view, &mut subchunk_mask_views);
+        let mut subchunk_target = build_nested_optional_target(subchunk_view, subchunk_mask_views);
         if let Some(decoded) = decoded {
-            decode_into_array_bytes_target(&decoded, subchunk_target)?;
+            decode_into_array_bytes_target(&decoded, &mut subchunk_target)?;
         } else {
-            copy_fill_value_into(data_type, fill_value, subchunk_target)?;
+            copy_fill_value_into(data_type, fill_value, &mut subchunk_target)?;
         }
     }
     Ok(())
@@ -789,11 +787,11 @@ async fn partial_decode_indexer(
     super::merge_indexer_subchunks(decoded, usize::try_from(indexer.len()).unwrap(), data_type)
 }
 
-/// Decode the elements of `indexer` into `output_view` by scattering each subchunk group directly.
+/// Decode the elements of `indexer` into `output_target` by scattering each subchunk group directly.
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_fixed_indexer_into<'a>(
+async fn partial_decode_fixed_indexer_into(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -802,15 +800,14 @@ async fn partial_decode_fixed_indexer_into<'a>(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    output_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
+    let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
         .fill_value()
         .ok_or(CodecError::UndefinedFillValue)?;
     let Some(shard_index) = shard_index else {
-        return output_view
-            .fill(fill_value.as_ne_bytes())
-            .map_err(CodecError::from);
+        return copy_fill_value_into(data_type, fill_value, output_target);
     };
     let groups = super::group_indices_by_subchunk(subchunk_grid, subchunk_shape, indexer);
     let (subchunk_concurrent_limit, resources) =
@@ -847,20 +844,16 @@ async fn partial_decode_fixed_indexer_into<'a>(
             subchunk_decoder(subchunk_index, &group.subchunk_shape).await?
         {
             decoder
-                .partial_decode_into(
-                    &group,
-                    ArrayBytesDecodeIntoTarget::Fixed(output_view),
-                    options,
-                    resources,
-                )
+                .partial_decode_into(&group, output_target, options, resources)
                 .await
         } else {
-            output_view
-                .fill(fill_value.as_ne_bytes())
-                .map_err(CodecError::from)
+            copy_fill_value_into(data_type, fill_value, output_target)
         };
     }
 
+    let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target else {
+        return Err(ExpectedOptionalBytesError.into());
+    };
     futures::stream::iter(groups)
         .map(|(subchunk_index, group)| async move {
             let bytes = if let Some(decoder) =

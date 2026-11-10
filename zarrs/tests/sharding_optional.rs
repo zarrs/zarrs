@@ -42,17 +42,13 @@ fn optional_innermost(data_type: &DataType) -> (&DataType, usize) {
 
 /// Build a decode target from views of the data and validity masks (outer to inner).
 fn nested_target<'a>(
-    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
-    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+    data_view: ArrayBytesFixedDisjointView<'a>,
+    mask_views: Vec<ArrayBytesFixedDisjointView<'a>>,
 ) -> ArrayBytesDecodeIntoTarget<'a> {
-    if let Some((mask_view, mask_views)) = mask_views.split_first_mut() {
-        ArrayBytesDecodeIntoTarget::Optional(
-            Box::new(nested_target(data_view, mask_views)),
-            mask_view,
-        )
-    } else {
-        ArrayBytesDecodeIntoTarget::Fixed(data_view)
-    }
+    mask_views.into_iter().rev().fold(
+        ArrayBytesDecodeIntoTarget::Fixed(data_view),
+        |inner, mask_view| ArrayBytesDecodeIntoTarget::Optional(Box::new(inner), mask_view),
+    )
 }
 
 /// Decode `$subset` of fixed length (optional) `$data_type` data with `$decode_into` into a new target.
@@ -66,7 +62,7 @@ macro_rules! decode_into_new {
         let mut masks = vec![vec![0u8; num_elements]; depth];
         {
             let subset = ArraySubset::new_with_shape(shape.clone());
-            let mut data_view = unsafe {
+            let data_view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     UnsafeCellSlice::new(&mut data),
                     data_type_size,
@@ -74,7 +70,7 @@ macro_rules! decode_into_new {
                     subset.clone(),
                 )?
             };
-            let mut mask_views = masks
+            let mask_views = masks
                 .iter_mut()
                 .map(|mask| unsafe {
                     ArrayBytesFixedDisjointView::new(
@@ -85,7 +81,7 @@ macro_rules! decode_into_new {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let $target = nested_target(&mut data_view, &mut mask_views);
+            let mut $target = nested_target(data_view, mask_views);
             $decode_into?;
         }
         masks
@@ -196,7 +192,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
     assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     if fixed {
         let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-            .partial_decode_into(&subset, target, &options, &Resources::default()));
+            .partial_decode_into(&subset, &mut target, &options, &Resources::default()));
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
     }
 
@@ -221,7 +217,7 @@ async fn sharding_optional_codec<T: ElementOwned + Clone + PartialEq + Debug>(
         assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         if fixed {
             let decoded = decode_into_new!(&data_type, subset, |target| partial_decoder
-                .partial_decode_into(&subset, target, &options, &Resources::default())
+                .partial_decode_into(&subset, &mut target, &options, &Resources::default())
                 .await);
             assert_eq!(T::from_array_bytes(&data_type, decoded)?, expected_subset);
         }

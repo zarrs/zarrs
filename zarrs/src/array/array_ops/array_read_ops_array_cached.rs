@@ -188,7 +188,7 @@ where
                 options,
                 resources,
             )?;
-            let mut data_view = unsafe {
+            let data_view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     data_slice,
                     data_type_size,
@@ -207,8 +207,8 @@ where
                     )
                 }?);
             }
-            let target = build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
-            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
+            let mut target = build_nested_optional_target(data_view, mask_views);
+            decode_into_array_bytes_target(&bytes, &mut target).map_err(ArrayError::CodecError)
         };
         chunks
             .indices()
@@ -231,7 +231,7 @@ where
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -249,7 +249,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -297,7 +297,7 @@ where
     pub fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_chunk_into_with_options(
@@ -339,7 +339,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_partial_chunk_into_with_options(
@@ -443,7 +443,7 @@ where
     pub fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::array_read_ops_common::retrieve_array_subset_into(

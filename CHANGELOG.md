@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` and `ArrayMutOps::set_metadata_erase_version()`
   - `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
+- **Breaking**: `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesDecodeIntoTarget`
 - **Breaking**: `[Async]ArrayWriteOps::erase_chunks` and `[Async]ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
   - *Behavioural change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
   - `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
@@ -127,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources; codecs bind to a data type and fill value at array creation; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources; codecs bind to a data type and fill value at array creation; decode targets own their views; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
 
 #### General
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries

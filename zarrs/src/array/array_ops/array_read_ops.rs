@@ -46,7 +46,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -107,7 +107,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -273,7 +273,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 

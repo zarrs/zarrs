@@ -871,7 +871,7 @@ pub fn update_array_bytes<'a>(
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     copy_fill_value_bytes_into(data_type, fill_value.as_ne_bytes(), output_target)
 }
@@ -879,7 +879,7 @@ pub fn copy_fill_value_into(
 fn copy_fill_value_bytes_into(
     data_type: &DataType,
     fill_value_bytes: &[u8],
-    output_target: ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
         (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target)) => {
@@ -892,7 +892,7 @@ fn copy_fill_value_bytes_into(
                 .into());
             }
             let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
-            copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, *data_target)?;
+            copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, data_target)?;
             mask_target.fill(&[mask_value])?;
             Ok(())
         }
@@ -928,7 +928,7 @@ fn copy_fill_value_bytes_into(
 /// Returns a [`CodecError`] if the bytes are incompatible with the target.
 pub fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
-    target: ArrayBytesDecodeIntoTarget<'_>,
+    target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     match (bytes, target) {
         // Fixed source → Fixed target
@@ -943,7 +943,7 @@ pub fn decode_into_array_bytes_target(
             ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
         ) => {
             // Recursively decode the inner data
-            decode_into_array_bytes_target(optional_bytes.data(), *data_target)?;
+            decode_into_array_bytes_target(optional_bytes.data(), data_target)?;
             // Decode the mask
             mask_target.copy_from_slice(optional_bytes.mask())?;
             Ok(())
