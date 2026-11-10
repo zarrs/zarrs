@@ -3,14 +3,13 @@ use std::sync::Arc;
 use zarrs_codec::{CowBytes, Resources};
 
 use futures::{StreamExt, TryStreamExt};
-use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::super::ArrayIndices;
 use super::super::array_bytes_internal::{
-    build_nested_optional_target, merge_chunks, optional_nesting_depth,
+    FixedDecodeBuffers, build_nested_optional_target, merge_chunks,
 };
 use super::super::concurrency::concurrency_chunks_and_codec;
-use super::super::{ArrayBytesFixedDisjointView, ArrayIndices};
-use super::async_array_read_ops_common::AsyncRetrieveInto;
+use super::async_array_read_ops_common::{AsyncRetrieveInto, retrieve_multi_chunk_fixed_into};
 use super::{
     Array, ArrayError, ArraySubsetTraits, AsyncArrayReadOps, AsyncReadableStorageTraits, ChunkGrid,
     CodecOptions, DataType, FromArrayBytes, Indexer, recommended_codec_concurrency,
@@ -564,89 +563,24 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let data_type_size = data_type
-            .fixed_size()
+        let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
             .expect("data_type must have fixed size");
-        let num_elements = array_subset.num_elements_usize();
-        let size_output = num_elements * data_type_size;
-        let nesting_depth = optional_nesting_depth(data_type);
-        let mut data_output = Vec::with_capacity(size_output);
-        let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
-            .map(|_| Vec::with_capacity(num_elements))
-            .collect();
-
         {
-            let data_output_slice = UnsafeCellSlice::new(data_output.spare_capacity_mut());
-            let mask_output_slices: Vec<_> = mask_outputs
-                .iter_mut()
-                .map(|mask| UnsafeCellSlice::new(mask.spare_capacity_mut()))
-                .collect();
-            let mask_output_slices = mask_output_slices.as_slice();
-            let array_subset_start = array_subset.start();
-            let array_subset_shape = array_subset.shape();
-
-            let retrieve_chunk = |chunk_indices: ArrayIndices| {
-                let array_subset_start = &array_subset_start;
-                let array_subset_shape = &array_subset_shape;
-                async move {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    let chunk_subset_in_array =
-                        chunk_subset_overlap.relative_to(array_subset_start)?;
-
-                    let data_view = unsafe {
-                        // SAFETY: chunks represent disjoint array subsets
-                        ArrayBytesFixedDisjointView::new(
-                            data_output_slice,
-                            data_type_size,
-                            array_subset_shape,
-                            chunk_subset_in_array.clone(),
-                        )?
-                    };
-
-                    let mut mask_views = Vec::with_capacity(mask_output_slices.len());
-                    for mask_slice in mask_output_slices {
-                        mask_views.push(unsafe {
-                            // SAFETY: chunks represent disjoint array subsets
-                            ArrayBytesFixedDisjointView::new(
-                                *mask_slice,
-                                1,
-                                array_subset_shape,
-                                chunk_subset_in_array.clone(),
-                            )
-                        }?);
-                    }
-
-                    let mut target = build_nested_optional_target(data_view, mask_views);
-
-                    self.async_retrieve_partial_chunk_into_with_options(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        &mut target,
-                        options,
-                        resources,
-                    )
-                    .await?;
-                    Ok::<_, ArrayError>(())
-                }
-            };
-
-            futures::stream::iter(&chunks.indices())
-                .map(Ok)
-                .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
-                .await?;
+            let (data_view, mask_views) = buffers.views()?;
+            retrieve_multi_chunk_fixed_into(
+                self,
+                self,
+                array_subset,
+                chunks,
+                chunk_concurrent_limit,
+                &build_nested_optional_target(data_view, mask_views),
+                options,
+                resources,
+            )
+            .await?;
         }
-
-        unsafe { data_output.set_len(size_output) };
-        for mask in &mut mask_outputs {
-            unsafe { mask.set_len(num_elements) };
-        }
-
-        let mut array_bytes = ArrayBytes::new_flen(data_output);
-        for mask in mask_outputs.into_iter().rev() {
-            array_bytes = array_bytes.with_optional_mask(mask);
-        }
-        Ok(array_bytes)
+        // SAFETY: the chunks cover the array subset, so every element has been written
+        Ok(unsafe { buffers.into_array_bytes() })
     }
 }
 

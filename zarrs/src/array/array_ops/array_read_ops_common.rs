@@ -1,5 +1,8 @@
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
+use crate::array::{
+    ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits,
+    IncompatibleDimensionalityError, Indexer,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -116,7 +119,7 @@ where
 }
 
 #[expect(clippy::too_many_arguments)]
-fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
+pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
@@ -139,21 +142,14 @@ where
         + MaybeSync,
 {
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
-    let parent_start = data_view_ref.subset().start().to_vec();
+    let array_subset_start = array_subset.start();
+    let output_start = data_view_ref.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset.start())?;
-
-        let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
-            .start()
-            .iter()
-            .zip(&parent_start)
-            .map(|(&c, &p)| c + p)
-            .collect();
         let chunk_subset_in_view =
-            ArraySubset::new_with_start_shape(chunk_start_in_view, chunk_subset_in_array.shape())?;
+            subset_in_output(&chunk_subset_overlap, &array_subset_start, output_start)?;
 
         let data_sub = unsafe {
             // SAFETY: chunks represent disjoint array subsets.
@@ -185,4 +181,28 @@ where
         .try_for_each(retrieve_chunk)?;
 
     Ok(())
+}
+
+/// Translate `subset`, which lies within an array subset starting at `array_subset_start`, to an output starting at `output_start`.
+///
+/// Equivalent to `subset.relative_to(array_subset_start)?.offset(output_start)` without the intermediate subset, which is measurable when reading many small chunks.
+pub(super) fn subset_in_output(
+    subset: &ArraySubset,
+    array_subset_start: &[u64],
+    output_start: &[u64],
+) -> Result<ArraySubset, ArrayError> {
+    for start in [array_subset_start, output_start] {
+        if start.len() != subset.dimensionality() {
+            return Err(
+                IncompatibleDimensionalityError::new(start.len(), subset.dimensionality()).into(),
+            );
+        }
+    }
+    let start: Vec<u64> = std::iter::zip(
+        subset.start(),
+        std::iter::zip(array_subset_start, output_start),
+    )
+    .map(|(&start, (&array_start, &output_start))| start - array_start + output_start)
+    .collect();
+    Ok(ArraySubset::new_with_start_shape(start, subset.shape())?)
 }
