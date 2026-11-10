@@ -575,66 +575,96 @@ mod tests {
         }
     }
 
-    /// `pack` and `unpack` match packing a bit at a time, for both byte orders and bit orders.
-    #[test]
+    /// `pack` and `unpack` match packing a bit at a time.
     #[expect(clippy::cast_possible_truncation)]
-    fn pack_unpack_reference() {
-        let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
-        for (endianness, bit_order) in itertools::iproduct!(
-            [Endianness::Little, Endianness::Big],
-            [PackBitsBitOrder::LsbFirst, PackBitsBitOrder::MsbFirst]
-        ) {
-            for component_size_bits in [1u32, 2, 4, 6, 8, 12, 16, 32, 64] {
-                for _ in 0..50 {
-                    let first_bit = rng.range(0..u64::from(component_size_bits)) as u32;
-                    let last_bit =
-                        rng.range(u64::from(first_bit)..u64::from(component_size_bits)) as u32;
-                    let layout = PackBitsLayout {
-                        component_size_bytes: component_size_bits.div_ceil(8) as usize,
-                        first_bit,
-                        last_bit,
-                        sign_extension: rng.next().is_multiple_of(2),
-                        endianness,
-                        bit_order,
-                    };
-                    // Span several blocks of `unpack`
-                    let max_components = 3 * 8 * 1024 / u64::from(layout.packed_bits());
-                    let num_components = rng.range(0..max_components) as usize;
-                    let decoded = rng.bytes(num_components * layout.component_size_bytes);
+    fn pack_unpack_reference(endianness: Endianness, bit_order: PackBitsBitOrder, seed: u64) {
+        let mut rng = Rng(seed);
+        for component_size_bits in [1u32, 2, 4, 6, 8, 12, 16, 32, 64] {
+            for _ in 0..50 {
+                let first_bit = rng.range(0..u64::from(component_size_bits)) as u32;
+                let last_bit =
+                    rng.range(u64::from(first_bit)..u64::from(component_size_bits)) as u32;
+                let layout = PackBitsLayout {
+                    component_size_bytes: component_size_bits.div_ceil(8) as usize,
+                    first_bit,
+                    last_bit,
+                    sign_extension: rng.next().is_multiple_of(2),
+                    endianness,
+                    bit_order,
+                };
+                // Span several blocks of `unpack`
+                let max_components = 3 * 8 * 1024 / u64::from(layout.packed_bits());
+                let num_components = rng.range(0..max_components) as usize;
+                let decoded = rng.bytes(num_components * layout.component_size_bytes);
 
-                    let packed = reference_pack(layout, &decoded);
-                    let packed_out = with_output(packed.len(), |out| pack(layout, &decoded, out));
-                    assert_eq!(packed_out, packed, "{layout:?}");
+                let packed = reference_pack(layout, &decoded);
+                let packed_out = with_output(packed.len(), |out| pack(layout, &decoded, out));
+                assert_eq!(packed_out, packed, "{layout:?}");
 
+                let decoded_out = with_output(decoded.len(), |out| unpack(layout, &packed, 0, out));
+                assert_eq!(
+                    decoded_out,
+                    reference_unpack(layout, &packed, 0, num_components),
+                    "{layout:?}"
+                );
+
+                // Unpack a subset from the bytes holding it
+                if num_components > 0 {
+                    let packed_bits = layout.packed_bits() as usize;
+                    let start = rng.range(0..num_components as u64) as usize;
+                    let end = rng.range(start as u64 + 1..num_components as u64 + 1) as usize;
+                    let bit_start = start * packed_bits;
+                    let bit_end = end * packed_bits;
+                    let packed_subset = &packed[bit_start / 8..bit_end.div_ceil(8)];
                     let decoded_out =
-                        with_output(decoded.len(), |out| unpack(layout, &packed, 0, out));
+                        with_output((end - start) * layout.component_size_bytes, |out| {
+                            unpack(layout, packed_subset, (bit_start % 8) as u8, out);
+                        });
                     assert_eq!(
                         decoded_out,
-                        reference_unpack(layout, &packed, 0, num_components),
+                        reference_unpack(layout, &packed, bit_start, end - start),
                         "{layout:?}"
                     );
-
-                    // Unpack a subset from the bytes holding it
-                    if num_components > 0 {
-                        let packed_bits = layout.packed_bits() as usize;
-                        let start = rng.range(0..num_components as u64) as usize;
-                        let end = rng.range(start as u64 + 1..num_components as u64 + 1) as usize;
-                        let bit_start = start * packed_bits;
-                        let bit_end = end * packed_bits;
-                        let packed_subset = &packed[bit_start / 8..bit_end.div_ceil(8)];
-                        let decoded_out =
-                            with_output((end - start) * layout.component_size_bytes, |out| {
-                                unpack(layout, packed_subset, (bit_start % 8) as u8, out);
-                            });
-                        assert_eq!(
-                            decoded_out,
-                            reference_unpack(layout, &packed, bit_start, end - start),
-                            "{layout:?}"
-                        );
-                    }
                 }
             }
         }
+    }
+
+    // Continue the original shared RNG stream so each test retains the same cases.
+    #[test]
+    fn pack_unpack_reference_little_lsb() {
+        pack_unpack_reference(
+            Endianness::Little,
+            PackBitsBitOrder::LsbFirst,
+            0x9E37_79B9_7F4A_7C15,
+        );
+    }
+
+    #[test]
+    fn pack_unpack_reference_little_msb() {
+        pack_unpack_reference(
+            Endianness::Little,
+            PackBitsBitOrder::MsbFirst,
+            0x73C6_949C_10FB_48AD,
+        );
+    }
+
+    #[test]
+    fn pack_unpack_reference_big_lsb() {
+        pack_unpack_reference(
+            Endianness::Big,
+            PackBitsBitOrder::LsbFirst,
+            0x7193_C584_52AE_2067,
+        );
+    }
+
+    #[test]
+    fn pack_unpack_reference_big_msb() {
+        pack_unpack_reference(
+            Endianness::Big,
+            PackBitsBitOrder::MsbFirst,
+            0xB7F2_5492_2559_B143,
+        );
     }
 
     /// `unpack` reads components that straddle the blocks it reverses, from any bit offset.
