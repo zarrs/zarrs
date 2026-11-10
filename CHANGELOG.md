@@ -197,11 +197,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix index endianness handling to use the actual index data type rather than `uint64`
 - Return an error rather than panicking if the encoded index length exceeds the chunk length
 
+#### `zstd`
+- Reuse per-thread compression and bulk decompression contexts
+  - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
+- Use bulk decompression bounds on WebAssembly when available
+- Cap the decompression buffer by the decoded size rather than the content size claimed by a frame header
+
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
-- `zstd`: Reuse per-thread compression and bulk decompression contexts
-  - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
 - `transpose`: Support optional data types, permuting values and validity masks together
 - `reshape`: Remove warnings now that the codec is stable

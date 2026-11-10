@@ -204,15 +204,23 @@ impl BytesToBytesCodecTraits for ZstdCodec {
     fn decode<'a>(
         &self,
         encoded_value: CowBytes<'a>,
-        _decoded_representation: &BytesRepresentation,
+        decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
+        // The frame header bound is untrusted, so cap it by the known decoded size
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
-        if let Some(upper_bound) = upper_bound {
+        let decoded_size = decoded_representation
+            .size()
+            .and_then(|size| usize::try_from(size).ok());
+        let capacity = match (upper_bound, decoded_size) {
+            (Some(upper_bound), Some(decoded_size)) => Some(upper_bound.min(decoded_size)),
+            (upper_bound, decoded_size) => upper_bound.or(decoded_size),
+        };
+        if let Some(capacity) = capacity {
             // Bulk decompression
             let result = with_decompressor(|decompressor| {
-                decompressor.decompress(&encoded_value, upper_bound)
+                decompressor.decompress(&encoded_value, capacity)
             })?;
             Ok(CowBytes::from(result))
         } else {
