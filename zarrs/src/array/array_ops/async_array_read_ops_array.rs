@@ -5,9 +5,7 @@ use zarrs_codec::{CowBytes, Resources};
 use futures::{StreamExt, TryStreamExt};
 
 use super::super::ArrayIndices;
-use super::super::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, merge_chunks,
-};
+use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::async_array_read_ops_common::{AsyncRetrieveInto, retrieve_multi_chunk_fixed_into};
 use super::{
@@ -565,20 +563,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
             .expect("data_type must have fixed size");
-        {
-            let (data_view, mask_views) = buffers.views()?;
-            retrieve_multi_chunk_fixed_into(
-                self,
-                self,
-                array_subset,
-                chunks,
-                chunk_concurrent_limit,
-                &build_nested_optional_target(data_view, mask_views),
-                options,
-                resources,
-            )
-            .await?;
-        }
+        retrieve_multi_chunk_fixed_into(
+            self,
+            self,
+            array_subset,
+            chunks,
+            chunk_concurrent_limit,
+            &buffers.target()?,
+            options,
+            resources,
+        )
+        .await?;
         // SAFETY: the chunks cover the array subset, so every element has been written
         Ok(unsafe { buffers.into_array_bytes() })
     }

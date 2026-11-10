@@ -104,21 +104,248 @@ pub enum ArrayBytesDecodeIntoTarget<'a> {
 
     /// Target for optional data (nested data target + mask view).
     ///
-    /// The mask is always fixed-length (one byte per element).
-    Optional(
-        Box<ArrayBytesDecodeIntoTarget<'a>>,
-        ArrayBytesFixedDisjointView<'a>,
-    ),
+    /// Created with [`with_optional_mask`](ArrayBytesDecodeIntoTarget::with_optional_mask), which validates the mask against the data.
+    Optional(ArrayBytesDecodeIntoTargetOptional<'a>),
 }
 
-impl ArrayBytesDecodeIntoTarget<'_> {
+/// An optional decode target composed of a data target and a validity mask view.
+///
+/// The fields are private so that the mask always covers the same elements as the data.
+pub struct ArrayBytesDecodeIntoTargetOptional<'a> {
+    data: Box<ArrayBytesDecodeIntoTarget<'a>>,
+    mask: ArrayBytesFixedDisjointView<'a>,
+}
+
+impl<'a> ArrayBytesDecodeIntoTargetOptional<'a> {
+    /// Return the target for the inner data.
+    #[must_use]
+    pub fn data(&self) -> &ArrayBytesDecodeIntoTarget<'a> {
+        &self.data
+    }
+
+    /// Return the validity mask view, with one byte per element.
+    #[must_use]
+    pub fn mask(&self) -> &ArrayBytesFixedDisjointView<'a> {
+        &self.mask
+    }
+
+    /// Consume self and return the data target and mask view.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        Box<ArrayBytesDecodeIntoTarget<'a>>,
+        ArrayBytesFixedDisjointView<'a>,
+    ) {
+        (self.data, self.mask)
+    }
+}
+
+impl<'a> ArrayBytesDecodeIntoTarget<'a> {
+    /// Wrap the target in an [`Optional`](Self::Optional) layer with `mask` as its validity mask.
+    ///
+    /// The target becomes the inner data and `mask` the outermost mask, like [`ArrayBytes::with_optional_mask`].
+    ///
+    /// # Errors
+    /// Returns a [`WithOptionalMaskError`] holding the target and `mask` unless `mask` has one byte per element and views an array with the same shape and [`subset`](Self::subset) as the target.
+    /// Map it to an [`IncompatibleOptionalMaskError`] with `From` to discard the inputs, e.g. to propagate it as a `Box<dyn Error>`.
+    pub fn with_optional_mask(
+        self,
+        mask: ArrayBytesFixedDisjointView<'a>,
+    ) -> Result<Self, WithOptionalMaskError<'a>> {
+        if let Err(error) = self.validate_optional_mask(&mask) {
+            return Err(WithOptionalMaskError::new(error, self, mask));
+        }
+        Ok(self.wrap_optional_mask(mask))
+    }
+
+    /// Wrap the target in one [`Optional`](Self::Optional) layer per mask, with `masks` ordered from outermost to innermost.
+    ///
+    /// # Errors
+    /// Returns a [`WithOptionalMaskError`] holding the target and `masks` if any mask is incompatible, see [`with_optional_mask`](Self::with_optional_mask).
+    pub fn with_optional_masks(
+        self,
+        masks: impl IntoIterator<Item = ArrayBytesFixedDisjointView<'a>>,
+    ) -> Result<Self, WithOptionalMaskError<'a, Vec<ArrayBytesFixedDisjointView<'a>>>> {
+        let masks: Vec<_> = masks.into_iter().collect();
+        // Wrapping does not change the innermost data, so every mask can be validated up front
+        if let Err(error) = masks
+            .iter()
+            .try_for_each(|mask| self.validate_optional_mask(mask))
+        {
+            return Err(WithOptionalMaskError::new(error, self, masks));
+        }
+        Ok(masks.into_iter().rev().fold(self, Self::wrap_optional_mask))
+    }
+
+    /// Check that `mask` is a valid validity mask for the innermost data of the target.
+    fn validate_optional_mask(
+        &self,
+        mask: &ArrayBytesFixedDisjointView<'a>,
+    ) -> Result<(), IncompatibleOptionalMaskError> {
+        let data = self.data_view();
+        if mask.data_type_size() != 1 {
+            return Err(IncompatibleOptionalMaskError::ElementSize(
+                mask.data_type_size(),
+            ));
+        }
+        if mask.shape() != data.shape() {
+            return Err(IncompatibleOptionalMaskError::ArrayShape {
+                mask: mask.shape().to_vec(),
+                data: data.shape().to_vec(),
+            });
+        }
+        if mask.subset() != data.subset() {
+            return Err(IncompatibleOptionalMaskError::Subset {
+                mask: Box::new(mask.subset().clone()),
+                data: Box::new(data.subset().clone()),
+            });
+        }
+        Ok(())
+    }
+
+    /// Wrap the target in an [`Optional`](Self::Optional) layer with a validated `mask`.
+    fn wrap_optional_mask(self, mask: ArrayBytesFixedDisjointView<'a>) -> Self {
+        Self::Optional(ArrayBytesDecodeIntoTargetOptional {
+            data: Box::new(self),
+            mask,
+        })
+    }
+
+    /// Return the innermost data view.
+    fn data_view(&self) -> &ArrayBytesFixedDisjointView<'a> {
+        match self {
+            Self::Fixed(data) => data,
+            Self::Optional(optional) => optional.data.data_view(),
+        }
+    }
+
+    /// Return the subset of the array covered by the target.
+    #[must_use]
+    pub fn subset(&self) -> &ArraySubset {
+        self.data_view().subset()
+    }
+
+    /// Create a target with the same structure as this target that covers `subset` of the same array.
+    ///
+    /// An empty `subset` references no elements, so it is accepted irrespective of its start.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the [`subset`](Self::subset) of the target.
+    ///
+    /// # Safety
+    /// The `subset` must not overlap with the `subset` of any other created targets or views that reference the same array bytes.
+    pub unsafe fn subdivide(&self, subset: ArraySubset) -> Result<Self, CodecError> {
+        match self {
+            Self::Fixed(data) => Ok(Self::Fixed(unsafe { data.subdivide(subset) }?)),
+            Self::Optional(optional) => {
+                let mask = unsafe { optional.mask.subdivide(subset.clone()) }?;
+                Ok(Self::Optional(ArrayBytesDecodeIntoTargetOptional {
+                    data: Box::new(unsafe { optional.data.subdivide(subset) }?),
+                    mask,
+                }))
+            }
+        }
+    }
+
     /// Return the number of elements in the target.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        match self {
-            Self::Fixed(data) => data.num_elements(),
-            Self::Optional(data, _) => data.num_elements(),
-        }
+        self.data_view().num_elements()
+    }
+}
+
+/// A validity mask view is incompatible with the data of an [`ArrayBytesDecodeIntoTarget`].
+#[derive(Clone, Debug, Display, Error)]
+pub enum IncompatibleOptionalMaskError {
+    /// The mask does not have one byte per element.
+    #[display("the optional mask has {_0} bytes per element, expected 1")]
+    ElementSize(usize),
+    /// The mask and data view arrays with different shapes.
+    #[display(
+        "the optional mask array shape {mask:?} does not match the data array shape {data:?}"
+    )]
+    ArrayShape {
+        /// The shape of the mask array.
+        mask: ArrayShape,
+        /// The shape of the data array.
+        data: ArrayShape,
+    },
+    /// The mask and data cover different subsets.
+    #[display("the optional mask subset {mask} does not match the data subset {data}")]
+    Subset {
+        /// The subset of the mask.
+        mask: Box<ArraySubset>,
+        /// The subset of the data.
+        data: Box<ArraySubset>,
+    },
+}
+
+/// The error returned by [`ArrayBytesDecodeIntoTarget::with_optional_mask`] and [`with_optional_masks`](ArrayBytesDecodeIntoTarget::with_optional_masks), holding the target and mask(s) that were passed in.
+pub struct WithOptionalMaskError<'a, M = ArrayBytesFixedDisjointView<'a>>(
+    Box<WithOptionalMaskErrorInner<'a, M>>,
+);
+
+/// Boxed to keep the error small.
+struct WithOptionalMaskErrorInner<'a, M> {
+    error: IncompatibleOptionalMaskError,
+    target: ArrayBytesDecodeIntoTarget<'a>,
+    masks: M,
+}
+
+impl<'a, M> WithOptionalMaskError<'a, M> {
+    fn new(
+        error: IncompatibleOptionalMaskError,
+        target: ArrayBytesDecodeIntoTarget<'a>,
+        masks: M,
+    ) -> Self {
+        Self(Box::new(WithOptionalMaskErrorInner {
+            error,
+            target,
+            masks,
+        }))
+    }
+}
+
+impl<'a, M> WithOptionalMaskError<'a, M> {
+    /// Return the reason the mask is incompatible.
+    #[must_use]
+    pub fn error(&self) -> &IncompatibleOptionalMaskError {
+        &self.0.error
+    }
+
+    /// Consume self and return the target and mask(s) that were passed in.
+    #[must_use]
+    pub fn into_parts(self) -> (ArrayBytesDecodeIntoTarget<'a>, M) {
+        (self.0.target, self.0.masks)
+    }
+}
+
+impl<M> std::fmt::Debug for WithOptionalMaskError<'_, M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WithOptionalMaskError")
+            .field("error", &self.0.error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<M> std::fmt::Display for WithOptionalMaskError<'_, M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0.error, f)
+    }
+}
+
+impl<M> std::error::Error for WithOptionalMaskError<'_, M> {}
+
+impl<M> From<WithOptionalMaskError<'_, M>> for IncompatibleOptionalMaskError {
+    fn from(error: WithOptionalMaskError<'_, M>) -> Self {
+        error.0.error
+    }
+}
+
+impl<M> From<WithOptionalMaskError<'_, M>> for CodecError {
+    fn from(error: WithOptionalMaskError<'_, M>) -> Self {
+        Self::IncompatibleOptionalMask(error.0.error)
     }
 }
 
@@ -677,6 +904,9 @@ pub enum CodecError {
     /// Subset out of bounds.
     #[error(transparent)]
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
+    /// An optional mask is incompatible with the data of a decode target.
+    #[error(transparent)]
+    IncompatibleOptionalMask(#[from] IncompatibleOptionalMaskError),
     /// Invalid byte offsets for variable length data.
     #[error(transparent)]
     ArrayBytesOffsetsCreate(#[from] ArrayBytesOffsetsCreateError),

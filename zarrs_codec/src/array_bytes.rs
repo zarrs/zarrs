@@ -157,6 +157,22 @@ impl<'a> ArrayBytes<'a> {
         Self::Optional(ArrayBytesOptional::new(self, mask))
     }
 
+    /// Wrap the array bytes in one optional layer per mask, with `masks` ordered from outermost to innermost.
+    ///
+    /// Like [`ArrayBytesDecodeIntoTarget::with_optional_masks`](crate::ArrayBytesDecodeIntoTarget::with_optional_masks).
+    #[must_use]
+    pub fn with_optional_masks<I>(self, masks: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<CowBytes<'a>>,
+        I::IntoIter: DoubleEndedIterator,
+    {
+        masks
+            .into_iter()
+            .rev()
+            .fold(self, |bytes, mask| bytes.with_optional_mask(mask))
+    }
+
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
     ///
     /// # Errors
@@ -852,22 +868,16 @@ pub fn update_array_bytes<'a>(
     }
 }
 
-/// Decode the fill value into a subset of a preallocated output.
+/// Decode the fill value into a preallocated output target.
 ///
 /// This method is intended for internal use by Array.
 /// Supports fixed length data types, including nested optional types with fixed length data.
 ///
 /// # Errors
-/// Returns [`CodecError::ExpectedFixedLengthBytes`] for variable-sized data.
-///
-/// # Panics
-/// Panics if the number of elements in a target exceeds [`usize::MAX`].
-///
-/// # Safety
-/// The caller must ensure that:
-///  - `data_type` and `fill_value` are compatible,
-///  - `output` holds enough space for the preallocated bytes of an array with `output_shape` and `data_type`, and
-///  - `output_subset` is within the bounds of `output_shape`.
+/// Returns a [`CodecError`] if
+///  - `data_type` is variable-sized,
+///  - the structure of `output_target` does not match `data_type` (one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level), or
+///  - `fill_value` is incompatible with `data_type`.
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
@@ -882,24 +892,16 @@ fn copy_fill_value_bytes_into(
     output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type.as_optional(), output_target) {
-        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target)) => {
-            let num_elements = data_target.num_elements();
-            if mask_target.num_elements() != num_elements {
-                return Err(InvalidBytesLengthError::new(
-                    usize::try_from(num_elements).unwrap(),
-                    usize::try_from(mask_target.num_elements()).unwrap(),
-                )
-                .into());
-            }
+        (Some(opt), ArrayBytesDecodeIntoTarget::Optional(optional_target)) => {
             let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
-            copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, data_target)?;
-            mask_target.fill(&[mask_value])?;
+            copy_fill_value_bytes_into(opt.data_type(), &inner_bytes, &mut optional_target.data)?;
+            optional_target.mask.fill(&[mask_value])?;
             Ok(())
         }
         (Some(_), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
             Err(ExpectedFixedLengthBytesError.into())
         }
-        (None, ArrayBytesDecodeIntoTarget::Optional(..)) => {
+        (None, ArrayBytesDecodeIntoTarget::Optional(_)) => {
             if data_type.is_fixed() {
                 Err(ExpectedOptionalBytesError.into())
             } else {
@@ -940,18 +942,20 @@ pub fn decode_into_array_bytes_target(
         // Optional source → Optional target (recursive)
         (
             ArrayBytes::Optional(optional_bytes),
-            ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
+            ArrayBytesDecodeIntoTarget::Optional(optional_target),
         ) => {
             // Recursively decode the inner data
-            decode_into_array_bytes_target(optional_bytes.data(), data_target)?;
+            decode_into_array_bytes_target(optional_bytes.data(), &mut optional_target.data)?;
             // Decode the mask
-            mask_target.copy_from_slice(optional_bytes.mask())?;
+            optional_target
+                .mask
+                .copy_from_slice(optional_bytes.mask())?;
             Ok(())
         }
 
         // Type mismatches
         (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
-        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(..)) => {
+        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
         }
         (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {

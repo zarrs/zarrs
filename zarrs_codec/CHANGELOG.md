@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `validate_chunk_{element_indices,subset}`
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
+- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,subset,subdivide}` to build and subdivide targets without depending on their structure
+  - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and matches the array shape and subset of the data
+- Add `ArrayBytesFixedDisjointView::data_type_size`
+- Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesDecodeIntoTarget::with_optional_masks`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(TStorage: *StorageTraits, StoreKey)`
 - Implement `From<CowBytes>` for `ArrayBytes`
@@ -58,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayBytesFixedDisjointView::new` takes `impl Into<UnsafeCellSlice<MaybeUninit<u8>>>` so views can cover uninitialised memory (e.g. `Vec::spare_capacity_mut()`), and `UnsafeCellSlice<u8>` arguments still work
   - Views never write uninitialised bytes
 - **Breaking**: `ArrayBytesDecodeIntoTarget` variants own their `ArrayBytesFixedDisjointView`s rather than borrowing them, and `From<ArrayBytesFixedDisjointView>` replaces `From<&mut ArrayBytesFixedDisjointView>`
+  - `ArrayBytesDecodeIntoTarget::Optional` holds the new `ArrayBytesDecodeIntoTargetOptional`, which can only be created with `with_optional_mask` and has read-only `data`/`mask` accessors and `into_parts`
   - `ArrayToBytesCodecTraits::decode_into`, `[Async]ArrayPartialDecoderTraits::partial_decode_into`, `copy_fill_value_into`, and `decode_into_array_bytes_target` take `&mut ArrayBytesDecodeIntoTarget`, so targets are not moved through each layer of decoding
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
@@ -66,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Improve performance
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
-  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once on first use, avoiding redundant allocations when creating and subdividing views
+  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` when used, without allocating, rather than when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 - Bump `zarrs_metadata` to 0.7.6, `itertools` to 0.15.0, and `unsafe_cell_slice` to 0.2.4

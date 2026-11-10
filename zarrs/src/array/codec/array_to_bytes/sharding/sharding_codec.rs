@@ -22,9 +22,7 @@ use super::{
     sharding_index_shape, sharding_partial_encoder, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::array_bytes_internal::{
-    FixedDecodeBuffers, build_nested_optional_target, extract_target_views, merge_chunks,
-};
+use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::chunk_grid::{
     ChunkEdgeLengths, RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid,
@@ -485,16 +483,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             return Ok(ArrayBytes::new_flen(vec![]));
         }
         if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {
-            {
-                let (data_view, mask_views) = buffers.views()?;
-                self.decode_into(
-                    encoded_shard,
-                    shape,
-                    &mut build_nested_optional_target(data_view, mask_views),
-                    options,
-                    resources,
-                )?;
-            }
+            self.decode_into(
+                encoded_shard,
+                shape,
+                &mut buffers.target()?,
+                options,
+                resources,
+            )?;
             // SAFETY: every element of the output (and masks) is written by `decode_into`
             return Ok(unsafe { buffers.into_array_bytes() });
         }
@@ -673,8 +668,6 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let data_type = self.data_type();
         let fill_value = &self.fill_value;
 
-        // Optional data is decoded into views of its inner data and each validity mask
-        let (output_view, mask_views) = extract_target_views(output_target);
         let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
         let num_chunks = chunks_per_shard
             .iter()
@@ -698,32 +691,14 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         );
 
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
+        let output_start = output_target.subset().start();
         let decode_chunk = |chunk_index: usize| {
             let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
-            let output_subset_chunk = ArraySubset::new_with_start_shape(
-                std::iter::zip(
-                    output_view.subset().start().iter(),
-                    chunk_subset.start().iter(),
-                )
-                .map(|(o, s)| o + s)
-                .collect::<Vec<_>>(),
-                chunk_subset.shape(),
-            )
-            .unwrap();
-            let output_view_subchunk = unsafe {
-                // SAFETY: subchunks represent disjoint array subsets
-                output_view.subdivide(output_subset_chunk.clone())?
-            };
-            let mut mask_views_subchunk = Vec::with_capacity(mask_views.len());
-            for mask_view in &mask_views {
-                mask_views_subchunk.push(unsafe {
-                    // SAFETY: subchunks represent disjoint array subsets
-                    mask_view.subdivide(output_subset_chunk.clone())
-                }?);
-            }
+            let output_subset_chunk = chunk_subset.offset(output_start)?;
+            // SAFETY: subchunks represent disjoint array subsets
             let mut output_target_subchunk =
-                build_nested_optional_target(output_view_subchunk, mask_views_subchunk);
+                unsafe { output_target.subdivide(output_subset_chunk) }?;
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];

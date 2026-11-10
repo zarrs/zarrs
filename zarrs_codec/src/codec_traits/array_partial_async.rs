@@ -110,13 +110,12 @@ pub trait AsyncArrayPartialDecoderTraits:
     /// This method is intended for internal use by Array.
     /// It currently only works for fixed length data types.
     ///
-    /// The `indexer` shape and dimensionality does not need to match `output_subset`, but the number of elements must match.
+    /// The `indexer` shape and dimensionality does not need to match `output_target`, but the number of elements must match.
     /// Extracted elements from the `indexer` are written as ordered by the indexer.
     /// For an [`ArraySubset`](zarrs_chunk_grid::ArraySubset), that is C order.
     ///
     /// # Errors
-    /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_view`,
-    #[allow(clippy::missing_safety_doc)]
+    /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_target`.
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
