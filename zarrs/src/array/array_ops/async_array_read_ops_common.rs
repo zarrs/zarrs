@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
+use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubsetTraits, Indexer};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
     copy_fill_value_into,
@@ -9,6 +9,7 @@ use zarrs_storage::MaybeSync;
 
 use super::super::array_bytes_internal::{build_nested_optional_target, extract_target_views};
 use super::super::concurrency::concurrency_chunks_and_codec;
+use super::array_read_ops_common::subset_in_output;
 use super::recommended_codec_concurrency;
 
 /// Chunk level `_into` retrieval, as used by [`retrieve_array_subset_into`].
@@ -145,28 +146,17 @@ where
     R: AsyncRetrieveInto + ?Sized,
 {
     let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
-    let parent_start = data_view_ref.subset().start().to_vec();
     let array_subset_start = array_subset.start();
+    let output_start = data_view_ref.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let array_subset_start = &array_subset_start;
-        let parent_start = &parent_start;
         let mask_view_refs = &mask_view_refs;
         async move {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
-
-            let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
-                .start()
-                .iter()
-                .zip(parent_start.iter())
-                .map(|(&c, &p)| c + p)
-                .collect();
-            let chunk_subset_in_view = ArraySubset::new_with_start_shape(
-                chunk_start_in_view,
-                chunk_subset_in_array.shape(),
-            )?;
+            let chunk_subset_in_view =
+                subset_in_output(&chunk_subset_overlap, array_subset_start, output_start)?;
 
             let data_sub = unsafe {
                 // SAFETY: chunks represent disjoint array subsets
