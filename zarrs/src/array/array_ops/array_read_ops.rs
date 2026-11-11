@@ -43,6 +43,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match the chunk,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
+    ///
+    /// If an error is returned, `output_target` may have been partially written.
     fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
@@ -103,6 +105,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match `indexer`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
+    ///
+    /// If an error is returned, `output_target` may have been partially written.
     fn retrieve_partial_chunk_into(
         &self,
         chunk_indices: &[u64],
@@ -267,6 +271,8 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     ///  - the number of elements in `output_target` does not match `array_subset`,
     ///  - there is a codec decoding error, or
     ///  - an underlying store error.
+    ///
+    /// If an error is returned, `output_target` may have been partially written.
     ///
     /// # Panics
     /// Panics if the number of chunks intersecting `array_subset` exceeds `usize::MAX`.
