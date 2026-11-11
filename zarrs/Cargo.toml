@@ -185,6 +185,10 @@ name = "array_bytes_eq"
 harness = false
 
 [[bench]]
+name = "array_bytes_ops"
+harness = false
+
+[[bench]]
 name = "sharded_partial_read"
 harness = false
 required-features = ["filesystem"]
