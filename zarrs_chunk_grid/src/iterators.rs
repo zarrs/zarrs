@@ -197,6 +197,42 @@ mod tests {
         assert_eq!(iter.next_back(), None);
     }
 
+    /// Check skipping with `nth`, interleaved with stepping from the front and the back.
+    fn check_nth<I>(mut iter: I, expected: &[I::Item], mut random: impl FnMut(u64) -> u64)
+    where
+        I: DoubleEndedIterator + ExactSizeIterator,
+        I::Item: PartialEq + std::fmt::Debug,
+    {
+        let (mut front, mut back) = (0, expected.len());
+        while front < back {
+            match random(3) {
+                0 => {
+                    // Occasionally skip past the back
+                    let n = usize::try_from(random((back - front) as u64 + 2)).unwrap();
+                    let item = iter.nth(n);
+                    if front + n < back {
+                        assert_eq!(item.as_ref(), Some(&expected[front + n]));
+                        front += n + 1;
+                    } else {
+                        assert_eq!(item, None);
+                        front = back;
+                    }
+                }
+                1 => {
+                    assert_eq!(iter.next().as_ref(), Some(&expected[front]));
+                    front += 1;
+                }
+                _ => {
+                    back -= 1;
+                    assert_eq!(iter.next_back().as_ref(), Some(&expected[back]));
+                }
+            }
+            assert_eq!(iter.len(), back - front);
+        }
+        assert_eq!(iter.nth(1), None);
+        assert_eq!(iter.next_back(), None);
+    }
+
     /// Every iterator matches enumerating the elements of random subsets without an iterator.
     #[test]
     fn array_subset_iters_match_brute_force() {
@@ -273,6 +309,8 @@ mod tests {
                     .collect()
             };
             check_double_ended(contiguous.iter(), &expected_runs, || random(2) == 0);
+            check_nth(contiguous.iter(), &expected_runs, &mut random);
+            check_nth(contiguous.clone().into_iter(), &expected_runs, &mut random);
             assert_eq!(contiguous.into_iter().collect::<Vec<_>>(), expected_runs);
 
             let contiguous = region.contiguous_indices(&array_shape).unwrap();

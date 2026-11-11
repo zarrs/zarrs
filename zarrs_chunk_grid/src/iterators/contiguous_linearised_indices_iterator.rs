@@ -166,6 +166,13 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
                 Some((run, self.indices.contiguous_elements))
             }
 
+            /// Skips `n` runs without stepping through them.
+            #[inline]
+            fn nth(&mut self, n: usize) -> Option<Self::Item> {
+                self.odometer.skip(&self.indices.runs, n);
+                self.next()
+            }
+
             fn size_hint(&self) -> (usize, Option<usize>) {
                 self.odometer.size_hint()
             }

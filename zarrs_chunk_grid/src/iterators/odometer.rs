@@ -84,6 +84,45 @@ impl Odometer {
         true
     }
 
+    /// Remove the front `n` elements (or all remaining elements, if fewer).
+    ///
+    /// Like [`pop_front`](Self::pop_front), `n` is added to the position along the innermost dimension and carried into
+    /// outer dimensions, so positions are only divided along dimensions that wrap.
+    /// `step(dimension, from, to)` is called for each of the `dimensions` along which the position of the front element
+    /// changes, if any elements remain.
+    #[inline]
+    pub(crate) fn skip<D: GridDimension>(
+        &mut self,
+        dimensions: &[D],
+        n: usize,
+        mut step: impl FnMut(&D, u64, u64),
+    ) {
+        let start = self.range.start.saturating_add(n).min(self.range.end);
+        let mut carry = (start - self.range.start) as u64;
+        self.range.start = start;
+        if self.range.is_empty() {
+            return;
+        }
+        for (position, dimension) in std::iter::zip(&mut self.positions, dimensions).rev() {
+            if carry == 0 {
+                break;
+            }
+            let count = dimension.count();
+            // The steps until the position wraps to zero, which is positive since a position is less than its count
+            let remaining = count - *position;
+            let from = *position;
+            if carry < remaining {
+                *position += carry;
+                carry = 0;
+            } else {
+                let excess = carry - remaining;
+                *position = excess % count;
+                carry = 1 + excess / count;
+            }
+            step(dimension, from, *position);
+        }
+    }
+
     /// Remove the back element, returning its index in the grid.
     pub(crate) fn pop_back(&mut self) -> Option<u64> {
         self.range.next_back().map(|index| index as u64)

@@ -152,6 +152,19 @@ impl StridedOdometer {
             .then_some(linearised)
     }
 
+    /// Remove the front `n` positions (or all remaining positions, if fewer).
+    #[inline]
+    pub(crate) fn skip(&mut self, indices: &StridedIndices, n: usize) {
+        let front = &mut self.front;
+        self.odometer
+            .skip(&indices.dimensions, n, |dimension, from, to| {
+                // Wrapping, since the position may step backwards along this dimension and forwards along an outer one
+                *front = front
+                    .wrapping_add(to * dimension.stride)
+                    .wrapping_sub(from * dimension.stride);
+            });
+    }
+
     pub(crate) fn next_back(&mut self, indices: &StridedIndices) -> Option<u64> {
         let index = self.odometer.pop_back()?;
         Some(indices.at(index))
