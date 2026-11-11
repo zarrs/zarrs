@@ -29,7 +29,7 @@ impl ConfigurationSerialize for PackBitsCodecConfiguration {}
 /// {
 ///     "name": "packbits",
 ///     "configuration": {
-///        "padding_encoding": "start_byte"
+///        "padding_encoding": "first_byte"
 ///     }
 /// }
 /// ```
