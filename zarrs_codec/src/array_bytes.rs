@@ -9,6 +9,7 @@ use zarrs_data_type::{DataTypeFillValueError, OptionalDataType};
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_ranges_concat};
 
+use crate::small_copy::with_small_len;
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
     FillValue, Indexer, IndexerError, InvalidBytesLengthError,
@@ -439,17 +440,13 @@ fn extract_elements(
         // The selected bytes are within `bytes`, so neither their offsets nor their total size overflow
         let mut out =
             Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
-        for (index, elements) in &runs {
-            let range = index * element_size..(index + elements) * element_size;
-            let run = usize::try_from(range.start)
-                .ok()
-                .zip(usize::try_from(range.end).ok())
-                .and_then(|(start, end)| bytes.get(start..end))
-                .ok_or_else(|| {
-                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64)
-                })?;
-            out.extend_from_slice(run);
-        }
+        let run_len = usize::try_from(runs.contiguous_elements() * element_size).unwrap();
+        with_small_len!(run_len, |run_len| {
+            for (index, _) in &runs {
+                let start = usize::try_from(index * element_size).unwrap();
+                out.extend_from_slice(&bytes[start..start + run_len]);
+            }
+        });
         out
     } else {
         let byte_ranges = indexer

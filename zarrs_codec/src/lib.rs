@@ -10,6 +10,7 @@
 mod codec_specific_options;
 mod options;
 mod resources;
+mod small_copy;
 pub use codec_specific_options::CodecSpecificOptions;
 pub use resources::{ComputeResources, Resources};
 
