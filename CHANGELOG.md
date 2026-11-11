@@ -145,6 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
 - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
+- Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Re-export `ArrayBytesDecodeIntoTargetOptional`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
 - Partial encoding

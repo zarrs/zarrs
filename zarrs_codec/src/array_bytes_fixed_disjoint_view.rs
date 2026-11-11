@@ -2,7 +2,9 @@ use derive_more::derive::Display;
 use std::mem::MaybeUninit;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::iterators::ContiguousLinearisedIndices;
+use zarrs_chunk_grid::iterators::{
+    ContiguousLinearisedIndices, ContiguousLinearisedIndicesIterator,
+};
 use zarrs_chunk_grid::{ArraySubset, IndexerError};
 
 use crate::small_copy::{with_small_len, write_copy_of_slice};
@@ -276,17 +278,18 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if bytes.len() != positions.len() * size {
             return Err(InvalidBytesLengthError::new(bytes.len(), positions.len() * size).into());
         }
-        let element_index = self.element_index_fn();
+        let indices = self.contiguous_linearised_indices();
+        let mut element_indices = self.element_indices(&indices);
         if size == 0 {
             // Nothing to copy, but positions are still validated (`chunks_exact` rejects a size of 0)
             for &position in positions {
-                element_index(position)?;
+                element_indices.get(position)?;
             }
             return Ok(());
         }
         with_small_len!(size, |size| {
             for (&position, element) in std::iter::zip(positions, bytes.chunks_exact(size)) {
-                let index = element_index(position)?;
+                let index = element_indices.get(position)?;
                 // SAFETY: `index` is an element of the view, which is disjoint from other views.
                 write_copy_of_slice(unsafe { self.region_mut(index, size) }, element);
             }
@@ -311,11 +314,12 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if fill_value.len() != size {
             return Err(InvalidBytesLengthError::new(fill_value.len(), size).into());
         }
-        let element_index = self.element_index_fn();
+        let indices = self.contiguous_linearised_indices();
+        let mut element_indices = self.element_indices(&indices);
         with_small_len!(size, |size| {
             let fill_value = &fill_value[..size];
             for &position in positions {
-                let index = element_index(position)?;
+                let index = element_indices.get(position)?;
                 // SAFETY: `index` is an element of the view, which is disjoint from other views.
                 write_copy_of_slice(unsafe { self.region_mut(index, size) }, fill_value);
             }
@@ -323,43 +327,82 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         Ok(())
     }
 
-    /// Return a function mapping the `position` of an element in the view (in C order) to its element index in the underlying bytes.
-    ///
-    /// The contiguous regions of the view are computed once, rather than for each element.
-    fn element_index_fn(&self) -> impl Fn(usize) -> Result<u64, IndexerError> {
-        let num_elements = self.num_elements();
-        let indices = self.contiguous_linearised_indices();
-        // The start of the view if it is a single contiguous block
-        let contiguous_start = if indices.len() == 1 {
-            indices.iter().next().map(|(start, _)| start)
-        } else {
-            None
-        };
-        move |position| {
-            let position = position as u64;
-            if position >= num_elements {
-                return Err(IndexerError::new_oob(vec![position], vec![num_elements]));
-            }
-            let index = if let Some(start) = contiguous_start {
-                start + position
-            } else {
-                let mut remainder = position;
-                let mut stride = 1;
-                let mut index = 0;
-                for ((&start, &len), &dim) in std::iter::zip(
-                    std::iter::zip(self.subset.start(), self.subset.shape()),
-                    self.shape,
-                )
-                .rev()
-                {
-                    index += (start + remainder % len) * stride;
-                    remainder /= len;
-                    stride *= dim;
-                }
-                index
-            };
-            Ok(index)
+    /// Map the positions of elements in the view (in C order) to their element indices in the underlying bytes.
+    fn element_indices<'i>(&self, indices: &'i ContiguousLinearisedIndices) -> ElementIndices<'i> {
+        let mut regions = indices.iter();
+        let region_index = regions.next().map_or(0, |(index, _)| index);
+        ElementIndices {
+            indices,
+            regions,
+            num_elements: self.num_elements(),
+            contiguous_elements: indices.contiguous_elements(),
+            region: 0,
+            region_index,
         }
+    }
+}
+
+/// Maps the positions of elements in a view (in C order) to their element indices in the underlying bytes.
+///
+/// Positions in the current or next contiguous region of the view are mapped without division, so ascending positions are cheap.
+struct ElementIndices<'a> {
+    indices: &'a ContiguousLinearisedIndices,
+    /// The regions after the current region.
+    regions: ContiguousLinearisedIndicesIterator<'a>,
+    num_elements: u64,
+    contiguous_elements: u64,
+    /// The current region.
+    region: u64,
+    /// The element index of the first element of the current region.
+    region_index: u64,
+}
+
+impl ElementIndices<'_> {
+    /// Return the element index of the element at `position` in the view.
+    ///
+    /// # Errors
+    /// Returns [`IndexerError`] if `position` is out-of-bounds of the view.
+    fn get(&mut self, position: usize) -> Result<u64, IndexerError> {
+        let position = position as u64;
+        if position >= self.num_elements {
+            return Err(IndexerError::new_oob(
+                vec![position],
+                vec![self.num_elements],
+            ));
+        }
+        let mut offset = position.wrapping_sub(self.region * self.contiguous_elements);
+        if offset >= self.contiguous_elements {
+            if offset - self.contiguous_elements < self.contiguous_elements {
+                // The next region
+                self.region += 1;
+                offset -= self.contiguous_elements;
+                self.region_index = self.next_region(None);
+            } else {
+                let region = position / self.contiguous_elements;
+                let skip = if region > self.region {
+                    region - self.region - 1
+                } else {
+                    self.regions = self.indices.iter();
+                    region
+                };
+                self.region = region;
+                offset = position - region * self.contiguous_elements;
+                self.region_index = self.next_region(Some(usize::try_from(skip).unwrap()));
+            }
+        }
+        Ok(self.region_index + offset)
+    }
+
+    /// Skip `n` regions (if any), and return the element index of the first element of the region after them.
+    fn next_region(&mut self, n: Option<usize>) -> u64 {
+        // Stepping to the adjacent region is the common case, so it avoids the skip in `nth`
+        let region = match n {
+            None => self.regions.next(),
+            Some(n) => self.regions.nth(n),
+        };
+        region
+            .expect("a position within the view is within a region")
+            .0
     }
 }
 
@@ -542,6 +585,58 @@ mod tests {
                     assert_eq!(bytes, expected, "{size} {width} {rows:?}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn element_positions() {
+        let shape = [3, 4, 5];
+        let subset = ArraySubset::new_with_ranges(&[1..3, 0..3, 1..4]);
+        // The element index in `shape` of each position in `subset`, in C order
+        let element_index = |position: usize| {
+            let (i, j, k) = (position / 9, position / 3 % 3, position % 3);
+            ((1 + i) * 4 + j) * 5 + 1 + k
+        };
+        let dense: Vec<usize> = (0..18).collect();
+        for positions in [
+            dense.clone(),
+            dense.iter().copied().step_by(4).collect(),
+            dense.iter().copied().rev().collect(),
+            vec![17, 0, 5, 5, 6, 12, 1, 2, 3, 15],
+        ] {
+            let values: Vec<u8> = (0..=255u8).cycle().take(positions.len() * 2).collect();
+            let mut expected_copy = vec![0xa5; 60 * 2];
+            let mut expected_fill = expected_copy.clone();
+            for (i, &position) in positions.iter().enumerate() {
+                let offset = element_index(position) * 2;
+                expected_copy[offset..offset + 2].copy_from_slice(&values[i * 2..i * 2 + 2]);
+                expected_fill[offset..offset + 2].copy_from_slice(&[7, 9]);
+            }
+            let mut copied = vec![0xa5; 60 * 2];
+            let mut filled = copied.clone();
+            // SAFETY: these are the only views of each of the bytes.
+            unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut copied),
+                    2,
+                    &shape,
+                    subset.clone(),
+                )
+                .unwrap()
+                .copy_elements_from_slice(&positions, &values)
+                .unwrap();
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut filled),
+                    2,
+                    &shape,
+                    subset.clone(),
+                )
+                .unwrap()
+                .fill_elements(&positions, &[7, 9])
+                .unwrap();
+            }
+            assert_eq!(copied, expected_copy, "{positions:?}");
+            assert_eq!(filled, expected_fill, "{positions:?}");
         }
     }
 
