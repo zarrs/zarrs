@@ -93,6 +93,81 @@ impl StridedIndices {
         }
     }
 
+    /// No positions.
+    pub(crate) fn empty() -> Self {
+        Self {
+            num_elements: 0,
+            first: 0,
+            dimensions: TinyVec::new(),
+        }
+    }
+
+    /// The linearised indices of a grid of positions from `first`, with the `(count, stride)` of each dimension given
+    /// innermost first.
+    ///
+    /// Dimensions with one position are dropped and adjacent contiguous dimensions are coalesced, as in
+    /// [`new`](Self::new).
+    ///
+    /// # Panics
+    /// Panics if the linearised index of a position or the number of positions exceeds [`u64::MAX`].
+    pub(crate) fn from_dimensions_rev(
+        first: u64,
+        dimensions_rev: impl Iterator<Item = (u64, u64)>,
+    ) -> Self {
+        let mut num_elements = Some(1u64);
+        let mut last = Some(first);
+        let mut dimensions = TinyVec::<[StridedDimension; 4]>::new();
+        for (count, stride) in dimensions_rev {
+            if count == 0 {
+                return Self::empty();
+            }
+            if count == 1 {
+                continue;
+            }
+            num_elements = num_elements.and_then(|n| n.checked_mul(count));
+            last = (count - 1)
+                .checked_mul(stride)
+                .and_then(|span| last?.checked_add(span));
+            if let Some(inner) = dimensions
+                .last_mut()
+                .filter(|inner| inner.count.checked_mul(inner.stride) == Some(stride))
+            {
+                if let Some(coalesced) = inner.count.checked_mul(count) {
+                    inner.count = coalesced;
+                }
+            } else {
+                dimensions.push(StridedDimension { count, stride });
+            }
+        }
+        let num_elements = num_elements.expect("the number of positions exceeds u64::MAX");
+        last.expect("linearised indices exceed u64::MAX");
+        dimensions.reverse();
+        Self {
+            num_elements,
+            first,
+            dimensions,
+        }
+    }
+
+    /// Split off the innermost dimension if its stride is 1, returning the number of contiguous
+    /// elements per remaining position (or 0 if there are no positions).
+    pub(crate) fn take_contiguous_inner(&mut self) -> u64 {
+        if self.num_elements == 0 {
+            return 0;
+        }
+        if self
+            .dimensions
+            .last()
+            .is_some_and(|inner| inner.stride == 1)
+        {
+            let inner = self.dimensions.pop().unwrap();
+            self.num_elements /= inner.count;
+            inner.count
+        } else {
+            1
+        }
+    }
+
     /// Return the number of positions.
     pub(crate) fn num_elements(&self) -> u64 {
         self.num_elements
