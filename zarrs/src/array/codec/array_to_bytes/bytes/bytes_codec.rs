@@ -190,6 +190,9 @@ pub(super) fn decoded_len(
     Ok((num_elements, len))
 }
 
+/// The minimum region length in bytes of a strided output to decode each region once it is copied, rather than decoding the whole input into a temporary buffer.
+const FUSED_DECODE_MIN_REGION_LEN: usize = 256;
+
 /// How the `bytes` codec decodes encoded elements, determined when it is bound to a data type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DecodeMode {
@@ -412,16 +415,41 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 return Ok(());
             }
 
-            // Decoding each region of a strided output in place is much slower for small regions
-            // (e.g. single elements), so decode in bulk and then copy.
             let bytes = input.into_bytes(options, resources)?;
             if bytes.len() != expected_len {
                 return Err(InvalidBytesLengthError::new(bytes.len(), expected_len).into());
             }
-            let bytes = if self.mode == DecodeMode::Passthrough {
-                bytes
-            } else {
-                self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+            let bytes = match self.mode {
+                DecodeMode::Passthrough => bytes,
+                DecodeMode::InPlace => {
+                    // Uniquely owned bytes are decoded in place without allocating, then copied.
+                    let bytes = match bytes {
+                        CowBytes::Shared(shared) => match shared.try_into_mut() {
+                            Ok(mut owned) => {
+                                self.decode_in_place(&mut owned)?;
+                                return Ok(output.copy_from_slice(&owned)?);
+                            }
+                            Err(shared) => CowBytes::Shared(shared),
+                        },
+                        bytes @ CowBytes::Borrowed(_) => bytes,
+                    };
+                    // Otherwise, decoding requires a copy. Decode each region once it is copied
+                    // into the output, unless the regions are too small for that to be faster.
+                    if output.contiguous_bytes_len() >= FUSED_DECODE_MIN_REGION_LEN {
+                        let codec = self.data_type.codec_bytes()?;
+                        let mut result = Some(Ok(()));
+                        output.copy_from_slice_with(&bytes, |region| {
+                            if matches!(result, Some(Ok(()))) {
+                                result = codec.decode_in_place(region, self.endian);
+                            }
+                        })?;
+                        return Ok(
+                            result.ok_or("the data type does not support decoding in place")??
+                        );
+                    }
+                    self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+                }
+                DecodeMode::Decode => self.data_type.codec_bytes()?.decode(bytes, self.endian)?,
             };
             return Ok(output.copy_from_slice(&bytes)?);
         }
@@ -529,6 +557,56 @@ mod tests {
             );
             assert!(result.is_err());
             assert!(output.iter().all(|&value| value == 0));
+        }
+    }
+
+    #[test]
+    fn decode_into_strided_regions_around_fused_threshold() {
+        let element_size = size_of::<u16>();
+        for endian in [Endianness::Little, Endianness::Big] {
+            let codec = BytesCodec::new(Some(endian))
+                .with_context(
+                    data_type::uint16(),
+                    Some(FillValue::from(0u16)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+            let threshold = FUSED_DECODE_MIN_REGION_LEN / element_size;
+            for width in [1, threshold - 1, threshold, threshold + 72] {
+                let values: Vec<u16> = (0..4 * width)
+                    .map(|i| u16::try_from(i * 257 % 65_536).unwrap())
+                    .collect();
+                let encoded: Vec<u8> = values
+                    .iter()
+                    .flat_map(|value| match endian {
+                        Endianness::Little => value.to_le_bytes(),
+                        Endianness::Big => value.to_be_bytes(),
+                    })
+                    .collect();
+                let width_u64 = u64::try_from(width).unwrap();
+                let chunk_shape = [
+                    NonZeroU64::new(4).unwrap(),
+                    NonZeroU64::new(width_u64).unwrap(),
+                ];
+                let mut expected = vec![0u16; 4 * 2 * width];
+                for (row, values) in values.chunks_exact(width).enumerate() {
+                    expected[row * 2 * width..][..width].copy_from_slice(values);
+                }
+                let shared = CowBytes::from(encoded.clone());
+                let inputs = [
+                    ("borrowed", CowBytes::from(encoded.as_slice())),
+                    ("shared", shared.clone()),
+                    ("owned", CowBytes::from(encoded.clone())),
+                ];
+                for (name, input) in inputs {
+                    let (output, result) =
+                        decode_into_view(&codec, input.into(), &chunk_shape, &[4, 2 * width_u64]);
+                    result.unwrap();
+                    assert_eq!(output, expected, "{endian:?} {width} {name}");
+                }
+                // Decoding shared bytes must not modify them in place
+                assert_eq!(*shared, *encoded);
+            }
         }
     }
 

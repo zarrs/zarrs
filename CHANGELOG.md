@@ -206,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### `bytes`
 - Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
+- Convert endianness while copying borrowed or shared bytes into strided output views with regions of at least 256 bytes, rather than into a temporary buffer
 - Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - Reject short decoded byte ranges in synchronous and asynchronous partial decoding
 
