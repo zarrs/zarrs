@@ -8,6 +8,7 @@
 //! - `sharded_read`: whole reads of 1, 4 and 16 shards of 32 x 32 subchunks.
 //! - `partial_decoder`: creating a partial decoder of a chunk, and decoding regions with it.
 //! - `chunk_cache`: reading a region through each type of chunk cache, empty and filled.
+//! - `element_order`: reading and writing a multi-chunk array in C and F element order, with and without a `transpose` codec.
 #![allow(missing_docs, clippy::cast_possible_truncation)]
 
 mod common;
@@ -432,6 +433,70 @@ fn chunk_cache(c: &mut Criterion) {
     group.finish();
 }
 
+/// Reading and writing a 1024 x 1024 `u16` array of 256 x 256 chunks in C and F element order.
+fn element_order(c: &mut Criterion) {
+    use zarrs::array::ElementOrder;
+    const SHAPE: [u64; 2] = [1024, 1024];
+    let mut group = c.benchmark_group("element_order");
+    group.sample_size(20);
+    let data = compressible_u16(SHAPE.iter().product::<u64>() as usize);
+    group.throughput(Throughput::Bytes(data.len() as u64 * 2));
+    for (label, compressed, transpose) in [
+        ("uncompressed", false, false),
+        ("zstd", true, false),
+        ("transpose", false, true),
+    ] {
+        let mut builder =
+            ArrayBuilder::new(SHAPE.to_vec(), vec![256, 256], data_type::uint16(), 0u16);
+        if compressed {
+            builder.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))]);
+        }
+        #[cfg(feature = "transpose")]
+        if transpose {
+            builder.array_to_array_codecs(vec![Arc::new(
+                zarrs::array::codec::TransposeCodec::new(
+                    zarrs::array::codec::TransposeOrder::new(&[1, 0]).unwrap(),
+                ),
+            )]);
+        }
+        #[cfg(not(feature = "transpose"))]
+        if transpose {
+            continue;
+        }
+        let array = builder.build(Arc::new(MemoryStore::new()), "/").unwrap();
+        let subset = array.subset_all();
+        array
+            .store_array_subset(&subset, data.as_slice(), &Resources::default())
+            .unwrap();
+        for order in [ElementOrder::C, ElementOrder::F] {
+            let array = array.with_element_order(order);
+            let id = format!("{label}_{order:?}");
+            group.bench_function(BenchmarkId::new("retrieve_array_subset", &id), |b| {
+                b.iter(|| {
+                    let _: Vec<u16> = array
+                        .retrieve_array_subset(&subset, &Resources::default())
+                        .unwrap();
+                });
+            });
+            group.bench_function(BenchmarkId::new("retrieve_chunk", &id), |b| {
+                b.iter(|| {
+                    let _: Vec<u16> = array
+                        .retrieve_chunk(&[1, 2], &Resources::default())
+                        .unwrap();
+                });
+            });
+            group.bench_function(BenchmarkId::new("store_array_subset", &id), |b| {
+                b.iter(|| {
+                    array
+                        .store_array_subset(&subset, data.as_slice(), &Resources::default())
+                        .unwrap();
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     many_small_chunks,
@@ -441,6 +506,7 @@ criterion_group!(
     nested_sharding,
     sharded_read,
     partial_decoder,
-    chunk_cache
+    chunk_cache,
+    element_order
 );
 criterion_main!(benches);
