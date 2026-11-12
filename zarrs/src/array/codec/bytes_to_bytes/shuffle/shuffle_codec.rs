@@ -135,6 +135,10 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let count = self.element_count(decoded_value.len())?;
+        if self.elementsize == 1 {
+            // Shuffling one-byte elements is the identity
+            return Ok(decoded_value);
+        }
         let len = decoded_value.len();
         let mut encoded_value = Vec::with_capacity(len);
         shuffle(
@@ -156,6 +160,11 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let len = encoded_value.len();
+        self.element_count(len)?;
+        if self.elementsize == 1 {
+            // Unshuffling one-byte elements is the identity
+            return Ok(encoded_value);
+        }
         let mut decoded_value = Vec::with_capacity(len);
         self.unshuffle(
             &encoded_value,

@@ -153,6 +153,40 @@ mod tests {
         }
     }
     #[test]
+    fn codec_shuffle_elementsize_one_passes_through() {
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        let codec = ShuffleCodec::new(1);
+        let data: Vec<u8> = (0..=255).collect();
+        let representation = BytesRepresentation::FixedSize(data.len() as u64);
+
+        // Borrowed input stays borrowed, without copying
+        let encoded = codec
+            .encode(CowBytes::Borrowed(&data), &options, &resources)
+            .unwrap();
+        assert!(matches!(encoded, CowBytes::Borrowed(_)));
+        assert_eq!(encoded.as_ptr(), data.as_ptr());
+        let decoded = codec
+            .decode(encoded, &representation, &options, &resources)
+            .unwrap();
+        assert!(matches!(decoded, CowBytes::Borrowed(_)));
+        assert_eq!(decoded.as_ptr(), data.as_ptr());
+
+        // Owned input keeps its allocation
+        let owned = data.clone();
+        let ptr = owned.as_ptr();
+        let encoded = codec
+            .encode(CowBytes::from(owned), &options, &resources)
+            .unwrap();
+        assert_eq!(encoded.as_ptr(), ptr);
+        let decoded = codec
+            .decode(encoded, &representation, &options, &resources)
+            .unwrap();
+        assert_eq!(decoded.as_ptr(), ptr);
+        assert_eq!(*decoded, *data);
+    }
+
+    #[test]
     fn codec_shuffle_elementsize_zero() {
         let configuration: ShuffleCodecConfiguration =
             serde_json::from_str(r#"{"elementsize":0}"#).unwrap();
