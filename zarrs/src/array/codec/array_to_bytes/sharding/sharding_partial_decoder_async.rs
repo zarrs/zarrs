@@ -271,7 +271,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             // Fixed length data (including optional data with fixed length inner data)
             // Subchunks are placed by their position in the subset, which needs a target with the subset shape
             (true, Some(subset), output_target)
-                if output_target.subset().shape() == subset.shape().as_ref() =>
+                if output_target.shape() == subset.shape().as_ref() =>
             {
                 partial_decode_fixed_array_subset_into(
                     &self.input_handle,
@@ -381,7 +381,6 @@ async fn partial_decode_fixed_array_subset_into(
         )?;
     let resources = &resources;
     let array_subset_start = array_subset.start();
-    let output_start = output_target.subset().start();
     let chunks = subchunk_grid
         .chunks_in_array_subset(array_subset)?
         .expect("subchunks always within shard");
@@ -396,8 +395,8 @@ async fn partial_decode_fixed_array_subset_into(
             .expect("matching dimensionality")
             .expect("subchunk always within shard");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-        let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
-        let chunk_output_overlap_subset = chunk_relative.offset(output_start)?;
+        // The chunk's position in the output target, which has the shape of the array subset
+        let chunk_output_overlap_subset = chunk_subset_overlap.relative_to(&array_subset_start)?;
         subchunks.push((
             offset_size,
             chunk_subset,

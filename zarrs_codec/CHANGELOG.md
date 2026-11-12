@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayToBytesCodecTraits::as_subchunking`, returning the optional `ArrayToBytesCodecSubchunkingTraits` capability for codecs that expose subchunks
   - `decoded_subchunk_grids` resolves ordered subchunk-grid hierarchies, and `subchunk_codecs` returns the shape-independent codec for each level (outermost first)
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
-- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,subset,subdivide}` to build and subdivide targets without depending on their structure
-  - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and matches the array shape and subset of the data
+- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,shape,subdivide,permuted_axes,reshaped,reborrow}` to build, subdivide, transform and reborrow targets without depending on their structure
+  - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and addresses the same elements of its bytes as the data (the same shape, offset and strides)
+- Add `ArrayBytesFixedDisjointView::{new_strided,offset,strides}` for views of strided grids of elements (e.g. column-major or transposed outputs), and the safe `ArrayBytesFixedDisjointView::{permuted_axes,reshaped}`, which return a view of the same elements with permuted dimensions or another shape
 - Add `ArrayBytesFixedDisjointView::data_type_size`
 - Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesDecodeIntoTarget::with_optional_masks`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
@@ -65,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
 - **Breaking**: `ArrayBytesFixedDisjointView::new` takes `impl Into<UnsafeCellSlice<MaybeUninit<u8>>>` so views can cover uninitialised memory (e.g. `Vec::spare_capacity_mut()`), and `UnsafeCellSlice<u8>` arguments still work
   - Views never write uninitialised bytes
+- **Breaking**: `ArrayBytesFixedDisjointView` is a strided view of elements in C order of its own shape
+  - `shape()` returns the shape of the view rather than of the underlying array, and `subset()` is removed
+  - `subdivide` takes a subset relative to the view rather than to the underlying array
+  - `new` no longer borrows `shape` for the lifetime of the view
 - **Breaking**: `ArrayBytesDecodeIntoTarget` variants own their `ArrayBytesFixedDisjointView`s rather than borrowing them, and `From<ArrayBytesFixedDisjointView>` replaces `From<&mut ArrayBytesFixedDisjointView>`
   - `ArrayBytesDecodeIntoTarget::Optional` holds the new `ArrayBytesDecodeIntoTargetOptional`, which can only be created with `with_optional_mask` and has read-only `data`/`mask` accessors and `into_parts`
   - `ArrayToBytesCodecTraits::decode_into`, `[Async]ArrayPartialDecoderTraits::partial_decode_into`, `copy_fill_value_into`, and `decode_into_array_bytes_target` take `&mut ArrayBytesDecodeIntoTarget`, so targets are not moved through each layer of decoding
@@ -77,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
   - `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` map ascending positions by stepping through the contiguous regions of the view, rather than unravelling each position
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
-  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` when used, without allocating, rather than when creating and subdividing views
+  - Compute the contiguous regions of `ArrayBytesFixedDisjointView` once per view, without allocating for up to four dimensions
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
 - Bump `zarrs_metadata` to 0.7.6, `itertools` to 0.15.0, and `unsafe_cell_slice` to 0.2.4
