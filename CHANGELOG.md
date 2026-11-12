@@ -151,6 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Re-export `ArrayBytesDecodeIntoTargetOptional`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
 - Decode through codec chains directly into output views, forwarding deferred decoding through transparent nested chains
+- Decode through `bitround`, `reshape`, `squeeze` and `transpose` codecs directly into output views by remapping the view to the encoded shape, rather than decoding into an intermediate buffer and copying
+  - e.g. a `transpose` chain decodes straight into a column-major output, and a trailing squeezed dimension no longer needs a copy
 - Partial encoding
   - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
     - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders

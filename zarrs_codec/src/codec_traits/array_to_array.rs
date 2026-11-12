@@ -7,9 +7,10 @@ use zarrs_metadata::ChunkShape;
 
 use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
-    CodecError, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, Resources,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, Resources,
 };
 #[cfg(feature = "async")]
 use crate::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -311,6 +312,23 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
+
+    /// Return a target for the encoded representation that places each element where [`decode`](Self::decode) would place it in `target`.
+    ///
+    /// A codec that does not change the bytes of elements on decode, and only reorders or relabels them (e.g. `reshape` or `transpose`), can express its decode as a view transform of the target (see [`ArrayBytesDecodeIntoTarget::reshaped`] and [`ArrayBytesDecodeIntoTarget::permuted_axes`]).
+    /// A codec chain then decodes the encoded representation directly into the returned target, skipping this codec's [`decode`](Self::decode).
+    ///
+    /// `target` has the `decoded_shape`, and the returned target must have the encoded shape and the encoded data type.
+    /// Returns [`None`] if decoding changes the bytes of elements or the transform is not expressible for `target`, which is the default.
+    fn decode_into_encoded_target<'t>(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        _ = decoded_shape;
+        _ = target;
+        None
+    }
 
     /// Initialise a partial decoder.
     ///

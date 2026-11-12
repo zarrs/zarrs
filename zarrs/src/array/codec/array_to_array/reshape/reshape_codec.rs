@@ -10,10 +10,10 @@ use crate::array::{
     unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -265,6 +265,16 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
+    }
+
+    fn decode_into_encoded_target<'t>(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        // Reshaping keeps elements in C order
+        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape).ok()?;
+        target.reshaped(bytemuck::must_cast_slice(&encoded_shape))
     }
 
     fn partial_decoder(

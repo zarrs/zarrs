@@ -9,11 +9,11 @@ use super::{
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -193,6 +193,15 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
+    }
+
+    fn decode_into_encoded_target<'t>(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        // Decoding is the identity
+        Some(target.reborrow())
     }
 
     fn partial_decoder(

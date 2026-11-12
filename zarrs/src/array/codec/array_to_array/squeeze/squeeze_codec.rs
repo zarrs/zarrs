@@ -7,10 +7,10 @@ use zarrs_plugin::ZarrVersion;
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -236,9 +236,11 @@ impl zarrs_codec::ArrayToArrayCodecGeometryTraits for SqueezeCodecBound {
         decoded_element_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, CodecError> {
         zarrs_codec::validate_chunk_element_indices(decoded_shape, decoded_element_indices)?;
-        let encoded_element_indices =
-            super::squeeze_dims(decoded_element_indices.iter().copied(), decoded_shape, 0);
-        Ok(Some(ArrayIndices::from(encoded_element_indices.as_slice())))
+        Ok(Some(super::squeeze_dims(
+            decoded_element_indices.iter().copied(),
+            decoded_shape,
+            0,
+        )))
     }
 
     fn decoded_local_subchunk_grid(
@@ -270,7 +272,7 @@ impl zarrs_codec::ArrayToArrayCodecGeometryTraits for SqueezeCodecBound {
         decoded_subset: &ArraySubset,
     ) -> Result<Option<ArraySubset>, CodecError> {
         zarrs_codec::validate_chunk_subset(decoded_shape, decoded_subset)?;
-        Ok(Some(ArraySubset::from(super::squeeze_dims(
+        Ok(Some(ArraySubset::from(super::squeeze_dims::<_, Vec<_>>(
             decoded_subset.to_ranges(),
             decoded_shape,
             0..1,
@@ -314,6 +316,20 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
+    }
+
+    fn decode_into_encoded_target<'t>(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        // Squeezing keeps elements in C order
+        let encoded_shape: ArrayIndices = super::squeeze_dims(
+            decoded_shape.iter().map(|size| size.get()),
+            decoded_shape,
+            1,
+        );
+        target.reshaped(&encoded_shape)
     }
 
     fn partial_decoder(
