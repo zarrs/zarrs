@@ -285,8 +285,6 @@ impl ArrayCodecTraits for PcodecCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PcodecCodecBound {}
-
 impl ArrayToBytesCodecTraits for PcodecCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>

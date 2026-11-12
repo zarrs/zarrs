@@ -13,12 +13,12 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesDecodeSource, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeSource,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -472,11 +472,14 @@ impl UnboundArrayToBytesCodecTraits for CodecChain {
     }
 }
 
-impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
+impl ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
     fn decoded_subchunk_grids(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
     ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
+        let Some(subchunking) = self.array_to_bytes.as_subchunking() else {
+            return Ok(Vec::new());
+        };
         let mut chunk_grids = Vec::with_capacity(self.array_to_array.len() + 1);
         let mut mapped_chunk_grid: ChunkGridDecoded = decoded_chunk_grid.into();
         chunk_grids.push(mapped_chunk_grid.clone());
@@ -492,9 +495,8 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
             chunk_grids.push(mapped_chunk_grid.clone());
         }
 
-        let encoded_subchunk_grids = self
-            .array_to_bytes
-            .decoded_subchunk_grids((&mapped_chunk_grid).into())?;
+        let encoded_subchunk_grids =
+            subchunking.decoded_subchunk_grids((&mapped_chunk_grid).into())?;
         let mut decoded_subchunk_grids = Vec::with_capacity(encoded_subchunk_grids.len());
 
         for mut subchunk_grid in encoded_subchunk_grids {
@@ -532,7 +534,9 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
     }
 
     fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        self.array_to_bytes.subchunk_codecs()
+        self.array_to_bytes
+            .as_subchunking()
+            .map_or_else(Vec::new, |codec| codec.subchunk_codecs())
     }
 }
 
@@ -544,6 +548,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for CodecChainBound {
 impl ArrayToBytesCodecTraits for CodecChainBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
+    }
+
+    fn as_subchunking(&self) -> Option<&dyn ArrayToBytesCodecSubchunkingTraits> {
+        self.array_to_bytes.as_subchunking().map(|_| self as _)
     }
 
     fn encode<'a>(

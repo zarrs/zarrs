@@ -204,6 +204,10 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         self
     }
 
+    fn as_subchunking(&self) -> Option<&dyn ArrayToBytesCodecSubchunkingTraits> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
@@ -683,6 +687,10 @@ impl ArrayToBytesCodecTraits for TestSubchunkingCodecBound {
         self
     }
 
+    fn as_subchunking(&self) -> Option<&dyn ArrayToBytesCodecSubchunkingTraits> {
+        self.expose_subchunks.then_some(self as _)
+    }
+
     fn encoded_representation(
         &self,
         _shape: &[NonZeroU64],
@@ -746,15 +754,16 @@ fn codec_chain_discovers_chunk_local_grid_after_global_mapping_fails() {
         .unwrap(),
     );
     let chain = local_only_grid_chain(true, false);
+    let subchunking = chain.as_subchunking().unwrap();
     assert!(matches!(
-        chain
+        subchunking
             .decoded_subchunk_grid((&decoded_chunk_grid).into())
             .unwrap(),
         ChunkGridDecoded::ChunkLocal
     ));
     assert_eq!(
-        subchunk_codec_depth(&chain.subchunk_codecs()),
-        chain
+        subchunk_codec_depth(&subchunking.subchunk_codecs()),
+        subchunking
             .decoded_subchunk_grids((&decoded_chunk_grid).into())
             .unwrap()
             .len()
@@ -764,26 +773,16 @@ fn codec_chain_discovers_chunk_local_grid_after_global_mapping_fails() {
 /// Return the depth of a subchunk codec hierarchy by walking the level zero codecs.
 fn subchunk_codec_depth(codecs: &[Arc<dyn ArrayToBytesCodecTraits>]) -> usize {
     codecs.first().map_or(0, |codec| {
-        1 + subchunk_codec_depth(&codec.subchunk_codecs())
+        1 + codec
+            .as_subchunking()
+            .map_or(0, |codec| subchunk_codec_depth(&codec.subchunk_codecs()))
     })
 }
 
 #[test]
 fn codec_chain_does_not_infer_chunk_local_without_downstream_subchunks() {
-    let decoded_chunk_grid = ChunkGrid::new(
-        RegularChunkGrid::new(
-            vec![4, 6],
-            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(6).unwrap()],
-        )
-        .unwrap(),
-    );
     let chain = local_only_grid_chain(false, false);
-    assert!(matches!(
-        chain
-            .decoded_subchunk_grid((&decoded_chunk_grid).into())
-            .unwrap(),
-        ChunkGridDecoded::None
-    ));
+    assert!(chain.as_subchunking().is_none());
 }
 
 #[test]
@@ -798,6 +797,8 @@ fn codec_chain_allows_later_array_codec_to_reject_chunk_local() {
     let chain = local_only_grid_chain(true, true);
     assert!(matches!(
         chain
+            .as_subchunking()
+            .unwrap()
             .decoded_subchunk_grid((&decoded_chunk_grid).into())
             .unwrap(),
         ChunkGridDecoded::None

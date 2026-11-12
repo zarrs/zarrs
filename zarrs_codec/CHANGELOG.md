@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGrid{Encoded,Decoded}[Ref]` and `[Async]ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid[s]` for chunk-local subchunk grids
 - Add `validate_chunk_{element_indices,subset}`
 - Add `ArrayToBytesCodecTraits::is_decode_passthrough`
+- Add `ArrayToBytesCodecTraits::as_subchunking`, returning the optional `ArrayToBytesCodecSubchunkingTraits` capability for codecs that expose subchunks
+  - `decoded_subchunk_grids` resolves ordered subchunk-grid hierarchies, and `subchunk_codecs` returns the shape-independent codec for each level (outermost first)
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,subset,subdivide}` to build and subdivide targets without depending on their structure
   - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and matches the array shape and subset of the data
@@ -38,9 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayCodecTraits::fill_value()` and `ArrayToArrayCodecTraits::encoded_fill_value()` return `Option<&FillValue>`, which is `None` if the fill value is undefined; `encoded_fill_value` no longer has a default implementation
   - Remove the `data_type` and `fill_value` parameters from encoding, decoding, representation, and partial encoder/decoder methods
   - Replace `ArrayCodecTraits::partial_decode_granularity` and `ArrayToArrayCodecTraits::decoded_shape` with `ArrayToArrayCodecTraits::partial_decode_granularity`, which maps an encoded granularity to the decoded representation
-- **Breaking**: Add the `ArrayToBytesCodecSubchunkingTraits` supertrait with `decoded_subchunk_grids()` for resolving ordered subchunk-grid hierarchies
-  - The `ArrayToBytesCodecNoSubchunkingTraits` marker trait implements it for codecs without subchunks
-  - `subchunk_codecs` returns the shape-independent codec for each subchunk level (outermost first)
 - **Breaking**: Add the `ArrayToArrayCodecGeometryTraits` supertrait, which maps shapes, element indices, subsets, and chunk grids between the decoded and encoded representations of a codec
   - The `ArrayToArrayCodecGeometryIdentityTraits` marker trait implements it for codecs that preserve chunk shape and element ordering
   - `encoded_shape` moves here from `ArrayToArrayCodecTraits` and no longer has a default implementation

@@ -379,8 +379,6 @@ impl zarrs_codec::ArrayCodecTraits for PlacingReceiverBound {
     }
 }
 
-impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for PlacingReceiverBound {}
-
 impl ArrayToBytesCodecTraits for PlacingReceiverBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self
@@ -595,8 +593,6 @@ impl zarrs_codec::ArrayCodecTraits for OrdinaryReceiver {
         self.bytes.fill_value()
     }
 }
-
-impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for OrdinaryReceiver {}
 
 impl ArrayToBytesCodecTraits for OrdinaryReceiver {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {

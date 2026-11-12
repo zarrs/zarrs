@@ -678,8 +678,15 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
         &subchunk_codecs[1]
     ));
     assert!(array.subchunk_codec_at_level(2).is_none());
-    assert_eq!(subchunk_codecs[0].subchunk_codecs().len(), 1);
-    assert!(subchunk_codecs[1].subchunk_codecs().is_empty());
+    assert_eq!(
+        subchunk_codecs[0]
+            .as_subchunking()
+            .unwrap()
+            .subchunk_codecs()
+            .len(),
+        1
+    );
+    assert!(subchunk_codecs[1].as_subchunking().is_none());
     assert!(subchunk_codecs.get(2).is_none());
     assert_eq!(array.subchunk_shape(), Some(vec![nz(4), nz(4)]));
     assert_eq!(array.subchunk_shape_at_level(0), Some(vec![nz(4), nz(4)]));

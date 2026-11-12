@@ -379,8 +379,6 @@ impl ArrayCodecTraits for OptionalCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToBytesCodecNoSubchunkingTraits for OptionalCodecBound {}
-
 impl ArrayToBytesCodecTraits for OptionalCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>

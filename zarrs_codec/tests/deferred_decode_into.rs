@@ -133,7 +133,6 @@ impl ArrayCodecTraits for Receiver {
         panic!("unused")
     }
 }
-impl ArrayToBytesCodecNoSubchunkingTraits for Receiver {}
 impl ArrayToBytesCodecTraits for Receiver {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self

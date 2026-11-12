@@ -9,9 +9,8 @@ use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, Element, data_type}
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayToBytesCodecNoSubchunkingTraits, CodecCreateError, CodecMetadataOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
+    CodecCreateError, CodecMetadataOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -113,8 +112,6 @@ impl ArrayCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
-
-impl ArrayToBytesCodecNoSubchunkingTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {}
 
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),

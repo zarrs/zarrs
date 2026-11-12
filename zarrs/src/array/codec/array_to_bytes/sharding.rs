@@ -132,18 +132,18 @@ fn nested_local_subchunk_grids(
 ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
     let mapped_subchunk_grid = ChunkGridDecoded::Array(subchunk_grid.clone());
     let mut subchunk_grids = vec![Some(subchunk_grid)];
-    subchunk_grids.extend(
-        zarrs_codec::ArrayToBytesCodecSubchunkingTraits::decoded_subchunk_grids(
-            inner_codecs,
-            (&mapped_subchunk_grid).into(),
-        )
-        .map_err(|err| CodecError::Other(err.to_string()))?
-        .into_iter()
-        .map(|grid| match grid {
-            ChunkGridDecoded::Array(grid) => Some(grid),
-            ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
-        }),
-    );
+    if let Some(codec) = inner_codecs.as_subchunking() {
+        subchunk_grids.extend(
+            codec
+                .decoded_subchunk_grids((&mapped_subchunk_grid).into())
+                .map_err(|err| CodecError::Other(err.to_string()))?
+                .into_iter()
+                .map(|grid| match grid {
+                    ChunkGridDecoded::Array(grid) => Some(grid),
+                    ChunkGridDecoded::None | ChunkGridDecoded::ChunkLocal => None,
+                }),
+        );
+    }
     Ok(subchunk_grids)
 }
 
@@ -156,9 +156,9 @@ fn nested_subchunk_codecs(
 ) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
     let mut codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>> =
         vec![ArrayToBytesCodecTraits::into_dyn(inner_codecs.clone())];
-    codecs.extend(
-        zarrs_codec::ArrayToBytesCodecSubchunkingTraits::subchunk_codecs(inner_codecs.as_ref()),
-    );
+    if let Some(codec) = inner_codecs.as_subchunking() {
+        codecs.extend(codec.subchunk_codecs());
+    }
     codecs
 }
 

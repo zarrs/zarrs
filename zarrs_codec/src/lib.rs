@@ -35,8 +35,7 @@ pub use codec_traits::array_to_array::{
     validate_chunk_subset,
 };
 pub use codec_traits::array_to_bytes::{
-    ArrayToBytesCodecNoSubchunkingTraits, ArrayToBytesCodecSubchunkingTraits,
-    ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
 pub use codec_traits::bytes_to_bytes::{
