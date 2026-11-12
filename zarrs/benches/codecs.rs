@@ -473,6 +473,27 @@ fn a2a_decode_into_bench(
     codec: Arc<dyn zarrs_codec::UnboundArrayToArrayCodecTraits>,
     decoded_shape: &[u64],
 ) {
+    let num_elements = decoded_shape.iter().product::<u64>();
+    let values: Vec<f32> = (0..num_elements).map(|i| (i % 31) as f32 * 0.25).collect();
+    a2a_decode_into_bench_with(
+        c,
+        name,
+        codec,
+        (data_type::float32(), FillValue::from(0f32), 4),
+        bytemuck::cast_slice(&values),
+        decoded_shape,
+    );
+}
+
+/// As [`a2a_decode_into_bench`], with elements of a (data type, fill value, size) and their `values`.
+fn a2a_decode_into_bench_with(
+    c: &mut Criterion,
+    name: &str,
+    codec: Arc<dyn zarrs_codec::UnboundArrayToArrayCodecTraits>,
+    (data_type, fill_value, size): (zarrs::array::DataType, FillValue, usize),
+    values: &[u8],
+    decoded_shape: &[u64],
+) {
     use unsafe_cell_slice::UnsafeCellSlice;
     use zarrs::array::codec::CodecChain;
     use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
@@ -482,7 +503,6 @@ fn a2a_decode_into_bench(
         .map(|&size| std::num::NonZeroU64::new(size).unwrap())
         .collect();
     let num_elements = decoded_shape.iter().product::<u64>();
-    let values: Vec<f32> = (0..num_elements).map(|i| (i % 31) as f32 * 0.25).collect();
     let options = CodecOptions::default();
     let resources = ComputeResources::default();
 
@@ -524,21 +544,16 @@ fn a2a_decode_into_bench(
     for (name, chain) in chains {
         let chain = chain
             .with_context(
-                data_type::float32(),
-                Some(0f32.into()),
+                data_type.clone(),
+                Some(fill_value.clone()),
                 &CodecSpecificOptions::default(),
             )
             .unwrap();
         let encoded = chain
-            .encode(
-                ArrayBytes::new_flen(bytemuck::cast_slice(&values)),
-                &shape,
-                &options,
-                &resources,
-            )
+            .encode(ArrayBytes::new_flen(values), &shape, &options, &resources)
             .unwrap();
         let mut group = c.benchmark_group(name);
-        group.throughput(Throughput::Bytes(num_elements * 4));
+        group.throughput(Throughput::Bytes(num_elements * size as u64));
         group.bench_function(BenchmarkId::new("decode", "owned"), |b| {
             b.iter(|| {
                 std::hint::black_box(
@@ -549,14 +564,14 @@ fn a2a_decode_into_bench(
             });
         });
         for (layout, output_shape, subset) in &layouts {
-            let mut output = vec![0f32; output_shape.iter().product::<u64>() as usize];
+            let mut output = vec![0u8; output_shape.iter().product::<u64>() as usize * size];
             group.bench_function(BenchmarkId::new("decode_into", layout), |b| {
                 b.iter(|| {
                     // SAFETY: each iteration owns the only view of this output buffer.
                     let view = unsafe {
                         ArrayBytesFixedDisjointView::new(
-                            UnsafeCellSlice::new(bytemuck::cast_slice_mut::<f32, u8>(&mut output)),
-                            4,
+                            UnsafeCellSlice::new(&mut output),
+                            size,
                             output_shape,
                             subset.clone(),
                         )
@@ -610,6 +625,44 @@ fn codec_a2a_decode_into(c: &mut Criterion) {
         c,
         "codec_bitround",
         Arc::new(zarrs::array::codec::BitroundCodec::new(10)),
+        &[128, 256],
+    );
+
+    // Codecs that change the bytes of elements on decode
+    let codec = |configuration: &str| -> Arc<dyn zarrs_codec::UnboundArrayToArrayCodecTraits> {
+        let metadata: zarrs::metadata::v3::MetadataV3 =
+            serde_json::from_str(configuration).unwrap();
+        match zarrs_codec::Codec::from_metadata(&metadata).unwrap() {
+            zarrs_codec::Codec::ArrayToArray(codec) => codec,
+            _ => unreachable!(),
+        }
+    };
+    a2a_decode_into_bench(
+        c,
+        "codec_fixedscaleoffset",
+        codec(
+            r#"{"name": "numcodecs.fixedscaleoffset", "configuration": {"offset": 0, "scale": 100, "dtype": "<f4", "astype": "<i2"}}"#,
+        ),
+        &[128, 256],
+    );
+    let values: Vec<u8> = (0..128 * 256i32)
+        .flat_map(|i| (i % 31).to_ne_bytes())
+        .collect();
+    a2a_decode_into_bench_with(
+        c,
+        "codec_cast_value",
+        codec(r#"{"name": "cast_value", "configuration": {"data_type": "int16"}}"#),
+        (data_type::int32(), FillValue::from(0i32), 4),
+        &values,
+        &[128, 256],
+    );
+    let values: Vec<u8> = (0..128 * 256u32).map(|i| u8::from(i % 3 == 0)).collect();
+    a2a_decode_into_bench_with(
+        c,
+        "codec_numcodecs_packbits",
+        codec(r#"{"name": "numcodecs.packbits"}"#),
+        (data_type::bool(), FillValue::from(false), 1),
+        &values,
         &[128, 256],
     );
 }
