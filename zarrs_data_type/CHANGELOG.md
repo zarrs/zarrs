@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `BytesDataTypeTraits::decode_in_place()` for optional allocation-free in-place decoding, with built-in implementations
 - Add the `codec_traits::cast_value` module for data types supported by the `cast_value` codec
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
+  - `CastValueKernel::cast_into` casts into a (possibly uninitialised) output slice, which it writes in full on success, and `CastValueKernel::{source_size,target_size}` return the element sizes
 - Add `BytesDataTypeTraits::is_decode_passthrough()`
 - Add `FillValue::equals_all_bytes`, which checks bytes against a borrowed fill value byte pattern
 
