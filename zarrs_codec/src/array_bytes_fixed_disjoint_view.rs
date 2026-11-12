@@ -483,6 +483,35 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         Some(unsafe { self.region_mut(index, self.bytes_in_subset_len) })
     }
 
+    /// Call `f` with each contiguous region of the view in turn, in C order, as a mutable slice of its (possibly uninitialised) bytes.
+    ///
+    /// Each region is a whole number of elements, with the length of [`contiguous_bytes_len`](Self::contiguous_bytes_len).
+    /// An empty view has no regions.
+    ///
+    /// # Errors
+    /// Returns the first error returned by `f`, without calling it for the remaining regions.
+    ///
+    /// # Safety
+    /// The bytes may be uninitialised, so they must be written before they are read.
+    /// `f` must never write uninitialised values to a region, and every region must be initialised before reporting success to the owner of the view's bytes, as for [`as_mut_slice`](Self::as_mut_slice).
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub unsafe fn for_each_region_mut<E>(
+        &mut self,
+        mut f: impl FnMut(&mut [MaybeUninit<u8>]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let length = self.runs.contiguous_elements_usize() * self.data_type_size;
+        if length == 0 {
+            return Ok(());
+        }
+        for (index, _) in &self.runs {
+            // SAFETY: the regions of the view are disjoint from each other and from other views, and each is only accessed by `f` while it is live.
+            f(unsafe { self.region_mut(index, length) })?;
+        }
+        Ok(())
+    }
+
     /// Fill the view with the fill value.
     ///
     /// # Errors
@@ -1070,6 +1099,39 @@ mod tests {
             .unwrap();
         }
         assert_eq!(regions * contiguous_run(expected), expected.len());
+        for (position, &index) in expected.iter().enumerate() {
+            assert_eq!(element(&bytes, index), source[position * size..][..size]);
+        }
+        assert!(untouched(&bytes, expected));
+
+        // for_each_region_mut visits the regions in C order of the view
+        let mut bytes = vec![0xa5; len * size];
+        {
+            let mut view = make_view(UnsafeCellSlice::new(&mut bytes));
+            let mut remaining = source.as_slice();
+            // SAFETY: every region is written from the source.
+            unsafe {
+                view.for_each_region_mut(|region| {
+                    let (written, rest) = remaining.split_at(region.len());
+                    write_copy_of_slice(region, written);
+                    remaining = rest;
+                    Ok::<_, ()>(())
+                })
+            }
+            .unwrap();
+            assert!(remaining.is_empty());
+            // Iteration stops at the first error
+            let mut calls = 0;
+            // SAFETY: the regions are not written, and the result is not reported as a success.
+            let result = unsafe {
+                view.for_each_region_mut(|_| {
+                    calls += 1;
+                    Err(())
+                })
+            };
+            assert_eq!(result.is_err(), !expected.is_empty());
+            assert_eq!(calls, usize::from(!expected.is_empty()));
+        }
         for (position, &index) in expected.iter().enumerate() {
             assert_eq!(element(&bytes, index), source[position * size..][..size]);
         }
