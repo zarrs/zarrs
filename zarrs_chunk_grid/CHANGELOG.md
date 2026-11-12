@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve indexing performance
   - `ArraySubset` stores its start and shape inline for up to four dimensions, so creating, cloning, offsetting and intersecting subsets does not allocate
   - `Indices`, `LinearisedIndices`, `ContiguousIndices` and `ContiguousLinearisedIndices` iterate forwards by stepping their indices through only the dimensions with more than one index, unravelling only the first index of an iterator
+  - `ContiguousLinearisedIndices[Into]Iterator::nth` skips runs by carrying through their dimensions, rather than stepping through each run
   - `ContiguousIndices::new` (and so `contiguous_[linearised_]indices`) reuses the subset it is given and checks bounds without allocating
   - `ArraySubsetTraits::{linearised_indices,contiguous_linearised_indices}` no longer copy the subset
   - `ArraySubset::bound` computes the bounded start and shape in one pass
