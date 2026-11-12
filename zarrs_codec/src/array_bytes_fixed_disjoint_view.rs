@@ -267,6 +267,26 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
     pub fn copy_from_slice(&mut self, subset_bytes: &[u8]) -> Result<(), InvalidBytesLengthError> {
+        self.copy_from_slice_with(subset_bytes, |_| ())
+    }
+
+    /// Copy bytes into the view, then call `f` on each contiguous region of the view once it is written.
+    ///
+    /// The regions are passed in C order, so `f` can transform the copied bytes while they are in cache.
+    /// Each region is a whole number of elements, with the length of [`contiguous_bytes_len`](Self::contiguous_bytes_len).
+    ///
+    /// The `subset_bytes` must be the same length as the byte length of the elements in the view.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the length of `subset_bytes` is not the same as the byte length of the elements in the view.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn copy_from_slice_with(
+        &mut self,
+        subset_bytes: &[u8],
+        mut f: impl FnMut(&mut [u8]),
+    ) -> Result<(), InvalidBytesLengthError> {
         if subset_bytes.len() != self.bytes_in_subset_len {
             return Err(InvalidBytesLengthError::new(
                 subset_bytes.len(),
@@ -281,7 +301,10 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         with_small_len!(length, |length| {
             for ((index, _), source) in indices.iter().zip(subset_bytes.chunks_exact(length)) {
                 // SAFETY: the regions of the view are disjoint from each other and from other views.
-                write_copy_of_slice(unsafe { self.region_mut(index, length) }, source);
+                f(write_copy_of_slice(
+                    unsafe { self.region_mut(index, length) },
+                    source,
+                ));
             }
         });
         Ok(())
@@ -605,7 +628,7 @@ mod tests {
                                 UnsafeCellSlice::new(&mut bytes),
                                 size,
                                 &shape,
-                                subset,
+                                subset.clone(),
                             )
                             .unwrap()
                         };
@@ -613,6 +636,50 @@ mod tests {
                         view.copy_from_slice(&input).unwrap();
                     }
                     assert_eq!(bytes, expected, "{size} {width} {rows:?}");
+
+                    // Each region is passed to `f` once it is written, in order
+                    let mut transformed = vec![0xa5; bytes.len()];
+                    let mut regions = Vec::new();
+                    {
+                        // SAFETY: this is the only view of transformed.
+                        let mut view = unsafe {
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut transformed),
+                                size,
+                                &shape,
+                                subset.clone(),
+                            )
+                            .unwrap()
+                        };
+                        assert!(
+                            view.copy_from_slice_with(&vec![0; count + 1], |_| unreachable!())
+                                .is_err()
+                        );
+                        view.copy_from_slice_with(&input, |region| {
+                            regions.push(region.to_vec());
+                            for byte in region.iter_mut() {
+                                *byte = !*byte;
+                            }
+                        })
+                        .unwrap();
+                    }
+                    let expected_regions: Vec<Vec<u8>> = if run == 0 {
+                        Vec::new()
+                    } else {
+                        input.chunks_exact(run).map(<[u8]>::to_vec).collect()
+                    };
+                    assert_eq!(regions, expected_regions, "{size} {width} {rows:?}");
+                    let mut expected_transformed = vec![0xa5; bytes.len()];
+                    for (k, row) in rows.clone().enumerate() {
+                        let destination = (usize::try_from(row).unwrap() * (width + 2) + 1) * size;
+                        for (dst, src) in expected_transformed[destination..destination + run]
+                            .iter_mut()
+                            .zip(&input[k * run..][..run])
+                        {
+                            *dst = !*src;
+                        }
+                    }
+                    assert_eq!(transformed, expected_transformed, "{size} {width} {rows:?}");
                 }
             }
         }

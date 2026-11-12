@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `read_decoded_bytes_into` for exact-length streaming decoding, stopping after the first extra decoded byte
 - Add the `unsafe` `BytesToBytesCodecDecodeInto` trait, `BytesToBytesCodecTraits::as_decode_into`, `BytesDecodeSource::decode_into`, `copy_decoded_bytes_into`, and the `unsafe` `ArrayBytesFixedDisjointView::as_mut_slice` for exact-length decoding into (possibly uninitialised) output views
 - Add `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` for single-use deferred decoding into array targets
+- Add `ArrayBytesFixedDisjointView::copy_from_slice_with` to transform each region of a view once it is copied
 - Add per-operation `Resources` and `ComputeResources`
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`, the codecs held by `Codec::ArrayTo{Array,Bytes}`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
