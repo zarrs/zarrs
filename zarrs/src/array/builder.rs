@@ -20,8 +20,8 @@ use crate::node::NodePath;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
-    ArrayToBytesCodecSubchunkingTraits, BytesToBytesCodecTraits, CodecOptions,
-    CodecSpecificOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -650,7 +650,9 @@ impl ArrayBuilder {
         )?;
         // Subchunk shapes that do not evenly divide the shard shape are not yet part of the specification.
         // Existing arrays with such subchunk shapes can still be opened.
-        codec_chain_bound.decoded_subchunk_grids(array.chunk_grid().into())?;
+        if let Some(codec) = codec_chain_bound.as_subchunking() {
+            codec.decoded_subchunk_grids(array.chunk_grid().into())?;
+        }
         array.set_metadata_options(self.metadata_options);
         array.set_codec_options(self.codec_options);
         Ok(array)

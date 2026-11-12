@@ -1,5 +1,5 @@
 use inherent::inherent;
-use zarrs_codec::ArrayToBytesCodecSubchunkingTraits;
+use zarrs_codec::ArrayToBytesCodecTraits;
 
 use super::{
     Arc, Array, ArrayCreateError, ArrayMetadata, ArrayMetadataOptions, ArrayMutOps, ArrayShape,
@@ -27,10 +27,15 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
             Some(self.fill_value.clone()),
             opts,
         )?;
-        let subchunk_grids = codecs_bound
-            .decoded_subchunk_grids((&self.chunk_grid).into())
-            .map_err(|err| CodecCreateError::from(err.to_string()))?;
-        let subchunk_codecs = codecs_bound.subchunk_codecs();
+        let (subchunk_grids, subchunk_codecs) = match codecs_bound.as_subchunking() {
+            Some(codec) => (
+                codec
+                    .decoded_subchunk_grids((&self.chunk_grid).into())
+                    .map_err(|err| CodecCreateError::from(err.to_string()))?,
+                codec.subchunk_codecs(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        };
         self.codecs_bound = codecs_bound;
         self.subchunk_grids = subchunk_grids;
         self.subchunk_codecs = subchunk_codecs;
@@ -66,7 +71,10 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grids = self
             .codecs_bound
-            .decoded_subchunk_grids((&self.chunk_grid).into())?;
+            .as_subchunking()
+            .map(|codec| codec.decoded_subchunk_grids((&self.chunk_grid).into()))
+            .transpose()?
+            .unwrap_or_default();
         match Arc::make_mut(&mut self.metadata) {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;

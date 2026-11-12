@@ -68,9 +68,8 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ArrayToBytesCodecNoSubchunkingTraits,
-    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeSource,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
+    BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
     CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
     CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
@@ -578,8 +577,13 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
-        let subchunk_codecs = codecs_bound.subchunk_codecs();
+        let (subchunk_grids, subchunk_codecs) = match codecs_bound.as_subchunking() {
+            Some(codec) => (
+                codec.decoded_subchunk_grids((&chunk_grid).into())?,
+                codec.subchunk_codecs(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        };
 
         // Create storage transformers
         let storage_transformers =
@@ -690,8 +694,13 @@ impl<TStorage: ?Sized> Array<TStorage> {
             Some(fill_value.clone()),
             &codec_specific_options,
         )?;
-        let subchunk_grids = codecs_bound.decoded_subchunk_grids((&chunk_grid).into())?;
-        let subchunk_codecs = codecs_bound.subchunk_codecs();
+        let (subchunk_grids, subchunk_codecs) = match codecs_bound.as_subchunking() {
+            Some(codec) => (
+                codec.decoded_subchunk_grids((&chunk_grid).into())?,
+                codec.subchunk_codecs(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        };
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -807,7 +816,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grids = self
             .codecs_bound
-            .decoded_subchunk_grids((&self.chunk_grid).into())?;
+            .as_subchunking()
+            .map(|codec| codec.decoded_subchunk_grids((&self.chunk_grid).into()))
+            .transpose()?
+            .unwrap_or_default();
 
         // Update metadata based on version
         match Arc::make_mut(&mut self.metadata) {

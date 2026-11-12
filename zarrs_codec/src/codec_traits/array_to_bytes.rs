@@ -21,8 +21,7 @@ use crate::{
 /// [`subchunk_codecs`](Self::subchunk_codecs) return one entry per nesting level, ordered from
 /// outermost (level 0) to innermost, or an empty vector when the codec exposes no subchunks.
 ///
-/// Implement [`ArrayToBytesCodecNoSubchunkingTraits`] instead of this trait when the codec does
-/// not expose subchunks.
+/// Return this capability from [`ArrayToBytesCodecTraits::as_subchunking`] to expose subchunks.
 ///
 /// # Subchunk Domains
 ///
@@ -62,7 +61,7 @@ use crate::{
 /// - `codecs[1]` (`bytes` codec) decodes level 1 bytes of shape `[3, 2]` into the transposed inner
 ///   shard's domain. In the outer shard's [`decoded_subchunk_grids`](Self::decoded_subchunk_grids),
 ///   that subchunk has shape `[2, 3]` because the transpose is mapped back to the outer domain.
-pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
+pub trait ArrayToBytesCodecSubchunkingTraits: ArrayToBytesCodecTraits {
     /// Return the decoded subchunk grids created by this codec, outermost first.
     ///
     /// An empty vector indicates that the codec does not expose subchunks. A
@@ -106,24 +105,6 @@ pub trait ArrayToBytesCodecSubchunkingTraits: ArrayCodecTraits {
     }
 }
 
-/// Marker trait for array-to-bytes codecs that do not expose subchunk grids.
-pub trait ArrayToBytesCodecNoSubchunkingTraits {}
-
-impl<T> ArrayToBytesCodecSubchunkingTraits for T
-where
-    T: ArrayCodecTraits + ArrayToBytesCodecNoSubchunkingTraits + ?Sized,
-{
-    fn decoded_subchunk_grids(
-        &self,
-        _decoded_chunk_grid: ChunkGridDecodedRef<'_>,
-    ) -> Result<Vec<ChunkGridDecoded>, ChunkGridCreateError> {
-        Ok(Vec::new())
-    }
-
-    fn subchunk_codecs(&self) -> Vec<Arc<dyn ArrayToBytesCodecTraits>> {
-        Vec::new()
-    }
-}
 #[cfg(feature = "async")]
 use crate::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -164,9 +145,16 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait ArrayToBytesCodecTraits: ArrayToBytesCodecSubchunkingTraits + core::fmt::Debug {
+pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the bound codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
+
+    /// Return this codec as a subchunking codec, if supported.
+    ///
+    /// Implement [`ArrayToBytesCodecSubchunkingTraits`] and return `Some(self)` to expose subchunks.
+    fn as_subchunking(&self) -> Option<&dyn ArrayToBytesCodecSubchunkingTraits> {
+        None
+    }
 
     /// Returns the size of the encoded representation given a size of the decoded representation.
     ///

@@ -6,14 +6,52 @@ use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
 use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingCodecBuilder};
 use zarrs::array::codec::{BytesCodec, CodecChainBound, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    ArrayBuilder, ArrayCached, ArraySubset, ArrayToBytesCodecTraits, CodecOptions,
-    ComputeResources, convert_from_bytes_slice, data_type,
+    Array, ArrayBuilder, ArrayCached, ArraySubset, ArrayToBytesCodecTraits, CodecOptions,
+    CodecSpecificOptions, ComputeResources, Resources, convert_from_bytes_slice, data_type,
 };
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 
 fn nz(n: u64) -> NonZeroU64 {
     NonZeroU64::new(n).unwrap()
+}
+
+#[test]
+fn unsharded_array_updates_have_no_subchunks() -> Result<(), Box<dyn std::error::Error>> {
+    let store = Arc::new(MemoryStore::default());
+    let mut array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .build(store.clone(), "/plain")?;
+    assert!(array.codecs_bound().as_subchunking().is_none());
+    assert!(
+        array
+            .codecs_bound()
+            .array_to_bytes_codec()
+            .as_subchunking()
+            .is_none()
+    );
+
+    array.set_codec_specific_options(&CodecSpecificOptions::default())?;
+    array.set_shape(vec![8, 8])?;
+    // SAFETY: No chunks have been written.
+    unsafe { array.set_shape_and_chunk_grid(vec![8, 8], vec![4, 4])? };
+    array.store_metadata()?;
+    let array = Array::open(store, "/plain")?;
+    assert!(array.codecs_bound().as_subchunking().is_none());
+    assert!(array.subchunk_grids().is_empty());
+    assert!(array.subchunk_codecs().is_empty());
+
+    let data: Vec<u8> = (0..64).collect();
+    array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())?,
+        data
+    );
+    assert!(
+        array
+            .local_subchunk_grid(&[0, 0], &Resources::default())?
+            .is_none()
+    );
+    Ok(())
 }
 
 #[test]
@@ -38,8 +76,11 @@ fn hierarchy_is_pure_ordered_and_shape_independent() -> Result<(), Box<dyn std::
     assert_eq!(codecs.len(), array.subchunk_grids().len());
     assert_eq!(codecs.len(), 2);
     assert_eq!(cached_codecs.len(), codecs.len());
-    assert_eq!(codecs[0].subchunk_codecs().len(), 1);
-    assert!(codecs[1].subchunk_codecs().is_empty());
+    assert_eq!(
+        codecs[0].as_subchunking().unwrap().subchunk_codecs().len(),
+        1
+    );
+    assert!(codecs[1].as_subchunking().is_none());
     for (level, codec) in codecs.iter().enumerate() {
         let cached_codec = cached_codecs.get(level).unwrap();
         let chain = codec.as_any().downcast_ref::<CodecChainBound>().unwrap();
@@ -105,6 +146,7 @@ fn hierarchy_is_pure_ordered_and_shape_independent() -> Result<(), Box<dyn std::
     assert!(plain.subchunk_codecs().is_empty());
     assert!(plain.subchunk_codec().is_none());
     assert!(plain.subchunk_codec_at_level(0).is_none());
+    assert!(plain.codecs_bound().as_subchunking().is_none());
     assert_eq!(store.reads(), 0);
     Ok(())
 }

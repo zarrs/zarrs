@@ -34,12 +34,12 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
-    decode_into_array_bytes_target,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
+    copy_fill_value_into, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -392,7 +392,7 @@ impl ArrayCodecTraits for ShardingCodecBound {
     }
 }
 
-impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
+impl ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
     fn decoded_subchunk_grids(
         &self,
         decoded_chunk_grid: ChunkGridDecodedRef<'_>,
@@ -414,10 +414,9 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
             ChunkGridDecodedRef::ChunkLocal => ChunkGridDecoded::ChunkLocal,
         };
         let mut subchunk_grids = vec![subchunk_grid.clone()];
-        subchunk_grids.extend(
-            self.inner_codecs
-                .decoded_subchunk_grids((&subchunk_grid).into())?,
-        );
+        if let Some(codec) = self.inner_codecs.as_subchunking() {
+            subchunk_grids.extend(codec.decoded_subchunk_grids((&subchunk_grid).into())?);
+        }
         Ok(subchunk_grids)
     }
 
@@ -434,6 +433,10 @@ impl zarrs_codec::ArrayToBytesCodecSubchunkingTraits for ShardingCodecBound {
 impl ArrayToBytesCodecTraits for ShardingCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn as_subchunking(&self) -> Option<&dyn ArrayToBytesCodecSubchunkingTraits> {
+        Some(self)
     }
 
     fn encode<'a>(
