@@ -6,10 +6,12 @@ use std::sync::Arc;
 use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArraySubset, DataType, Indexer};
+use super::iterators::ContiguousLinearisedIndices;
+use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
     ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
+    ExpectedFixedLengthBytesError, ExpectedOptionalBytesError, InvalidBytesLengthError,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -126,6 +128,174 @@ impl FixedDecodeBuffers {
             unsafe { mask.set_len(num_elements) };
         }
         ArrayBytes::new_flen(self.data).with_optional_masks(self.masks)
+    }
+}
+
+/// The elements of `bytes` at a strided grid of element indices, in C order of the grid.
+///
+/// The grid starts at element `offset` and has `shape` and `strides` (in elements).
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type` or the grid addresses elements beyond them.
+pub(crate) fn extract_strided(
+    bytes: &ArrayBytes<'_>,
+    data_type: &DataType,
+    offset: u64,
+    shape: &[u64],
+    strides: &[u64],
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let empty = shape.contains(&0);
+    let runs = ContiguousLinearisedIndices::new_strided(
+        if empty { 0 } else { offset },
+        std::iter::zip(shape.iter().copied(), strides.iter().copied()),
+    );
+    extract_runs(bytes, data_type, &runs)
+}
+
+/// Evaluate `$body` with `$len` bound to `$length`, specialised for common small lengths.
+macro_rules! with_small_len {
+    ($length:expr, |$len:ident| $body:expr) => {
+        match $length {
+            1 => {
+                let $len: usize = 1;
+                $body
+            }
+            2 => {
+                let $len: usize = 2;
+                $body
+            }
+            4 => {
+                let $len: usize = 4;
+                $body
+            }
+            8 => {
+                let $len: usize = 8;
+                $body
+            }
+            16 => {
+                let $len: usize = 16;
+                $body
+            }
+            $len => $body,
+        }
+    };
+}
+
+/// The elements of `bytes` in the contiguous `runs` of element indices, in order.
+fn extract_runs(
+    bytes: &ArrayBytes<'_>,
+    data_type: &DataType,
+    runs: &ContiguousLinearisedIndices,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    match bytes {
+        ArrayBytes::Fixed(bytes) => {
+            let size = data_type
+                .fixed_size()
+                .ok_or(ExpectedFixedLengthBytesError)?;
+            Ok(ArrayBytes::new_flen(extract_runs_fixed(bytes, size, runs)?))
+        }
+        ArrayBytes::Variable(variable) => {
+            let (bytes, offsets) = (variable.bytes(), variable.offsets());
+            let num_elements = offsets.len() - 1;
+            let run_elements = runs.contiguous_elements_usize();
+            if let Some((index, _)) = runs.iter().next_back()
+                && usize::try_from(index)
+                    .ok()
+                    .and_then(|start| start.checked_add(run_elements))
+                    .is_none_or(|end| end > num_elements)
+            {
+                return Err(CodecError::InvalidVariableSizedArrayOffsets);
+            }
+            let bytes_len: usize = if runs.len() * run_elements == num_elements {
+                // The runs cover as many elements as the bytes, e.g. reordering all elements
+                offsets.get(num_elements).unwrap() - offsets.get(0).unwrap()
+            } else {
+                runs.iter()
+                    .map(|(index, _)| {
+                        let start = usize::try_from(index).unwrap();
+                        offsets.get(start + run_elements).unwrap() - offsets.get(start).unwrap()
+                    })
+                    .sum()
+            };
+            let mut extracted = Vec::with_capacity(bytes_len);
+            let mut extracted_offsets = Vec::with_capacity(runs.len() * run_elements + 1);
+            for (index, _) in runs {
+                let start = usize::try_from(index).unwrap();
+                for element in start..start + run_elements {
+                    extracted_offsets.push(extracted.len());
+                    extracted.extend_from_slice(&bytes[offsets.element_range(element)]);
+                }
+            }
+            extracted_offsets.push(extracted.len());
+            let offsets = offsets_from_usize(extracted_offsets)?;
+            // SAFETY: the offsets are monotonically increasing and the last is the length of the bytes
+            Ok(unsafe { ArrayBytes::new_vlen_unchecked(extracted, offsets) })
+        }
+        ArrayBytes::Optional(optional) => {
+            let inner_data_type = data_type
+                .optional_inner()
+                .ok_or(ExpectedOptionalBytesError)?;
+            let data = extract_runs(optional.data(), inner_data_type, runs)?;
+            let mask = extract_runs_fixed(optional.mask(), 1, runs)?;
+            Ok(data.with_optional_mask(mask))
+        }
+    }
+}
+
+/// The bytes of the elements of `size` bytes in the contiguous `runs` of element indices of `bytes`, in order.
+fn extract_runs_fixed(
+    bytes: &[u8],
+    size: usize,
+    runs: &ContiguousLinearisedIndices,
+) -> Result<Vec<u8>, InvalidBytesLengthError> {
+    let run_len = runs.contiguous_elements_usize() * size;
+    if let Some((index, _)) = runs.iter().next_back() {
+        let end = usize::try_from(index)
+            .ok()
+            .and_then(|start| start.checked_mul(size))
+            .and_then(|start| start.checked_add(run_len));
+        if end.is_none_or(|end| end > bytes.len()) {
+            return Err(InvalidBytesLengthError::new(
+                bytes.len(),
+                end.unwrap_or(usize::MAX),
+            ));
+        }
+    }
+    let mut extracted = Vec::with_capacity(runs.len() * run_len);
+    with_small_len!(run_len, |run_len| {
+        for (index, _) in runs {
+            let start = usize::try_from(index).unwrap() * size;
+            extracted.extend_from_slice(&bytes[start..start + run_len]);
+        }
+    });
+    Ok(extracted)
+}
+
+/// Reorder the elements of `bytes`, an array of `shape` with elements in `from` order, to `to` order.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type` or `shape`.
+pub(crate) fn reorder<'a>(
+    bytes: ArrayBytes<'a>,
+    data_type: &DataType,
+    shape: &[u64],
+    from: ElementOrder,
+    to: ElementOrder,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if from == to || !ElementOrder::F.is_reordered(shape) {
+        return Ok(bytes);
+    }
+    bytes.validate(shape.iter().product(), data_type)?;
+    // Gather the elements of the source in the C order of the destination grid
+    match to {
+        ElementOrder::C => extract_strided(&bytes, data_type, 0, shape, &from.strides(shape)),
+        ElementOrder::F => {
+            // The C order of the reversed shape is the F order of `shape`
+            let reversed_shape: ArrayIndices = shape.iter().rev().copied().collect();
+            let mut reversed_strides = from.strides(shape);
+            reversed_strides.reverse();
+            extract_strided(&bytes, data_type, 0, &reversed_shape, &reversed_strides)
+        }
     }
 }
 
@@ -322,6 +492,122 @@ mod tests {
     use super::*;
     use crate::array::{FillValue, data_type};
     use zarrs_codec::copy_fill_value_into;
+
+    #[test]
+    fn reorder_between_element_orders() {
+        // A 2x3 array with elements 0..6 in C order
+        let shape = [2, 3];
+        let c_order = [0u8, 1, 2, 3, 4, 5];
+        let f_order = [0u8, 3, 1, 4, 2, 5];
+        let to_f = |bytes: ArrayBytes<'static>, data_type: &DataType| {
+            reorder(bytes, data_type, &shape, ElementOrder::C, ElementOrder::F).unwrap()
+        };
+        let to_c = |bytes: ArrayBytes<'static>, data_type: &DataType| {
+            reorder(bytes, data_type, &shape, ElementOrder::F, ElementOrder::C).unwrap()
+        };
+
+        // Fixed length
+        let uint8 = data_type::uint8();
+        let f = to_f(ArrayBytes::new_flen(c_order.to_vec()), &uint8);
+        assert_eq!(f, ArrayBytes::new_flen(f_order.to_vec()));
+        assert_eq!(to_c(f, &uint8), ArrayBytes::new_flen(c_order.to_vec()));
+
+        // Fixed length elements of more than one byte
+        let uint16 = data_type::uint16();
+        let bytes = |order: &[u8]| -> Vec<u8> {
+            order
+                .iter()
+                .flat_map(|&e| (u16::from(e) * 257).to_ne_bytes())
+                .collect()
+        };
+        assert_eq!(
+            to_f(ArrayBytes::new_flen(bytes(&c_order)), &uint16),
+            ArrayBytes::new_flen(bytes(&f_order))
+        );
+
+        // Variable length
+        let string = data_type::string();
+        let vlen = |order: &[u8]| {
+            let elements: Vec<String> = order.iter().map(|e| "x".repeat(usize::from(*e))).collect();
+            <String as crate::array::Element>::into_array_bytes(&string, elements).unwrap()
+        };
+        let f = to_f(vlen(&c_order), &string);
+        assert_eq!(f, vlen(&f_order));
+        assert_eq!(to_c(f, &string), vlen(&c_order));
+
+        // Optional
+        let optional = data_type::uint8().to_optional();
+        let mask = |order: &[u8]| {
+            order
+                .iter()
+                .map(|e| u8::from(e % 2 == 0))
+                .collect::<Vec<u8>>()
+        };
+        let opt =
+            |order: &[u8]| ArrayBytes::new_flen(order.to_vec()).with_optional_mask(mask(order));
+        let f = to_f(opt(&c_order), &optional);
+        assert_eq!(f, opt(&f_order));
+        assert_eq!(to_c(f, &optional), opt(&c_order));
+
+        // Arrays with at most one dimension of more than one element are not reordered
+        for shape in [vec![6], vec![1, 6], vec![6, 1], vec![]] {
+            let bytes = ArrayBytes::new_flen(vec![
+                0u8;
+                usize::try_from(shape.iter().product::<u64>())
+                    .unwrap()
+            ]);
+            let reordered = reorder(
+                bytes.clone(),
+                &uint8,
+                &shape,
+                ElementOrder::C,
+                ElementOrder::F,
+            )
+            .unwrap();
+            assert_eq!(reordered, bytes);
+        }
+
+        // Bytes of the wrong length are rejected
+        assert!(
+            reorder(
+                ArrayBytes::new_flen(vec![0u8; 5]),
+                &uint8,
+                &shape,
+                ElementOrder::C,
+                ElementOrder::F
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn extract_strided_elements() {
+        // The column 1 of a 3x4 array, and a 2x2 block in F order of a 3x4 F-order array
+        let bytes = ArrayBytes::new_flen((0u8..12).collect::<Vec<u8>>());
+        let uint8 = data_type::uint8();
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 1, &[3], &[4]).unwrap(),
+            ArrayBytes::new_flen(vec![1u8, 5, 9])
+        );
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 4, &[2, 2], &[1, 3]).unwrap(),
+            ArrayBytes::new_flen(vec![4u8, 7, 5, 8])
+        );
+        // Out of bounds grids are rejected
+        assert!(extract_strided(&bytes, &uint8, 4, &[3], &[4]).is_err());
+        let string = data_type::string();
+        let vlen = <String as crate::array::Element>::into_array_bytes(
+            &string,
+            vec!["a".to_string(), "b".to_string()],
+        )
+        .unwrap();
+        assert!(extract_strided(&vlen, &string, 1, &[2], &[1]).is_err());
+        // Empty grids extract nothing
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 99, &[0, 2], &[1, 3]).unwrap(),
+            ArrayBytes::new_flen(Vec::<u8>::new())
+        );
+    }
 
     #[test]
     fn copy_fill_value_into_matches_materialised_fill() {

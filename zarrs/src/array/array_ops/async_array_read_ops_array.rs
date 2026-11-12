@@ -1,3 +1,4 @@
+use crate::array::ElementOrder;
 use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::{CowBytes, Resources};
@@ -124,7 +125,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 )
                 .map_err(CodecError::from)
                 .map_err(ArrayError::from)?;
-                T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
+                T::from_array_bytes(
+                    bytes,
+                    &array_subset_shape,
+                    self.data_type(),
+                    ElementOrder::C,
+                )
             }
             1 => {
                 let chunk_indices = chunks.start();
@@ -173,7 +179,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                     )
                     .await?
                 };
-                T::from_array_bytes(bytes.into_owned(), &array_subset_shape, self.data_type())
+                T::from_array_bytes(
+                    bytes.into_owned(),
+                    &array_subset_shape,
+                    self.data_type(),
+                    ElementOrder::C,
+                )
             }
         }
     }
@@ -405,7 +416,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await?
             .into_owned();
         bytes.validate(indexer.len(), self.data_type())?;
-        T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
+        T::from_array_bytes(
+            bytes,
+            &indexer.output_shape(),
+            self.data_type(),
+            ElementOrder::C,
+        )
     }
 
     pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
@@ -476,6 +492,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 bytes.into_owned(),
                 bytemuck::must_cast_slice(&chunk_shape),
                 self.data_type(),
+                ElementOrder::C,
             )?))
         } else {
             Ok(None)

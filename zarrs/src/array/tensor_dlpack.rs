@@ -7,7 +7,7 @@ use dlpark::tensor::compact_strides;
 use dlpark::{Builder, DlpackFlags, versioned};
 
 use super::element_layout::{ElementLayout, ElementPacking};
-use super::{DataType, Tensor, TensorError};
+use super::{DataType, ElementOrder, Tensor, TensorError};
 use crate::array::data_type as dt;
 
 /// Convert a zarrs [`DataType`] and [`ElementLayout`] to a [`DLDataType`] and the [`DlpackFlags`]
@@ -146,19 +146,31 @@ fn expected_num_bytes(
     usize::try_from(layout.byte_offset.checked_add(elements)?).ok()
 }
 
-/// Convert a tensor shape into `DLPack` shape and row-major compact strides (in elements).
+/// Convert a tensor shape into `DLPack` shape and compact strides (in elements) for elements in `order`.
 ///
 /// # Errors
 /// Returns [`TensorError::UnsupportedShape`] if a dimension or a stride is not representable as an
 /// [`i64`].
-fn shape_and_strides(shape: &[u64]) -> Result<(Vec<i64>, Vec<i64>), TensorError> {
+fn shape_and_strides(
+    shape: &[u64],
+    order: ElementOrder,
+) -> Result<(Vec<i64>, Vec<i64>), TensorError> {
     let unsupported = || TensorError::UnsupportedShape(shape.to_vec());
-    let shape = shape
+    let shape_i64 = shape
         .iter()
         .map(|s| i64::try_from(*s).map_err(|_| unsupported()))
         .collect::<Result<Vec<i64>, TensorError>>()?;
-    let strides = compact_strides(&shape).map_err(|_| unsupported())?;
-    Ok((shape, strides))
+    let strides = match order {
+        ElementOrder::C => compact_strides(&shape_i64).map_err(|_| unsupported())?,
+        ElementOrder::F => {
+            // The column-major strides of a shape are the row-major strides of its reverse, reversed
+            let reversed: Vec<i64> = shape_i64.iter().rev().copied().collect();
+            let mut strides = compact_strides(&reversed).map_err(|_| unsupported())?;
+            strides.reverse();
+            strides
+        }
+    };
+    Ok((shape_i64, strides))
 }
 
 impl Tensor<'static> {
@@ -208,7 +220,7 @@ impl Tensor<'static> {
         let tensor = Box::new(self);
         let layout = tensor.layout();
         let (dtype, flags) = data_type_to_dlpack(tensor.data_type(), layout)?;
-        let (shape, strides) = shape_and_strides(tensor.shape())?;
+        let (shape, strides) = shape_and_strides(tensor.shape(), tensor.order())?;
 
         // The exported tensor must not describe bytes beyond the end of the buffer
         let expected = expected_num_bytes(tensor.num_elements(), dtype, layout);
@@ -228,7 +240,7 @@ impl Tensor<'static> {
         let builder = Builder::new(tensor, CopiedSlice::new(shape, strides));
         // SAFETY: the boxed tensor owns the bytes at `data` and outlives the managed tensor, which
         // needs the `'static` tensor. `dtype`/shape/strides/`byte_offset` describe those bytes as a
-        // compact row-major tensor, and there are enough of them for the elements described.
+        // compact tensor in the tensor's element order, and there are enough of them for the elements described.
         let builder = unsafe { builder.data(data) }
             .dtype(dtype)
             .device(DLDevice::CPU)
@@ -247,6 +259,24 @@ mod tests {
 
     use super::{ElementLayout, ElementPacking};
     use crate::array::data_type;
+
+    #[test]
+    fn tensor_dlpack_strides() {
+        use crate::array::{ElementOrder, Tensor};
+        let bytes: Vec<u8> = (0..24).collect();
+        let tensor = |order| {
+            Tensor::new(bytes.clone(), data_type::uint8(), vec![2, 3, 4])
+                .with_order(order)
+                .into_dlpack()
+                .unwrap()
+        };
+        let c = tensor(ElementOrder::C);
+        assert_eq!(c.shape().unwrap(), &[2, 3, 4]);
+        assert_eq!(c.strides().unwrap(), Some(&[12i64, 4, 1][..]));
+        let f = tensor(ElementOrder::F);
+        assert_eq!(f.shape().unwrap(), &[2, 3, 4]);
+        assert_eq!(f.strides().unwrap(), Some(&[1i64, 2, 6][..]));
+    }
 
     #[test]
     fn tensor_dlpack_layout_flags() {

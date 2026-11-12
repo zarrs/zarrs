@@ -1,3 +1,4 @@
+use crate::array::ElementOrder;
 use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::Resources;
@@ -80,7 +81,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 )?;
             }
         } else {
-            let subset_bytes = subset_data.into_array_bytes(self.data_type())?;
+            let subset_bytes = subset_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
@@ -191,7 +192,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             return self.store_chunk_with_options(chunk_indices, indexer_data, options, resources);
         }
 
-        let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
+        let indexer_bytes = indexer_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
         indexer_bytes.validate(indexer.len(), self.data_type())?;
         if indexer.is_empty() {
             return Ok(());

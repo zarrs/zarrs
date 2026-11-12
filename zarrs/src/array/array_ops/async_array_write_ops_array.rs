@@ -1,3 +1,4 @@
+use crate::array::ElementOrder;
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 
@@ -123,7 +124,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
-                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
+                let subset_bytes =
+                    chunks_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
                 subset_bytes.validate(0, self.data_type())?;
             }
             1 => {
@@ -137,7 +139,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 .await?;
             }
             _ => {
-                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
+                let subset_bytes =
+                    chunks_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
                 let array_subset = self.chunks_subset(chunks)?;
                 subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
@@ -243,7 +246,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
+        let chunk_bytes = chunk_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
 
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;

@@ -105,6 +105,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`, which exports a `Tensor<'static>` as a versioned DLPack managed tensor (requires `dlpack`)
   - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
   - Add `Tensor::num_elements()` and implement `Clone` and `Debug` for `Tensor`
+  - **Breaking**: `FromArrayBytes::from_array_bytes[_arc]` and `IntoArrayBytes::into_array_bytes` take the `ElementOrder` of the elements
+    - Add `ElementOrder` (`C` or `F`)
+    - Types without a layout (`Vec`, slices, `ArrayBytes`) hold their elements in the given order; `ndarray` arrays are created column-major for `F`, and are borrowed without a copy if they are already in the requested order
+    - Add `IntoArrayBytes::element_order`, the order of the elements of an input for a target shape; it returns the new `ElementError::IncompatibleShape` for an `ndarray` array or `Tensor` with a shape other than the target's, which was previously stored if it had the same number of elements
+  - Add `Tensor::{order,with_order}()`; a `Tensor` is reordered when stored in another order, and DLPack export uses column-major strides for `F`
+    - **Breaking**: `Tensor::{into_parts,as_parts}()` also return the order
   - Implement `IntoArrayBytes` for `&bytes::Bytes`; storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
   - Fix DLPack export to validate that tensor bytes cover the shape and data type, adding `TensorError::{InsufficientBytes,UnsupportedShape}`
 - Implement `Clone` for `ArrayBuilder`

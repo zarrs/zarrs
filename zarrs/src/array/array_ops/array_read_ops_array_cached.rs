@@ -1,3 +1,4 @@
+use crate::array::ElementOrder;
 use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::Resources;
@@ -249,6 +250,7 @@ where
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            ElementOrder::C,
         )
     }
 
@@ -290,7 +292,12 @@ where
             options,
             resources,
         )?;
-        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
+        T::from_array_bytes_arc(
+            bytes,
+            &indexer.output_shape(),
+            self.array().data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -324,7 +331,12 @@ where
             options,
             resources,
         )?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
+        T::from_array_bytes_arc(
+            bytes,
+            &array_subset.shape(),
+            self.array().data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -349,6 +361,7 @@ where
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            ElementOrder::C,
         )
         .map(Some)
     }

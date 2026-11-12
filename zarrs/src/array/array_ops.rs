@@ -57,6 +57,7 @@
 //!
 //! [`ArrayMutOps::set_codec_options`] can instead update an array through a mutable reference.
 
+use crate::array::ElementOrder;
 use std::sync::Arc;
 
 use super::chunk_cache::ChunkCache;
@@ -158,5 +159,6 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
         bytes,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
+        ElementOrder::C,
     )
 }

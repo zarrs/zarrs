@@ -28,6 +28,7 @@ mod array_metadata_options;
 mod array_ops;
 mod element;
 mod element_layout;
+mod element_order;
 mod from_array_bytes;
 mod into_array_bytes;
 mod tensor;
@@ -104,6 +105,7 @@ pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWrit
 use self::chunk_grid::RegularChunkGrid;
 pub use self::codec::{CodecChain, CodecChainBound};
 pub use self::element::{Element, ElementError, ElementOwned};
+pub use self::element_order::ElementOrder;
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
