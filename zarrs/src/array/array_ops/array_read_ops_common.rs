@@ -1,12 +1,17 @@
+use std::num::NonZeroU64;
+
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, Indexer};
+use crate::array::{
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits,
+    ChunkShapeTraits, Indexer,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
-    copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
+    InvalidNumberOfElementsError, Resources, copy_fill_value_into, decode_into_array_bytes_target,
 };
-use zarrs_storage::{MaybeSend, MaybeSync};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 
 use super::super::array_bytes_internal::FixedDecodeBuffers;
 use super::super::concurrency::concurrency_chunks_and_codec;
@@ -192,4 +197,47 @@ where
         .try_for_each(retrieve_chunk)?;
 
     Ok(())
+}
+
+impl<TStorage: ?Sized> Array<TStorage> {
+    /// Decode the encoded chunk `chunk_encoded` with `chunk_shape`.
+    pub(super) fn decode_chunk(
+        &self,
+        chunk_encoded: Bytes,
+        chunk_shape: &[NonZeroU64],
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        let bytes = self
+            .codecs_bound()
+            .decode(
+                CowBytes::Shared(chunk_encoded),
+                chunk_shape,
+                options,
+                resources.compute(),
+            )
+            .map_err(ArrayError::CodecError)?;
+        bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        Ok(bytes.into_owned())
+    }
+
+    /// Decode the encoded chunk `chunk_encoded` with `chunk_shape` into `output_target`.
+    pub(super) fn decode_chunk_into(
+        &self,
+        chunk_encoded: Bytes,
+        chunk_shape: &[NonZeroU64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.codecs_bound()
+            .decode_into(
+                CowBytes::Shared(chunk_encoded).into(),
+                chunk_shape,
+                output_target,
+                options,
+                resources.compute(),
+            )
+            .map_err(ArrayError::CodecError)
+    }
 }

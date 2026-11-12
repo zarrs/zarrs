@@ -37,6 +37,17 @@ impl ElementOrder {
     pub(crate) fn is_reordered(self, shape: &[u64]) -> bool {
         self == Self::F && shape.iter().filter(|&&size| size > 1).count() > 1
     }
+
+    /// Return the order of C-ordered elements of an array with `shape`, preferring this order if both apply.
+    ///
+    /// This is this order if it places the elements of `shape` as C order does, and C order otherwise.
+    pub(crate) fn for_c_order_elements(self, shape: &[u64]) -> Self {
+        if self.is_reordered(shape) {
+            Self::C
+        } else {
+            self
+        }
+    }
 }
 
 #[cfg(test)]
@@ -52,5 +63,17 @@ mod tests {
         assert!(ElementOrder::F.is_reordered(&[2, 3]));
         assert!(!ElementOrder::F.is_reordered(&[1, 3, 1]));
         assert!(!ElementOrder::F.is_reordered(&[5]));
+        assert_eq!(
+            ElementOrder::F.for_c_order_elements(&[2, 3]),
+            ElementOrder::C
+        );
+        assert_eq!(
+            ElementOrder::F.for_c_order_elements(&[1, 3]),
+            ElementOrder::F
+        );
+        assert_eq!(
+            ElementOrder::C.for_c_order_elements(&[2, 3]),
+            ElementOrder::C
+        );
     }
 }
