@@ -465,6 +465,155 @@ fn codec_bytes_decode_into_strided(c: &mut Criterion) {
     }
 }
 
+/// Decode a chain with an array-to-array codec of `decoded_shape` `f32` elements, owned and into contiguous, block (half of
+/// each innermost row) and strided (every second element) targets, with and without zstd.
+fn a2a_decode_into_bench(
+    c: &mut Criterion,
+    name: &str,
+    codec: Arc<dyn zarrs_codec::UnboundArrayToArrayCodecTraits>,
+    decoded_shape: &[u64],
+) {
+    use unsafe_cell_slice::UnsafeCellSlice;
+    use zarrs::array::codec::CodecChain;
+    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+
+    let shape: Vec<std::num::NonZeroU64> = decoded_shape
+        .iter()
+        .map(|&size| std::num::NonZeroU64::new(size).unwrap())
+        .collect();
+    let num_elements = decoded_shape.iter().product::<u64>();
+    let values: Vec<f32> = (0..num_elements).map(|i| (i % 31) as f32 * 0.25).collect();
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+
+    let mut block_shape = decoded_shape.to_vec();
+    *block_shape.last_mut().unwrap() *= 2;
+    let strided_shape = [decoded_shape, &[2]].concat();
+    let layouts = [
+        (
+            "contiguous",
+            decoded_shape.to_vec(),
+            ArraySubset::new_with_shape(decoded_shape),
+        ),
+        (
+            "block",
+            block_shape,
+            ArraySubset::new_with_shape(decoded_shape),
+        ),
+        (
+            "strided",
+            strided_shape,
+            ArraySubset::new_with_shape([decoded_shape, &[1]].concat()),
+        ),
+    ];
+
+    #[allow(unused_mut)]
+    let mut chains = vec![(
+        name.to_string(),
+        CodecChain::new(vec![codec.clone()], Arc::new(BytesCodec::default()), vec![]),
+    )];
+    #[cfg(feature = "zstd")]
+    chains.push((
+        format!("{name}_zstd"),
+        CodecChain::new(
+            vec![codec],
+            Arc::new(BytesCodec::default()),
+            vec![Arc::new(ZstdCodec::new(1, false))],
+        ),
+    ));
+    for (name, chain) in chains {
+        let chain = chain
+            .with_context(
+                data_type::float32(),
+                Some(0f32.into()),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let encoded = chain
+            .encode(
+                ArrayBytes::new_flen(bytemuck::cast_slice(&values)),
+                &shape,
+                &options,
+                &resources,
+            )
+            .unwrap();
+        let mut group = c.benchmark_group(name);
+        group.throughput(Throughput::Bytes(num_elements * 4));
+        group.bench_function(BenchmarkId::new("decode", "owned"), |b| {
+            b.iter(|| {
+                std::hint::black_box(
+                    chain
+                        .decode(encoded.clone(), &shape, &options, &resources)
+                        .unwrap(),
+                );
+            });
+        });
+        for (layout, output_shape, subset) in &layouts {
+            let mut output = vec![0f32; output_shape.iter().product::<u64>() as usize];
+            group.bench_function(BenchmarkId::new("decode_into", layout), |b| {
+                b.iter(|| {
+                    // SAFETY: each iteration owns the only view of this output buffer.
+                    let view = unsafe {
+                        ArrayBytesFixedDisjointView::new(
+                            UnsafeCellSlice::new(bytemuck::cast_slice_mut::<f32, u8>(&mut output)),
+                            4,
+                            output_shape,
+                            subset.clone(),
+                        )
+                        .unwrap()
+                    };
+                    chain
+                        .decode_into(
+                            encoded.clone().into(),
+                            &shape,
+                            &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                            &options,
+                            &resources,
+                        )
+                        .unwrap();
+                    std::hint::black_box(&output);
+                });
+            });
+        }
+    }
+}
+
+/// Decode chains with an array-to-array codec into contiguous and strided targets.
+fn codec_a2a_decode_into(c: &mut Criterion) {
+    use zarrs::array::codec::{ReshapeCodec, ReshapeDim, ReshapeShape, SqueezeCodec};
+
+    #[cfg(feature = "transpose")]
+    a2a_decode_into_bench(
+        c,
+        "codec_transpose",
+        Arc::new(zarrs::array::codec::TransposeCodec::new(
+            zarrs::array::codec::TransposeOrder::new(&[1, 0]).unwrap(),
+        )),
+        &[128, 256],
+    );
+    a2a_decode_into_bench(
+        c,
+        "codec_reshape",
+        Arc::new(ReshapeCodec::new(
+            ReshapeShape::new([ReshapeDim::from([0, 1])]).unwrap(),
+        )),
+        &[128, 256],
+    );
+    a2a_decode_into_bench(
+        c,
+        "codec_squeeze",
+        Arc::new(SqueezeCodec::new()),
+        &[128, 1, 256],
+    );
+    #[cfg(feature = "bitround")]
+    a2a_decode_into_bench(
+        c,
+        "codec_bitround",
+        Arc::new(zarrs::array::codec::BitroundCodec::new(10)),
+        &[128, 256],
+    );
+}
+
 fn bytes_decode_into_bench(c: &mut Criterion, name: &str, codec: Arc<dyn BytesToBytesCodecTraits>) {
     decode_into_bench(
         c,
@@ -570,6 +719,7 @@ criterion_group!(
     codec_packbits,
     codec_shuffle,
     codec_decode_into,
-    codec_bytes_decode_into_strided
+    codec_bytes_decode_into_strided,
+    codec_a2a_decode_into
 );
 criterion_main!(benches);

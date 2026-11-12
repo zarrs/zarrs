@@ -65,6 +65,9 @@ fn array_bytes_ops(c: &mut Criterion) {
                 std::hint::black_box(&output);
             });
         };
+        bench_view("copy_from_slice", &|view| {
+            view.copy_from_slice(&values).unwrap()
+        });
         bench_view("fill", &|view| view.fill(&fill_value).unwrap());
         bench_view("fill_uniform", &|view| view.fill(&[0; 4]).unwrap());
         bench_view("copy_elements_from_slice", &|view| {
