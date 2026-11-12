@@ -1,4 +1,5 @@
 use crate::array::ElementOrder;
+use crate::array::array_bytes_internal::{extract_array_subset_in_order, reorder};
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 
@@ -107,6 +108,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         self.async_store_chunk_with_options(
             chunk_indices,
             chunk_data,
+            self.element_order(),
             self.codec_options(),
             resources,
         )
@@ -121,6 +123,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
+        let order = self.element_order();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
@@ -133,15 +136,16 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 self.async_store_chunk_with_options(
                     &chunk_indices,
                     chunks_data,
+                    order,
                     options,
                     resources,
                 )
                 .await?;
             }
             _ => {
-                let subset_bytes =
-                    chunks_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
                 let array_subset = self.chunks_subset(chunks)?;
+                let order = chunks_data.element_order(array_subset.shape(), order)?;
+                let subset_bytes = chunks_data.into_array_bytes(self.data_type(), order)?;
                 subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
                 // Calculate chunk/codec concurrency
@@ -157,17 +161,19 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 let resources = &resources;
                 let store_chunk = |chunk_indices: ArrayIndices| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
-                    let chunk_bytes = subset_bytes
-                        .extract_array_subset(
-                            &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
-                            array_subset.shape(),
-                            self.data_type(),
-                        )
-                        .unwrap(); // FIXME: unwrap
+                    let chunk_bytes = extract_array_subset_in_order(
+                        &subset_bytes,
+                        self.data_type(),
+                        &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
+                        array_subset.shape(),
+                        order,
+                    )
+                    .unwrap(); // FIXME: unwrap
                     async move {
                         self.async_store_chunk_with_options(
                             &chunk_indices,
                             chunk_bytes,
+                            ElementOrder::C,
                             options,
                             resources,
                         )
@@ -243,12 +249,20 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        order: ElementOrder,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = chunk_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
-
         let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        let order = chunk_data.element_order(chunk_shape_u64, order)?;
+        let chunk_bytes = reorder(
+            chunk_data.into_array_bytes(self.data_type(), order)?,
+            self.data_type(),
+            chunk_shape_u64,
+            order,
+            ElementOrder::C,
+        )?;
         chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
 
         let is_fill_value =

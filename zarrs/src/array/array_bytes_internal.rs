@@ -7,7 +7,7 @@ use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::iterators::ContiguousLinearisedIndices;
-use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer};
+use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer, IndexerError};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
     ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
@@ -282,6 +282,31 @@ fn extract_runs_fixed(
         }
     });
     Ok(extracted)
+}
+
+/// Extract the elements of `subset` in C order from `bytes`, the elements of an array of `shape` in `order`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type`, or `subset` is out-of-bounds of `shape`.
+pub(crate) fn extract_array_subset_in_order<'a>(
+    bytes: &'a ArrayBytes<'_>,
+    data_type: &DataType,
+    subset: &ArraySubset,
+    shape: &[u64],
+    order: ElementOrder,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if order.is_reordered(shape) {
+        if !subset.inbounds_shape(shape) {
+            return Err(IndexerError::new_oob(subset.end_exc().to_vec(), shape.to_vec()).into());
+        }
+        let strides = order.strides(shape);
+        let offset = std::iter::zip(subset.start(), &strides)
+            .map(|(start, stride)| start * stride)
+            .sum();
+        extract_strided(bytes, data_type, offset, subset.shape(), &strides)
+    } else {
+        bytes.extract_array_subset(subset, shape, data_type)
+    }
 }
 
 /// Reorder the elements of `bytes`, an array of `shape` with elements in `from` order, to `to` order.

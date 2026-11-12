@@ -1,4 +1,5 @@
 use crate::array::ElementOrder;
+use crate::array::array_bytes_internal::{extract_array_subset_in_order, reorder};
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 
@@ -89,7 +90,13 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         chunk_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.store_chunk_with_options(chunk_indices, chunk_data, self.codec_options(), resources)
+        self.store_chunk_with_options(
+            chunk_indices,
+            chunk_data,
+            self.element_order(),
+            self.codec_options(),
+            resources,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -100,6 +107,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
+        let order = self.element_order();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
@@ -109,12 +117,18 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_with_options(&chunk_indices, chunks_data, options, resources)?;
+                self.store_chunk_with_options(
+                    &chunk_indices,
+                    chunks_data,
+                    order,
+                    options,
+                    resources,
+                )?;
             }
             _ => {
-                let subset_bytes =
-                    chunks_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
                 let array_subset = self.chunks_subset(chunks)?;
+                let order = chunks_data.element_order(array_subset.shape(), order)?;
+                let subset_bytes = chunks_data.into_array_bytes(self.data_type(), order)?;
                 subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
                 // Calculate chunk/codec concurrency
@@ -129,12 +143,20 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 
                 let store_chunk = |chunk_indices: ArrayIndices| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_bytes = subset_bytes.extract_array_subset(
+                    let chunk_bytes = extract_array_subset_in_order(
+                        &subset_bytes,
+                        self.data_type(),
                         &chunk_subset.relative_to(array_subset.start())?,
                         array_subset.shape(),
-                        self.data_type(),
+                        order,
                     )?;
-                    self.store_chunk_with_options(&chunk_indices, chunk_bytes, options, &resources)
+                    self.store_chunk_with_options(
+                        &chunk_indices,
+                        chunk_bytes,
+                        ElementOrder::C,
+                        options,
+                        &resources,
+                    )
                 };
 
                 let indices = chunks.indices();
@@ -199,17 +221,25 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
 }
 
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
+    /// Store `chunk_data`, with elements in `order`.
     pub(in crate::array) fn store_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        order: ElementOrder,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = chunk_data.into_array_bytes(self.data_type(), ElementOrder::C)?;
-
-        // Validation
         let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        let order = chunk_data.element_order(chunk_shape_u64, order)?;
+        let chunk_bytes = reorder(
+            chunk_data.into_array_bytes(self.data_type(), order)?,
+            self.data_type(),
+            chunk_shape_u64,
+            order,
+            ElementOrder::C,
+        )?;
         chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
 
         let is_fill_value =
