@@ -285,7 +285,7 @@ fn codec_shuffle(c: &mut Criterion) {
     let mut group = c.benchmark_group("codec_shuffle");
     group.plot_config(plot_config);
 
-    for elementsize in [2usize, 3, 4, 8, 16] {
+    for elementsize in [1usize, 2, 3, 4, 8, 16] {
         let codec = ShuffleCodec::new(elementsize);
         for len in [1usize << 16, 1 << 20, 1 << 24] {
             let len = len / elementsize * elementsize;
