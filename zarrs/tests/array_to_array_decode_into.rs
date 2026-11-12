@@ -241,6 +241,19 @@ fn cases() -> Vec<Case> {
                     .collect::<Vec<u8>>(),
             ),
         },
+        // A scalar map is applied element by element, so it is cast through a buffer
+        Case {
+            name: "cast_value_scalar_map",
+            codecs: r#"[{"name": "cast_value", "configuration": {"data_type": "int16", "scalar_map": {"decode": [[7, -1]]}}}, BYTES]"#,
+            data_type: data_type::int32(),
+            fill_value: FillValue::from(0i32),
+            shape: vec![90, 100],
+            elements: ArrayBytes::new_flen(
+                (0..9000i32)
+                    .flat_map(|i| (i % 50).to_ne_bytes())
+                    .collect::<Vec<u8>>(),
+            ),
+        },
         // More elements than are cast at a time
         Case {
             name: "cast_value_blocks",

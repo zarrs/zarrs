@@ -332,7 +332,24 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
                 kernel: self.decode_kernel,
             };
 
-            // Elements are cast a block at a time into a buffer that stays in cache, and copied into the regions of the view
+            // A bulk kernel casts straight into the regions of the view
+            if let (Some(kernel), None) = (&context.kernel, context.scalar_map) {
+                let mut source: &[u8] = &bytes;
+                // SAFETY: each region is cast from the next source elements, and `cast_into` writes every byte of its output on success.
+                // There is a source element for every element of the view, so every region is initialised.
+                return unsafe {
+                    view.for_each_region_mut(|region| {
+                        let (region_source, rest) =
+                            source.split_at(region.len() / target_size * source_size);
+                        source = rest;
+                        kernel
+                            .cast_into(region_source, region)
+                            .map_err(|err| CodecError::Other(err.to_string()))
+                    })
+                };
+            }
+
+            // Otherwise elements are cast a block at a time into a buffer that stays in cache, and copied into the regions of the view
             let mut source: &[u8] = &bytes;
             let mut cast = Vec::with_capacity(num_elements.min(BLOCK_ELEMENTS) * target_size);
             let mut cast_position = 0;
