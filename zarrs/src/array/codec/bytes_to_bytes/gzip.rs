@@ -233,4 +233,25 @@ mod tests {
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
     }
+
+    #[test]
+    fn codec_gzip_decode_into() {
+        let codec = GzipCodec::new(1).unwrap();
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &b"decode directly into this buffer".repeat(32),
+            1,
+            |encoded| {
+                // A truncated stream, and bytes that are not a gzip stream
+                vec![encoded[..encoded.len() / 2].to_vec(), vec![0u8; 64]]
+            },
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn codec_gzip_decode_into_bounds() {
+        let codec = GzipCodec::new(1).unwrap();
+        crate::array::codec::bytes_to_bytes::check_stream_decode_into_bounds(&codec);
+    }
 }

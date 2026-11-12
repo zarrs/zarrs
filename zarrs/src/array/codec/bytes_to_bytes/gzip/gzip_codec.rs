@@ -1,5 +1,6 @@
 use std::io::{Cursor, Read};
 use std::sync::Arc;
+use zarrs_codec::read_decoded_bytes_into;
 
 use flate2::bufread::{GzDecoder, GzEncoder};
 
@@ -9,8 +10,9 @@ use super::{
 };
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -120,6 +122,10 @@ impl BytesToBytesCodecTraits for GzipCodec {
         Ok(CowBytes::from(out))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -134,5 +140,19 @@ impl BytesToBytesCodecTraits for GzipCodec {
                 let deflate_overhead = size.div_ceil(8) + size.div_ceil(64) + 5;
                 BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + deflate_overhead)
             })
+    }
+}
+
+// SAFETY: `read_decoded_bytes_into` zero-initialises `output` before reading into it.
+unsafe impl BytesToBytesCodecDecodeInto for GzipCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [std::mem::MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        read_decoded_bytes_into(GzDecoder::new(&encoded_value[..]), output)
     }
 }

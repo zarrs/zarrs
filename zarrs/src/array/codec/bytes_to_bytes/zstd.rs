@@ -98,13 +98,15 @@ impl CodecTraitsV2 for ZstdCodec {
 #[cfg(test)]
 mod tests {
     use crate::array::Resources;
+    use std::mem::MaybeUninit;
     use std::sync::Arc;
     use zarrs_codec::{ComputeResources, CowBytes};
 
     use super::*;
     use crate::array::BytesRepresentation;
     use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+        BytesPartialDecoderTraits, BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits,
+        CodecError, CodecOptions,
     };
     use zarrs_storage::byte_range::ByteRange;
 
@@ -397,5 +399,97 @@ mod tests {
             decode(&encoded, BytesRepresentation::UnboundedSize).unwrap(),
             data
         );
+    }
+
+    #[test]
+    fn decode_into() {
+        let codec = ZstdCodec::new(1, false);
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &b"decode directly into this buffer".repeat(32),
+            1,
+            |encoded| {
+                // A truncated stream, and bytes that are not a zstd stream
+                vec![encoded[..encoded.len() / 2].to_vec(), vec![0u8; 64]]
+            },
+        );
+    }
+
+    #[test]
+    fn decode_into_unknown_content_size() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = b"streamed frame without content size".repeat(32);
+        let len = decoded.len();
+        // The streaming encoder does not write the content size into the frame header
+        let encoded = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        assert!(matches!(
+            zstd::zstd_safe::get_frame_content_size(&encoded),
+            Ok(None)
+        ));
+        let decode_into = |output: &mut [MaybeUninit<u8>]| {
+            codec.decode_into(
+                CowBytes::from(encoded.as_slice()),
+                &BytesRepresentation::UnboundedSize,
+                output,
+                &options,
+                &ComputeResources::default(),
+            )
+        };
+
+        let mut output = vec![MaybeUninit::uninit(); len];
+        decode_into(&mut output).unwrap();
+        // SAFETY: a successful `decode_into` initialises the output.
+        assert_eq!(
+            unsafe { crate::slice_assume_init_mut(&mut output) },
+            decoded
+        );
+
+        // A too-small output returns the bounded decoder's error without a second decode.
+        assert!(matches!(
+            decode_into(&mut output[..len - 1]),
+            Err(CodecError::IOError(_))
+        ));
+        // Successful decompression reports its actual length for a too-large output.
+        assert!(matches!(
+            decode_into(&mut vec![MaybeUninit::uninit(); len + 1]),
+            Err(CodecError::UnexpectedChunkDecodedSize(_))
+        ));
+    }
+
+    #[test]
+    fn decode_into_oversized_frame_does_not_materialise_output() {
+        let codec = ZstdCodec::new(1, false);
+        let options = CodecOptions::default();
+        let decoded = vec![0u8; 8 * 1024 * 1024];
+        let known_size = codec
+            .encode(
+                CowBytes::from(decoded.as_slice()),
+                &options,
+                &ComputeResources::default(),
+            )
+            .unwrap();
+        let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        for (encoded, size_known) in [(known_size, true), (CowBytes::from(unknown_size), false)] {
+            let mut output = [MaybeUninit::uninit(); 8];
+            // The old allocating retry returned UnexpectedChunkDecodedSize only after expanding the entire 8 MiB
+            // frame. A size in the frame header is compared without decompressing, otherwise decompressing fails
+            // once the output is full.
+            let result = codec.decode_into(
+                encoded,
+                &BytesRepresentation::FixedSize(8),
+                &mut output,
+                &options,
+                &ComputeResources::default(),
+            );
+            if size_known {
+                assert!(matches!(
+                    result,
+                    Err(CodecError::UnexpectedChunkDecodedSize(_))
+                ));
+            } else {
+                assert!(matches!(result, Err(CodecError::IOError(_))));
+            }
+        }
     }
 }

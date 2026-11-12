@@ -6,9 +6,9 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
 
@@ -72,9 +72,10 @@ impl ShuffleCodec {
         encoded_value: &[u8],
         decoded_value: &mut [MaybeUninit<u8>],
     ) -> Result<(), CodecError> {
+        // Shuffling preserves the length, so the decoded length is the encoded length
         if encoded_value.len() != decoded_value.len() {
             return Err(
-                InvalidBytesLengthError::new(decoded_value.len(), encoded_value.len()).into(),
+                InvalidBytesLengthError::new(encoded_value.len(), decoded_value.len()).into(),
             );
         }
 
@@ -134,6 +135,10 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let count = self.element_count(decoded_value.len())?;
+        if self.elementsize == 1 {
+            // Shuffling one-byte elements is the identity
+            return Ok(decoded_value);
+        }
         let len = decoded_value.len();
         let mut encoded_value = Vec::with_capacity(len);
         shuffle(
@@ -155,6 +160,11 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
         let len = encoded_value.len();
+        self.element_count(len)?;
+        if self.elementsize == 1 {
+            // Unshuffling one-byte elements is the identity
+            return Ok(encoded_value);
+        }
         let mut decoded_value = Vec::with_capacity(len);
         self.unshuffle(
             &encoded_value,
@@ -165,6 +175,10 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         Ok(CowBytes::from(decoded_value))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -173,12 +187,28 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
     }
 }
 
+// SAFETY: `unshuffle` initialises every byte of `output` from the equal-length encoded bytes.
+unsafe impl BytesToBytesCodecDecodeInto for ShuffleCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        self.unshuffle(&encoded_value, output)
+    }
+}
+
 /// Shuffle `count` elements of `elementsize` bytes: byte `i` of element `k` of `decoded` goes to `encoded[i * count + k]`.
 ///
 /// `decoded` and `encoded` must have `count * elementsize` bytes, and every byte of `encoded` is initialised.
 fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => crate::write_copy_of_slice(encoded, decoded),
+        1 => {
+            crate::write_copy_of_slice(encoded, decoded);
+        }
         2 => shuffle_swar::<2>(count, decoded, encoded),
         4 => shuffle_swar::<4>(count, decoded, encoded),
         8 => shuffle_swar::<8>(count, decoded, encoded),
@@ -196,7 +226,9 @@ fn shuffle(elementsize: usize, count: usize, decoded: &[u8], encoded: &mut [Mayb
 /// The inverse of [`shuffle`], which initialises every byte of `decoded`.
 fn unshuffle(elementsize: usize, count: usize, encoded: &[u8], decoded: &mut [MaybeUninit<u8>]) {
     match elementsize {
-        1 => crate::write_copy_of_slice(decoded, encoded),
+        1 => {
+            crate::write_copy_of_slice(decoded, encoded);
+        }
         2 => unshuffle_rows::<2>(count, encoded, decoded),
         4 => unshuffle_swar::<4>(count, encoded, decoded),
         8 => unshuffle_swar::<8>(count, encoded, decoded),

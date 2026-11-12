@@ -1,3 +1,4 @@
+use super::gdeflate_decode_into;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -8,8 +9,9 @@ use super::{
 };
 use crate::array::{BytesRepresentation, CowBytes, RecommendedConcurrency};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability,
 };
 use zarrs_metadata::Configuration;
 
@@ -138,6 +140,10 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         )?))
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -152,5 +158,19 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
             }
             BytesRepresentation::UnboundedSize => BytesRepresentation::UnboundedSize,
         }
+    }
+}
+
+// SAFETY: each page of `output` is decompressed in turn, and each page fails unless it is filled exactly.
+unsafe impl BytesToBytesCodecDecodeInto for GDeflateCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [std::mem::MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        gdeflate_decode_into(&encoded_value, output)
     }
 }

@@ -7,8 +7,8 @@ use zarrs_chunk_grid::iterators::{
 };
 use zarrs_chunk_grid::{ArraySubset, IndexerError};
 
-use crate::small_copy::{with_small_len, write_copy_of_slice};
-use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
+use crate::small_copy::with_small_len;
+use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError, write_copy_of_slice};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///
@@ -175,6 +175,32 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             * self.data_type_size
     }
 
+    /// Return the complete view as a mutable slice if it occupies one contiguous region.
+    ///
+    /// Returns [`None`] if the view is empty or occupies more than one contiguous region of the
+    /// underlying bytes.
+    ///
+    /// The slice covers only the bytes of this view. It does not alias the bytes of any other
+    /// view of the same array bytes, since [`new`](Self::new) requires views to be disjoint.
+    ///
+    /// # Safety
+    /// The bytes may be uninitialised, so they must be written before they are read.
+    /// The caller must never write uninitialised values to the slice, and must initialise all of it before reporting success to the owner of the view's bytes, which may then assume that they are initialised.
+    /// For example, an [`ArrayToBytesCodecTraits::decode_into`](crate::ArrayToBytesCodecTraits::decode_into) implementation must initialise the slice before returning `Ok`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    #[must_use]
+    pub unsafe fn as_mut_slice(&mut self) -> Option<&mut [MaybeUninit<u8>]> {
+        let indices = self.contiguous_linearised_indices();
+        if indices.len() != 1 {
+            return None;
+        }
+        let (index, _) = indices.iter().next()?;
+        // SAFETY: this mutable borrow exclusively accesses the single region of this disjoint view.
+        Some(unsafe { self.region_mut(index, self.bytes_in_subset_len) })
+    }
+
     /// Fill the view with the fill value.
     ///
     /// # Errors
@@ -241,6 +267,26 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
     /// # Panics
     /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
     pub fn copy_from_slice(&mut self, subset_bytes: &[u8]) -> Result<(), InvalidBytesLengthError> {
+        self.copy_from_slice_with(subset_bytes, |_| ())
+    }
+
+    /// Copy bytes into the view, then call `f` on each contiguous region of the view once it is written.
+    ///
+    /// The regions are passed in C order, so `f` can transform the copied bytes while they are in cache.
+    /// Each region is a whole number of elements, with the length of [`contiguous_bytes_len`](Self::contiguous_bytes_len).
+    ///
+    /// The `subset_bytes` must be the same length as the byte length of the elements in the view.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the length of `subset_bytes` is not the same as the byte length of the elements in the view.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub fn copy_from_slice_with(
+        &mut self,
+        subset_bytes: &[u8],
+        mut f: impl FnMut(&mut [u8]),
+    ) -> Result<(), InvalidBytesLengthError> {
         if subset_bytes.len() != self.bytes_in_subset_len {
             return Err(InvalidBytesLengthError::new(
                 subset_bytes.len(),
@@ -255,7 +301,10 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         with_small_len!(length, |length| {
             for ((index, _), source) in indices.iter().zip(subset_bytes.chunks_exact(length)) {
                 // SAFETY: the regions of the view are disjoint from each other and from other views.
-                write_copy_of_slice(unsafe { self.region_mut(index, length) }, source);
+                f(write_copy_of_slice(
+                    unsafe { self.region_mut(index, length) },
+                    source,
+                ));
             }
         });
         Ok(())
@@ -461,6 +510,8 @@ mod tests {
             }
             .unwrap();
             assert_eq!(view0.shape(), shape);
+            // SAFETY: the slice is not used.
+            assert!(unsafe { view0.as_mut_slice() }.is_none());
 
             view0.copy_from_slice(&[11, 12, 14, 15]).unwrap();
             assert!(view0.copy_from_slice(&[11, 12, 14, 15, 255]).is_err()); // wrong length
@@ -492,6 +543,8 @@ mod tests {
                 )
             }
             .unwrap();
+            // SAFETY: the slice is only measured, then the view is filled.
+            assert_eq!(unsafe { view1.as_mut_slice() }.unwrap().len(), 2);
             view1.fill(&[255]).unwrap();
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
@@ -575,7 +628,7 @@ mod tests {
                                 UnsafeCellSlice::new(&mut bytes),
                                 size,
                                 &shape,
-                                subset,
+                                subset.clone(),
                             )
                             .unwrap()
                         };
@@ -583,6 +636,50 @@ mod tests {
                         view.copy_from_slice(&input).unwrap();
                     }
                     assert_eq!(bytes, expected, "{size} {width} {rows:?}");
+
+                    // Each region is passed to `f` once it is written, in order
+                    let mut transformed = vec![0xa5; bytes.len()];
+                    let mut regions = Vec::new();
+                    {
+                        // SAFETY: this is the only view of transformed.
+                        let mut view = unsafe {
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut transformed),
+                                size,
+                                &shape,
+                                subset.clone(),
+                            )
+                            .unwrap()
+                        };
+                        assert!(
+                            view.copy_from_slice_with(&vec![0; count + 1], |_| unreachable!())
+                                .is_err()
+                        );
+                        view.copy_from_slice_with(&input, |region| {
+                            regions.push(region.to_vec());
+                            for byte in region.iter_mut() {
+                                *byte = !*byte;
+                            }
+                        })
+                        .unwrap();
+                    }
+                    let expected_regions: Vec<Vec<u8>> = if run == 0 {
+                        Vec::new()
+                    } else {
+                        input.chunks_exact(run).map(<[u8]>::to_vec).collect()
+                    };
+                    assert_eq!(regions, expected_regions, "{size} {width} {rows:?}");
+                    let mut expected_transformed = vec![0xa5; bytes.len()];
+                    for (k, row) in rows.clone().enumerate() {
+                        let destination = (usize::try_from(row).unwrap() * (width + 2) + 1) * size;
+                        for (dst, src) in expected_transformed[destination..destination + run]
+                            .iter_mut()
+                            .zip(&input[k * run..][..run])
+                        {
+                            *dst = !*src;
+                        }
+                    }
+                    assert_eq!(transformed, expected_transformed, "{size} {width} {rows:?}");
                 }
             }
         }
@@ -655,6 +752,8 @@ mod tests {
             }
             .unwrap();
             assert_eq!(view.num_elements(), 0);
+            // SAFETY: the slice is not used.
+            assert!(unsafe { view.as_mut_slice() }.is_none());
             view.copy_from_slice(&[]).unwrap();
             view.fill(&[1, 2]).unwrap();
         }

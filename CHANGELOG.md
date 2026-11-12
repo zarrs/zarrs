@@ -129,7 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
 
 #### General
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -148,6 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Re-export `ArrayBytesDecodeIntoTargetOptional`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
+- Decode through codec chains directly into output views, forwarding deferred decoding through transparent nested chains
 - Partial encoding
   - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
     - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders
@@ -187,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Correct missing `packbits` `first_byte`/`last_byte` padding bytes for whole-byte data. Chunks written by `zarrs` 0.20-0.23 without them are no longer readable, and those releases cannot read the corrected chunks
 - **Breaking**: `packbits` requires components of at most 64 bits and matching data type/component sizes
 - Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
+- Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
@@ -202,20 +204,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix index endianness handling to use the actual index data type rather than `uint64`
 - Return an error rather than panicking if the encoded index length exceeds the chunk length
 
+#### `bytes`
+- Decode directly into contiguous output views, converting endianness while copying and placing deferred output directly into the view
+- Convert endianness while copying borrowed or shared bytes into strided output views with regions of at least 256 bytes, rather than into a temporary buffer
+- Return an error rather than panicking if a decoded shape's element count or byte size overflows
+- Reject short decoded byte ranges in synchronous and asynchronous partial decoding
+
+#### `blosc`
+- Decode directly into preallocated output on native and WebAssembly backends
+- Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
+- Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
+
 #### `zstd`
 - Reuse per-thread compression and bulk decompression contexts
   - Compression reuse defaults to inputs up to 1 MiB and is configurable with `ZstdCodecOptions::{with_,set_,}compression_context_reuse_threshold`, via `ZstdCodec::with_options` or `CodecSpecificOptions`
 - Use bulk decompression bounds on WebAssembly when available
 - Cap the decompression buffer by the decoded size rather than the content size claimed by a frame header
+- Decode directly into preallocated output, validating frame lengths against the decoded size
+
+#### `zarrs.gdeflate`
+- Decode directly into preallocated output (requires `gdeflate`)
+- Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
+- Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
 
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
+- `pcodec`: Decode directly into aligned contiguous output, retaining fallback for other views and rejecting incomplete decompression (requires `pcodec`)
+- `bz2`: Decode streams directly into preallocated, uninitialised output (requires `bz2`)
+- `zlib`: Decode streams directly into preallocated, uninitialised output (requires `zlib`)
+- `gzip`: Decode streams directly into preallocated output with bounded oversized-stream detection
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
 - `transpose`: Support optional data types, permuting values and validity masks together
 - `reshape`: Remove warnings now that the codec is stable
 - `reshape`: Fix empty partial reads and writes, which are now mapped to an empty subset of the encoded dimensionality instead of an incompatible empty list of indices
-- `shuffle`: Encode and decode 4–28× faster for 2, 4, 8 and 16-byte elements by transposing eight elements at a time without zero-initialising the output
+- `shuffle`: Encode and decode 4–28× faster for 2, 4, 8 and 16-byte elements by transposing eight elements at a time without zero-initialising the output, decode directly into preallocated output, and pass one-byte elements through without copying
 - `shuffle`: Reject an `elementsize` of zero, which panicked when encoding or decoding an empty chunk
 - `crc32c`/`adler32`/`fletcher32`: Reuse the input allocation (if possible) when appending/stripping the checksum
 - `crc32c`/`adler32`/`fletcher32`: Fix partial decoders returning incorrect bytes for a `ByteRange::Suffix` request with the checksum at the end
@@ -225,16 +248,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
   - Represent `offset` and `scale` as `f64` rather than `f32`
   - Read single byte `dtype`/`astype` data types with a `|` byteorder (e.g. `|i1`, as written by `numcodecs`) or without a byteorder (except `u1`)
-- `blosc`: Fix incorrect partial decoding for byte ranges not aligned to the blosc `typesize` (e.g. optional data types)
-- `blosc`: Return an error instead of panicking or returning short output when decompression yields fewer bytes than expected, and from `blosc_decompress_bytes_partial` if the requested item range exceeds `c_int::MAX`
-- `bytes`: Return an error rather than panicking if a decoded shape's element count or byte size overflows
-- `zarrs.gdeflate`: Decode chunks of more than one page, and return an error rather than panicking if a page is corrupt
-- `zarrs.gdeflate`: Check decoded representation bounds and validate unbounded input page by page before allocating the full decoded length
 - `numcodecs.zlib`: Read configurations without a `level` (as written by `zarr-python` by default) or with the zlib default level of -1 ([#503](https://github.com/zarrs/zarrs/issues/503))
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
@@ -290,7 +308,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
-- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.18.2, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1
 
 ### Internal
 - Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations

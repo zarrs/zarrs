@@ -1,14 +1,5 @@
 //! Helpers for copying many small byte runs.
 
-use std::mem::MaybeUninit;
-
-/// Polyfill for `<[MaybeUninit<u8>]>::write_copy_of_slice`; remove at MSRV 1.93.
-pub(crate) fn write_copy_of_slice(dst: &mut [MaybeUninit<u8>], src: &[u8]) {
-    // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and `src` is only read.
-    let src = unsafe { &*(std::ptr::from_ref::<[u8]>(src) as *const [MaybeUninit<u8>]) };
-    dst.copy_from_slice(src);
-}
-
 /// Evaluate `$body` with `$len` bound to `$length`, specialised for common small lengths.
 ///
 /// Small lengths are bound as constants, so copies of `$len` bytes in `$body` compile to single moves rather than calls to `memcpy`.

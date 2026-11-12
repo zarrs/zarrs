@@ -196,7 +196,7 @@ async fn sharding_decode_into_target_shape() -> Result<(), Box<dyn std::error::E
         for layout in layouts(32) {
             let mut buffers = LayoutBuffers::new(&data_type, &layout);
             codec.decode_into(
-                encoded.clone().into(),
+                zarrs_codec::CowBytes::from(encoded.clone()).into(),
                 &shard_shape,
                 &mut buffers.target(),
                 &options,

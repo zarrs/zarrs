@@ -154,18 +154,42 @@ pub fn blosc_decompress_bytes(
     destsize: usize,
     numinternalthreads: usize,
 ) -> Result<Vec<u8>, BloscError> {
+    let mut dest: Vec<u8> = vec![0; destsize];
+    blosc_decompress_bytes_into_init(src, &mut dest, numinternalthreads)?;
+    Ok(dest)
+}
+
+/// Decompress a blosc buffer into `dest`, which must be the length of the uncompressed bytes.
+pub(super) fn blosc_decompress_bytes_into(
+    src: &[u8],
+    dest: &mut [std::mem::MaybeUninit<u8>],
+    numinternalthreads: usize,
+) -> Result<(), BloscError> {
+    // blusc decompresses into initialised bytes
+    dest.fill(std::mem::MaybeUninit::new(0));
+    // SAFETY: `dest` was initialised above.
+    let dest = unsafe { crate::slice_assume_init_mut(dest) };
+    blosc_decompress_bytes_into_init(src, dest, numinternalthreads)
+}
+
+/// Decompress a blosc buffer into initialised `dest`, which must be the length of the uncompressed bytes.
+fn blosc_decompress_bytes_into_init(
+    src: &[u8],
+    dest: &mut [u8],
+    numinternalthreads: usize,
+) -> Result<(), BloscError> {
+    let destsize = dest.len();
     let numinternalthreads = if destsize >= MIN_PARALLEL_LENGTH {
         std::cmp::min(numinternalthreads, BLOSC_MAX_THREADS as usize)
     } else {
         1
     };
 
-    let mut dest: Vec<u8> = vec![0; destsize];
     let decompressed = {
         let mut dparams = BLOSC2_DPARAMS_DEFAULTS;
         dparams.nthreads = numinternalthreads as i16;
         let context = blosc2_create_dctx(dparams);
-        blosc2_decompress_ctx(&context, src, &mut dest)
+        blosc2_decompress_ctx(&context, src, dest)
     };
     if decompressed <= 0 {
         Err(BloscError::from("blosc_decompress_ctx failed"))
@@ -174,7 +198,7 @@ pub fn blosc_decompress_bytes(
             "blosc_decompress_ctx returned {decompressed} bytes, expected {destsize}"
         )))
     } else {
-        Ok(dest)
+        Ok(())
     }
 }
 

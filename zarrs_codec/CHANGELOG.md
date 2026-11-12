@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `read_decoded_bytes_into` for exact-length streaming decoding, stopping after the first extra decoded byte
+- Add the `unsafe` `BytesToBytesCodecDecodeInto` trait, `BytesToBytesCodecTraits::as_decode_into`, `BytesDecodeSource::decode_into`, `copy_decoded_bytes_into`, and the `unsafe` `ArrayBytesFixedDisjointView::as_mut_slice` for exact-length decoding into (possibly uninitialised) output views
+- Add `ArrayBytesDecodeIntoInput` and `BytesDecodeSource` for single-use deferred decoding into array targets
+- Add `ArrayBytesFixedDisjointView::copy_from_slice_with` to transform each region of a view once it is copied
 - Add per-operation `Resources` and `ComputeResources`
 - Add `UnboundArrayTo{Array,Bytes}CodecTraits`, the codecs held by `Codec::ArrayTo{Array,Bytes}`
   - `with_context` binds a codec to a data type, fill value, and `CodecSpecificOptions`, and codecs must bind any nested codecs with the same options
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
+- **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput`, resolving immediate or deferred encoded bytes without cloning them
 - **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; remove compute-target control and `chunk_concurrent_minimum` (including its getter, setter, and `with_` method) from `CodecOptions`
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time
   - Add `ArrayCodecTraits::{as_any,data_type,fill_value}`, and `ArrayCodecTraits` no longer requires `CodecTraits`

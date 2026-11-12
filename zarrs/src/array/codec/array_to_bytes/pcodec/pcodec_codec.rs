@@ -1,4 +1,9 @@
+use std::mem::MaybeUninit;
 use std::sync::Arc;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, InvalidBytesLengthError,
+    decode_into_array_bytes_target,
+};
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
@@ -179,6 +184,85 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
     }
 }
 
+impl PcodecCodecBound {
+    /// Decompress `bytes` into `output`, which may be uninitialised.
+    ///
+    /// Returns `false` without writing to `output` if `output` cannot be decompressed into, which is the case if `output` is not aligned to the element type or is not the number of elements of `shape`.
+    ///
+    /// # Errors
+    /// Returns an [`InvalidBytesLengthError`] if the number of decompressed elements does not fill `output`.
+    /// This is reported rather than decoding `bytes` again, since that cannot succeed.
+    /// If there are more decompressed elements than `output` holds, the reported length is one element more than the length of `output`.
+    fn decompress_into(
+        &self,
+        bytes: &[u8],
+        shape: &[NonZeroU64],
+        output: &mut [MaybeUninit<u8>],
+    ) -> Result<bool, CodecError> {
+        // An element count that overflows is not the length of `output`
+        let Some(num_elements) = shape
+            .iter()
+            .try_fold(self.elements_per_element, |count, d| {
+                count.checked_mul(usize::try_from(d.get()).ok()?)
+            })
+        else {
+            return Ok(false);
+        };
+        match self.element_type {
+            PcodecElementType::U16 => decompress_into_as::<u16>(bytes, num_elements, output),
+            PcodecElementType::U32 => decompress_into_as::<u32>(bytes, num_elements, output),
+            PcodecElementType::U64 => decompress_into_as::<u64>(bytes, num_elements, output),
+            PcodecElementType::I16 => decompress_into_as::<i16>(bytes, num_elements, output),
+            PcodecElementType::I32 => decompress_into_as::<i32>(bytes, num_elements, output),
+            PcodecElementType::I64 => decompress_into_as::<i64>(bytes, num_elements, output),
+            PcodecElementType::F16 => decompress_into_as::<half::f16>(bytes, num_elements, output),
+            PcodecElementType::F32 => decompress_into_as::<f32>(bytes, num_elements, output),
+            PcodecElementType::F64 => decompress_into_as::<f64>(bytes, num_elements, output),
+        }
+    }
+}
+
+/// Decompress `bytes` into `output` as `num_elements` elements of type `T`.
+///
+/// Returns `false` without writing to `output` if `output` is not aligned to `T` or is not `num_elements` elements long.
+///
+/// # Errors
+/// Returns an [`InvalidBytesLengthError`] if the number of decompressed elements does not fill `output`.
+/// If there are more decompressed elements than `output` holds, the reported length is one element more than the length of `output`.
+fn decompress_into_as<T: pco::data_types::Number>(
+    bytes: &[u8],
+    num_elements: usize,
+    output: &mut [MaybeUninit<u8>],
+) -> Result<bool, CodecError> {
+    let output_len = output.len();
+    if !output.as_ptr().cast::<T>().is_aligned()
+        || num_elements.checked_mul(size_of::<T>()) != Some(output_len)
+    {
+        return Ok(false);
+    }
+    // SAFETY: `output` is aligned to `T` and holds `num_elements` elements, and any bytes are a valid `MaybeUninit<T>`.
+    let elements = unsafe {
+        std::slice::from_raw_parts_mut(output.as_mut_ptr().cast::<MaybeUninit<T>>(), num_elements)
+    };
+    let progress = pco::standalone::simple_decompress_into_uninit(bytes, elements)
+        .map_err(|err| CodecError::Other(err.to_string()))?;
+    if progress.finished && progress.n_processed == num_elements {
+        // pco initialised the `n_processed` elements, which are all of `output`.
+        Ok(true)
+    } else {
+        let decoded_elements = if progress.finished {
+            progress.n_processed
+        } else {
+            num_elements.saturating_add(1)
+        };
+        Err(InvalidBytesLengthError::new(
+            decoded_elements.saturating_mul(size_of::<T>()),
+            output_len,
+        )
+        .into())
+    }
+}
+
 impl ArrayCodecTraits for PcodecCodecBound {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -267,6 +351,28 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
             PcodecElementType::F64 => pcodec_decode!(f64),
         }?;
         Ok(ArrayBytes::from(bytes))
+    }
+
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let bytes = input.into_bytes(options, resources)?;
+        // Decompress directly into an output that is one contiguous region
+        // SAFETY: `decompress_into` only writes initialised bytes, and initialises all of `output` if it returns `true`.
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = output_target
+            && let Some(output) = unsafe { output.as_mut_slice() }
+            && self.decompress_into(&bytes, shape, output)?
+        {
+            return Ok(());
+        }
+
+        let bytes = self.decode(bytes, shape, options, resources)?;
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn encoded_representation(

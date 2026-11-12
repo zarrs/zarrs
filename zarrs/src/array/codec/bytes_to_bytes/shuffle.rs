@@ -78,12 +78,16 @@ impl zarrs_codec::CodecTraitsV2 for ShuffleCodec {
 #[cfg(test)]
 mod tests {
     use crate::array::Resources;
+    use std::mem::MaybeUninit;
     use std::sync::Arc;
     use zarrs_codec::{ComputeResources, CowBytes};
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits,
+        CodecOptions,
+    };
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
@@ -148,6 +152,40 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn codec_shuffle_elementsize_one_passes_through() {
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        let codec = ShuffleCodec::new(1);
+        let data: Vec<u8> = (0..=255).collect();
+        let representation = BytesRepresentation::FixedSize(data.len() as u64);
+
+        // Borrowed input stays borrowed, without copying
+        let encoded = codec
+            .encode(CowBytes::Borrowed(&data), &options, &resources)
+            .unwrap();
+        assert!(matches!(encoded, CowBytes::Borrowed(_)));
+        assert_eq!(encoded.as_ptr(), data.as_ptr());
+        let decoded = codec
+            .decode(encoded, &representation, &options, &resources)
+            .unwrap();
+        assert!(matches!(decoded, CowBytes::Borrowed(_)));
+        assert_eq!(decoded.as_ptr(), data.as_ptr());
+
+        // Owned input keeps its allocation
+        let owned = data.clone();
+        let ptr = owned.as_ptr();
+        let encoded = codec
+            .encode(CowBytes::from(owned), &options, &resources)
+            .unwrap();
+        assert_eq!(encoded.as_ptr(), ptr);
+        let decoded = codec
+            .decode(encoded, &representation, &options, &resources)
+            .unwrap();
+        assert_eq!(decoded.as_ptr(), ptr);
+        assert_eq!(*decoded, *data);
+    }
+
     #[test]
     fn codec_shuffle_elementsize_zero() {
         let configuration: ShuffleCodecConfiguration =
@@ -277,5 +315,70 @@ mod tests {
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    fn codec_shuffle_decode_into() {
+        let codec = ShuffleCodec::new(2);
+        crate::array::codec::bytes_to_bytes::check_bytes_decode_into(
+            &codec,
+            &crate::array::transmute_to_bytes_vec((0..32u16).collect::<Vec<_>>()),
+            2,
+            |_| Vec::new(),
+        );
+
+        // The input must be a multiple of the element size
+        assert!(
+            codec
+                .decode_into(
+                    CowBytes::from(vec![0u8; 3]),
+                    &BytesRepresentation::FixedSize(3),
+                    &mut [MaybeUninit::uninit(); 3],
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn codec_shuffle_direct_output_matches_elements() {
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        for elementsize in [1usize, 2, 3, 4, 5, 8, 16, 32] {
+            let codec = ShuffleCodec::new(elementsize);
+            for count in [0usize, 1, 7, 8, 9, 64, 1003] {
+                let data: Vec<u8> = (0..elementsize * count)
+                    .map(|i| u8::try_from(i * 7 % 251).unwrap())
+                    .collect();
+                let encoded = codec
+                    .encode(CowBytes::Borrowed(&data), &options, &resources)
+                    .unwrap();
+                let mut output = vec![MaybeUninit::uninit(); data.len()];
+                codec
+                    .decode_into(
+                        encoded,
+                        &BytesRepresentation::FixedSize(data.len() as u64),
+                        &mut output,
+                        &options,
+                        &resources,
+                    )
+                    .unwrap();
+                // SAFETY: a successful `decode_into` initialises the output.
+                let output = unsafe { crate::slice_assume_init_mut(&mut output) };
+                assert_eq!(output, data, "{elementsize}x{count}");
+            }
+        }
+        assert!(
+            ShuffleCodec::new(0)
+                .decode_into(
+                    CowBytes::Borrowed(&[]),
+                    &BytesRepresentation::FixedSize(0),
+                    &mut [],
+                    &options,
+                    &resources
+                )
+                .is_err()
+        );
     }
 }

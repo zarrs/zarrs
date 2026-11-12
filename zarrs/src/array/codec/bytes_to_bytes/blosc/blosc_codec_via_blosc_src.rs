@@ -15,8 +15,8 @@ use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    BytesPartialDecoderTraits, BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources,
 };
 use zarrs_metadata::Configuration;
@@ -267,6 +267,10 @@ impl BytesToBytesCodecTraits for BloscCodec {
         Ok(Arc::new(
             blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),
         ))
+    }
+
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
     }
 
     fn encoded_representation(

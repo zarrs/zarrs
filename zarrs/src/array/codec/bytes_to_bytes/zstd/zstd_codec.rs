@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::mem::MaybeUninit;
 use std::sync::Arc;
+use zarrs_codec::InvalidBytesLengthError;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zstd::zstd_safe;
@@ -7,11 +9,45 @@ use zstd::zstd_safe;
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCodecOptions};
 use crate::array::{BytesRepresentation, CowBytes};
 use zarrs_codec::{
-    BytesToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
+    BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
+
+/// A zstd output buffer of possibly uninitialised bytes, initialised from the start as zstd writes to it.
+struct UninitWriteBuf<'a> {
+    bytes: &'a mut [MaybeUninit<u8>],
+    filled: usize,
+}
+
+impl<'a> UninitWriteBuf<'a> {
+    fn new(bytes: &'a mut [MaybeUninit<u8>]) -> Self {
+        Self { bytes, filled: 0 }
+    }
+}
+
+// SAFETY: `as_slice` only covers the bytes that zstd reports as written through `filled_until`, and
+// `capacity` and `as_mut_ptr` describe the whole buffer, which zstd only writes to.
+unsafe impl zstd_safe::WriteBuf for UninitWriteBuf<'_> {
+    fn as_slice(&self) -> &[u8] {
+        // SAFETY: the first `filled` bytes are initialised.
+        unsafe { std::slice::from_raw_parts(self.bytes.as_ptr().cast::<u8>(), self.filled) }
+    }
+
+    fn capacity(&self) -> usize {
+        self.bytes.len()
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.bytes.as_mut_ptr().cast::<u8>()
+    }
+
+    unsafe fn filled_until(&mut self, n: usize) {
+        debug_assert!(n <= self.bytes.len());
+        self.filled = n;
+    }
+}
 
 thread_local! {
     /// The decompression context of the thread, reused by decodes since creating one costs more than decompressing a
@@ -231,6 +267,10 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         }
     }
 
+    fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {
+        Some(self)
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -246,6 +286,38 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 let blocks_overhead = BLOCK_OVERHEAD * size.div_ceil(MIN_WINDOW_SIZE);
                 BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + blocks_overhead)
             })
+    }
+}
+
+// SAFETY: zstd decompresses into a prefix of `output`, which fails unless it is all of `output`.
+unsafe impl BytesToBytesCodecDecodeInto for ZstdCodec {
+    fn decode_into(
+        &self,
+        encoded_value: CowBytes<'_>,
+        _decoded_representation: &BytesRepresentation,
+        output: &mut [MaybeUninit<u8>],
+        _options: &CodecOptions,
+        _resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        // The decoded size in the frame headers (if all present) reports an output of the wrong length without
+        // decompressing. Never materialise an oversized frame just to improve a length diagnostic.
+        if let Ok(Some(decoded_len)) = zstd_safe::find_decompressed_size(&encoded_value)
+            && decoded_len != output.len() as u64
+        {
+            return Err(InvalidBytesLengthError::new(
+                usize::try_from(decoded_len).unwrap_or(usize::MAX),
+                output.len(),
+            )
+            .into());
+        }
+        let output_len = output.len();
+        let decoded_len = with_decompressor(|decompressor| {
+            decompressor.decompress_to_buffer(&encoded_value, &mut UninitWriteBuf::new(output))
+        })?;
+        if decoded_len != output_len {
+            return Err(InvalidBytesLengthError::new(decoded_len, output_len).into());
+        }
+        Ok(())
     }
 }
 
