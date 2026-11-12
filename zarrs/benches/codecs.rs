@@ -393,6 +393,78 @@ fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::
     }
 }
 
+/// Decode with the opposite endianness into strided views with regions of `width` elements, from shared and owned bytes.
+fn codec_bytes_decode_into_strided(c: &mut Criterion) {
+    use criterion::BatchSize;
+    use unsafe_cell_slice::UnsafeCellSlice;
+    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+
+    const NUM_ELEMENTS: u64 = 32_768;
+    let endianness = if cfg!(target_endian = "little") {
+        Endianness::Big
+    } else {
+        Endianness::Little
+    };
+    let shape = [std::num::NonZeroU64::new(NUM_ELEMENTS).unwrap()];
+    let values: Vec<f32> = (0..NUM_ELEMENTS).map(|i| (i % 31) as f32 * 0.25).collect();
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let codec = BytesCodec::new(Some(endianness))
+        .with_context(
+            data_type::float32(),
+            Some(0f32.into()),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    let encoded = codec
+        .encode(
+            ArrayBytes::new_flen(bytemuck::cast_slice(&values)),
+            &shape,
+            &options,
+            &resources,
+        )
+        .unwrap();
+    let mut group = c.benchmark_group("codec_bytes");
+    group.throughput(Throughput::Bytes(NUM_ELEMENTS * 4));
+    for width in [1u64, 8, 64, 1024] {
+        let output_shape = [NUM_ELEMENTS / width, 2 * width];
+        let subset = ArraySubset::new_with_ranges(&[0..NUM_ELEMENTS / width, 0..width]);
+        let mut output = vec![0f32; 2 * NUM_ELEMENTS as usize];
+        let mut decode_into = |input: CowBytes<'_>| {
+            // SAFETY: each iteration owns the only view of this output buffer.
+            let view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(bytemuck::cast_slice_mut::<f32, u8>(&mut output)),
+                    4,
+                    &output_shape,
+                    subset.clone(),
+                )
+                .unwrap()
+            };
+            codec
+                .decode_into(
+                    input.into(),
+                    &shape,
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &options,
+                    &resources,
+                )
+                .unwrap();
+            std::hint::black_box(&output);
+        };
+        group.bench_function(BenchmarkId::new("decode_into_strided/shared", width), |b| {
+            b.iter(|| decode_into(encoded.clone()));
+        });
+        group.bench_function(BenchmarkId::new("decode_into_strided/owned", width), |b| {
+            b.iter_batched(
+                || CowBytes::from(encoded.to_vec()),
+                &mut decode_into,
+                BatchSize::SmallInput,
+            );
+        });
+    }
+}
+
 fn bytes_decode_into_bench(c: &mut Criterion, name: &str, codec: Arc<dyn BytesToBytesCodecTraits>) {
     decode_into_bench(
         c,
@@ -497,6 +569,7 @@ criterion_group!(
     codec_sharding,
     codec_packbits,
     codec_shuffle,
-    codec_decode_into
+    codec_decode_into,
+    codec_bytes_decode_into_strided
 );
 criterion_main!(benches);
