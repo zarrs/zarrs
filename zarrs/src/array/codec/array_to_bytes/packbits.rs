@@ -177,6 +177,17 @@ impl PackBitsLayout {
         }
     }
 
+    /// Place the low [`packed_bits`](Self::packed_bits) bits of `value` at `first_bit`, sign extending `last_bit` if `sign_extension`.
+    fn decode_value(self, value: u64) -> u64 {
+        if self.sign_extension {
+            // Move the sign bit to the most significant bit, then shift it back down with sign extension
+            ((value << (64 - self.packed_bits())).cast_signed() >> (63 - self.last_bit))
+                .cast_unsigned()
+        } else {
+            value << self.first_bit
+        }
+    }
+
     /// Write a decoded component.
     fn write_component<const N: usize>(self, value: u64, component: &mut [MaybeUninit<u8>; N]) {
         let (bytes, start) = match self.endianness {
@@ -269,10 +280,95 @@ fn pack_components<const N: usize, const MSB_FIRST: bool>(
 /// This is the inverse of [`pack`], and also sign extends components if `layout.sign_extension`.
 /// `packed` must hold the bits of every component of `decoded`, which is initialised.
 fn unpack(layout: PackBitsLayout, packed: &[u8], bit_offset: u8, decoded: &mut [MaybeUninit<u8>]) {
-    with_component_size!(
-        layout,
-        unpack_components(layout, packed, bit_offset, decoded)
+    if layout.component_size_bytes == 1 && layout.packed_bits() == 1 {
+        // A one byte component of one packed bit (e.g. `bool`) is zero or the decoded set bit
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a one byte component is the low byte"
+        )]
+        let one = layout.decode_value(1) as u8;
+        match layout.bit_order {
+            PackBitsBitOrder::LsbFirst => unpack_bits::<false>(packed, bit_offset, decoded, one),
+            PackBitsBitOrder::MsbFirst => unpack_bits::<true>(packed, bit_offset, decoded, one),
+        }
+    } else {
+        with_component_size!(
+            layout,
+            unpack_components(layout, packed, bit_offset, decoded)
+        );
+    }
+}
+
+/// The bytes of eight components unpacked from each byte of packed bits, a component per byte of a little-endian word.
+/// A component is 1 if its bit is set and 0 otherwise, and the bits are in sequence from the most significant bit if `MSB_FIRST`.
+const fn unpacked_bits_table<const MSB_FIRST: bool>() -> [u64; 256] {
+    let mut table = [0; 256];
+    let mut byte = 0;
+    while byte < 256 {
+        let mut component = 0;
+        while component < 8 {
+            let bit = if MSB_FIRST { 7 - component } else { component };
+            table[byte] |= ((byte as u64 >> bit) & 1) << (8 * component);
+            component += 1;
+        }
+        byte += 1;
+    }
+    table
+}
+
+/// Unpack one byte components of one packed bit from `packed`, skipping its first `bit_offset` bits, eight at a time.
+///
+/// A component is `one` if its bit is set and zero otherwise.
+/// `packed` must hold the bits of every component of `decoded`, which is initialised.
+fn unpack_bits<const MSB_FIRST: bool>(
+    packed: &[u8],
+    bit_offset: u8,
+    decoded: &mut [MaybeUninit<u8>],
+    one: u8,
+) {
+    const TABLE_LSB_FIRST: [u64; 256] = unpacked_bits_table::<false>();
+    const TABLE_MSB_FIRST: [u64; 256] = unpacked_bits_table::<true>();
+    let table = if MSB_FIRST {
+        &TABLE_MSB_FIRST
+    } else {
+        &TABLE_LSB_FIRST
+    };
+    let shift = u32::from(bit_offset);
+    assert!(
+        shift < 8 && packed.len() * 8 >= usize::from(bit_offset) + decoded.len(),
+        "packed holds all bits"
     );
+    // Each byte of a looked up word is 0 or 1, so multiplying by `one` does not carry between components
+    let write = |components: &mut [MaybeUninit<u8>; 8], bits: u8| {
+        *components = (table[usize::from(bits)] * u64::from(one))
+            .to_le_bytes()
+            .map(MaybeUninit::new);
+    };
+    let (groups, tail) = decoded.as_chunks_mut::<8>();
+    if shift == 0 {
+        for (components, &bits) in std::iter::zip(groups.iter_mut(), packed) {
+            write(components, bits);
+        }
+    } else {
+        // The eight bits from `shift` span two packed bytes, which exist as `shift` is not zero
+        for (components, bytes) in std::iter::zip(groups.iter_mut(), packed.windows(2)) {
+            let bits = if MSB_FIRST {
+                (bytes[0] << shift) | (bytes[1] >> (8 - shift))
+            } else {
+                (bytes[0] >> shift) | (bytes[1] << (8 - shift))
+            };
+            write(components, bits);
+        }
+    }
+    let tail_bit = usize::from(bit_offset) + groups.len() * 8;
+    for (bit, component) in (tail_bit..).zip(tail) {
+        let shift = if MSB_FIRST { 7 - bit % 8 } else { bit % 8 };
+        component.write(if (packed[bit / 8] >> shift) & 1 == 1 {
+            one
+        } else {
+            0
+        });
+    }
 }
 
 /// Unpack `len` decoded bytes from `packed` into a new vector, as in [`unpack`].
@@ -348,14 +444,7 @@ fn unpack_components<const N: usize, const MSB_FIRST: bool>(
             let hi = u64::from(bytes[8]);
             // Shift `hi` in two steps, as it is shifted out entirely if `shift` is zero
             let value = ((lo >> shift) | (hi << 1 << (63 - shift))) & mask;
-            let value = if layout.sign_extension {
-                // Move the sign bit to the most significant bit, then shift it back down with sign extension
-                ((value << (64 - packed_bits)).cast_signed() >> (63 - layout.last_bit))
-                    .cast_unsigned()
-            } else {
-                value << layout.first_bit
-            };
-            layout.write_component(value, component);
+            layout.write_component(layout.decode_value(value), component);
             bit += packed_bits;
         }
         bit += block_start * 8;
@@ -574,6 +663,42 @@ mod tests {
             };
             let decoded = with_output(4, |out| unpack(layout, &[packed], 0, out));
             assert_eq!(decoded, [0x01, 0xFE, 0xFF, 0x00]);
+        }
+    }
+
+    /// `unpack` of one byte components of one packed bit matches unpacking a bit at a time, for every layout and bit offset.
+    #[test]
+    fn unpack_one_bit_components_reference() {
+        let mut rng = Rng(0x2545_F491_4F6C_DD1D);
+        let packed = rng.bytes(64);
+        for (bit_order, endianness, sign_extension, bit) in itertools::iproduct!(
+            [PackBitsBitOrder::LsbFirst, PackBitsBitOrder::MsbFirst],
+            [Endianness::Little, Endianness::Big],
+            [false, true],
+            0..8
+        ) {
+            let layout = PackBitsLayout {
+                component_size_bytes: 1,
+                first_bit: bit,
+                last_bit: bit,
+                sign_extension,
+                endianness,
+                bit_order,
+            };
+            // Lengths of up to five whole bytes with every number of remaining components, and longer lengths
+            for (bit_offset, num_components) in
+                itertools::iproduct!(0..8usize, (0..=40).chain([255, 256, 257, 504]))
+            {
+                let packed = &packed[..(bit_offset + num_components).div_ceil(8)];
+                let decoded_out = with_output(num_components, |out| {
+                    unpack(layout, packed, bit_offset as u8, out);
+                });
+                assert_eq!(
+                    decoded_out,
+                    reference_unpack(layout, packed, bit_offset, num_components),
+                    "{layout:?} {bit_offset} {num_components}"
+                );
+            }
         }
     }
 

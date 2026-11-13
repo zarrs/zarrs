@@ -192,6 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `NumcodecsPackBitsCodec` for Numcodecs-compatible boolean packing (V2 `packbits`, V3 `numcodecs.packbits`)
 - Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Copy only the packed bytes that are unpacked when unpacking part of a chunk
+- Unpack one-bit components of one byte (e.g. `bool`) eight at a time, about 14 times faster
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
