@@ -114,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix multi-chunk operations to treat a concurrent target of zero as unconstrained, and avoid stalled async encoded-chunk retrieval and suffix stripping
 - Fix `[Async]ArrayReadOps::[async_]retrieve_array_subset_into` failing across multiple chunks if the output target has the same number of elements as the array subset, but a different shape or dimensionality
 - Fix variable-length fill-value detection to respect element boundaries, preventing non-fill chunks from being omitted or erased when `store_empty_chunks` is disabled
+- Fix storing an owned `ndarray` array sliced in place, which used every element of its backing vector rather than only its own elements
 
 ### Groups and hierarchy
 - **Breaking**: `Group::open_opt` takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`, and `Hierarchy::open_opt` takes a `HierarchyOpenOptions`

@@ -81,12 +81,18 @@ where
 impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static> for ndarray::Array<T, D> {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'static>, ElementError> {
         let elements = if self.is_standard_layout() {
-            self
+            // The elements are contiguous from the offset, but an array sliced in place keeps its entire backing vector
+            let len = self.len();
+            let (mut elements, offset) = self.into_raw_vec_and_offset();
+            elements.drain(..offset.unwrap_or(0));
+            elements.truncate(len);
+            elements
         } else {
-            self.as_standard_layout().into_owned()
-        }
-        .into_raw_vec_and_offset()
-        .0;
+            self.as_standard_layout()
+                .into_owned()
+                .into_raw_vec_and_offset()
+                .0
+        };
         Ok(T::into_array_bytes(data_type, elements)?.into_owned())
     }
 }
@@ -108,5 +114,25 @@ impl<'a> IntoArrayBytes<'a> for &'a super::Tensor<'_> {
             return Err(ElementError::IncompatibleElementType);
         }
         Ok(ArrayBytes::from(bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "ndarray")]
+    #[test]
+    fn into_array_bytes_sliced_owned_ndarray() {
+        use super::*;
+        use crate::array::data_type;
+        use ndarray::{Array2, s};
+
+        // Rows 1..3 of a C-contiguous 4x3 array
+        let mut array = Array2::from_shape_vec((4, 3), (0u8..12).collect()).unwrap();
+        array.slice_collapse(s![1..3, ..]);
+        assert!(array.is_standard_layout());
+        assert_eq!(
+            array.into_array_bytes(&data_type::uint8()).unwrap(),
+            ArrayBytes::new_flen(vec![3u8, 4, 5, 6, 7, 8])
+        );
     }
 }
