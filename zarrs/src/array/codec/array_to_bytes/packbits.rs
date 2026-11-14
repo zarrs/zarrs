@@ -227,7 +227,52 @@ macro_rules! with_component_size {
 /// Components are packed from their least significant bit, and each byte of `packed` is filled in the bit order of `layout`.
 /// `packed` must have the length of the packed bits rounded up to whole bytes, and is initialised.
 fn pack(layout: PackBitsLayout, decoded: &[u8], packed: &mut [MaybeUninit<u8>]) {
-    with_component_size!(layout, pack_components(layout, decoded, packed));
+    if layout.component_size_bytes == 1 && layout.packed_bits() == 1 {
+        // A one byte component of one packed bit (e.g. `bool`) packs its bit `first_bit`
+        match layout.bit_order {
+            PackBitsBitOrder::LsbFirst => pack_bits::<false>(decoded, layout.first_bit, packed),
+            PackBitsBitOrder::MsbFirst => pack_bits::<true>(decoded, layout.first_bit, packed),
+        }
+    } else {
+        with_component_size!(layout, pack_components(layout, decoded, packed));
+    }
+}
+
+/// Pack bit `first_bit` of each one byte component of `decoded` into `packed`, eight components at a time.
+///
+/// `packed` must have a byte per eight components (rounded up), and is initialised.
+/// The bits of a last byte after the last component are zero.
+fn pack_bits<const MSB_FIRST: bool>(
+    decoded: &[u8],
+    first_bit: u32,
+    packed: &mut [MaybeUninit<u8>],
+) {
+    // Multiplying a little-endian word with a 0 or 1 in each byte gathers the byte `k` bit to bit `56 + k` (or `63 - k` if `MSB_FIRST`) without carries,
+    // as the bit of each byte and each set bit of the multiplier sum to a distinct bit
+    let multiplier: u64 = if MSB_FIRST {
+        0x8040_2010_0804_0201
+    } else {
+        0x0102_0408_1020_4080
+    };
+    let gather = |components: [u8; 8]| {
+        (((u64::from_le_bytes(components) >> first_bit) & 0x0101_0101_0101_0101)
+            .wrapping_mul(multiplier)
+            >> 56) as u8
+    };
+    assert_eq!(
+        packed.len(),
+        decoded.len().div_ceil(8),
+        "packed holds all bits"
+    );
+    let (groups, tail) = decoded.as_chunks::<8>();
+    for (byte, components) in std::iter::zip(packed.iter_mut(), groups) {
+        byte.write(gather(*components));
+    }
+    if !tail.is_empty() {
+        let mut components = [0; 8];
+        components[..tail.len()].copy_from_slice(tail);
+        packed[groups.len()].write(gather(components));
+    }
 }
 
 #[expect(
@@ -666,11 +711,13 @@ mod tests {
         }
     }
 
-    /// `unpack` of one byte components of one packed bit matches unpacking a bit at a time, for every layout and bit offset.
+    /// `pack` and `unpack` of one byte components of one packed bit match packing and unpacking a bit at a time, for every layout and bit offset.
     #[test]
-    fn unpack_one_bit_components_reference() {
+    fn pack_unpack_one_bit_components_reference() {
         let mut rng = Rng(0x2545_F491_4F6C_DD1D);
         let packed = rng.bytes(64);
+        // Components with random bits, of which only bit `first_bit` is packed
+        let decoded = rng.bytes(64 * 8);
         for (bit_order, endianness, sign_extension, bit) in itertools::iproduct!(
             [PackBitsBitOrder::LsbFirst, PackBitsBitOrder::MsbFirst],
             [Endianness::Little, Endianness::Big],
@@ -685,6 +732,17 @@ mod tests {
                 endianness,
                 bit_order,
             };
+            for num_components in (0..=40).chain([255, 256, 257, 512]) {
+                let decoded = &decoded[..num_components];
+                let packed_out = with_output(num_components.div_ceil(8), |out| {
+                    pack(layout, decoded, out);
+                });
+                assert_eq!(
+                    packed_out,
+                    reference_pack(layout, decoded),
+                    "{layout:?} {num_components}"
+                );
+            }
             // Lengths of up to five whole bytes with every number of remaining components, and longer lengths
             for (bit_offset, num_components) in
                 itertools::iproduct!(0..8usize, (0..=40).chain([255, 256, 257, 504]))
