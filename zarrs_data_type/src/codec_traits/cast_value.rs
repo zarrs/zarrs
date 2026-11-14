@@ -116,6 +116,9 @@ pub enum CastValueError {
     /// Wrapping was requested for a non-integral target data type.
     #[error("cast_value wrap mode is only valid for integral target data types")]
     InvalidWrapTarget,
+    /// The output does not have the length of the cast elements.
+    #[error("the cast_value output does not have the length of the cast elements")]
+    InvalidOutputLength,
 }
 
 /// Traits for a data type supporting the `cast_value` codec.

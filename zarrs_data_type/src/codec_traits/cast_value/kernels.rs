@@ -6,6 +6,8 @@
 //! the generic [`CastValueScalar`](super::CastValueScalar) path remains as the
 //! fallback for data types without a [`CastValueRepr`].
 
+use std::mem::MaybeUninit;
+
 use half::{bf16, f16};
 
 use super::{
@@ -98,7 +100,12 @@ struct CastKernelParams {
     out_of_range: Option<CastValueOutOfRangeMode>,
 }
 
-type CastKernelFn = fn(&[u8], &mut Vec<u8>, CastKernelParams) -> Result<(), CastValueError>;
+/// A kernel casting the source elements of `&[u8]` into an output slice, which it writes in full on success.
+///
+/// The caller must check that the source is element aligned and that the output has exactly the length of the cast elements.
+/// [`CastValueKernel::cast`] and [`CastValueKernel::cast_into`] are the only callers and perform this check, so a successful cast initialises every output byte, which unsafe code relies on.
+type CastKernelFn =
+    fn(&[u8], &mut [MaybeUninit<u8>], CastKernelParams) -> Result<(), CastValueError>;
 
 /// A monomorphised bulk cast selected for a (source, target, configuration) triple.
 ///
@@ -109,16 +116,71 @@ type CastKernelFn = fn(&[u8], &mut Vec<u8>, CastKernelParams) -> Result<(), Cast
 pub struct CastValueKernel {
     kernel: CastKernelFn,
     params: CastKernelParams,
+    source_size: usize,
+    target_size: usize,
 }
 
 impl CastValueKernel {
     /// Cast contiguous source elements, appending the encoded bytes to `output`.
     ///
+    /// `output` is unchanged on error.
+    ///
     /// # Errors
     /// Returns an error if `source` is not element aligned or an element cannot be cast.
     pub fn cast(&self, source: &[u8], output: &mut Vec<u8>) -> Result<(), CastValueError> {
+        let len = check_alignment(source, self.source_size)?
+            .checked_mul(self.target_size)
+            .expect("capacity overflow");
+        output.reserve(len);
+        (self.kernel)(source, &mut output.spare_capacity_mut()[..len], self.params)?;
+        // SAFETY: a kernel writes every byte of its output on success, which is the first `len` bytes of the spare capacity.
+        unsafe { output.set_len(output.len() + len) };
+        Ok(())
+    }
+
+    /// Cast contiguous source elements into `output`, which must have the length of the cast elements.
+    ///
+    /// On success, every byte of `output` has been written, so it may be uninitialised beforehand.
+    /// On error, `output` may have been partially written.
+    ///
+    /// # Errors
+    /// Returns an error if `source` is not element aligned, `output` does not have the length of the cast elements, or an element cannot be cast.
+    pub fn cast_into(
+        &self,
+        source: &[u8],
+        output: &mut [MaybeUninit<u8>],
+    ) -> Result<(), CastValueError> {
+        if Some(output.len())
+            != check_alignment(source, self.source_size)?.checked_mul(self.target_size)
+        {
+            return Err(CastValueError::InvalidOutputLength);
+        }
         (self.kernel)(source, output, self.params)
     }
+
+    /// The size in bytes of a source element.
+    #[must_use]
+    pub fn source_size(&self) -> usize {
+        self.source_size
+    }
+
+    /// The size in bytes of a cast element.
+    #[must_use]
+    pub fn target_size(&self) -> usize {
+        self.target_size
+    }
+}
+
+/// Write `bytes` to `output`, which has the same length.
+///
+/// # Panics
+/// Panics if `output` does not have the length of `bytes`.
+#[inline(always)]
+fn write_bytes<const N: usize>(output: &mut [MaybeUninit<u8>], bytes: [u8; N]) {
+    // A fixed size output is written with one store, rather than byte by byte
+    let output: &mut [MaybeUninit<u8>; N] =
+        output.try_into().expect("the output holds one element");
+    *output = bytes.map(MaybeUninit::new);
 }
 
 /// A source value widened to 64-bit arithmetic.
@@ -147,8 +209,8 @@ trait KernelInt: Copy {
     const SIZE: usize;
     fn read(bytes: &[u8]) -> Self;
     fn widen(self) -> IntWide;
-    fn write_i64(value: i64, output: &mut Vec<u8>);
-    fn write_u64(value: u64, output: &mut Vec<u8>);
+    fn write_i64(value: i64, output: &mut [MaybeUninit<u8>]);
+    fn write_u64(value: u64, output: &mut [MaybeUninit<u8>]);
 }
 
 macro_rules! impl_kernel_int {
@@ -169,18 +231,18 @@ macro_rules! impl_kernel_int {
             // pattern; `as` truncation is exact. `allow` rather than `expect`:
             // which cast lints fire varies per instantiation.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            #[inline]
-            fn write_i64(value: i64, output: &mut Vec<u8>) {
-                output.extend_from_slice(&(value as $t).to_ne_bytes());
+            #[inline(always)]
+            fn write_i64(value: i64, output: &mut [MaybeUninit<u8>]) {
+                write_bytes(output, (value as $t).to_ne_bytes());
             }
             #[allow(
                 clippy::cast_possible_truncation,
                 clippy::cast_possible_wrap,
                 clippy::cast_sign_loss
             )]
-            #[inline]
-            fn write_u64(value: u64, output: &mut Vec<u8>) {
-                output.extend_from_slice(&(value as $t).to_ne_bytes());
+            #[inline(always)]
+            fn write_u64(value: u64, output: &mut [MaybeUninit<u8>]) {
+                write_bytes(output, (value as $t).to_ne_bytes());
             }
         }
     };
@@ -236,7 +298,7 @@ trait KernelFloatTarget {
     const MANTISSA_DIGITS: u32;
     fn min_f64() -> f64;
     fn max_f64() -> f64;
-    fn round_write(value: f64, rounding: CastValueRoundingMode, output: &mut Vec<u8>);
+    fn round_write(value: f64, rounding: CastValueRoundingMode, output: &mut [MaybeUninit<u8>]);
 }
 
 macro_rules! impl_kernel_float_target {
@@ -252,9 +314,13 @@ macro_rules! impl_kernel_float_target {
             fn max_f64() -> f64 {
                 $max
             }
-            #[inline]
-            fn round_write(value: f64, rounding: CastValueRoundingMode, output: &mut Vec<u8>) {
-                output.extend_from_slice(&$round(value, rounding).to_ne_bytes());
+            #[inline(always)]
+            fn round_write(
+                value: f64,
+                rounding: CastValueRoundingMode,
+                output: &mut [MaybeUninit<u8>],
+            ) {
+                write_bytes(output, $round(value, rounding).to_ne_bytes());
             }
         }
     };
@@ -333,8 +399,8 @@ fn int_bounds(bits: u32, signed: bool) -> IntBounds {
 }
 
 /// Write a wrapped (modulo `2^bits`) value from its two's complement bit pattern.
-#[inline]
-fn write_wrapped<T: KernelInt>(pattern: u64, bits: u32, output: &mut Vec<u8>) {
+#[inline(always)]
+fn write_wrapped<T: KernelInt>(pattern: u64, bits: u32, output: &mut [MaybeUninit<u8>]) {
     let mask = if bits == 64 {
         u64::MAX
     } else {
@@ -357,13 +423,15 @@ fn write_wrapped<T: KernelInt>(pattern: u64, bits: u32, output: &mut Vec<u8>) {
 }
 
 /// Write one 64-bit-domain value to an integer target with bounds handling.
-#[inline]
+///
+/// Always inlined, so that the per-element writes of a kernel are not calls.
+#[inline(always)]
 fn write_int<T: KernelInt>(
     value: IntWide,
     bits: u32,
     bounds: IntBounds,
     out_of_range: Option<CastValueOutOfRangeMode>,
-    output: &mut Vec<u8>,
+    output: &mut [MaybeUninit<u8>],
 ) -> Result<(), CastValueError> {
     match value {
         IntWide::I(value) => {
@@ -434,13 +502,14 @@ fn check_alignment(source: &[u8], element_size: usize) -> Result<usize, CastValu
 
 fn kernel_int_to_int<S: KernelInt, T: KernelInt>(
     source: &[u8],
-    output: &mut Vec<u8>,
+    output: &mut [MaybeUninit<u8>],
     params: CastKernelParams,
 ) -> Result<(), CastValueError> {
-    let num_elements = check_alignment(source, S::SIZE)?;
-    output.reserve(num_elements * T::SIZE);
     let bounds = int_bounds(params.target_bits, T::SIGNED);
-    for element in source.chunks_exact(S::SIZE) {
+    for (element, output) in source
+        .chunks_exact(S::SIZE)
+        .zip(output.chunks_exact_mut(T::SIZE))
+    {
         write_int::<T>(
             S::read(element).widen(),
             params.target_bits,
@@ -496,14 +565,15 @@ fn round_int_to_f64(value: IntWide, mantissa_digits: u32, rounding: CastValueRou
 
 fn kernel_int_to_float<S: KernelInt, F: KernelFloatTarget>(
     source: &[u8],
-    output: &mut Vec<u8>,
+    output: &mut [MaybeUninit<u8>],
     params: CastKernelParams,
 ) -> Result<(), CastValueError> {
-    let num_elements = check_alignment(source, S::SIZE)?;
-    output.reserve(num_elements * F::SIZE);
     let min = F::min_f64();
     let max = F::max_f64();
-    for element in source.chunks_exact(S::SIZE) {
+    for (element, output) in source
+        .chunks_exact(S::SIZE)
+        .zip(output.chunks_exact_mut(F::SIZE))
+    {
         let value = S::read(element).widen();
         // This conversion is used only for target-range handling. It is exact
         // whenever an integer can be near the bounds of a supported target.
@@ -529,14 +599,15 @@ fn kernel_int_to_float<S: KernelInt, F: KernelFloatTarget>(
 
 fn kernel_to_float<S: KernelToF64, F: KernelFloatTarget>(
     source: &[u8],
-    output: &mut Vec<u8>,
+    output: &mut [MaybeUninit<u8>],
     params: CastKernelParams,
 ) -> Result<(), CastValueError> {
-    let num_elements = check_alignment(source, S::SIZE)?;
-    output.reserve(num_elements * F::SIZE);
     let min = F::min_f64();
     let max = F::max_f64();
-    for element in source.chunks_exact(S::SIZE) {
+    for (element, output) in source
+        .chunks_exact(S::SIZE)
+        .zip(output.chunks_exact_mut(F::SIZE))
+    {
         let value = S::read_to_f64(element, params.rounding);
         let quantity = float_quantity_from_f64(
             value,
@@ -558,14 +629,15 @@ const TWO_POW_64: f64 = 18_446_744_073_709_551_616.0;
 
 fn kernel_float_to_int<S: KernelFloatSource, T: KernelInt>(
     source: &[u8],
-    output: &mut Vec<u8>,
+    output: &mut [MaybeUninit<u8>],
     params: CastKernelParams,
 ) -> Result<(), CastValueError> {
-    let num_elements = check_alignment(source, S::SIZE)?;
-    output.reserve(num_elements * T::SIZE);
     let bits = params.target_bits;
     let bounds = int_bounds(bits, T::SIGNED);
-    for element in source.chunks_exact(S::SIZE) {
+    for (element, output) in source
+        .chunks_exact(S::SIZE)
+        .zip(output.chunks_exact_mut(T::SIZE))
+    {
         let value = S::read_f64(element);
         if value.is_nan() || value.is_infinite() {
             return Err(CastValueError::NotRepresentable);
@@ -703,7 +775,19 @@ pub fn select_cast_kernel(
             rounding,
             out_of_range,
         },
+        source_size: repr_size(source),
+        target_size: repr_size(target),
     })
+}
+
+/// The size in bytes of an element with a representation.
+const fn repr_size(repr: CastValueRepr) -> usize {
+    match repr {
+        CastValueRepr::Int { stored, .. } => (stored.bits() / 8) as usize,
+        CastValueRepr::F16 | CastValueRepr::BF16 => 2,
+        CastValueRepr::F32 => 4,
+        CastValueRepr::F64 => 8,
+    }
 }
 
 #[cfg(test)]
@@ -785,6 +869,49 @@ mod tests {
             .flat_map(|v| v.to_ne_bytes())
             .collect();
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn kernel_cast_into_slice() {
+        let int16 = CastValueRepr::Int {
+            bits: 16,
+            stored: CastValueIntStored::I16,
+        };
+        let int8 = CastValueRepr::Int {
+            bits: 8,
+            stored: CastValueIntStored::I8,
+        };
+        let kernel =
+            select_cast_kernel(int16, int8, CastValueRoundingMode::NearestEven, None).unwrap();
+        assert_eq!((kernel.source_size(), kernel.target_size()), (2, 1));
+        let source: Vec<u8> = [-3_i16, 0, 100]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+
+        // Every byte of an uninitialised output is written
+        let mut output = [MaybeUninit::<u8>::uninit(); 3];
+        kernel.cast_into(&source, &mut output).unwrap();
+        // SAFETY: `cast_into` initialised the output.
+        let output: [u8; 3] = output.map(|byte| unsafe { byte.assume_init() });
+        assert_eq!(output, [-3_i8, 0, 100].map(i8::cast_unsigned));
+
+        // The output must have the length of the cast elements
+        for len in [2, 4] {
+            let mut output = vec![MaybeUninit::<u8>::uninit(); len];
+            assert!(matches!(
+                kernel.cast_into(&source, &mut output),
+                Err(CastValueError::InvalidOutputLength)
+            ));
+        }
+
+        // An appended output is unchanged on error
+        let mut output = vec![7];
+        let unrepresentable: Vec<u8> = [1_i16, 1000].iter().flat_map(|v| v.to_ne_bytes()).collect();
+        assert!(kernel.cast(&unrepresentable, &mut output).is_err());
+        assert_eq!(output, [7]);
+        kernel.cast(&source, &mut output).unwrap();
+        assert_eq!(output, [7, (-3_i8).cast_unsigned(), 0, 100]);
     }
 
     fn cast_u64_to_f32(value: u64, rounding: CastValueRoundingMode) -> u32 {
