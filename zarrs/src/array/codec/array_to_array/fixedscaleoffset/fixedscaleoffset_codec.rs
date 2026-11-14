@@ -239,7 +239,10 @@ macro_rules! transform {
             let ($o, $s) = ($offset as F, $scale as F);
             let elements = bytes.as_chunks::<{ size_of::<T>() }>().0;
             with_element_type!($to, U, {
-                let len = elements.len() * size_of::<U>();
+                let len = elements
+                    .len()
+                    .checked_mul(size_of::<U>())
+                    .expect("capacity overflow");
                 let mut out: Vec<u8> = Vec::with_capacity(len);
                 // Writing through a pre-sized slice (rather than pushing each element) lets the loop vectorise
                 let transformed = out.spare_capacity_mut()[..len]

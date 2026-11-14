@@ -128,7 +128,9 @@ impl CastValueKernel {
     /// # Errors
     /// Returns an error if `source` is not element aligned or an element cannot be cast.
     pub fn cast(&self, source: &[u8], output: &mut Vec<u8>) -> Result<(), CastValueError> {
-        let len = check_alignment(source, self.source_size)? * self.target_size;
+        let len = check_alignment(source, self.source_size)?
+            .checked_mul(self.target_size)
+            .expect("capacity overflow");
         output.reserve(len);
         (self.kernel)(source, &mut output.spare_capacity_mut()[..len], self.params)?;
         // SAFETY: a kernel writes every byte of its output on success, which is the first `len` bytes of the spare capacity.
@@ -148,7 +150,9 @@ impl CastValueKernel {
         source: &[u8],
         output: &mut [MaybeUninit<u8>],
     ) -> Result<(), CastValueError> {
-        if output.len() != check_alignment(source, self.source_size)? * self.target_size {
+        if Some(output.len())
+            != check_alignment(source, self.source_size)?.checked_mul(self.target_size)
+        {
             return Err(CastValueError::InvalidOutputLength);
         }
         (self.kernel)(source, output, self.params)
