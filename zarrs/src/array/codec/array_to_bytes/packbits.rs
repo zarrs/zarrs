@@ -157,6 +157,11 @@ impl PackBitsLayout {
         self.last_bit - self.first_bit + 1
     }
 
+    /// Whether components are one byte of one packed bit (e.g. `bool`), which are packed and unpacked eight at a time.
+    fn is_one_bit_bytes(self) -> bool {
+        self.component_size_bytes == 1 && self.packed_bits() == 1
+    }
+
     /// A mask of the low [`packed_bits`](Self::packed_bits) bits.
     fn mask(self) -> u64 {
         u64::MAX >> (64 - self.packed_bits())
@@ -227,7 +232,7 @@ macro_rules! with_component_size {
 /// Components are packed from their least significant bit, and each byte of `packed` is filled in the bit order of `layout`.
 /// `packed` must have the length of the packed bits rounded up to whole bytes, and is initialised.
 fn pack(layout: PackBitsLayout, decoded: &[u8], packed: &mut [MaybeUninit<u8>]) {
-    if layout.component_size_bytes == 1 && layout.packed_bits() == 1 {
+    if layout.is_one_bit_bytes() {
         // A one byte component of one packed bit (e.g. `bool`) packs its bit `first_bit`
         match layout.bit_order {
             PackBitsBitOrder::LsbFirst => pack_bits::<false>(decoded, layout.first_bit, packed),
@@ -325,7 +330,7 @@ fn pack_components<const N: usize, const MSB_FIRST: bool>(
 /// This is the inverse of [`pack`], and also sign extends components if `layout.sign_extension`.
 /// `packed` must hold the bits of every component of `decoded`, which is initialised.
 fn unpack(layout: PackBitsLayout, packed: &[u8], bit_offset: u8, decoded: &mut [MaybeUninit<u8>]) {
-    if layout.component_size_bytes == 1 && layout.packed_bits() == 1 {
+    if layout.is_one_bit_bytes() {
         // A one byte component of one packed bit (e.g. `bool`) is zero or the decoded set bit
         #[expect(
             clippy::cast_possible_truncation,
@@ -365,6 +370,8 @@ const fn unpacked_bits_table<const MSB_FIRST: bool>() -> [u64; 256] {
 ///
 /// A component is `one` if its bit is set and zero otherwise.
 /// `packed` must hold the bits of every component of `decoded`, which is initialised.
+// Not inlined, so that its short loop keeps its inputs in registers whatever `unpack` is inlined into (inlined, it was 24% slower in one build, reloading `packed` from the stack each iteration)
+#[inline(never)]
 fn unpack_bits<const MSB_FIRST: bool>(
     packed: &[u8],
     bit_offset: u8,
@@ -1704,6 +1711,162 @@ mod tests {
                         i16::from_array_bytes(&data_type, decoded_partial_chunk)?
                     );
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// `decode_into` matches `decode` and a copy, for regions that are unpacked directly and that are too small to be.
+    #[test]
+    fn codec_packbits_decode_into_layouts() -> Result<(), Box<dyn std::error::Error>> {
+        use unsafe_cell_slice::UnsafeCellSlice;
+        use zarrs_codec::ArrayBytesDecodeIntoTarget;
+
+        use crate::array::{ArrayBytesFixedDisjointView, DataType};
+
+        let chunk_shape = [NonZeroU64::new(3).unwrap(), NonZeroU64::new(1100).unwrap()];
+        let num_elements = 3300;
+        /// A data type, fill value, decoded elements, first and last bits, and padding encoding.
+        type Case = (
+            DataType,
+            FillValue,
+            Vec<u8>,
+            Option<u64>,
+            Option<u64>,
+            PackBitsPaddingEncoding,
+        );
+        let cases: Vec<Case> = vec![
+            (
+                data_type::bool(),
+                FillValue::from(false),
+                (0..num_elements).map(|i| u8::from(i % 3 == 0)).collect(),
+                None,
+                None,
+                PackBitsPaddingEncoding::None,
+            ),
+            (
+                data_type::bool(),
+                FillValue::from(false),
+                (0..num_elements).map(|i| u8::from(i % 7 < 3)).collect(),
+                None,
+                None,
+                PackBitsPaddingEncoding::FirstByte,
+            ),
+            (
+                data_type::uint8(),
+                FillValue::from(0u8),
+                (0..num_elements).map(|i| ((i % 8) << 1) as u8).collect(),
+                Some(1),
+                Some(3),
+                PackBitsPaddingEncoding::LastByte,
+            ),
+            // One packed bit of a byte other than its first
+            (
+                data_type::uint8(),
+                FillValue::from(0u8),
+                (0..num_elements).map(|i| ((i % 3) << 1) as u8).collect(),
+                Some(2),
+                Some(2),
+                PackBitsPaddingEncoding::None,
+            ),
+            (
+                data_type::int4(),
+                FillValue::from(0i8),
+                (0..num_elements)
+                    .map(|i| ((i % 16) as i8 - 8).cast_unsigned())
+                    .collect(),
+                None,
+                None,
+                PackBitsPaddingEncoding::None,
+            ),
+            (
+                data_type::int16(),
+                FillValue::from(0i16),
+                (0..num_elements)
+                    .flat_map(|i| ((i % 1000) as i16 - 500).to_ne_bytes())
+                    .collect(),
+                None,
+                Some(10),
+                PackBitsPaddingEncoding::None,
+            ),
+        ];
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+        for (data_type, fill_value, bytes, first_bit, last_bit, padding) in cases {
+            let size = data_type.fixed_size().unwrap();
+            let codec = Arc::new(super::PackBitsCodec::new(padding, first_bit, last_bit)?)
+                .with_context(
+                    data_type.clone(),
+                    Some(fill_value),
+                    &CodecSpecificOptions::default(),
+                )?;
+            let encoded = codec.encode(
+                ArrayBytes::new_flen(bytes),
+                &chunk_shape,
+                &options,
+                &resources,
+            )?;
+            let decoded = codec.decode(encoded.clone(), &chunk_shape, &options, &resources)?;
+            // (array shape, offset, shape, strides) of each target
+            for (len, offset, shape, strides) in [
+                // One region
+                (3300, 0, vec![3, 1100], vec![1100, 1]),
+                // Regions of 1100 elements, unpacked directly if components are one byte of one packed bit
+                (3 * 1130, 10, vec![3, 1100], vec![1130, 1]),
+                (3 * 1500, 0, vec![3, 1100], vec![1500, 1]),
+                // Regions of 550 and of 1 elements, decoded and copied
+                (6 * 600, 0, vec![6, 550], vec![600, 1]),
+                (3300, 0, vec![3, 1100], vec![1, 3]),
+            ] {
+                fn target<'b>(
+                    output: &'b mut [u8],
+                    size: usize,
+                    offset: u64,
+                    shape: &[u64],
+                    strides: &[u64],
+                ) -> ArrayBytesDecodeIntoTarget<'b> {
+                    // SAFETY: the view is the only view of `output`, and distinct indices address distinct elements.
+                    unsafe {
+                        ArrayBytesFixedDisjointView::new_strided(
+                            UnsafeCellSlice::new(output),
+                            size,
+                            offset,
+                            shape,
+                            strides,
+                        )
+                    }
+                    .unwrap()
+                    .into()
+                }
+                let mut expected = vec![0xa5; len * size];
+                zarrs_codec::decode_into_array_bytes_target(
+                    &decoded,
+                    &mut target(&mut expected, size, offset, &shape, &strides),
+                )?;
+                let mut actual = vec![0xa5; len * size];
+                codec.decode_into(
+                    encoded.clone().into(),
+                    &chunk_shape,
+                    &mut target(&mut actual, size, offset, &shape, &strides),
+                    &options,
+                    &resources,
+                )?;
+                assert_eq!(actual, expected, "{data_type:?} {strides:?}");
+
+                // Invalid input leaves the target untouched
+                let mut untouched = vec![0xa5; len * size];
+                assert!(
+                    codec
+                        .decode_into(
+                            encoded.clone().slice(1..).into(),
+                            &chunk_shape,
+                            &mut target(&mut untouched, size, offset, &shape, &strides),
+                            &options,
+                            &resources,
+                        )
+                        .is_err()
+                );
+                assert!(untouched.iter().all(|&byte| byte == 0xa5));
             }
         }
         Ok(())

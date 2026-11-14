@@ -7,17 +7,18 @@ use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::packbits_partial_decoder::PackBitsPartialDecoder;
 use super::{
     PackBitsBitOrder, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1, PackBitsLayout,
-    pack, pack_bits_components, unpack_to_vec,
+    pack, pack_bits_components, unpack, unpack_to_vec,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
 use std::ops::Range;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, InvalidBytesLengthError, InvalidNumberOfElementsError,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToBytesCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -430,6 +431,70 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         let bytes_dec = unpack_to_vec(self.layout, packed_elements, 0, decoded_bytes);
 
         Ok(ArrayBytes::Fixed(self.components_to_bytes(bytes_dec)?))
+    }
+
+    fn decode_into(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        /// The fewest elements in a region of the target to unpack into directly, which is slower per region than unpacking all elements and copying them.
+        const MIN_REGION_ELEMENTS: usize = 1024;
+        // Only components of one byte of one packed bit (e.g. `bool`) are unpacked directly, as copying is a small part of unpacking other components
+        let bytes = input.into_bytes(options, resources)?;
+        let (data_type_size, view) = match (self.data_type.fixed_size(), &mut *output_target) {
+            (Some(data_type_size), ArrayBytesDecodeIntoTarget::Fixed(view))
+                if self.layout.is_one_bit_bytes()
+                    && !self.convert_bytes
+                    && view.data_type_size() == data_type_size
+                    && (view.num_contiguous_elements() >= MIN_REGION_ELEMENTS
+                        || view.num_contiguous_elements() as u64 == view.num_elements()) =>
+            {
+                (data_type_size, view)
+            }
+            _ => {
+                let decoded = self.decode(bytes, shape, options, resources)?;
+                return decode_into_array_bytes_target(&decoded, output_target);
+            }
+        };
+        let sizes = self.sizes(shape)?;
+
+        // Input checks
+        if bytes.len() != sizes.encoded_bytes {
+            return Err(InvalidBytesLengthError::new(bytes.len(), sizes.encoded_bytes).into());
+        }
+        if let Some((index, _)) = sizes.padding_byte {
+            sizes.check_padding_byte(bytes[index])?;
+        }
+        if view.num_elements() * data_type_size as u64 != sizes.decoded_bytes {
+            return Err(InvalidNumberOfElementsError::new(
+                view.num_elements(),
+                sizes.decoded_bytes / data_type_size as u64,
+            )
+            .into());
+        }
+        let packed_elements = &bytes[sizes.packed];
+
+        let mut element = 0u64;
+        // SAFETY: each region is unpacked from the packed bits of its elements, which initialises it.
+        // The decoded components are the decoded bytes, as `convert_bytes` is false.
+        unsafe {
+            view.for_each_region_mut(|region| {
+                let bit = element * self.element_size_bits;
+                let byte = usize::try_from(bit / 8).unwrap();
+                unpack(
+                    self.layout,
+                    &packed_elements[byte..],
+                    (bit % 8) as u8,
+                    region,
+                );
+                element += (region.len() / data_type_size) as u64;
+                Ok::<_, CodecError>(())
+            })
+        }
     }
 
     fn partial_decoder(

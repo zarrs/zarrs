@@ -32,13 +32,13 @@ use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3, CodecSpecificOptions,
+    CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -308,6 +308,23 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         self.packbits
             .decode(bytes.into_fixed()?, shape, options, resources)
+    }
+
+    fn decode_into(
+        &self,
+        bytes: ArrayBytes<'_>,
+        shape: &[NonZeroU64],
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        self.packbits.decode_into(
+            ArrayBytesDecodeIntoInput::from(bytes.into_fixed()?),
+            shape,
+            target,
+            options,
+            resources,
+        )
     }
 
     fn partial_decoder(
