@@ -451,7 +451,7 @@ fn unpack_components<const N: usize, const MSB_FIRST: bool>(
     };
     // Only the packed bytes holding the bits of `decoded` are copied into blocks
     let packed = &packed[..(usize::from(bit_offset) + components.len() * packed_bits).div_ceil(8)];
-    let mut components = components.iter_mut();
+    let mut components = components;
     // A block of packed bytes with the bits in sequence from the least significant bit.
     // It is uninitialised, as zeroing it all would dominate unpacking short ranges.
     let mut block = [MaybeUninit::<u8>::uninit(); BLOCK_BYTES];
@@ -479,18 +479,43 @@ fn unpack_components<const N: usize, const MSB_FIRST: bool>(
         let block_init: &[u8] =
             unsafe { std::slice::from_raw_parts(block.as_ptr().cast::<u8>(), init_len) };
 
-        // Unpack components while the 9 bytes holding their (at most 64) bits are initialised
-        while let Some(bytes) = block_init.get(bit / 8..bit / 8 + 9) {
-            let Some(component) = components.next() else {
-                return;
+        // Unpack the components whose 9 bytes holding their (at most 64) bits are initialised, those starting before bit `(init_len - 8) * 8`.
+        // Counting them once rather than checking each component keeps the loop short.
+        // `bit` is less than 8, so there is at least one if `init_len > 8`.
+        let num_initialised = if init_len > 8 {
+            ((init_len - 8) * 8 - 1 - bit) / packed_bits + 1
+        } else {
+            0
+        };
+        let num_run = num_initialised.min(components.len());
+        let (run, rest) = std::mem::take(&mut components).split_at_mut(num_run);
+        components = rest;
+        /// Unpack the components of `run` with `$decode` applied to their packed bits.
+        macro_rules! unpack_run {
+            (|$value:ident| $decode:expr) => {
+                for component in run {
+                    let byte = bit / 8;
+                    debug_assert!(byte + 9 <= init_len);
+                    // SAFETY: `bit < (init_len - 8) * 8` for each of the first `num_initialised` components, so `bit / 8 + 9 <= init_len`.
+                    let bytes = unsafe { block_init.get_unchecked(byte..byte + 9) };
+                    let shift = bit % 8;
+                    let lo = u64::from_le_bytes(bytes[..8].try_into().unwrap());
+                    let hi = u64::from(bytes[8]);
+                    // Shift `hi` in two steps, as it is shifted out entirely if `shift` is zero
+                    let $value = ((lo >> shift) | (hi << 1 << (63 - shift))) & mask;
+                    layout.write_component($decode, component);
+                    bit += packed_bits;
+                }
             };
-            let shift = bit % 8;
-            let lo = u64::from_le_bytes(bytes[..8].try_into().unwrap());
-            let hi = u64::from(bytes[8]);
-            // Shift `hi` in two steps, as it is shifted out entirely if `shift` is zero
-            let value = ((lo >> shift) | (hi << 1 << (63 - shift))) & mask;
-            layout.write_component(layout.decode_value(value), component);
-            bit += packed_bits;
+        }
+        // Components that need no placement are unpacked by a separate loop, without a shift by zero
+        if !layout.sign_extension && layout.first_bit == 0 {
+            unpack_run!(|value| value);
+        } else {
+            unpack_run!(|value| layout.decode_value(value));
+        }
+        if components.is_empty() {
+            return;
         }
         bit += block_start * 8;
     }
