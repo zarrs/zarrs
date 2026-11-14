@@ -146,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix codec-specific options to propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
   - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Cache data type support when binding `bytes`, `packbits`, `bitround`, and `cast_value`, and re-export their `{Codec}DataTypeTraitsArc` aliases
 - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
 - Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
@@ -193,7 +194,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Copy only the packed bytes that are unpacked when unpacking part of a chunk
 - Pack and unpack one-bit components of one byte (e.g. `bool`) eight at a time, about 20 and 14 times faster
-- Cache data type codec support when binding for byte-order conversion, and re-export `PackBitsDataTypeTraitsArc`
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
@@ -214,7 +214,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Convert endianness while copying borrowed or shared bytes into strided output views with regions of at least 256 bytes, rather than into a temporary buffer
 - Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - Reject short decoded byte ranges in synchronous and asynchronous partial decoding
-- Cache data type codec support when binding, and re-export `BytesDataTypeTraitsArc`
 
 #### `blosc`
 - Decode directly into preallocated output on native and WebAssembly backends
@@ -236,12 +235,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
-  - Cache decoded and encoded data type codec support when binding, and re-export `CastValueDataTypeTraitsArc`
 - `pcodec`: Decode directly into aligned contiguous output, retaining fallback for other views and rejecting incomplete decompression (requires `pcodec`)
 - `bz2`: Decode streams directly into preallocated, uninitialised output (requires `bz2`)
 - `zlib`: Decode streams directly into preallocated, uninitialised output (requires `zlib`)
 - `gzip`: Decode streams directly into preallocated output with bounded oversized-stream detection
-- `bitround`: Cache data type codec support when binding, and re-export `BitroundDataTypeTraitsArc` (requires `bitround`)
 - `zfp`/`zfpy`: Replace `zfp-sys` with the pure-Rust `zfp-rs`
 - `transpose`: Support optional data types, permuting values and validity masks together
 - `reshape`: Remove warnings now that the codec is stable
