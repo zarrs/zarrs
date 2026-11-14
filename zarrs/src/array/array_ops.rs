@@ -57,7 +57,11 @@
 //!
 //! [`ArrayMutOps::set_codec_options`] can instead update an array through a mutable reference.
 
+use crate::array::ElementOrder;
 use std::sync::Arc;
+
+use super::array_bytes_internal::{FixedDecodeBuffers, reordered};
+use zarrs_codec::ArrayBytesDecodeIntoTarget;
 
 use super::chunk_cache::ChunkCache;
 use super::{
@@ -137,6 +141,155 @@ fn recommended_codec_concurrency(
     Ok(array.codecs_bound().recommended_concurrency(chunk_shape)?)
 }
 
+/// Return `T` from F-ordered `buffers` of `shape`.
+///
+/// # Safety
+/// Every element of the target returned by [`FixedDecodeBuffers::target_in_order`] must have been written.
+unsafe fn from_f_order_buffers<T: FromArrayBytes>(
+    buffers: FixedDecodeBuffers,
+    shape: &[u64],
+    data_type: &DataType,
+) -> Result<T, ArrayError> {
+    // SAFETY: the caller guarantees that every element has been written
+    let bytes = unsafe { buffers.into_array_bytes() };
+    T::from_array_bytes(bytes, shape, data_type, ElementOrder::F)
+}
+
+/// Return `T` from C-ordered `bytes` of `shape` on an array with `order`.
+///
+/// `T` is in `order` if `order` places the elements of `shape` as C order does, and in C order otherwise.
+fn from_c_order_bytes<T: FromArrayBytes>(
+    bytes: super::ArrayBytes<'static>,
+    shape: &[u64],
+    data_type: &DataType,
+    order: ElementOrder,
+) -> Result<T, ArrayError> {
+    T::from_array_bytes(bytes, shape, data_type, order.for_c_order_elements(shape))
+}
+
+/// Return `T` from shared C-ordered `bytes` of `shape` on an array with `order`.
+///
+/// This is the shared counterpart of [`from_c_order_bytes`].
+fn from_c_order_bytes_arc<T: FromArrayBytes>(
+    bytes: std::sync::Arc<super::ArrayBytes<'static>>,
+    shape: &[u64],
+    data_type: &DataType,
+    order: ElementOrder,
+) -> Result<T, ArrayError> {
+    T::from_array_bytes_arc(bytes, shape, data_type, order.for_c_order_elements(shape))
+}
+
+/// Return `T` with the elements of C-ordered `bytes` of `shape` in F order.
+fn from_c_order_in_f_order<T: FromArrayBytes>(
+    bytes: &super::ArrayBytes<'_>,
+    shape: &[u64],
+    data_type: &DataType,
+) -> Result<T, ArrayError> {
+    let bytes = reordered(bytes, data_type, shape, ElementOrder::C, ElementOrder::F)?;
+    T::from_array_bytes(bytes, shape, data_type, ElementOrder::F)
+}
+
+/// Return the shape of the chunk at `chunk_indices` of `array`.
+fn chunk_shape_u64(array: &impl ArrayOps, chunk_indices: &[u64]) -> Result<Vec<u64>, ArrayError> {
+    Ok(bytemuck::allocation::cast_vec(
+        array.chunk_shape(chunk_indices)?,
+    ))
+}
+
+/// Return the element order of the elements selected by `indexer` on an array with `order`.
+///
+/// Only array subsets have a multidimensional output shape with an element order, so the elements of other indexers are in C order.
+fn indexer_element_order(indexer: &dyn Indexer, order: ElementOrder) -> ElementOrder {
+    if indexer.as_array_subset().is_some() {
+        order
+    } else {
+        ElementOrder::C
+    }
+}
+
+/// Return an error if `indexer` is an array subset that is not within `chunk_shape`.
+fn validate_partial_chunk_subset(
+    indexer: &dyn Indexer,
+    chunk_shape: &[u64],
+) -> Result<(), ArrayError> {
+    if let Some(chunk_subset) = indexer.as_array_subset()
+        && !chunk_subset.inbounds_shape(chunk_shape)
+    {
+        return Err(ArrayError::InvalidArraySubset(
+            Box::new(chunk_subset.to_array_subset()),
+            chunk_shape.to_vec(),
+        ));
+    }
+    Ok(())
+}
+
+/// Retrieve `T` with the elements of `shape` in `order`.
+///
+/// `shape` is only evaluated for [`ElementOrder::F`].
+/// If `order` reorders the elements of `shape`, fixed length data is decoded by `retrieve_into` into buffers with an F-ordered layout, and variable length data is retrieved in C order by `retrieve_c_order` and reordered.
+/// Otherwise, the C and F orders of the elements coincide, and `T` is returned by `retrieve`.
+fn retrieve_in_order<T, S, B>(
+    data_type: &DataType,
+    order: ElementOrder,
+    shape: impl FnOnce() -> Result<S, ArrayError>,
+    retrieve_into: impl FnOnce(&mut ArrayBytesDecodeIntoTarget<'_>) -> Result<(), ArrayError>,
+    retrieve_c_order: impl FnOnce() -> Result<B, ArrayError>,
+    retrieve: impl FnOnce() -> Result<T, ArrayError>,
+) -> Result<T, ArrayError>
+where
+    T: FromArrayBytes,
+    S: AsRef<[u64]>,
+    B: std::borrow::Borrow<super::ArrayBytes<'static>>,
+{
+    if order == ElementOrder::F {
+        let shape = shape()?;
+        let shape = shape.as_ref();
+        if order.is_reordered(shape) {
+            return if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shape) {
+                retrieve_into(&mut buffers.target_in_order(ElementOrder::F)?)?;
+                // SAFETY: a successful retrieval into a target writes every element
+                unsafe { from_f_order_buffers(buffers, shape, data_type) }
+            } else {
+                from_c_order_in_f_order(retrieve_c_order()?.borrow(), shape, data_type)
+            };
+        }
+    }
+    retrieve()
+}
+
+/// Retrieve `T` with the elements of `shape` in `order` asynchronously.
+///
+/// This is the asynchronous counterpart of [`retrieve_in_order`].
+#[cfg(feature = "async")]
+async fn async_retrieve_in_order<T, S, B>(
+    data_type: &DataType,
+    order: ElementOrder,
+    shape: impl FnOnce() -> Result<S, ArrayError>,
+    retrieve_into: impl AsyncFnOnce(&mut ArrayBytesDecodeIntoTarget<'_>) -> Result<(), ArrayError>,
+    retrieve_c_order: impl AsyncFnOnce() -> Result<B, ArrayError>,
+    retrieve: impl AsyncFnOnce() -> Result<T, ArrayError>,
+) -> Result<T, ArrayError>
+where
+    T: FromArrayBytes,
+    S: AsRef<[u64]>,
+    B: std::borrow::Borrow<super::ArrayBytes<'static>>,
+{
+    if order == ElementOrder::F {
+        let shape = shape()?;
+        let shape = shape.as_ref();
+        if order.is_reordered(shape) {
+            return if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shape) {
+                retrieve_into(&mut buffers.target_in_order(ElementOrder::F)?).await?;
+                // SAFETY: a successful retrieval into a target writes every element
+                unsafe { from_f_order_buffers(buffers, shape, data_type) }
+            } else {
+                from_c_order_in_f_order(retrieve_c_order().await?.borrow(), shape, data_type)
+            };
+        }
+    }
+    retrieve().await
+}
+
 /// Return `chunk` if it exists, otherwise the fill value of the chunk at `chunk_indices`.
 fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     array: &A,
@@ -158,5 +311,6 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
         bytes,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
+        array.element_order(),
     )
 }

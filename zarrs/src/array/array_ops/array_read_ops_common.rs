@@ -1,15 +1,17 @@
+use std::num::NonZeroU64;
+
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{
-    ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits,
-    IncompatibleDimensionalityError, Indexer,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits,
+    ChunkShapeTraits, Indexer,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
-    copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
+    InvalidNumberOfElementsError, Resources, copy_fill_value_into, decode_into_array_bytes_target,
 };
-use zarrs_storage::{MaybeSend, MaybeSync};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 
 use super::super::array_bytes_internal::FixedDecodeBuffers;
 use super::super::concurrency::concurrency_chunks_and_codec;
@@ -105,11 +107,10 @@ where
                 &codec_concurrency,
             );
             // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
-            let mut buffers = (output_target.subset().shape() != array_subset.shape().as_ref())
-                .then(|| {
-                    FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
-                        .expect("fixed data type")
-                });
+            let mut buffers = (output_target.shape() != array_subset.shape().as_ref()).then(|| {
+                FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
+                    .expect("fixed data type")
+            });
             let buffers_target = buffers
                 .as_mut()
                 .map(FixedDecodeBuffers::target)
@@ -171,13 +172,11 @@ where
         + MaybeSync,
 {
     let array_subset_start = array_subset.start();
-    let output_start = output_target.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
         let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-        let chunk_subset_in_view =
-            subset_in_output(&chunk_subset_overlap, &array_subset_start, output_start)?;
+        let chunk_subset_in_view = chunk_subset_overlap.relative_to(&array_subset_start)?;
 
         // SAFETY: chunks represent disjoint array subsets.
         let mut target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;
@@ -200,30 +199,45 @@ where
     Ok(())
 }
 
-/// Translate `subset`, which lies within an array subset starting at `array_subset_start`, to an output starting at `output_start`.
-///
-/// Equivalent to `subset.relative_to(array_subset_start)?.offset(output_start)` without the intermediate subset, which is measurable when reading many small chunks.
-pub(super) fn subset_in_output(
-    subset: &ArraySubset,
-    array_subset_start: &[u64],
-    output_start: &[u64],
-) -> Result<ArraySubset, ArrayError> {
-    for start in [array_subset_start, output_start] {
-        if start.len() != subset.dimensionality() {
-            return Err(
-                IncompatibleDimensionalityError::new(start.len(), subset.dimensionality()).into(),
-            );
-        }
+impl<TStorage: ?Sized> Array<TStorage> {
+    /// Decode the encoded chunk `chunk_encoded` with `chunk_shape`.
+    pub(super) fn decode_chunk(
+        &self,
+        chunk_encoded: Bytes,
+        chunk_shape: &[NonZeroU64],
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        let bytes = self
+            .codecs_bound()
+            .decode(
+                CowBytes::Shared(chunk_encoded),
+                chunk_shape,
+                options,
+                resources.compute(),
+            )
+            .map_err(ArrayError::CodecError)?;
+        bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        Ok(bytes.into_owned())
     }
-    // Built from ranges to allocate only the start and shape
-    Ok(ArraySubset::from(
-        std::iter::zip(
-            std::iter::zip(subset.start(), subset.shape()),
-            std::iter::zip(array_subset_start, output_start),
-        )
-        .map(|((&start, &size), (&array_start, &output_start))| {
-            let start = start - array_start + output_start;
-            start..start + size
-        }),
-    ))
+
+    /// Decode the encoded chunk `chunk_encoded` with `chunk_shape` into `output_target`.
+    pub(super) fn decode_chunk_into(
+        &self,
+        chunk_encoded: Bytes,
+        chunk_shape: &[NonZeroU64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError> {
+        self.codecs_bound()
+            .decode_into(
+                CowBytes::Shared(chunk_encoded).into(),
+                chunk_shape,
+                output_target,
+                options,
+                resources.compute(),
+            )
+            .map_err(ArrayError::CodecError)
+    }
 }

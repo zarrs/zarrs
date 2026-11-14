@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Array` operations; configure a derived array with the corresponding `with_*` method, then call the operation
   - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` and `ArrayMutOps::set_metadata_erase_version()`
   - `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
+- Add an array element order for reading and writing arrays in column-major (F) order, `ArrayOps::{element_order,with_element_order}()` and `ArrayMutOps::set_element_order()`
+  - Generic `[async_]retrieve_*` methods of `Array` and `ArrayCached` return elements in the array's `ElementOrder` (C by default), so `Vec` results are column-major, `ndarray` results have a column-major layout, and `Tensor` results report `ElementOrder::F`
+  - Generic `[async_]store_*` methods take elements in the array's `ElementOrder`; `ndarray` arrays and `Tensor`s are stored by their logical elements in either order, without a copy for a column-major `ndarray` array of a column-major array
+  - Fixed length data is decoded directly into column-major output, so a `transpose` codec chain (e.g. a Zarr V2 array with `"order": "F"`) decodes without a copy, and variable length data is decoded and then reordered
+  - Each chunk of a multi-chunk store is gathered directly from the column-major input
+  - `_into` methods are unaffected, since the output target has its own layout
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
 - **Breaking**: `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesDecodeIntoTarget`
 - **Breaking**: `[Async]ArrayWriteOps::erase_chunks` and `[Async]ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
@@ -105,6 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`, which exports a `Tensor<'static>` as a versioned DLPack managed tensor (requires `dlpack`)
   - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
   - Add `Tensor::num_elements()` and implement `Clone` and `Debug` for `Tensor`
+  - **Breaking**: `FromArrayBytes::from_array_bytes[_arc]` and `IntoArrayBytes::into_array_bytes` take the `ElementOrder` of the elements
+    - Add `ElementOrder` (`C` or `F`)
+    - Types without a layout (`Vec`, slices, `ArrayBytes`) hold their elements in the given order; `ndarray` arrays are created column-major for `F`, and are borrowed without a copy if they are already in the requested order
+    - Add `IntoArrayBytes::element_order`, the order of the elements of an input for a target shape; it returns the new `ElementError::IncompatibleShape` for an `ndarray` array or `Tensor` with a shape other than the target's, which was previously stored if it had the same number of elements
+  - Add `Tensor::{order,with_order}()`; a `Tensor` is reordered when stored in another order, and DLPack export uses column-major strides for `F`
+    - **Breaking**: `Tensor::{into_parts,as_parts}()` also return the order
   - Implement `IntoArrayBytes` for `&bytes::Bytes`; storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
   - Fix DLPack export to validate that tensor bytes cover the shape and data type, adding `TensorError::{InsufficientBytes,UnsupportedShape}`
 - Implement `Clone` for `ArrayBuilder`
@@ -131,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable, strided decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`
 
 #### General
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -151,6 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Re-export `ArrayBytesDecodeIntoTargetOptional`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
 - Decode through codec chains directly into output views, forwarding deferred decoding through transparent nested chains
+- Decode through `bitround`, `reshape`, `squeeze` and `transpose` codecs directly into output views by remapping the view to the encoded shape, rather than decoding into an intermediate buffer and copying
+  - e.g. a `transpose` chain decodes straight into a column-major output, and a trailing squeezed dimension no longer needs a copy
 - Partial encoding
   - The `bytes` codec and default array-to-array/array-to-bytes partial encoders replace the chunk without checking for or reading the existing chunk if an update covers the entire chunk
     - The chunk is erased if the update is entirely the fill value and `store_empty_chunks` is disabled, as with other partial encoders

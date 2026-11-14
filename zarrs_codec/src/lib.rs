@@ -153,7 +153,7 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
     /// The target becomes the inner data and `mask` the outermost mask, like [`ArrayBytes::with_optional_mask`].
     ///
     /// # Errors
-    /// Returns a [`WithOptionalMaskError`] holding the target and `mask` unless `mask` has one byte per element and views an array with the same shape and [`subset`](Self::subset) as the target.
+    /// Returns a [`WithOptionalMaskError`] holding the target and `mask` unless `mask` has one byte per element and addresses the same elements of its bytes as the innermost data of the target (the same [`shape`](Self::shape), offset and strides).
     /// Map it to an [`IncompatibleOptionalMaskError`] with `From` to discard the inputs, e.g. to propagate it as a `Box<dyn Error>`.
     pub fn with_optional_mask(
         self,
@@ -196,15 +196,17 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
             ));
         }
         if mask.shape() != data.shape() {
-            return Err(IncompatibleOptionalMaskError::ArrayShape {
+            return Err(IncompatibleOptionalMaskError::Shape {
                 mask: mask.shape().to_vec(),
                 data: data.shape().to_vec(),
             });
         }
-        if mask.subset() != data.subset() {
-            return Err(IncompatibleOptionalMaskError::Subset {
-                mask: Box::new(mask.subset().clone()),
-                data: Box::new(data.subset().clone()),
+        if !mask.same_layout(data) {
+            return Err(IncompatibleOptionalMaskError::Layout {
+                mask_offset: mask.offset(),
+                mask_strides: mask.strides().into(),
+                data_offset: data.offset(),
+                data_strides: data.strides().into(),
             });
         }
         Ok(())
@@ -226,21 +228,22 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
         }
     }
 
-    /// Return the subset of the array covered by the target.
+    /// Return the shape of the target.
     #[must_use]
-    pub fn subset(&self) -> &ArraySubset {
-        self.data_view().subset()
+    pub fn shape(&self) -> &[u64] {
+        self.data_view().shape()
     }
 
-    /// Create a target with the same structure as this target that covers `subset` of the same array.
+    /// Create a target with the same structure as this target that covers a `subset` of it.
     ///
+    /// The `subset` is relative to the target, as in [`ArrayBytesFixedDisjointView::subdivide`].
     /// An empty `subset` references no elements, so it is accepted irrespective of its start.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the [`subset`](Self::subset) of the target.
+    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the [`shape`](Self::shape) of the target.
     ///
     /// # Safety
-    /// The `subset` must not overlap with the `subset` of any other created targets or views that reference the same array bytes.
+    /// The `subset` must not overlap with the elements of any other created targets or views that reference the same array bytes.
     pub unsafe fn subdivide(&self, subset: ArraySubset) -> Result<Self, CodecError> {
         match self {
             Self::Fixed(data) => Ok(Self::Fixed(unsafe { data.subdivide(subset) }?)),
@@ -250,6 +253,51 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
                     data: Box::new(unsafe { optional.data.subdivide(subset) }?),
                     mask,
                 }))
+            }
+        }
+    }
+
+    /// Return a target of the same elements with permuted dimensions, see [`ArrayBytesFixedDisjointView::permuted_axes`].
+    ///
+    /// Returns [`None`] if `order` is not a permutation of the dimensions of the target.
+    #[must_use]
+    pub fn permuted_axes(&mut self, order: &[usize]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+        self.map_views(&mut |view| view.permuted_axes(order))
+    }
+
+    /// Return a target of the same elements with `shape`, in the same C order, see [`ArrayBytesFixedDisjointView::reshaped`].
+    ///
+    /// Returns [`None`] if the target cannot be reshaped to `shape`.
+    #[must_use]
+    pub fn reshaped(&mut self, shape: &[u64]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+        self.map_views(&mut |view| view.reshaped(shape))
+    }
+
+    /// Reborrow this target with a shorter lifetime.
+    #[must_use]
+    pub fn reborrow(&mut self) -> ArrayBytesDecodeIntoTarget<'_> {
+        self.map_views(&mut |view| Some(view.reborrow()))
+            .expect("reborrow is infallible")
+    }
+
+    /// Apply `f` to the data view and every mask view, returning [`None`] if it returns [`None`] for any.
+    fn map_views<'b>(
+        &'b mut self,
+        f: &mut impl for<'c> FnMut(
+            &'c mut ArrayBytesFixedDisjointView<'a>,
+        ) -> Option<ArrayBytesFixedDisjointView<'c>>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'b>> {
+        match self {
+            Self::Fixed(data) => f(data).map(ArrayBytesDecodeIntoTarget::Fixed),
+            Self::Optional(optional) => {
+                let mask = f(&mut optional.mask)?;
+                let data = optional.data.map_views(f)?;
+                Some(ArrayBytesDecodeIntoTarget::Optional(
+                    ArrayBytesDecodeIntoTargetOptional {
+                        data: Box::new(data),
+                        mask,
+                    },
+                ))
             }
         }
     }
@@ -267,23 +315,27 @@ pub enum IncompatibleOptionalMaskError {
     /// The mask does not have one byte per element.
     #[display("the optional mask has {_0} bytes per element, expected 1")]
     ElementSize(usize),
-    /// The mask and data view arrays with different shapes.
-    #[display(
-        "the optional mask array shape {mask:?} does not match the data array shape {data:?}"
-    )]
-    ArrayShape {
-        /// The shape of the mask array.
+    /// The mask and data have different shapes.
+    #[display("the optional mask shape {mask:?} does not match the data shape {data:?}")]
+    Shape {
+        /// The shape of the mask.
         mask: ArrayShape,
-        /// The shape of the data array.
+        /// The shape of the data.
         data: ArrayShape,
     },
-    /// The mask and data cover different subsets.
-    #[display("the optional mask subset {mask} does not match the data subset {data}")]
-    Subset {
-        /// The subset of the mask.
-        mask: Box<ArraySubset>,
-        /// The subset of the data.
-        data: Box<ArraySubset>,
+    /// The mask and data have the same shape, but address different elements of their bytes.
+    #[display(
+        "the optional mask layout (offset {mask_offset}, strides {mask_strides:?}) does not address the same elements as the data layout (offset {data_offset}, strides {data_strides:?})"
+    )]
+    Layout {
+        /// The offset of the mask.
+        mask_offset: u64,
+        /// The strides of the mask.
+        mask_strides: Box<[u64]>,
+        /// The offset of the data.
+        data_offset: u64,
+        /// The strides of the data.
+        data_strides: Box<[u64]>,
     },
 }
 
@@ -351,7 +403,13 @@ impl<M> From<WithOptionalMaskError<'_, M>> for IncompatibleOptionalMaskError {
 
 impl<M> From<WithOptionalMaskError<'_, M>> for CodecError {
     fn from(error: WithOptionalMaskError<'_, M>) -> Self {
-        Self::IncompatibleOptionalMask(error.0.error)
+        error.0.error.into()
+    }
+}
+
+impl From<IncompatibleOptionalMaskError> for CodecError {
+    fn from(error: IncompatibleOptionalMaskError) -> Self {
+        Self::IncompatibleOptionalMask(Box::new(error))
     }
 }
 
@@ -912,7 +970,7 @@ pub enum CodecError {
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
     /// An optional mask is incompatible with the data of a decode target.
     #[error(transparent)]
-    IncompatibleOptionalMask(#[from] IncompatibleOptionalMaskError),
+    IncompatibleOptionalMask(Box<IncompatibleOptionalMaskError>),
     /// Invalid byte offsets for variable length data.
     #[error(transparent)]
     ArrayBytesOffsetsCreate(#[from] ArrayBytesOffsetsCreateError),

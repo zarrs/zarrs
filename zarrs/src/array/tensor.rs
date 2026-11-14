@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::array::CowBytes;
 
-use super::DataType;
+use super::{DataType, ElementOrder};
 
 /// Errors related to [`Tensor`] operations.
 #[derive(Clone, Debug, Display, Error)]
@@ -27,7 +27,7 @@ pub enum TensorError {
 
 /// A tensor holding raw bytes with data type and shape metadata.
 ///
-/// This represents a multidimensional array of fixed-size elements in C-contiguous (row-major) order.
+/// This represents a multidimensional array of fixed-size elements in C-contiguous (row-major) order, or column-major order if its [`order`](Self::order) is [`ElementOrder::F`].
 ///
 /// # Element layout
 /// The [`bytes`](Self::bytes) hold the elements in the same layout as decoded array bytes: the first
@@ -43,17 +43,32 @@ pub struct Tensor<'a> {
     bytes: CowBytes<'a>,
     data_type: DataType,
     shape: Vec<u64>,
+    order: ElementOrder,
 }
 
 impl<'a> Tensor<'a> {
-    /// Create a new [`Tensor`].
+    /// Create a new [`Tensor`] with elements in C order.
     #[must_use]
     pub fn new(bytes: impl Into<CowBytes<'a>>, data_type: DataType, shape: Vec<u64>) -> Self {
         Self {
             bytes: bytes.into(),
             data_type,
             shape,
+            order: ElementOrder::C,
         }
+    }
+
+    /// Return the tensor with its elements interpreted in `order`, without moving them.
+    #[must_use]
+    pub fn with_order(mut self, order: ElementOrder) -> Self {
+        self.order = order;
+        self
+    }
+
+    /// Get the order of the elements.
+    #[must_use]
+    pub fn order(&self) -> ElementOrder {
+        self.order
     }
 
     /// Get the raw bytes.
@@ -90,21 +105,24 @@ impl<'a> Tensor<'a> {
             bytes: self.bytes.into_static(),
             data_type: self.data_type,
             shape: self.shape,
+            order: self.order,
         }
     }
 
-    /// Consume self and return the parts.
+    /// Consume self and return the parts `(bytes, data_type, shape, order)`.
+    ///
+    /// The elements of `bytes` are in `order`.
     #[must_use]
-    pub fn into_parts(self) -> (CowBytes<'a>, DataType, Vec<u64>) {
-        (self.bytes, self.data_type, self.shape)
+    pub fn into_parts(self) -> (CowBytes<'a>, DataType, Vec<u64>, ElementOrder) {
+        (self.bytes, self.data_type, self.shape, self.order)
     }
 
-    /// Get references to all parts of the tensor.
+    /// Get all parts of the tensor.
     ///
-    /// Returns `(bytes, data_type, shape)` as references.
+    /// Returns `(bytes, data_type, shape, order)`, with references to the bytes, data type and shape.
     #[must_use]
-    pub fn as_parts(&self) -> (&[u8], &DataType, &[u64]) {
-        (&self.bytes, &self.data_type, &self.shape)
+    pub fn as_parts(&self) -> (&[u8], &DataType, &[u64], ElementOrder) {
+        (&self.bytes, &self.data_type, &self.shape, self.order)
     }
 }
 
@@ -113,13 +131,32 @@ mod tests {
     use crate::array::Resources;
     use zarrs_storage::store::MemoryStore;
 
-    use crate::array::{ArrayBuilder, Tensor, data_type};
+    use crate::array::{ArrayBuilder, ElementOrder, Tensor, data_type};
 
     #[test]
     fn tensor_borrowed_bytes_are_not_copied() {
         let bytes = vec![0u8; 4 * size_of::<f32>()];
         let tensor = Tensor::new(&bytes[..], data_type::float32(), vec![2, 2]);
         assert_eq!(tensor.bytes().as_ptr(), bytes.as_ptr());
+    }
+
+    #[test]
+    fn tensor_parts_roundtrip_order() {
+        let tensor = Tensor::new(vec![0u8, 3, 1, 4, 2, 5], data_type::uint8(), vec![2, 3])
+            .with_order(ElementOrder::F);
+        let (bytes, data_type, shape, order) = tensor.as_parts();
+        assert_eq!(
+            (bytes, data_type, shape),
+            (
+                &[0u8, 3, 1, 4, 2, 5][..],
+                &data_type::uint8(),
+                &[2u64, 3][..]
+            )
+        );
+        assert_eq!(order, ElementOrder::F);
+        let (bytes, data_type, shape, order) = tensor.into_parts();
+        let rebuilt = Tensor::new(bytes, data_type, shape).with_order(order);
+        assert_eq!(rebuilt.order(), ElementOrder::F);
     }
 
     #[test]

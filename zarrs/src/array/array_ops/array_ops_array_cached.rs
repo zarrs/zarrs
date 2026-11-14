@@ -5,8 +5,8 @@ use super::{
     Arc, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArrayMetadata, ArrayMetadataOptions,
     ArrayOps, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkKeyEncoding, ChunkShape, CodecChain, CodecChainBound, CodecOptions, CodecSpecificOptions,
-    DataType, DimensionName, FillValue, IncompatibleDimensionalityError, MetadataEraseVersion,
-    NodePath, StorageTransformerChain, StoreKey,
+    DataType, DimensionName, ElementOrder, FillValue, IncompatibleDimensionalityError,
+    MetadataEraseVersion, NodePath, StorageTransformerChain, StoreKey,
 };
 
 #[inherent]
@@ -86,6 +86,18 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
     #[allow(clippy::must_use_candidate)]
     pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
         self.array().metadata_erase_version()
+    }
+
+    #[allow(clippy::must_use_candidate)]
+    pub fn element_order(&self) -> ElementOrder {
+        self.array().element_order()
+    }
+
+    #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
+    pub fn with_element_order(&self, element_order: ElementOrder) -> Self {
+        self.map_array(|array| {
+            array.set_element_order(element_order);
+        })
     }
 
     #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]

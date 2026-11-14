@@ -56,6 +56,29 @@ impl ContiguousLinearisedIndices {
         })
     }
 
+    /// Return the contiguous linearised indices of a strided grid of elements.
+    ///
+    /// The grid starts at element `first` and has the `(count, stride)` of each of its dimensions in `dimensions`,
+    /// outermost first, with strides in elements. Elements are visited in C order of the grid, so the runs are its
+    /// trailing dimensions whose elements are adjacent (`stride` equal to the number of elements in the run so far).
+    /// For an array subset, the grid is the subset shape with the C-order strides of the array, and the result equals
+    /// [`new`](Self::new).
+    ///
+    /// # Panics
+    /// Panics if a linearised index or the number of elements exceeds [`u64::MAX`].
+    #[must_use]
+    pub fn new_strided(
+        first: u64,
+        dimensions: impl DoubleEndedIterator<Item = (u64, u64)>,
+    ) -> Self {
+        let mut runs = StridedIndices::from_dimensions_rev(first, dimensions.rev());
+        let contiguous_elements = runs.take_contiguous_inner();
+        Self {
+            runs,
+            contiguous_elements,
+        }
+    }
+
     /// Return the number of starting indices (i.e. the length of the iterator).
     ///
     /// # Panics

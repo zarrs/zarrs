@@ -354,6 +354,126 @@ impl CodecChainBound {
         Ok(bytes)
     }
 
+    /// Decode `bytes` from the encoded representation of the chain to the decoded representation of array-to-array codec `index` (or of the array-to-bytes codec, if `index` is the number of array-to-array codecs).
+    fn decode_from<'a>(
+        &self,
+        index: usize,
+        array_representations: &ArrayRepresentations,
+        bytes: CowBytes<'a>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        let bytes_representations =
+            self.get_bytes_representations(&array_representations.last().unwrap().0)?;
+
+        // bytes->bytes
+        let bytes = self.decode_bytes_to_bytes(
+            bytes,
+            &bytes_representations,
+            0..self.bytes_to_bytes.len(),
+            options,
+            resources,
+        )?;
+
+        // bytes->array
+        let mut bytes = self.array_to_bytes.decode(
+            bytes,
+            &array_representations.last().unwrap().0,
+            options,
+            resources,
+        )?;
+
+        // array->array
+        for (codec, (shape, _data_type)) in std::iter::zip(
+            self.array_to_array[index..].iter().rev(),
+            array_representations[index..].iter().rev().skip(1),
+        ) {
+            bytes = codec.decode(bytes, shape, options, resources)?;
+        }
+
+        let (shape, data_type) = &array_representations[index];
+        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
+
+        Ok(bytes)
+    }
+
+    /// Decode into `target`, which has the decoded shape of array-to-array codec `index`.
+    ///
+    /// Each codec that can express its decode as a transform of the target remaps it to its encoded shape, so the inner codecs place elements directly.
+    /// At the first codec that cannot, the remaining codecs are decoded and the result is copied into the target.
+    fn decode_into_array_to_array(
+        &self,
+        index: usize,
+        array_representations: &ArrayRepresentations,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let (decoded_shape, _data_type) = &array_representations[index];
+        let Some(codec) = self.array_to_array.get(index) else {
+            return self.decode_into_array_to_bytes(
+                input,
+                decoded_shape,
+                target,
+                options,
+                resources,
+            );
+        };
+        if let Some(mut encoded_target) = codec.decode_into_encoded_target(decoded_shape, target) {
+            return self.decode_into_array_to_array(
+                index + 1,
+                array_representations,
+                input,
+                &mut encoded_target,
+                options,
+                resources,
+            );
+        }
+        let bytes = self.decode_from(
+            index,
+            array_representations,
+            input.into_bytes(options, resources)?,
+            options,
+            resources,
+        )?;
+        decode_into_array_bytes_target(&bytes, target)
+    }
+
+    /// Decode into `target` through the bytes-to-bytes and array-to-bytes codecs, where `shape` is the decoded shape of the array-to-bytes codec.
+    fn decode_into_array_to_bytes(
+        &self,
+        input: ArrayBytesDecodeIntoInput<'_>,
+        shape: &[NonZeroU64],
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        // Receivers resolve a deferred input with the ordinary decode if they cannot place it directly
+        // (e.g. into a strided or optional target), so always defer and let them place their own output.
+        let input = if let Some(last) = self.bytes_to_bytes.first() {
+            let representations = self.get_bytes_representations(shape)?;
+            let bytes = self.decode_bytes_to_bytes(
+                input.into_bytes(options, resources)?,
+                &representations,
+                1..self.bytes_to_bytes.len(),
+                options,
+                resources,
+            )?;
+            // Leave placement of the final decode to the array-to-bytes receiver.
+            ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                last.as_ref(),
+                bytes,
+                representations[0],
+            ))
+        } else {
+            // Transparent nested chains must not materialise a deferred input.
+            input
+        };
+        self.array_to_bytes
+            .decode_into(input, shape, target, options, resources)
+    }
+
     fn get_representations(
         &self,
         shape: &[NonZeroU64],
@@ -591,37 +711,8 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let (array_representations, bytes_representations) = self.get_representations(shape)?;
-
-        // bytes->bytes
-        let bytes = self.decode_bytes_to_bytes(
-            bytes,
-            &bytes_representations,
-            0..self.bytes_to_bytes.len(),
-            options,
-            resources,
-        )?;
-
-        // bytes->array
-        let mut bytes = self.array_to_bytes.decode(
-            bytes,
-            &array_representations.last().unwrap().0,
-            options,
-            resources,
-        )?;
-
-        // array->array
-        for (codec, (shape, _data_type)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
-        ) {
-            bytes = codec.decode(bytes, shape, options, resources)?;
-        }
-
-        let (shape, data_type) = array_representations.first().unwrap();
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
-
-        Ok(bytes)
+        let array_representations = self.get_array_representations(shape)?;
+        self.decode_from(0, &array_representations, bytes, options, resources)
     }
 
     fn decode_into(
@@ -632,29 +723,8 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
-        // Receivers resolve a deferred input with the ordinary decode if they cannot place it directly
-        // (e.g. into a strided or optional target), so always defer and let them place their own output.
         if self.array_to_array.is_empty() {
-            let input = if let Some(last) = self.bytes_to_bytes.first() {
-                let representations = self.get_bytes_representations(shape)?;
-                let bytes = self.decode_bytes_to_bytes(
-                    input.into_bytes(options, resources)?,
-                    &representations,
-                    1..self.bytes_to_bytes.len(),
-                    options,
-                    resources,
-                )?;
-                // Leave placement of the final decode to the array-to-bytes receiver.
-                ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
-                    last.as_ref(),
-                    bytes,
-                    representations[0],
-                ))
-            } else {
-                // Transparent nested chains must not materialise a deferred input.
-                input
-            };
-            return self.array_to_bytes.decode_into(
+            return self.decode_into_array_to_bytes(
                 input,
                 shape,
                 output_target,
@@ -662,14 +732,37 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
                 resources,
             );
         }
-
-        let bytes = self.decode(
-            input.into_bytes(options, resources)?,
-            shape,
+        let array_representations = self.get_array_representations(shape)?;
+        let shape_u64 = bytemuck::must_cast_slice(shape);
+        if output_target.shape() == shape_u64 {
+            return self.decode_into_array_to_array(
+                0,
+                &array_representations,
+                input,
+                output_target,
+                options,
+                resources,
+            );
+        }
+        // The target has a different shape with the same elements, so express it in the decoded shape
+        let Some(mut target) = output_target.reshaped(shape_u64) else {
+            let bytes = self.decode_from(
+                0,
+                &array_representations,
+                input.into_bytes(options, resources)?,
+                options,
+                resources,
+            )?;
+            return decode_into_array_bytes_target(&bytes, output_target);
+        };
+        self.decode_into_array_to_array(
+            0,
+            &array_representations,
+            input,
+            &mut target,
             options,
             resources,
-        )?;
-        decode_into_array_bytes_target(&bytes, output_target)
+        )
     }
 
     fn compact<'a>(

@@ -237,18 +237,33 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = retrieve_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            options,
-            resources,
-        )?;
-        let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
+        let retrieve_bytes = || {
+            retrieve_chunk_bytes(
+                self.cache(),
+                self.array(),
+                chunk_indices,
+                options,
+                resources,
+            )
+        };
+        super::retrieve_in_order(
             self.array().data_type(),
+            self.element_order(),
+            || super::chunk_shape_u64(self, chunk_indices),
+            |target| {
+                self.retrieve_chunk_into_with_options(chunk_indices, target, options, resources)
+            },
+            retrieve_bytes,
+            || {
+                let bytes = retrieve_bytes()?;
+                let shape = self.array().chunk_shape(chunk_indices)?;
+                super::from_c_order_bytes_arc(
+                    bytes,
+                    bytemuck::must_cast_slice(&shape),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
         )
     }
 
@@ -282,15 +297,45 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = C::Value::retrieve_partial_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            indexer,
-            options,
-            resources,
-        )?;
-        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
+        let retrieve_bytes = || {
+            C::Value::retrieve_partial_chunk_bytes(
+                self.cache(),
+                self.array(),
+                chunk_indices,
+                indexer,
+                options,
+                resources,
+            )
+        };
+        super::retrieve_in_order(
+            self.array().data_type(),
+            super::indexer_element_order(indexer, self.element_order()),
+            || {
+                super::validate_partial_chunk_subset(
+                    indexer,
+                    &super::chunk_shape_u64(self, chunk_indices)?,
+                )?;
+                Ok(indexer.output_shape())
+            },
+            |target| {
+                self.retrieve_partial_chunk_into_with_options(
+                    chunk_indices,
+                    indexer,
+                    target,
+                    options,
+                    resources,
+                )
+            },
+            retrieve_bytes,
+            || {
+                super::from_c_order_bytes_arc(
+                    retrieve_bytes()?,
+                    &indexer.output_shape(),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -317,14 +362,30 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = retrieve_array_subset_bytes(
-            self.cache(),
-            self.array(),
-            array_subset,
-            options,
-            resources,
-        )?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
+        let retrieve_bytes = || {
+            retrieve_array_subset_bytes(
+                self.cache(),
+                self.array(),
+                array_subset,
+                options,
+                resources,
+            )
+        };
+        super::retrieve_in_order(
+            self.array().data_type(),
+            self.element_order(),
+            || Ok(array_subset.shape()),
+            |target| self.retrieve_array_subset_into(array_subset, target, resources),
+            retrieve_bytes,
+            || {
+                super::from_c_order_bytes_arc(
+                    retrieve_bytes()?,
+                    &array_subset.shape(),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -345,10 +406,22 @@ where
             return Ok(None);
         };
         let shape = self.array().chunk_shape(chunk_indices)?;
+        if self
+            .element_order()
+            .is_reordered(bytemuck::must_cast_slice(&shape))
+        {
+            return super::from_c_order_in_f_order(
+                &bytes,
+                bytemuck::must_cast_slice(&shape),
+                self.array().data_type(),
+            )
+            .map(Some);
+        }
         T::from_array_bytes_arc(
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            self.element_order(),
         )
         .map(Some)
     }

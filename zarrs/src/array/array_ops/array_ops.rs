@@ -2,8 +2,8 @@ use super::{
     Arc, ArrayBuilder, ArrayError, ArrayIndices, ArrayMetadata, ArrayMetadataOptions, ArraySubset,
     ArraySubsetTraits, ChunkGrid, ChunkGridDecoded, ChunkGridDecodedRef, ChunkKeyEncoding,
     ChunkShape, CodecChain, CodecChainBound, CodecOptions, CodecSpecificOptions, DataType,
-    DimensionName, FillValue, IncompatibleDimensionalityError, MetadataEraseVersion, NodePath,
-    StorageTransformerChain, StoreKey,
+    DimensionName, ElementOrder, FillValue, IncompatibleDimensionalityError, MetadataEraseVersion,
+    NodePath, StorageTransformerChain, StoreKey,
 };
 #[cfg(doc)]
 use super::{Array, ArrayMutOps};
@@ -73,6 +73,22 @@ pub trait ArrayOps {
     /// [`with_metadata_erase_version`](ArrayOps::with_metadata_erase_version), or
     /// [`ArrayMutOps::set_metadata_erase_version`] where the array is owned.
     fn metadata_erase_version(&self) -> MetadataEraseVersion;
+
+    /// Get the order of the elements that array operations decode into and encode from.
+    ///
+    /// The default is [`ElementOrder::C`].
+    /// Generic `retrieve_*` methods return elements in this order, and `store_*` methods take elements in this order (or reorder them, for inputs with a layout of their own like `ndarray` arrays).
+    /// It does not apply to `_into` methods, where the output target has its own layout, or to the order of the elements in encoded chunks, which is set by codecs (e.g. `transpose`).
+    ///
+    /// Override it with [`with_element_order`](ArrayOps::with_element_order), or
+    /// [`ArrayMutOps::set_element_order`] where the array is owned.
+    fn element_order(&self) -> ElementOrder;
+
+    /// Return this array configured to decode into and encode from elements in `element_order`.
+    #[must_use]
+    fn with_element_order(&self, element_order: ElementOrder) -> Self
+    where
+        Self: Sized;
 
     /// Return this array configured to use `codec_options` for its operations.
     ///

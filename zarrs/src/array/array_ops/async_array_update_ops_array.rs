@@ -1,3 +1,6 @@
+use crate::array::ElementOrder;
+use crate::array::array_bytes_internal::{extract_array_subset_in_order, reorder};
+
 use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::Resources;
@@ -32,6 +35,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             chunk_indices,
             indexer,
             indexer_data,
+            self.element_order(),
             self.codec_options(),
             resources,
         )
@@ -46,6 +50,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
+        let order = self.element_order();
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
@@ -69,21 +74,30 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             if chunk_subset == array_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_partial_chunk
-                self.async_store_chunk_with_options(chunk_indices, subset_data, options, resources)
-                    .await?;
+                self.async_store_chunk_with_options(
+                    chunk_indices,
+                    subset_data,
+                    order,
+                    options,
+                    resources,
+                )
+                .await?;
             } else {
                 // Store the chunk subset
                 self.async_store_partial_chunk_with_options(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
+                    order,
                     options,
                     resources,
                 )
                 .await?;
             }
         } else {
-            let subset_bytes = subset_data.into_array_bytes(self.data_type())?;
+            let array_subset_shape = array_subset.shape();
+            let order = subset_data.element_order(&array_subset_shape, order)?;
+            let subset_bytes = subset_data.into_array_bytes(self.data_type(), order)?;
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
             // Calculate chunk/codec concurrency
@@ -97,7 +111,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             );
 
             let array_subset_start = array_subset.start();
-            let array_subset_shape = array_subset.shape();
             let resources = &resources;
             let store_chunk = |chunk_indices: ArrayIndices| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
@@ -106,18 +119,20 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
                     overlap.relative_to(&array_subset_start).unwrap();
                 let array_subset_in_chunk_subset =
                     overlap.relative_to(chunk_subset.start()).unwrap();
-                let chunk_subset_bytes = subset_bytes
-                    .extract_array_subset(
-                        &chunk_subset_in_array_subset,
-                        &array_subset_shape,
-                        self.data_type(),
-                    )
-                    .unwrap(); // FIXME: unwrap
+                let chunk_subset_bytes = extract_array_subset_in_order(
+                    &subset_bytes,
+                    self.data_type(),
+                    &chunk_subset_in_array_subset,
+                    &array_subset_shape,
+                    order,
+                )
+                .unwrap(); // FIXME: unwrap
                 async move {
                     self.async_store_partial_chunk_with_options(
                         &chunk_indices,
                         &array_subset_in_chunk_subset,
                         chunk_subset_bytes,
+                        ElementOrder::C,
                         options,
                         resources,
                     )
@@ -186,6 +201,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        order: ElementOrder,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -204,13 +220,29 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         } else {
             indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
-        if indexer.covers_array(&chunk_shape) {
+        let order = super::indexer_element_order(indexer, order);
+        // The data of an array subset covering the chunk has the shape of the chunk
+        if indexer.as_array_subset().is_some() && indexer.covers_array(&chunk_shape) {
             return self
-                .async_store_chunk_with_options(chunk_indices, indexer_data, options, resources)
+                .async_store_chunk_with_options(
+                    chunk_indices,
+                    indexer_data,
+                    order,
+                    options,
+                    resources,
+                )
                 .await;
         }
 
-        let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
+        let output_shape = indexer.output_shape();
+        let order = indexer_data.element_order(&output_shape, order)?;
+        let indexer_bytes = reorder(
+            indexer_data.into_array_bytes(self.data_type(), order)?,
+            self.data_type(),
+            &output_shape,
+            order,
+            ElementOrder::C,
+        )?;
         indexer_bytes.validate(indexer.len(), self.data_type())?;
         if indexer.is_empty() {
             return Ok(());
@@ -262,8 +294,14 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 self.data_type().size(),
             )?;
 
-            self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
-                .await
+            self.async_store_chunk_with_options(
+                chunk_indices,
+                chunk_bytes_new,
+                ElementOrder::C,
+                options,
+                resources,
+            )
+            .await
         }
     }
 

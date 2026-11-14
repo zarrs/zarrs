@@ -9,7 +9,6 @@ use zarrs_storage::MaybeSync;
 
 use super::super::array_bytes_internal::FixedDecodeBuffers;
 use super::super::concurrency::concurrency_chunks_and_codec;
-use super::array_read_ops_common::subset_in_output;
 use super::recommended_codec_concurrency;
 
 /// Chunk level `_into` retrieval, as used by [`retrieve_array_subset_into`].
@@ -116,11 +115,10 @@ where
                 &codec_concurrency,
             );
             // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
-            let mut buffers = (output_target.subset().shape() != array_subset.shape().as_ref())
-                .then(|| {
-                    FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
-                        .expect("fixed data type")
-                });
+            let mut buffers = (output_target.shape() != array_subset.shape().as_ref()).then(|| {
+                FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
+                    .expect("fixed data type")
+            });
             let buffers_target = buffers
                 .as_mut()
                 .map(FixedDecodeBuffers::target)
@@ -175,7 +173,6 @@ where
     Fut: Future<Output = Result<(), ArrayError>>,
 {
     let array_subset_start = array_subset.start();
-    let output_start = output_target.subset().start();
 
     let retrieve_chunk = |chunk_indices: ArrayIndices| {
         let array_subset_start = &array_subset_start;
@@ -183,8 +180,7 @@ where
         async move {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let chunk_subset_in_view =
-                subset_in_output(&chunk_subset_overlap, array_subset_start, output_start)?;
+            let chunk_subset_in_view = chunk_subset_overlap.relative_to(array_subset_start)?;
 
             // SAFETY: chunks represent disjoint array subsets
             let target = unsafe { output_target.subdivide(chunk_subset_in_view) }?;

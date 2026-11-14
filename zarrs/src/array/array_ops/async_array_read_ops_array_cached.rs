@@ -295,20 +295,41 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = async_retrieve_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            options,
-            resources,
-        )
-        .await?;
-        let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
+        let retrieve_bytes = || {
+            async_retrieve_chunk_bytes(
+                self.cache(),
+                self.array(),
+                chunk_indices,
+                options,
+                resources,
+            )
+        };
+        super::async_retrieve_in_order(
             self.array().data_type(),
+            self.element_order(),
+            || super::chunk_shape_u64(self, chunk_indices),
+            async |target| {
+                self.async_retrieve_chunk_into_with_options(
+                    chunk_indices,
+                    target,
+                    options,
+                    resources,
+                )
+                .await
+            },
+            async || retrieve_bytes().await,
+            async || {
+                let bytes = retrieve_bytes().await?;
+                let shape = self.array().chunk_shape(chunk_indices)?;
+                super::from_c_order_bytes_arc(
+                    bytes,
+                    bytemuck::must_cast_slice(&shape),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
         )
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -341,16 +362,48 @@ where
         indexer: &dyn Indexer,
         resources: &Resources,
     ) -> Result<T, ArrayError> {
-        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            indexer,
-            self.codec_options(),
-            resources,
+        let options = self.codec_options();
+        let retrieve_bytes = || {
+            C::Value::async_retrieve_partial_chunk_bytes(
+                self.cache(),
+                self.array(),
+                chunk_indices,
+                indexer,
+                options,
+                resources,
+            )
+        };
+        super::async_retrieve_in_order(
+            self.array().data_type(),
+            super::indexer_element_order(indexer, self.element_order()),
+            || {
+                super::validate_partial_chunk_subset(
+                    indexer,
+                    &super::chunk_shape_u64(self, chunk_indices)?,
+                )?;
+                Ok(indexer.output_shape())
+            },
+            async |target| {
+                self.async_retrieve_partial_chunk_into_with_options(
+                    chunk_indices,
+                    indexer,
+                    target,
+                    options,
+                    resources,
+                )
+                .await
+            },
+            async || retrieve_bytes().await,
+            async || {
+                super::from_c_order_bytes_arc(
+                    retrieve_bytes().await?,
+                    &indexer.output_shape(),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
         )
-        .await?;
-        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -377,15 +430,35 @@ where
         array_subset: &dyn ArraySubsetTraits,
         resources: &Resources,
     ) -> Result<T, ArrayError> {
-        let bytes = async_retrieve_array_subset_bytes(
-            self.cache(),
-            self.array(),
-            array_subset,
-            self.codec_options(),
-            resources,
+        let options = self.codec_options();
+        let retrieve_bytes = || {
+            async_retrieve_array_subset_bytes(
+                self.cache(),
+                self.array(),
+                array_subset,
+                options,
+                resources,
+            )
+        };
+        super::async_retrieve_in_order(
+            self.array().data_type(),
+            self.element_order(),
+            || Ok(array_subset.shape()),
+            async |target| {
+                self.async_retrieve_array_subset_into(array_subset, target, resources)
+                    .await
+            },
+            async || retrieve_bytes().await,
+            async || {
+                super::from_c_order_bytes_arc(
+                    retrieve_bytes().await?,
+                    &array_subset.shape(),
+                    self.array().data_type(),
+                    self.element_order(),
+                )
+            },
         )
-        .await?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
+        .await
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -407,10 +480,22 @@ where
             return Ok(None);
         };
         let shape = self.array().chunk_shape(chunk_indices)?;
+        if self
+            .element_order()
+            .is_reordered(bytemuck::must_cast_slice(&shape))
+        {
+            return super::from_c_order_in_f_order(
+                &bytes,
+                bytemuck::must_cast_slice(&shape),
+                self.array().data_type(),
+            )
+            .map(Some);
+        }
         T::from_array_bytes_arc(
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            self.element_order(),
         )
         .map(Some)
     }

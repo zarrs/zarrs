@@ -709,6 +709,90 @@ fn array_to_array_branch_uses_ordinary_producer_route() {
     assert!(!calls[0].direct);
 }
 
+#[test]
+fn array_to_array_remap_forwards_deferred_placement() {
+    use zarrs::array::codec::{ReshapeCodec, ReshapeDim, ReshapeShape, SqueezeCodec};
+    use zarrs_codec::UnboundArrayToArrayCodecTraits;
+    // Reshape and squeeze keep elements in C order, so a contiguous target stays contiguous
+    let codecs: [Arc<dyn UnboundArrayToArrayCodecTraits>; 2] = [
+        Arc::new(ReshapeCodec::new(
+            ReshapeShape::new([ReshapeDim::auto()]).unwrap(),
+        )),
+        Arc::new(SqueezeCodec::new()),
+    ];
+    for codec in codecs {
+        let calls = Arc::default();
+        let chain = bind(&CodecChain::new(
+            vec![codec],
+            Arc::new(BytesCodec::new(Some(endian(false)))),
+            vec![producer(&calls, 1, true, false, false)],
+        ));
+        let (_, pointer) = run(chain.as_ref(), false);
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].direct);
+        assert_eq!(calls[0].pointer, pointer);
+    }
+}
+
+/// Transposing a column-major target makes it C-contiguous, so the producer decodes directly into it.
+#[cfg(feature = "transpose")]
+#[test]
+fn transpose_into_column_major_target_forwards_deferred_placement() {
+    use zarrs::array::codec::{TransposeCodec, TransposeOrder};
+    let calls = Arc::default();
+    let chain = bind(&CodecChain::new(
+        vec![Arc::new(TransposeCodec::new(
+            TransposeOrder::new(&[1, 0]).unwrap(),
+        ))],
+        Arc::new(BytesCodec::new(Some(endian(false)))),
+        vec![producer(&calls, 1, true, false, false)],
+    ));
+    let shape = [NonZeroU64::new(2).unwrap(); 2];
+    let options = CodecOptions::default();
+    let encoded = chain
+        .encode(
+            ArrayBytes::new_flen(native_bytes()),
+            &shape,
+            &options,
+            &ComputeResources::default(),
+        )
+        .unwrap();
+    let mut output = vec![0xa5; 8];
+    let pointer = output.as_ptr() as usize;
+    {
+        // SAFETY: this is the only view and no other access occurs until it is dropped.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new_strided(
+                UnsafeCellSlice::new(&mut output),
+                2,
+                0,
+                &[2, 2],
+                &[1, 2],
+            )
+            .unwrap()
+        };
+        chain
+            .decode_into(
+                ArrayBytesDecodeIntoInput::from(encoded),
+                &shape,
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &options,
+                &ComputeResources::default(),
+            )
+            .unwrap();
+    }
+    let expected: Vec<u8> = [0x1234u16, 1, 0xabcd, 0xff00]
+        .into_iter()
+        .flat_map(u16::to_ne_bytes)
+        .collect();
+    assert_eq!(output, expected);
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert!(calls[0].direct);
+    assert_eq!(calls[0].pointer, pointer);
+}
+
 #[cfg(all(feature = "sharding", feature = "zstd"))]
 #[test]
 fn sharded_array_compressed_non_native_subset_preserves_output_border() {

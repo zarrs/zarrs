@@ -13,6 +13,16 @@ pub enum ElementError {
     /// Invalid element value.
     #[error("Invalid element value")]
     InvalidElementValue,
+    /// The shape of elements with a layout (e.g. an `ndarray` array or a `Tensor`) differs from the shape of the target.
+    #[error(
+        "the shape {actual:?} of the elements does not match the shape {expected:?} of the target"
+    )]
+    IncompatibleShape {
+        /// The shape of the target.
+        expected: Vec<u64>,
+        /// The shape of the elements.
+        actual: Vec<u64>,
+    },
     /// Expected fixed length bytes.
     #[error(transparent)]
     ExpectedFixedLengthBytes(#[from] ExpectedFixedLengthBytesError),
