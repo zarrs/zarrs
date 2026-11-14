@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
 - Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,shape,subdivide,permuted_axes,reshaped,reborrow}` to build, subdivide, transform and reborrow targets without depending on their structure
   - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and addresses the same elements of its bytes as the data (the same shape, offset and strides)
+- Add `ArrayToArrayCodecTraits::decode_into`, which decodes into an output target (by default with `decode` and a copy), and which a codec chain calls for the outermost array-to-array codec that cannot remap the target
+- Add the `unsafe` `ArrayBytesFixedDisjointView::for_each_region_mut` for writing the (possibly uninitialised) contiguous regions of a view in order
 - Add `ArrayToArrayCodecTraits::decode_into_encoded_target` (default `None`), which lets a codec that only reorders or relabels elements on decode express its decode as a transform of the output target, so a codec chain decodes the encoded representation directly into it
 - Add `ArrayBytesFixedDisjointView::{new_strided,offset,strides}` for views of strided grids of elements (e.g. column-major or transposed outputs), and the safe `ArrayBytesFixedDisjointView::{permuted_axes,reshaped}`, which return a view of the same elements with permuted dimensions or another shape
 - Add `ArrayBytesFixedDisjointView::data_type_size`

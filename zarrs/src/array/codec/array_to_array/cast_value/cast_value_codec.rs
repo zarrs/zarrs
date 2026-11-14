@@ -3,11 +3,12 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -24,6 +25,7 @@ use zarrs_metadata_ext::codec::cast_value::{
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use crate::array::{DataType, FillValue};
+use crate::write_copy_of_slice;
 
 pub(super) type ScalarMap = HashMap<Vec<u8>, Vec<u8>>;
 
@@ -288,6 +290,104 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         )?))
     }
 
+    fn decode_into(
+        &self,
+        bytes: ArrayBytes<'_>,
+        shape: &[NonZeroU64],
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        /// The number of elements cast at a time, which bounds the buffer they are cast into.
+        const BLOCK_ELEMENTS: usize = 4096;
+        /// The fewest elements in a region of the target to copy cast blocks into, which is slower per region than casting all elements and copying them.
+        const MIN_REGION_ELEMENTS: usize = 64;
+        if let (Some(source_size), Some(target_size), ArrayBytesDecodeIntoTarget::Fixed(view)) = (
+            self.encoded_data_type.fixed_size(),
+            self.data_type.fixed_size(),
+            &mut *target,
+        ) && (view.num_contiguous_elements() >= MIN_REGION_ELEMENTS
+            || view.num_contiguous_elements() as u64 == view.num_elements())
+        {
+            let bytes = bytes.into_fixed()?;
+            if view.data_type_size() != target_size {
+                return Err(
+                    InvalidBytesLengthError::new(view.data_type_size(), target_size).into(),
+                );
+            }
+            let num_elements = usize::try_from(view.num_elements()).unwrap();
+            if bytes.len() != num_elements * source_size {
+                return Err(
+                    InvalidBytesLengthError::new(bytes.len(), num_elements * source_size).into(),
+                );
+            }
+            let context = CastBytesContext {
+                source_data_type: &self.encoded_data_type,
+                target_data_type: &self.data_type,
+                source: self.encoded_data_type.codec_castvalue()?,
+                target: self.data_type.codec_castvalue()?,
+                scalar_map: self.decode_scalar_map.as_ref(),
+                rounding: self.rounding,
+                out_of_range: self.out_of_range,
+                kernel: self.decode_kernel,
+            };
+
+            // A bulk kernel casts straight into the regions of the view
+            if let (Some(kernel), None) = (&context.kernel, context.scalar_map) {
+                let mut source: &[u8] = &bytes;
+                // SAFETY: each region is cast from the next source elements, and `cast_into` writes every byte of its output on success.
+                // There is a source element for every element of the view, so every region is initialised.
+                return unsafe {
+                    view.for_each_region_mut(|region| {
+                        let (region_source, rest) =
+                            source.split_at(region.len() / target_size * source_size);
+                        source = rest;
+                        kernel
+                            .cast_into(region_source, region)
+                            .map_err(|err| CodecError::Other(err.to_string()))
+                    })
+                };
+            }
+
+            // Otherwise elements are cast a block at a time into a buffer that stays in cache, and copied into the regions of the view
+            let mut source: &[u8] = &bytes;
+            let mut cast = Vec::with_capacity(num_elements.min(BLOCK_ELEMENTS) * target_size);
+            let mut cast_position = 0;
+            // SAFETY: every region is written from the cast elements in order.
+            // There is a source element for every element of the view, and each block is checked to cast to one element per source element, so the cast elements cover every region.
+            unsafe {
+                view.for_each_region_mut(|mut region| {
+                    while !region.is_empty() {
+                        if cast_position == cast.len() {
+                            let (block, rest) =
+                                source.split_at(source.len().min(BLOCK_ELEMENTS * source_size));
+                            source = rest;
+                            cast.clear();
+                            cast_position = 0;
+                            cast_bytes_into(block, &context, &mut cast)?;
+                            if block.is_empty()
+                                || cast.len() != block.len() / source_size * target_size
+                            {
+                                return Err(CodecError::Other(
+                                    "cast_value cast an unexpected number of bytes".to_string(),
+                                ));
+                            }
+                        }
+                        let len = region.len().min(cast.len() - cast_position);
+                        let (head, tail) = std::mem::take(&mut region).split_at_mut(len);
+                        write_copy_of_slice(head, &cast[cast_position..cast_position + len]);
+                        cast_position += len;
+                        region = tail;
+                    }
+                    Ok(())
+                })
+            }
+        } else {
+            let decoded = self.decode(bytes, shape, options, resources)?;
+            decode_into_array_bytes_target(&decoded, target)
+        }
+    }
+
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
@@ -401,6 +501,17 @@ pub(super) fn cast_bytes(
     bytes: &[u8],
     context: &CastBytesContext<'_>,
 ) -> Result<Vec<u8>, CodecError> {
+    let mut output = Vec::new();
+    cast_bytes_into(bytes, context, &mut output)?;
+    Ok(output)
+}
+
+/// Cast the elements of `bytes` and append them to `output`, as in [`cast_bytes`].
+fn cast_bytes_into(
+    bytes: &[u8],
+    context: &CastBytesContext<'_>,
+    output: &mut Vec<u8>,
+) -> Result<(), CodecError> {
     let source_size = context
         .source_data_type
         .fixed_size()
@@ -419,7 +530,7 @@ pub(super) fn cast_bytes(
         ));
     }
     let num_elements = bytes.len() / source_size;
-    let mut output = Vec::with_capacity(num_elements * target_size);
+    output.reserve(num_elements * target_size);
     if let Some(scalar_map) = context.scalar_map {
         for source_bytes in bytes.chunks_exact(source_size) {
             if let Some(mapped) = scalar_map.get(source_bytes) {
@@ -432,13 +543,13 @@ pub(super) fn cast_bytes(
                     context.kernel.as_ref(),
                     context.rounding,
                     context.out_of_range,
-                    &mut output,
+                    output,
                 )?;
             }
         }
     } else if let Some(kernel) = &context.kernel {
         kernel
-            .cast(bytes, &mut output)
+            .cast(bytes, output)
             .map_err(|err| CodecError::Other(err.to_string()))?;
     } else {
         context
@@ -449,11 +560,11 @@ pub(super) fn cast_bytes(
                 context.target,
                 context.rounding,
                 context.out_of_range,
-                &mut output,
+                output,
             )
             .map_err(|err| CodecError::Other(err.to_string()))?;
     }
-    Ok(output)
+    Ok(())
 }
 
 /// Cast one element via the kernel if selected, else the generic scalar path.

@@ -400,7 +400,7 @@ impl CodecChainBound {
     /// Decode into `target`, which has the decoded shape of array-to-array codec `index`.
     ///
     /// Each codec that can express its decode as a transform of the target remaps it to its encoded shape, so the inner codecs place elements directly.
-    /// At the first codec that cannot, the remaining codecs are decoded and the result is copied into the target.
+    /// The first codec that cannot decodes into the target itself, from the output of the codecs inside it.
     fn decode_into_array_to_array(
         &self,
         index: usize,
@@ -431,13 +431,13 @@ impl CodecChainBound {
             );
         }
         let bytes = self.decode_from(
-            index,
+            index + 1,
             array_representations,
             input.into_bytes(options, resources)?,
             options,
             resources,
         )?;
-        decode_into_array_bytes_target(&bytes, target)
+        codec.decode_into(bytes, decoded_shape, target, options, resources)
     }
 
     /// Decode into `target` through the bytes-to-bytes and array-to-bytes codecs, where `shape` is the decoded shape of the array-to-bytes codec.

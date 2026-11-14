@@ -313,6 +313,27 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
         resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
+    /// Decode `bytes`, the encoded representation of a chunk with the decoded `shape`, into `target`.
+    ///
+    /// `target` has the decoded `shape`.
+    /// The default implementation decodes with [`decode`](Self::decode) and copies the result into `target`.
+    /// Codecs that transform the bytes of elements on decode can write into `target` directly instead.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with the encoded representation or `target`.
+    /// `target` may have been partially written.
+    fn decode_into(
+        &self,
+        bytes: ArrayBytes<'_>,
+        shape: &[NonZeroU64],
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        let decoded = self.decode(bytes, shape, options, resources)?;
+        crate::decode_into_array_bytes_target(&decoded, target)
+    }
+
     /// Return a target for the encoded representation that places each element where [`decode`](Self::decode) would place it in `target`.
     ///
     /// A codec that does not change the bytes of elements on decode, and only reorders or relabels them (e.g. `reshape` or `transpose`), can express its decode as a view transform of the target (see [`ArrayBytesDecodeIntoTarget::reshaped`] and [`ArrayBytesDecodeIntoTarget::permuted_axes`]).

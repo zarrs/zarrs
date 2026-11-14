@@ -3,6 +3,8 @@
 /// Evaluate `$body` with `$len` bound to `$length`, specialised for common small lengths.
 ///
 /// Small lengths are bound as constants, so copies of `$len` bytes in `$body` compile to single moves rather than calls to `memcpy`.
+#[macro_export]
+#[doc(hidden)]
 macro_rules! with_small_len {
     ($length:expr, |$len:ident| $body:expr) => {
         match $length {

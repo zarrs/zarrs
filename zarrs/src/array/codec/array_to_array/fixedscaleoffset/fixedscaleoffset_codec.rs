@@ -11,10 +11,12 @@ use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCodecTraits,
+    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    ExpectedOptionalBytesError, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    decode_into_array_bytes_target,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
@@ -326,6 +328,76 @@ fn do_decode(
     Ok(decoded.into())
 }
 
+/// Decode the elements of `encoded_element_type` in `encoded` into the elements of `element_type` of `view` (in C order of the view), as in [`do_decode`].
+///
+/// # Errors
+/// Returns a [`CodecError`] if `encoded` does not hold one element per element of `view`, or the elements of `view` are not of `element_type`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_cast
+)]
+fn decode_into_view(
+    encoded: &[u8],
+    view: &mut ArrayBytesFixedDisjointView<'_>,
+    element_type: FixedScaleOffsetElementType,
+    offset: f64,
+    scale: f64,
+    encoded_element_type: FixedScaleOffsetElementType,
+) -> Result<(), CodecError> {
+    if view.data_type_size() != element_type.size() {
+        return Err(
+            InvalidBytesLengthError::new(view.data_type_size(), element_type.size()).into(),
+        );
+    }
+    let expected_len = usize::try_from(view.num_elements()).unwrap() * encoded_element_type.size();
+    if encoded.len() != expected_len {
+        return Err(InvalidBytesLengthError::new(encoded.len(), expected_len).into());
+    }
+    let to_integer = !matches!(
+        element_type,
+        FixedScaleOffsetElementType::F32 | FixedScaleOffsetElementType::F64
+    );
+    with_element_type!(encoded_element_type, T, F, {
+        let (offset, scale) = (offset as F, scale as F);
+        let mut encoded = encoded.as_chunks::<{ size_of::<T>() }>().0;
+        with_element_type!(element_type, U, {
+            /// Decode `encoded` into `decoded`, which have the same length.
+            fn decode_elements(
+                encoded: &[[u8; size_of::<T>()]],
+                decoded: &mut [[MaybeUninit<u8>; size_of::<U>()]],
+                offset: F,
+                scale: F,
+                to_integer: bool,
+            ) {
+                for (decoded, encoded) in std::iter::zip(decoded, encoded) {
+                    let x = <T>::from_ne_bytes(*encoded) as F;
+                    let value = x / scale + offset;
+                    let value = if to_integer {
+                        value.round_ties_even()
+                    } else {
+                        value
+                    };
+                    *decoded = (value as U).to_ne_bytes().map(MaybeUninit::new);
+                }
+            }
+            // SAFETY: each region is a whole number of `U` elements (the element size of the view), and each element is written from the next encoded element.
+            // There is one encoded element per element of the view, so every region is initialised.
+            unsafe {
+                view.for_each_region_mut(|region| {
+                    let decoded = region.as_chunks_mut::<{ size_of::<U>() }>().0;
+                    let (region_encoded, rest) = encoded.split_at(decoded.len());
+                    encoded = rest;
+                    decode_elements(region_encoded, decoded, offset, scale, to_integer);
+                    Ok::<_, CodecError>(())
+                })
+            }
+        })
+    })
+}
+
 fn encode_fill_value(
     fill_value: &FillValue,
     data_type: &DataType,
@@ -468,6 +540,35 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_decode(
             bytes,
+            self.element_type,
+            self.offset,
+            self.scale,
+            self.encoded_element_type,
+        )
+    }
+
+    fn decode_into(
+        &self,
+        bytes: ArrayBytes<'_>,
+        shape: &[NonZeroU64],
+        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &ComputeResources,
+    ) -> Result<(), CodecError> {
+        /// The fewest elements in a region of the target to decode into directly, which is slower per region than decoding all elements and copying them.
+        const MIN_REGION_ELEMENTS: usize = 16;
+        let ArrayBytesDecodeIntoTarget::Fixed(view) = target else {
+            return Err(ExpectedOptionalBytesError.into());
+        };
+        if view.num_contiguous_elements() < MIN_REGION_ELEMENTS
+            && view.num_contiguous_elements() as u64 != view.num_elements()
+        {
+            let decoded = self.decode(bytes, shape, options, resources)?;
+            return decode_into_array_bytes_target(&decoded, target);
+        }
+        decode_into_view(
+            &bytes.into_fixed()?,
+            view,
             self.element_type,
             self.offset,
             self.scale,

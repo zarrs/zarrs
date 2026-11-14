@@ -229,6 +229,68 @@ fn cases() -> Vec<Case> {
                 (0..15u8).map(|i| u8::from(i % 3 == 0)).collect::<Vec<u8>>(),
             ),
         },
+        Case {
+            name: "cast_value",
+            codecs: r#"[{"name": "cast_value", "configuration": {"data_type": "int16"}}, BYTES]"#,
+            data_type: data_type::int32(),
+            fill_value: FillValue::from(0i32),
+            shape: vec![4, 6],
+            elements: ArrayBytes::new_flen(
+                (0..24i32)
+                    .flat_map(|i| (i * 1000 - 12000).to_ne_bytes())
+                    .collect::<Vec<u8>>(),
+            ),
+        },
+        // A scalar map is applied element by element, so it is cast through a buffer
+        Case {
+            name: "cast_value_scalar_map",
+            codecs: r#"[{"name": "cast_value", "configuration": {"data_type": "int16", "scalar_map": {"decode": [[7, -1]]}}}, BYTES]"#,
+            data_type: data_type::int32(),
+            fill_value: FillValue::from(0i32),
+            shape: vec![90, 100],
+            elements: ArrayBytes::new_flen(
+                (0..9000i32)
+                    .flat_map(|i| (i % 50).to_ne_bytes())
+                    .collect::<Vec<u8>>(),
+            ),
+        },
+        // More elements than are cast at a time
+        Case {
+            name: "cast_value_blocks",
+            codecs: r#"[{"name": "cast_value", "configuration": {"data_type": "float32"}}, BYTES]"#,
+            data_type: data_type::float64(),
+            fill_value: FillValue::from(0f64),
+            shape: vec![90, 100],
+            elements: ArrayBytes::new_flen(
+                (0..9000u32)
+                    .flat_map(|i| (f64::from(i) * 0.5).to_ne_bytes())
+                    .collect::<Vec<u8>>(),
+            ),
+        },
+        Case {
+            name: "fixedscaleoffset_regions",
+            codecs: r#"[{"name": "numcodecs.fixedscaleoffset", "configuration": {"offset": 0, "scale": 100, "dtype": "<f4", "astype": "<i2"}}, BYTES]"#,
+            data_type: data_type::float32(),
+            fill_value: FillValue::from(0f32),
+            shape: vec![4, 1100],
+            elements: ArrayBytes::new_flen(
+                (0..4400u16)
+                    .flat_map(|i| (f32::from(i % 300) * 0.25).to_ne_bytes())
+                    .collect::<Vec<u8>>(),
+            ),
+        },
+        Case {
+            name: "numcodecs_packbits_regions",
+            codecs: r#"[{"name": "numcodecs.packbits"}, BYTES]"#,
+            data_type: data_type::bool(),
+            fill_value: FillValue::from(false),
+            shape: vec![3, 1100],
+            elements: ArrayBytes::new_flen(
+                (0..3300u32)
+                    .map(|i| u8::from(i % 7 < 3))
+                    .collect::<Vec<u8>>(),
+            ),
+        },
         optional_case(
             "optional_reshape",
             r#"[{"name": "reshape", "configuration": {"shape": [-1]}}, OPTIONAL]"#,

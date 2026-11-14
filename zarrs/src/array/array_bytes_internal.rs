@@ -165,35 +165,6 @@ pub(crate) fn extract_strided(
     extract_runs(bytes, data_type, &runs)
 }
 
-/// Evaluate `$body` with `$len` bound to `$length`, specialised for common small lengths.
-macro_rules! with_small_len {
-    ($length:expr, |$len:ident| $body:expr) => {
-        match $length {
-            1 => {
-                let $len: usize = 1;
-                $body
-            }
-            2 => {
-                let $len: usize = 2;
-                $body
-            }
-            4 => {
-                let $len: usize = 4;
-                $body
-            }
-            8 => {
-                let $len: usize = 8;
-                $body
-            }
-            16 => {
-                let $len: usize = 16;
-                $body
-            }
-            $len => $body,
-        }
-    };
-}
-
 /// The elements of `bytes` in the contiguous `runs` of element indices, in order.
 fn extract_runs(
     bytes: &ArrayBytes<'_>,
@@ -234,10 +205,13 @@ fn extract_runs(
             let mut extracted_offsets = Vec::with_capacity(runs.len() * run_elements + 1);
             for (index, _) in runs {
                 let start = usize::try_from(index).unwrap();
+                let run_base = offsets.get(start).unwrap();
+                let out_base = extracted.len();
                 for element in start..start + run_elements {
-                    extracted_offsets.push(extracted.len());
-                    extracted.extend_from_slice(&bytes[offsets.element_range(element)]);
+                    extracted_offsets.push(out_base + (offsets.get(element).unwrap() - run_base));
                 }
+                let run_end = offsets.get(start + run_elements).unwrap();
+                extracted.extend_from_slice(&bytes[run_base..run_end]);
             }
             extracted_offsets.push(extracted.len());
             let offsets = offsets_from_usize(extracted_offsets)?;
@@ -275,7 +249,7 @@ fn extract_runs_fixed(
         }
     }
     let mut extracted = Vec::with_capacity(runs.len() * run_len);
-    with_small_len!(run_len, |run_len| {
+    zarrs_codec::with_small_len!(run_len, |run_len| {
         for (index, _) in runs {
             let start = usize::try_from(index).unwrap() * size;
             extracted.extend_from_slice(&bytes[start..start + run_len]);

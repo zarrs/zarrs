@@ -207,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bind full-width whole-byte layouts without padding to the little-endian `bytes` codec for direct output placement
 - Copy only the packed bytes that are unpacked when unpacking part of a chunk
 - Pack and unpack one-bit components of one byte (e.g. `bool`) eight at a time, about 20 and 14 times faster
+- Unpack one-bit components of one byte (e.g. `bool`, including through `numcodecs.packbits`) directly into output views whose contiguous regions have at least 1024 elements
 - Fix `packbits` sign extension, which was missing when partially decoding `int2`/`int4` and stopped at the byte containing the sign bit for multi-byte signed values
 - Fix `packbits` partial decoding with non-zero `first_bit`, big-endian encoding, and input validation
 
@@ -248,6 +249,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Other codecs
 - `vlen-bytes`/`vlen-utf8`: **Breaking**: `ArrayBuilder` returns an error for the `vlen-bytes` codec with a data type other than `bytes`, and the `vlen-utf8` codec with a data type other than `string`, as the registered codecs are only compatible with those data types (such arrays are still read)
 - `cast_value`: Add the `cast_value` array-to-array codec
+- `cast_value`: Cast about twice as fast with the bulk kernels, and decode directly into output views whose contiguous regions have at least 64 elements, casting straight into each region (or through a small buffer with a scalar map or a data type without a kernel)
 - `pcodec`: Decode directly into aligned contiguous output, retaining fallback for other views and rejecting incomplete decompression (requires `pcodec`)
 - `bz2`: Decode streams directly into preallocated, uninitialised output (requires `bz2`)
 - `zlib`: Decode streams directly into preallocated, uninitialised output (requires `zlib`)
@@ -261,6 +263,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `crc32c`/`adler32`/`fletcher32`: Reuse the input allocation (if possible) when appending/stripping the checksum
 - `crc32c`/`adler32`/`fletcher32`: Fix partial decoders returning incorrect bytes for a `ByteRange::Suffix` request with the checksum at the end
 - `numcodecs.fletcher32`: Fix checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
+- `numcodecs.fixedscaleoffset`: Decode directly into output views whose contiguous regions have at least 16 elements
 - `numcodecs.fixedscaleoffset`: Decode twice as fast, and encode faster, by transforming elements into a pre-sized output
 - `numcodecs.fixedscaleoffset`: Fix encoding to match `numcodecs`
   - Compute in `f32` for `float32` data and otherwise `f64`, rounding encoded values with ties to even and decoded integers to the nearest integer
