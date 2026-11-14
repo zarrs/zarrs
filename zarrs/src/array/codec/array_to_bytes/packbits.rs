@@ -308,6 +308,8 @@ fn unpack_components<const N: usize, const MSB_FIRST: bool>(
     let (components, []) = decoded.as_chunks_mut::<N>() else {
         panic!("decoded holds whole components");
     };
+    // Only the packed bytes holding the bits of `decoded` are copied into blocks
+    let packed = &packed[..(usize::from(bit_offset) + components.len() * packed_bits).div_ceil(8)];
     let mut components = components.iter_mut();
     // A block of packed bytes with the bits in sequence from the least significant bit.
     // It is uninitialised, as zeroing it all would dominate unpacking short ranges.
